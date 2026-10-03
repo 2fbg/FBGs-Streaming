@@ -84,6 +84,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            try {
+                coil.Coil.imageLoader(this).memoryCache?.clear()
+                System.gc()
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
     fun getPipParams(isPlaying: Boolean): android.app.PictureInPictureParams? {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val actions = ArrayList<android.app.RemoteAction>()

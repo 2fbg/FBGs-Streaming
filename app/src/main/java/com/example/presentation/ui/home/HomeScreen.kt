@@ -294,7 +294,23 @@ fun HomeScreen(
                     }
                 }
             } else {
+                val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+                val shouldLoadMore by remember {
+                    derivedStateOf {
+                        val layoutInfo = gridState.layoutInfo
+                        val total = layoutInfo.totalItemsCount
+                        val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        total > 0 && lastVisible >= total - 8
+                    }
+                }
+                LaunchedEffect(shouldLoadMore) {
+                    if (shouldLoadMore) {
+                        viewModel.loadMoreItems()
+                    }
+                }
+
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Adaptive(minSize = 150.dp),
                     contentPadding = PaddingValues(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -422,7 +438,12 @@ private fun ChannelCard(
                     AsyncImage(
                         model = ImageRequest.Builder(context)
                             .data(item.logoUrl)
-                            .crossfade(true)
+                            .size(140, 140)
+                            .precision(coil.size.Precision.INEXACT)
+                            .allowRgb565(true)
+                            .memoryCachePolicy(coil.request.CachePolicy.ENABLED)
+                            .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                            .crossfade(150)
                             .build(),
                         contentDescription = item.name,
                         contentScale = ContentScale.Fit,

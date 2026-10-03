@@ -207,17 +207,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _activePinPromptCategory = MutableStateFlow<String?>(null)
     val activePinPromptCategory = _activePinPromptCategory.asStateFlow()
 
-    // Live state bindings based on currently active list selection
-    val activeItemsList = combine(
+    // Aggressive Lazy Loading Page Limit for Memory-Constrained Devices (OOM Prevention)
+    private val _displayedItemsLimit = MutableStateFlow(60)
+    val displayedItemsLimit = _displayedItemsLimit.asStateFlow()
+
+    fun loadMoreItems() {
+        _displayedItemsLimit.value = (_displayedItemsLimit.value + 60).coerceAtMost(1500)
+    }
+
+    fun resetItemsLimit() {
+        _displayedItemsLimit.value = 60
+    }
+
+    // Live state bindings based on currently active list selection with Aggressive Lazy Loading
+    val activeItemsList: StateFlow<List<PlaylistItem>> = combine(
         combine(_activePlaylistName, _selectedContentType, _selectedCategory) { playlist, type, category ->
             Triple(playlist, type, category)
         },
         combine(_searchQuery, _adultPinGranted, _sortOrder) { query, adultGranted, sort ->
             Triple(query, adultGranted, sort)
-        }
-    ) { p1, p2 ->
-        Pair(p1, p2)
-    }.flatMapLatest { (p1, p2) ->
+        },
+        _displayedItemsLimit
+    ) { p1, p2, limit ->
+        Triple(p1, p2, limit)
+    }.flatMapLatest { (p1, p2, displayLimit) ->
         val (playlist, type, category) = p1
         val (query, adultGranted, sortOrder) = p2
         
@@ -275,7 +288,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 SortOrder.DEFAULT -> filtered.sortedBy { it.id } // "Ordem por número" sorts by raw insertion number (ID ascending)
             }
-            sorted.take(2000)
+            sorted.take(displayLimit)
         }
     }.flowOn(Dispatchers.IO).stateIn(
         scope = viewModelScope,
@@ -913,6 +926,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun changeContentType(type: ContentType) {
+        resetItemsLimit()
         _selectedContentType.value = type
         _selectedCategory.value = "Todas"
     }
@@ -924,6 +938,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectCategory(category: String) {
+        resetItemsLimit()
         if (isAdultCategory(category) && !_adultPinGranted.value) {
             _activePinPromptCategory.value = category
         } else {
@@ -932,6 +947,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSearchQuery(query: String) {
+        resetItemsLimit()
         _searchQuery.value = query
     }
 

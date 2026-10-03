@@ -123,16 +123,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val isPlayerPlaying = MutableStateFlow(true)
 
+    // Aggressive Lazy Loading Page Limit for Memory-Constrained Devices
+    private val _displayedItemsLimit = MutableStateFlow(60)
+    val displayedItemsLimit: StateFlow<Int> = _displayedItemsLimit.asStateFlow()
+
+    fun loadMoreItems() {
+        _displayedItemsLimit.value = (_displayedItemsLimit.value + 60).coerceAtMost(1500)
+    }
+
+    fun resetItemsLimit() {
+        _displayedItemsLimit.value = 60
+    }
+
     // Flow reativo dos canais do servidor ativo
     val activeItemsList: StateFlow<List<PlaylistItem>> = combine(
-        _activePlaylistName,
-        _selectedContentType,
-        _selectedCategory,
-        _searchQuery
-    ) { playlist, type, category, query ->
-        Quadruple(playlist, type, category, query)
-    }.flatMapLatest { (playlist, type, category, query) ->
-        if (query.isNotBlank()) {
+        combine(_activePlaylistName, _selectedContentType, _selectedCategory, _searchQuery) { playlist, type, category, query ->
+            Quadruple(playlist, type, category, query)
+        },
+        _displayedItemsLimit
+    ) { (playlist, type, category, query), limit ->
+        Pair(Quadruple(playlist, type, category, query), limit)
+    }.flatMapLatest { (quad, limit) ->
+        val (playlist, type, category, query) = quad
+        val baseFlow = if (query.isNotBlank()) {
             playlistDao.searchItems(playlist, "%$query%")
         } else if (category == "★ Favoritos") {
             playlistDao.getFavorites(playlist).map { list ->
@@ -143,6 +156,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             playlistDao.getItemsByCategoryAndType(playlist, category, type.name)
         }
+        baseFlow.map { list -> list.take(limit) }
     }.flowOn(Dispatchers.IO).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -305,21 +319,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setActivePlaylistName(name: String) {
+        resetItemsLimit()
         preferencesService.activePlaylistName = name
         _activePlaylistName.value = name
         loadChannelsForActiveServer()
     }
 
     fun setContentType(type: ContentType) {
+        resetItemsLimit()
         _selectedContentType.value = type
         _selectedCategory.value = "Todas"
     }
 
     fun setSelectedCategory(category: String) {
+        resetItemsLimit()
         _selectedCategory.value = category
     }
 
     fun setSearchQuery(query: String) {
+        resetItemsLimit()
         _searchQuery.value = query
     }
 
