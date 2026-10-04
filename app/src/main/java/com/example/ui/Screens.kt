@@ -1,5 +1,6 @@
 package com.example.ui
 
+import kotlinx.coroutines.*
 import android.util.Log
 import android.app.Activity
 import android.os.Build
@@ -3022,10 +3023,30 @@ data class EpgProgramInfo(
     val timeRange: String,
     val description: String,
     val isCurrent: Boolean,
-    val progressPercent: Float = 0f
+    val progressPercent: Float = 0f,
+    val isReal: Boolean = false
 )
 
+object AndroidRealEpgCache {
+    val cache = java.util.concurrent.ConcurrentHashMap<String, List<EpgProgramInfo>>()
+
+    fun get(channelName: String): List<EpgProgramInfo>? {
+        val clean = channelName.uppercase().trim()
+        return cache[clean] ?: cache.entries.firstOrNull { 
+            clean.contains(it.key) || it.key.contains(clean) 
+        }?.value
+    }
+
+    fun put(channelName: String, list: List<EpgProgramInfo>) {
+        cache[channelName.uppercase().trim()] = list
+    }
+}
+
 fun getChannelEpgSchedule(channelName: String): List<EpgProgramInfo> {
+    val realList = AndroidRealEpgCache.get(channelName)
+    if (!realList.isNullOrEmpty()) {
+        return realList
+    }
     val cal = java.util.Calendar.getInstance()
     val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
     val minute = cal.get(java.util.Calendar.MINUTE)
@@ -3143,6 +3164,11 @@ fun getChannelEpgSchedule(channelName: String): List<EpgProgramInfo> {
 }
 
 fun getCurrentEpgProgram(channelName: String): String {
+    val realList = AndroidRealEpgCache.get(channelName)
+    if (!realList.isNullOrEmpty()) {
+        val cur = realList.firstOrNull { it.isCurrent } ?: realList.firstOrNull()
+        if (cur != null) return cur.title
+    }
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val name = channelName.uppercase()
     return when {
@@ -3512,8 +3538,91 @@ fun ChannelEpgPreviewDialog(
     onPlay: (PlaylistItem) -> Unit
 ) {
     val context = LocalContext.current
-    val schedule = remember(item.name) { getChannelEpgSchedule(item.name) }
+    var schedule by remember(item.name) { mutableStateOf(getChannelEpgSchedule(item.name)) }
     val currentProgram = remember(schedule) { schedule.firstOrNull { it.isCurrent } ?: schedule.firstOrNull() }
+
+    LaunchedEffect(item.url) {
+        withContext(Dispatchers.IO) {
+            try {
+                val streamIdMatch = Regex("/([0-9]+)(?:\\.[a-zA-Z0-9]+)?$").find(item.url)
+                val streamId = streamIdMatch?.groupValues?.get(1)
+
+                val prefs = context.getSharedPreferences("app_preferences", android.content.Context.MODE_PRIVATE)
+                val user = prefs.getString("username", "") ?: ""
+                val pass = prefs.getString("password", "") ?: ""
+                val baseUrl = prefs.getString("base_url", "") ?: ""
+
+                if (streamId != null && baseUrl.isNotEmpty() && user.isNotEmpty() && pass.isNotEmpty()) {
+                    val cleanBase = baseUrl.trimEnd('/')
+                    val epgApiUrl = "$cleanBase/player_api.php?username=$user&password=$pass&action=get_short_epg&stream_id=$streamId&limit=10"
+                    val client = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    val req = okhttp3.Request.Builder().url(epgApiUrl).build()
+                    val resp = client.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string()
+                        if (body != null && body.contains("epg_listings")) {
+                            val json = org.json.JSONObject(body)
+                            val arr = json.optJSONArray("epg_listings")
+                            if (arr != null && arr.length() > 0) {
+                                val list = mutableListOf<EpgProgramInfo>()
+                                val now = System.currentTimeMillis()
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    var title = obj.optString("title", "Programa")
+                                    var desc = obj.optString("description", "")
+                                    try {
+                                        if (title.matches(Regex("^[A-Za-z0-9+/=]+$")) && title.length % 4 == 0) {
+                                            val dec = String(android.util.Base64.decode(title, android.util.Base64.DEFAULT), Charsets.UTF_8)
+                                            if (dec.isNotBlank()) title = dec
+                                        }
+                                        if (desc.matches(Regex("^[A-Za-z0-9+/=]+$")) && desc.length % 4 == 0) {
+                                            val dec = String(android.util.Base64.decode(desc, android.util.Base64.DEFAULT), Charsets.UTF_8)
+                                            if (dec.isNotBlank()) desc = dec
+                                        }
+                                    } catch (ignored: Exception) {}
+
+                                    val startTs = obj.optLong("start_timestamp", 0L) * 1000L
+                                    val stopTs = obj.optLong("stop_timestamp", 0L) * 1000L
+                                    val isCur = now in startTs..stopTs
+                                    val timeRange = if (startTs > 0 && stopTs > 0) {
+                                        val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                                        "${sdf.format(java.util.Date(startTs))} - ${sdf.format(java.util.Date(stopTs))}"
+                                    } else {
+                                        "Ao Vivo"
+                                    }
+                                    val progress = if (isCur && stopTs > startTs) {
+                                        ((now - startTs).toFloat() / (stopTs - startTs).toFloat()).coerceIn(0.05f, 0.98f)
+                                    } else 0f
+
+                                    list.add(
+                                        EpgProgramInfo(
+                                            title = title,
+                                            timeRange = timeRange,
+                                            description = desc.ifBlank { "Programação ao vivo transmitida pelo canal." },
+                                            isCurrent = isCur,
+                                            progressPercent = progress,
+                                            isReal = true
+                                        )
+                                    )
+                                }
+                                if (list.isNotEmpty()) {
+                                    withContext(Dispatchers.Main) {
+                                        schedule = list
+                                        AndroidRealEpgCache.put(item.name, list)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (ignored: Exception) {
+                // Keep simulated schedule
+            }
+        }
+    }
 
     var isMiniBuffering by remember { mutableStateOf(true) }
     var isMuted by remember { mutableStateOf(false) }
@@ -3626,6 +3735,22 @@ fun ChannelEpgPreviewDialog(
                                     fontWeight = FontWeight.Bold,
                                     color = NetflixRed
                                 )
+                            }
+                            if (schedule.any { it.isReal }) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFF065F46))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "XMLTV REAL",
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF34D399)
+                                    )
+                                }
                             }
                         }
                         Text(

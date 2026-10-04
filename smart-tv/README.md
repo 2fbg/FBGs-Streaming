@@ -22,23 +22,24 @@ Todas as Smart TVs modernas (Samsung 2017+, LG 2016+, Philips, TCL, Roku) possue
 Os aplicativos da LG Smart TV usam a tecnologia oficial **webOS TV SDK** (baseada em HTML5/JS).
 
 ### Arquivos prontos no repositório:
-- `smart-tv/webos/appinfo.json`: Manifesto de configuração oficial para webOS.
+- `smart-tv/mk21play_3.6.0_all.ipk`: Pacote oficial compilado pronto para instalação.
+- `smart-tv/mk21-tv/`: Código fonte completo otimizado para webOS e Tizen.
+- `smart-tv/webos/appinfo.json` e `smart-tv/mk21-tv/appinfo.json`: Manifestos webOS v3.6.0.
 
-### Passos para instalar na LG TV:
+### Instalação via Homebrew Channel (Recomendado):
+1. Caso sua TV possua o **webOS Homebrew Channel**, transfira e instale diretamente o arquivo `mk21play_3.6.0_all.ipk` ou use o instalador OTA integrado no menu Configurações > Atualização de Sistema.
+
+### Instalação via Modo Desenvolvedor oficial:
 1. **Ative o Modo Desenvolvedor na sua TV LG:**
    - Na loja de aplicativos da LG TV (**LG Content Store**), pesquise e instale o aplicativo **Developer Mode**.
    - Abra o app, crie uma conta gratuita LG Developer e ative o **Dev Mode Status**. A TV mostrará seu IP e a chave de acesso.
 2. **No seu computador (Windows/Mac/Linux):**
    - Baixe o pacote oficial [webOS TV CLI (ares-cli)](https://webostv.developer.lge.com/develop/tools/cli-installation).
-   - Abra o terminal na pasta `smart-tv/webos/` e gere o instalador `.ipk`:
-     ```bash
-     ares-package .
-     ```
    - Instale na sua TV com o comando:
      ```bash
-     ares-install com.fbg2.mk21streaming_1.0.0_all.ipk -d <NomeDaSuaTV>
+     ares-install smart-tv/mk21play_3.6.0_all.ipk -d <NomeDaSuaTV>
      ```
-3. O ícone **MK21 Streaming** aparecerá na barra principal de aplicativos da sua LG TV!
+3. O ícone **MK21 Play** aparecerá na barra principal de aplicativos da sua LG TV!
 
 ---
 

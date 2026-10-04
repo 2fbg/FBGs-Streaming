@@ -1,9 +1,9 @@
 {
-  "version": "3.5.0",
-  "versionCode": 350,
-  "title": "MK21 Play v3.5.0",
-  "releaseNotes": "• Categorização fidedigna às listas (canais lineares não se misturam com filmes e séries)\n• Player com controle de velocidade até 4x e preservação de áudio (preservesPitch)\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Teclas Play/Pause universais no controle remoto e atalhos de avanço/recuo de 10s\n• Teste de velocidade em tempo real com indicador gauge, ping e taxa de download\n• Gerenciador de servidores com opção de editar listas e reconexão imediata\n• Nova tela de inicialização (Splash Screen) premium com animação e barra de status\n• Escala de fonte ampliada para todos os menus e tela de armazenamento idêntica à Vizzion",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21play_3.5.0_all.ipk",
+  "version": "3.6.0",
+  "versionCode": 360,
+  "title": "MK21 Play v3.6.0",
+  "releaseNotes": "• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Gerenciador de servidores com restauração e troca rápida\n• Nova tela de inicialização (Splash) premium com animação e status",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21play_3.6.0_all.ipk",
   "apkUrl": "https://github.com/2fbg/BGs-Streaming/raw/main/web/mk21.apk",
   "updatedAt": "2026-10-04"
 }

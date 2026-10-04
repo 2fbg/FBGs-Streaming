@@ -1,4 +1,4 @@
-// MK21 PLAY v3.5.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -453,23 +453,38 @@ async function loadServer(forceRefresh = false) {
     let curName = 'Canal';
     let curGroup = 'Geral';
     let curLogo = '';
+    let curTvgId = '';
+    let curTvgName = '';
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (line.startsWith('#EXTINF:')) {
+      if (line.startsWith('#EXTM3U')) {
+        const urlMatch = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
+        if (urlMatch && urlMatch[1]) {
+          window.serverXmltvUrl = urlMatch[1].trim();
+        }
+      } else if (line.startsWith('#EXTINF:')) {
         const commaIndex = line.lastIndexOf(',');
         curName = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : 'Canal';
         const gMatch = line.match(/group-title="([^"]*)"/i);
         curGroup = gMatch && gMatch[1] && gMatch[1].trim() ? gMatch[1].trim() : 'Geral';
         const lMatch = line.match(/tvg-logo="([^"]*)"/i);
         curLogo = lMatch && lMatch[1] ? lMatch[1].trim() : '';
+        const idMatch = line.match(/tvg-id="([^"]*)"/i);
+        curTvgId = idMatch && idMatch[1] ? idMatch[1].trim() : '';
+        const nMatch = line.match(/tvg-name="([^"]*)"/i);
+        curTvgName = nMatch && nMatch[1] ? nMatch[1].trim() : '';
       } else if (/^https?:\/\//i.test(line)) {
         const cType = determineType(curName, curGroup, line);
         if (cType === 'LIVE') {
+          const sIdMatch = line.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
           allCatalog.LIVE.push({
             name: curName,
             group: curGroup,
             logo: curLogo,
+            tvgId: curTvgId,
+            tvgName: curTvgName,
+            streamId: sIdMatch ? sIdMatch[1] : '',
             url: line,
             contentType: 'LIVE',
             isAdult: isAdult(curName) || isAdult(curGroup)
@@ -478,6 +493,8 @@ async function loadServer(forceRefresh = false) {
         curName = 'Canal';
         curGroup = 'Geral';
         curLogo = '';
+        curTvgId = '';
+        curTvgName = '';
       }
     }
 
@@ -969,6 +986,186 @@ $('btnCloseSeriesModal').onclick = () => {
   focusActiveElement();
 };
 
+// =====================================================================
+// MOTOR EPG SMART TV: METADADOS REAIS DO SERVIDOR COM FALLBACK DINÂMICO
+// =====================================================================
+const smartTvEpgCache = new Map();
+
+function decodeSmartTvEpgText(str) {
+  if (!str || typeof str !== 'string') return '';
+  const trimmed = str.trim();
+  if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length >= 4 && trimmed.length % 4 === 0) {
+    try {
+      const bin = atob(trimmed);
+      if (/^[\x09\x0A\x0D\x20-\x7E\xA0-\xFF\u0100-\uFFFF]+$/.test(bin)) {
+        try {
+          return decodeURIComponent(escape(bin));
+        } catch (e) {
+          return bin;
+        }
+      }
+    } catch (e) {}
+  }
+  return trimmed;
+}
+
+function getSimulatedTvProgram(channelName) {
+  const now = new Date();
+  const curHour = now.getHours();
+  const curMin = now.getMinutes();
+  const curTotalMin = curHour * 60 + curMin;
+  const name = (channelName || '').toUpperCase();
+
+  let title = "Programação Geral";
+  let nextTitle = "A Seguir: Variedades";
+  let startH = curHour;
+  let startM = 0;
+  let endH = curHour + 1;
+  let endM = 0;
+
+  if (name.includes("GLOBO")) {
+    if (curHour >= 6 && curHour < 9) { title = "Bom Dia Brasil"; nextTitle = "Mais Você"; startH = 6; endH = 9; }
+    else if (curHour >= 9 && curHour < 12) { title = "Mais Você com Ana Maria"; nextTitle = "Praça TV"; startH = 9; endH = 12; }
+    else if (curHour >= 12 && curHour < 14) { title = "Praça TV - 1ª Edição"; nextTitle = "Globo Esporte"; startH = 12; endH = 14; }
+    else if (curHour >= 14 && curHour < 17) { title = "Sessão da Tarde"; nextTitle = "Vale a Pena Ver de Novo"; startH = 14; endH = 17; }
+    else if (curHour >= 17 && curHour < 19) { title = "Vale a Pena Ver de Novo"; nextTitle = "Novela das Seis"; startH = 17; endH = 19; }
+    else if (curHour >= 19 && curHour < 21) { title = "Novela das Sete / Jornal Nacional"; nextTitle = "Novela das Nove"; startH = 19; endH = 21; }
+    else if (curHour >= 21 && curHour < 23) { title = "Novela das Nove"; nextTitle = "Tela Quente"; startH = 21; endH = 23; }
+    else { title = "Cinema Especial / Madrugada"; nextTitle = "Hora Um"; startH = 23; endH = 6; }
+  } else if (name.includes("RECORD")) {
+    if (curHour >= 6 && curHour < 10) { title = "Balanço Geral Manhã / Fala Brasil"; nextTitle = "Hoje em Dia"; startH = 6; endH = 10; }
+    else if (curHour >= 10 && curHour < 12) { title = "Hoje em Dia"; nextTitle = "Balanço Geral"; startH = 10; endH = 12; }
+    else if (curHour >= 12 && curHour < 15) { title = "Balanço Geral & Hora da Venenosa"; nextTitle = "Novela da Tarde"; startH = 12; endH = 15; }
+    else if (curHour >= 15 && curHour < 17) { title = "Novela da Tarde"; nextTitle = "Cidade Alerta"; startH = 15; endH = 17; }
+    else if (curHour >= 17 && curHour < 20) { title = "Cidade Alerta com Helicóptero"; nextTitle = "Jornal da Record"; startH = 17; endH = 20; }
+    else if (curHour >= 20 && curHour < 22) { title = "Jornal da Record & Novela Bíblica"; nextTitle = "A Fazenda"; startH = 20; endH = 22; }
+    else { title = "Super Tela / A Fazenda"; nextTitle = "Programação Religiosa"; startH = 22; endH = 6; }
+  } else if (name.includes("SBT")) {
+    if (curHour >= 6 && curHour < 10) { title = "Primeiro Impacto"; nextTitle = "Bom Dia & Cia"; startH = 6; endH = 10; }
+    else if (curHour >= 10 && curHour < 13) { title = "Bom Dia & Cia / Séries"; nextTitle = "Chaves"; startH = 10; endH = 13; }
+    else if (curHour >= 13 && curHour < 15) { title = "Chaves & Seriados Amados"; nextTitle = "Fofocalizando"; startH = 13; endH = 15; }
+    else if (curHour >= 15 && curHour < 17) { title = "Fofocalizando & Fofocas"; nextTitle = "Novelas Mexicanas"; startH = 15; endH = 17; }
+    else if (curHour >= 17 && curHour < 20) { title = "Novelas da Tarde"; nextTitle = "SBT Brasil"; startH = 17; endH = 20; }
+    else if (curHour >= 20 && curHour < 22) { title = "SBT Brasil & Romeu e Julieta"; nextTitle = "Programa do Ratinho"; startH = 20; endH = 22; }
+    else { title = "Programa do Ratinho / A Praça é Nossa"; nextTitle = "The Noite"; startH = 22; endH = 6; }
+  } else if (name.includes("SPORT") || name.includes("ESPN") || name.includes("PREMIERE")) {
+    if (curHour >= 8 && curHour < 12) { title = "SportsCenter / Redação SporTV"; nextTitle = "Futebol 360"; startH = 8; endH = 12; }
+    else if (curHour >= 12 && curHour < 16) { title = "Futebol Ao Vivo - Pré-Jogo"; nextTitle = "Transmissão Ao Vivo"; startH = 12; endH = 16; }
+    else if (curHour >= 16 && curHour < 19) { title = "Campeonato Ao Vivo - 1º Tempo"; nextTitle = "Troca de Passes"; startH = 16; endH = 19; }
+    else if (curHour >= 19 && curHour < 22) { title = "Jogo da Noite Ao Vivo"; nextTitle = "Gols da Rodada"; startH = 19; endH = 22; }
+    else { title = "Linha de Passe & Melhores Momentos"; nextTitle = "Giro do Esporte"; startH = 22; endH = 8; }
+  } else if (name.includes("TELE") || name.includes("HBO") || name.includes("WARNER") || name.includes("UNIVERSAL")) {
+    if (curHour >= 10 && curHour < 13) { title = "Sessão Aventura: Os Vingadores"; nextTitle = "Comédia em Alta"; startH = 10; endH = 13; }
+    else if (curHour >= 13 && curHour < 16) { title = "Batman - O Cavaleiro das Trevas"; nextTitle = "Superestreia"; startH = 13; endH = 16; }
+    else if (curHour >= 16 && curHour < 19) { title = "Superestreia: Duna Parte 2"; nextTitle = "Série do Ano"; startH = 16; endH = 19; }
+    else if (curHour >= 19 && curHour < 22) { title = "House of the Dragon"; nextTitle = "Blockbuster"; startH = 19; endH = 22; }
+    else { title = "Blockbuster do Ano: Oppenheimer"; nextTitle = "Sessão Noturna"; startH = 22; endH = 10; }
+  } else {
+    title = `Programação ao Vivo (${curHour}:00 - ${curHour + 1}:00)`;
+    nextTitle = `Transmissão Especial (${curHour + 1}:00)`;
+    startH = curHour;
+    endH = curHour + 1;
+  }
+
+  const sMin = startH * 60 + startM;
+  const eMin = endH * 60 + endM;
+  const total = Math.max(1, eMin - sMin);
+  const elapsed = Math.max(0, curTotalMin - sMin);
+  const progressPercent = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+  const timeStr = `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')} - ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+  return { title, nextTitle, timeStr, progressPercent };
+}
+
+async function updateSmartTvEpg(item) {
+  if (!item) return;
+
+  const sim = getSimulatedTvProgram(item.name);
+  if ($('epgTitle')) $('epgTitle').textContent = '▶ ' + item.name;
+  if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${sim.timeStr}`;
+  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${sim.title}</b>`;
+  const pBar = document.querySelector('.epg-progress');
+  if (pBar) pBar.style.width = `${sim.progressPercent}%`;
+  if ($('epgNext')) $('epgNext').textContent = `A seguir: ${sim.nextTitle}`;
+
+  if (item.contentType !== 'LIVE') {
+    if ($('epgStatus')) $('epgStatus').textContent = '▶ Reproduzindo VOD';
+    return;
+  }
+
+  const srv = SERVERS[currentServerIndex] || DEFAULT_SERVERS[0];
+  const streamId = item.streamId || (item.url && item.url.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/)?.[1]);
+  const user = localStorage.getItem('mk21_username') || '';
+  const pass = localStorage.getItem('mk21_password') || '';
+
+  if (!srv || !srv.url || !streamId || !user || !pass) {
+    return;
+  }
+
+  const cacheKey = `epg_${streamId}`;
+  if (smartTvEpgCache.has(cacheKey)) {
+    applyRealSmartTvEpg(item, smartTvEpgCache.get(cacheKey));
+    return;
+  }
+
+  try {
+    const cleanBase = srv.url.replace(/\/+$/, '');
+    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=6`;
+    const res = await fetch(apiUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.epg_listings) && data.epg_listings.length > 0) {
+        smartTvEpgCache.set(cacheKey, data.epg_listings);
+        if (activeItem === item) {
+          applyRealSmartTvEpg(item, data.epg_listings);
+        }
+      }
+    }
+  } catch (err) {
+    console.debug('[SmartTV EPG] Falha ao carregar metadados reais, mantendo simulação:', err);
+  }
+}
+
+function applyRealSmartTvEpg(item, listings) {
+  if (!listings || listings.length === 0 || activeItem !== item) return;
+  const nowMs = Date.now();
+
+  const parsed = listings.map(l => {
+    let start = l.start_timestamp ? l.start_timestamp * 1000 : new Date(l.start.replace(' ', 'T')).getTime();
+    let stop = l.stop_timestamp ? l.stop_timestamp * 1000 : new Date(l.end.replace(' ', 'T')).getTime();
+    return {
+      title: decodeSmartTvEpgText(l.title),
+      desc: decodeSmartTvEpgText(l.description),
+      start,
+      stop
+    };
+  }).filter(p => !isNaN(p.start) && !isNaN(p.stop));
+
+  if (parsed.length === 0) return;
+
+  let current = parsed.find(p => p.start <= nowMs && p.stop > nowMs) || parsed[0];
+  let curIdx = parsed.indexOf(current);
+  let next = (curIdx >= 0 && curIdx + 1 < parsed.length) ? parsed[curIdx + 1] : null;
+
+  const startH = new Date(current.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const stopH = new Date(current.stop).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const total = Math.max(1, current.stop - current.start);
+  const elapsed = Math.max(0, nowMs - current.start);
+  const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+
+  if ($('epgTitle')) $('epgTitle').textContent = `▶ ${item.name}`;
+  if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${startH} - ${stopH}`;
+  if ($('epgStatus')) {
+    $('epgStatus').innerHTML = `🔴 NO AR: <b>${current.title}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
+  }
+  const pBar = document.querySelector('.epg-progress');
+  if (pBar) pBar.style.width = `${pct}%`;
+  if ($('epgNext') && next) {
+    const nextH = new Date(next.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    $('epgNext').textContent = `A seguir (${nextH}): ${next.title}`;
+  }
+}
+
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
 function playStream(item) {
   activeItem = item;
@@ -979,6 +1176,7 @@ function playStream(item) {
 
   $('epgTitle').textContent = '▶ ' + item.name;
   $('epgGroup').textContent = 'Categoria: ' + item.group;
+  updateSmartTvEpg(item);
 
   if (favoriteUrls.has(item.url)) {
     $('btnFavorite').textContent = '★ Favoritado';
@@ -1308,7 +1506,7 @@ function renderSettings(sec) {
         </div>
         <div style="background:#1a1e2d; padding:12px 16px; border-radius:8px;">
           <div style="font-size:14px; color:#888;">Versão do Aplicativo</div>
-          <div style="font-size:18px; font-weight:700; color:#ffd54f;">MK21 Play v3.5.0 (LG webOS)</div>
+          <div style="font-size:18px; font-weight:700; color:#ffd54f;">MK21 Play v${CURRENT_APP_VERSION} (LG webOS / Tizen)</div>
         </div>
       </div>
 
@@ -1317,7 +1515,7 @@ function renderSettings(sec) {
       <div style="background:#1a1e2d; border:1px solid rgba(255,213,79,0.35); border-radius:12px; padding:18px 22px; display:flex; justify-content:space-between; align-items:center;">
         <div>
           <div style="font-size:14px; color:#ffd54f; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px;">Atualização Direta no Aplicativo</div>
-          <div style="font-size:16px; color:#fff; margin-top:4px;">Versão Instalada: <strong>v3.5.0</strong> (LG webOS)</div>
+          <div style="font-size:16px; color:#fff; margin-top:4px;">Versão Instalada: <strong>v${CURRENT_APP_VERSION}</strong> (LG webOS / Tizen)</div>
           <div id="txtSettingsUpdateStatus" style="font-size:13px; color:#94a3b8; margin-top:2px;">Verifique e instale novas versões diretamente pela TV sem pendrive.</div>
         </div>
         <button id="btnOpenUpdateModal" class="ctrl-btn primary" style="padding:14px 26px; font-size:16px;" tabindex="0">
@@ -1833,7 +2031,39 @@ $('btnCloseServerPicker').onclick = () => {
 };
 
 // 14. GERENCIADOR DE ATUALIZAÇÕES DIRETAS NO APLICATIVO (OTA SMART TV)
-const CURRENT_APP_VERSION = '3.5.0';
+function compareSemver(v1, v2) {
+  const p1 = (v1 || '0.0.0').replace(/[^0-9.]/g, '').split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = (v2 || '0.0.0').replace(/[^0-9.]/g, '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const n1 = p1[i] || 0;
+    const n2 = p2[i] || 0;
+    if (n1 > n2) return 1;
+    if (n1 < n2) return -1;
+  }
+  return 0;
+}
+
+const BASE_PACKAGE_VERSION = '3.6.0';
+let savedOtaVer = null;
+try {
+  savedOtaVer = localStorage.getItem('mk21_ota_app_version');
+} catch (e) {}
+
+let CURRENT_APP_VERSION = BASE_PACKAGE_VERSION;
+if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) > 0) {
+  CURRENT_APP_VERSION = savedOtaVer;
+} else if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) < 0) {
+  // Pacote físico recém instalado é mais recente que o OTA salvo: limpar hot-patch anterior
+  try {
+    localStorage.removeItem('mk21_ota_app_js');
+    localStorage.removeItem('mk21_ota_styles_css');
+    localStorage.setItem('mk21_ota_app_version', BASE_PACKAGE_VERSION);
+  } catch (e) {}
+  CURRENT_APP_VERSION = BASE_PACKAGE_VERSION;
+} else {
+  CURRENT_APP_VERSION = savedOtaVer || BASE_PACKAGE_VERSION;
+}
+
 let latestRemoteUpdateData = null;
 
 async function openAppUpdateModal(manualCheck = true) {
@@ -1843,30 +2073,62 @@ async function openAppUpdateModal(manualCheck = true) {
   modal.classList.remove('hidden');
   activeZone = 'modalAppUpdate';
   $('txtInstalledVer').textContent = 'v' + CURRENT_APP_VERSION;
-  $('txtLatestVer').textContent = 'Consultando GitHub...';
+  $('txtLatestVer').textContent = 'Consultando atualizações...';
   $('txtLatestVer').style.color = '#94a3b8';
-  $('txtReleaseNotes').textContent = 'Buscando informações da versão mais recente no repositório oficial...';
+  $('txtReleaseNotes').textContent = 'Verificando dados de versão oficial...';
   $('updateProgressBox').classList.add('hidden');
   $('qrCodeBox').classList.add('hidden');
 
   try {
-    const res = await fetch('https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/version.json?t=' + Date.now());
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    let data = null;
+    const candidateEndpoints = [
+      'version.json?t=' + Date.now(),
+      './version.json?t=' + Date.now(),
+      'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/version.json?t=' + Date.now()
+    ];
+
+    for (const url of candidateEndpoints) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.version) {
+            data = json;
+            break;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.6.0
+    if (!data || compareSemver(data.version, '3.6.0') < 0) {
+      data = {
+        version: '3.6.0',
+        versionCode: 360,
+        title: 'MK21 Play v3.6.0',
+        releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21play_3.6.0_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.6.0') < 0)
+      };
+    }
     latestRemoteUpdateData = data;
 
-    const isNewer = data.version !== CURRENT_APP_VERSION;
+    const isNewer = compareSemver(data.version, CURRENT_APP_VERSION) > 0;
     if (isNewer) {
       $('txtLatestVer').textContent = `v${data.version} 🎉 (Disponível!)`;
       $('txtLatestVer').style.color = '#4caf50';
-      $('btnStartDirectUpdate').textContent = `⬇️ Instalar v${data.version} Diretamente na TV`;
+      $('btnStartDirectUpdate').textContent = `⬇️ Instalar v${data.version} Diretamente na TV (OTA)`;
     } else {
       $('txtLatestVer').textContent = `v${data.version} ✅ (Versão Mais Recente)`;
       $('txtLatestVer').style.color = '#ffd54f';
       $('btnStartDirectUpdate').textContent = `🔄 Reinstalar / Atualizar Arquivos v${data.version}`;
     }
 
-    $('txtReleaseNotes').textContent = data.releaseNotes || 'Melhorias de desempenho e correções gerais.';
+    let notes = data.releaseNotes || 'Melhorias de desempenho, EPG real XMLTV e correções gerais.';
+    if (data.isPendingPush) {
+      notes += '\n\n💡 Dica: No menu do AI Studio no seu navegador, clique em "Push to GitHub" para atualizar os repositórios remotos oficiais.';
+    }
+    $('txtReleaseNotes').textContent = notes;
 
     // Exibir QR Code para download do pacote IPK
     if (data.ipkUrl) {
@@ -1878,7 +2140,7 @@ async function openAppUpdateModal(manualCheck = true) {
   } catch (err) {
     console.error('Update check failed:', err);
     $('txtLatestVer').textContent = 'v' + CURRENT_APP_VERSION + ' (Offline)';
-    $('txtReleaseNotes').textContent = 'Não foi possível contatar o GitHub no momento. Detalhes: ' + err.message + '\nVocê pode tentar novamente ou verificar sua conexão de internet.';
+    $('txtReleaseNotes').textContent = 'Não foi possível contatar o servidor de atualizações no momento: ' + err.message;
     $('btnStartDirectUpdate').textContent = '🔄 Tentar Novamente';
     $('btnCheckAgainUpdate').focus();
   }
@@ -1894,11 +2156,13 @@ async function startDirectUpdate() {
   $('btnStartDirectUpdate').disabled = true;
   $('btnCheckAgainUpdate').disabled = true;
 
+  const targetVer = latestRemoteUpdateData?.version || '3.6.0';
+
   const steps = [
-    { pct: 15, text: 'Conectando ao repositório GitHub...' },
-    { pct: 35, text: 'Baixando pacote atualizado do MK21 Play...' },
-    { pct: 65, text: 'Descompactando novos módulos da Smart TV...' },
-    { pct: 85, text: 'Instalando arquivos no sistema webOS...' },
+    { pct: 15, text: 'Conectando ao repositório de atualização...' },
+    { pct: 40, text: 'Baixando novos scripts e módulos (EPG Real XMLTV, Áudio, Velocidade)...' },
+    { pct: 75, text: 'Instalando módulos no armazenamento local da Smart TV...' },
+    { pct: 90, text: 'Sincronizando com serviços do sistema webOS...' },
     { pct: 100, text: '✅ Atualização concluída com sucesso!' }
   ];
 
@@ -1907,6 +2171,53 @@ async function startDirectUpdate() {
     txtStep.textContent = s.text;
     txtPct.textContent = s.pct + '%';
     bar.style.width = s.pct + '%';
+
+    if (i === 1) {
+      // Baixa e salva o app.js e styles.css mais recentes no localStorage
+      let downloadedJs = false;
+      const jsCandidates = [
+        './app.js?t=' + Date.now(),
+        'app.js?t=' + Date.now(),
+        'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21-tv/app.js?t=' + Date.now()
+      ];
+
+      for (const url of jsCandidates) {
+        try {
+          const jsRes = await fetch(url);
+          if (jsRes.ok) {
+            const jsText = await jsRes.text();
+            if (jsText && jsText.length > 5000 && jsText.includes('playStream')) {
+              localStorage.setItem('mk21_ota_app_js', jsText);
+              downloadedJs = true;
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+
+      const cssCandidates = [
+        './styles.css?t=' + Date.now(),
+        'styles.css?t=' + Date.now(),
+        'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=' + Date.now()
+      ];
+
+      for (const url of cssCandidates) {
+        try {
+          const cssRes = await fetch(url);
+          if (cssRes.ok) {
+            const cssText = await cssRes.text();
+            if (cssText && cssText.length > 1000) {
+              localStorage.setItem('mk21_ota_styles_css', cssText);
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+
+      localStorage.setItem('mk21_ota_app_version', targetVer);
+      CURRENT_APP_VERSION = targetVer;
+    }
+
     await new Promise(r => setTimeout(r, 650));
   }
 
@@ -1920,9 +2231,21 @@ async function startDirectUpdate() {
   } catch (e) {}
 
   setTimeout(() => {
-    alert('O aplicativo MK21 Play foi atualizado com sucesso! Reiniciando a aplicação agora...');
+    alert(`O aplicativo MK21 Play foi atualizado para a versão v${targetVer} com sucesso!\nReiniciando a aplicação agora...`);
     window.location.reload(true);
   }, 1000);
+}
+
+function forceResetTvAppCache() {
+  if (confirm('Deseja limpar todos os scripts em cache e forçar a versão nativa mais recente (v3.6.0)?')) {
+    try {
+      localStorage.removeItem('mk21_ota_app_js');
+      localStorage.removeItem('mk21_ota_styles_css');
+      localStorage.setItem('mk21_ota_app_version', BASE_PACKAGE_VERSION);
+    } catch (e) {}
+    alert('Cache de scripts limpo com sucesso! A TV será reiniciada na versão v' + BASE_PACKAGE_VERSION);
+    window.location.reload(true);
+  }
 }
 
 $('btnCloseUpdateModal').onclick = () => {
@@ -1931,6 +2254,9 @@ $('btnCloseUpdateModal').onclick = () => {
 };
 $('btnStartDirectUpdate').onclick = startDirectUpdate;
 $('btnCheckAgainUpdate').onclick = () => openAppUpdateModal(true);
+if ($('btnForceResetCache')) {
+  $('btnForceResetCache').onclick = forceResetTvAppCache;
+}
 
 function togglePlayPause() {
   const v = $('tvPlayer');

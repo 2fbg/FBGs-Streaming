@@ -558,9 +558,16 @@
                                         </button>
                                     </div>
                                     <h2 id="detail-name" class="font-extrabold text-xl leading-tight">Nome da Mídia</h2>
-                                    <div id="detail-epg-container" class="hidden flex items-center gap-2 mt-2 py-1 px-2.5 bg-red-950/25 border border-red-500/10 rounded-lg max-w-full">
-                                        <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse shrink-0"></span>
-                                        <span id="detail-epg-program" class="text-xs font-semibold text-red-400 truncate">Carregando programa...</span>
+                                    <div id="detail-epg-container" class="hidden flex flex-wrap items-center justify-between gap-2 mt-2 py-1.5 px-3 bg-red-950/25 border border-red-500/20 rounded-xl max-w-full">
+                                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                                            <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse shrink-0"></span>
+                                            <span id="detail-epg-program" class="text-xs font-semibold text-red-400 truncate">Carregando programa...</span>
+                                            <span id="detail-epg-real-badge" class="hidden text-[8.5px] px-1.5 py-0.5 bg-emerald-950/70 text-emerald-400 border border-emerald-500/30 rounded font-black tracking-wider uppercase shrink-0">XMLTV Real</span>
+                                        </div>
+                                        <button id="btn-open-epg-guide" onclick="window.openCurrentStreamEpgModal()" class="text-[11px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-red-950/60 border border-slate-750 hover:border-red-500/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shrink-0 transition-all font-semibold" title="Abrir Guia de Programação EPG">
+                                            <i class="fa-solid fa-calendar-days text-red-500"></i>
+                                            <span>Grade EPG</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -819,6 +826,57 @@
         </div>
     </div>
 
+    <!-- MODAL: GUIA DE PROGRAMAÇÃO EPG (METADADOS XMLTV DO SERVIDOR) -->
+    <div id="epg-guide-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4">
+        <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-3xl max-w-xl w-full p-6 text-white shadow-2xl relative flex flex-col max-h-[85vh]">
+            <button onclick="window.closeEpgGuideModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4 pr-10">
+                <div id="epg-modal-logo-container" class="w-12 h-12 rounded-2xl bg-red-600/10 border border-red-500/30 flex items-center justify-center overflow-hidden shrink-0">
+                    <i class="fa-solid fa-calendar-days text-[#E50914] text-xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h3 id="epg-modal-channel-name" class="font-black text-lg text-white truncate">Guia de Programação EPG</h3>
+                        <span id="epg-modal-source-badge" class="text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">XMLTV Real</span>
+                    </div>
+                    <p id="epg-modal-subtitle" class="text-xs text-slate-400 truncate">Grade em tempo real via metadados do servidor</p>
+                </div>
+            </div>
+            
+            <!-- Progress / current on-air highlight card -->
+            <div id="epg-modal-current-card" class="mb-4 p-3.5 bg-gradient-to-r from-red-950/40 to-slate-900/60 border border-red-500/20 rounded-2xl">
+                <div class="flex items-center justify-between text-xs mb-1.5">
+                    <span class="text-red-400 font-bold flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> NO AR AGORA
+                    </span>
+                    <span id="epg-modal-current-time" class="text-slate-350 font-mono text-[11px]">--:-- - --:--</span>
+                </div>
+                <h4 id="epg-modal-current-title" class="font-extrabold text-sm text-white mb-1">Carregando programação...</h4>
+                <p id="epg-modal-current-desc" class="text-xs text-slate-400 line-clamp-2 mb-2">Aguardando dados de programação do servidor.</p>
+                <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div id="epg-modal-current-progress" class="bg-gradient-to-r from-red-600 to-amber-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- EPG Timeline Schedule List -->
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cronograma de Programas</span>
+                <button onclick="window.refreshActiveChannelEpg()" class="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 font-semibold transition-colors">
+                    <i class="fa-solid fa-arrows-rotate"></i> Atualizar do Servidor
+                </button>
+            </div>
+            <div id="epg-modal-schedule-list" class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scroll min-h-[180px]">
+                <!-- Schedule items dynamically rendered -->
+            </div>
+            <div class="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                <span id="epg-modal-footer-info">Sincronizado via metadados XMLTV</span>
+                <span class="font-bold text-[#E50914]">MK21 EPG Engine</span>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: INSTALAR NA SMART TV / NAVEGADOR -->
     <div id="smart-tv-install-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4">
         <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-3xl max-w-lg w-full p-6 text-white shadow-2xl relative">
@@ -934,61 +992,562 @@
             { id: "server_10", name: "MULTT BOX", baseUrl: "http://cdnconn.xyz" }
         ];
 
-        // EPG Program Schedule Engine (Dynamic metadata)
-        function getCurrentEpgProgram(channelName) {
-            const hour = new Date().getHours();
-            const name = (channelName || '').toUpperCase();
-            
-            if (name.includes("GLOBO")) {
-                if (hour >= 6 && hour <= 8) return "Bom Dia Brasil";
-                if (hour >= 9 && hour <= 11) return "Mais Você";
-                if (hour >= 12 && hour <= 13) return "Praça TV - 1ª Edição";
-                if (hour >= 14 && hour <= 16) return "Sessão da Tarde";
-                if (hour >= 17 && hour <= 19) return "Vale a Pena Ver de Novo";
-                if (hour >= 20 && hour <= 21) return "Jornal Nacional";
-                if (hour >= 22 && hour <= 23) return "Novela das Nove";
-                return "Cinema Espetacular";
+        // =====================================================================
+        // MOTOR AVANÇADO DE EPG REAL (METADADOS XMLTV / XTREAM CODES API) & FALLBACK
+        // =====================================================================
+        const EpgManager = {
+            cache: new Map(), // key -> Array<{ title, description, start: Date, stop: Date, isReal: boolean }>
+            fetchingKeys: new Set(),
+            serverXmltvUrl: '',
+            xmltvParsedData: null,
+            activeEpgItem: null,
+            xmltvPromise: null,
+
+            getStreamId(url) {
+                if (!url) return null;
+                const match = String(url).match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
+                return match ? match[1] : null;
+            },
+
+            decodeText(str) {
+                if (!str || typeof str !== 'string') return '';
+                const trimmed = str.trim();
+                if (/^[A-Za-z0-9+/=]+$/.test(trimmed) && trimmed.length >= 4 && trimmed.length % 4 === 0) {
+                    try {
+                        const binary = atob(trimmed);
+                        if (/^[\x09\x0A\x0D\x20-\x7E\xA0-\xFF\u0100-\uFFFF]+$/.test(binary)) {
+                            try {
+                                return decodeURIComponent(escape(binary));
+                            } catch (e) {
+                                return binary;
+                            }
+                        }
+                    } catch (err) {}
+                }
+                return trimmed;
+            },
+
+            parseXmltvDate(dateStr) {
+                if (!dateStr) return null;
+                const m = String(dateStr).trim().match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-]\d{4}))?/);
+                if (!m) return null;
+                const [, y, mo, d, h, min, s, tz] = m;
+                let utcMs = Date.UTC(parseInt(y, 10), parseInt(mo, 10) - 1, parseInt(d, 10), parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+                if (tz) {
+                    const sign = tz.charAt(0) === '-' ? -1 : 1;
+                    const tzH = parseInt(tz.substring(1, 3), 10);
+                    const tzM = parseInt(tz.substring(3, 5), 10);
+                    utcMs -= sign * (tzH * 60 + tzM) * 60 * 1000;
+                }
+                return new Date(utcMs);
+            },
+
+            formatTime(date) {
+                if (!date) return '--:--';
+                return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+            },
+
+            getChannelKeys(item) {
+                const keys = [];
+                if (!item) return keys;
+                if (item.streamId) keys.push(`id_${item.streamId}`);
+                const sId = this.getStreamId(item.url);
+                if (sId) keys.push(`id_${sId}`);
+                if (item.tvgId) keys.push(`tvgid_${item.tvgId.toLowerCase().trim()}`);
+                if (item.tvgName) keys.push(`tvgname_${item.tvgName.toLowerCase().trim()}`);
+                if (item.name) {
+                    const clean = item.name.toUpperCase().replace(/\b(FHD|HD|4K|SD|BR|BRASIL|CANAL|CANAIS)\b/g, '').trim().toLowerCase();
+                    keys.push(`name_${clean}`);
+                }
+                return keys;
+            },
+
+            getCachedSchedule(item) {
+                const keys = this.getChannelKeys(item);
+                for (const k of keys) {
+                    if (this.cache.has(k)) {
+                        return this.cache.get(k);
+                    }
+                }
+                return null;
+            },
+
+            storeSchedule(item, schedule) {
+                const keys = this.getChannelKeys(item);
+                for (const k of keys) {
+                    this.cache.set(k, schedule);
+                }
+            },
+
+            async fetchRealEpg(item) {
+                if (!item || !item.url) return null;
+                const keys = this.getChannelKeys(item);
+                const primaryKey = keys[0] || item.name;
+
+                if (this.cache.has(primaryKey)) {
+                    return this.cache.get(primaryKey);
+                }
+                if (this.fetchingKeys.has(primaryKey)) {
+                    return null;
+                }
+
+                const streamId = item.streamId || this.getStreamId(item.url);
+                const baseUrl = localStorage.getItem('mk21_baseUrl') || (typeof serverSelector !== 'undefined' && serverSelector.value) || '';
+                const user = localStorage.getItem('mk21_username') || '';
+                const pass = localStorage.getItem('mk21_password') || '';
+                const corsMethod = localStorage.getItem('mk21_cors') || 'auto';
+
+                if (!baseUrl || !user || !pass || !streamId) {
+                    return null;
+                }
+
+                this.fetchingKeys.add(primaryKey);
+
+                try {
+                    const cleanBase = baseUrl.replace(/\/+$/, '');
+                    const epgApiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=12`;
+                    
+                    const fetchUrl = (typeof getEffectiveProxyMethod === 'function') 
+                        ? getProxyUrl(epgApiUrl, getEffectiveProxyMethod(epgApiUrl, corsMethod))
+                        : epgApiUrl;
+
+                    const res = await fetch(fetchUrl, { headers: { 'Accept': 'application/json' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && Array.isArray(data.epg_listings) && data.epg_listings.length > 0) {
+                            const parsedList = data.epg_listings.map(epg => {
+                                const title = this.decodeText(epg.title) || 'Programa';
+                                const desc = this.decodeText(epg.description) || '';
+                                let start = null;
+                                let stop = null;
+                                if (epg.start_timestamp) {
+                                    start = new Date(epg.start_timestamp * 1000);
+                                } else if (epg.start) {
+                                    start = new Date(epg.start.replace(' ', 'T'));
+                                }
+                                if (epg.stop_timestamp) {
+                                    stop = new Date(epg.stop_timestamp * 1000);
+                                } else if (epg.end) {
+                                    stop = new Date(epg.end.replace(' ', 'T'));
+                                }
+                                return {
+                                    title,
+                                    description: desc,
+                                    start,
+                                    stop,
+                                    isReal: true
+                                };
+                            }).filter(p => p.start && p.stop && !isNaN(p.start.getTime()) && !isNaN(p.stop.getTime()));
+
+                            if (parsedList.length > 0) {
+                                this.storeSchedule(item, parsedList);
+                                window.dispatchEvent(new CustomEvent('mk21:epg-updated', { detail: { item, schedule: parsedList } }));
+                                return parsedList;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.debug('[EPG] Short EPG fetch error for', item.name, err);
+                } finally {
+                    this.fetchingKeys.delete(primaryKey);
+                }
+
+                return null;
+            },
+
+            async loadServerXmltv(customUrl = null) {
+                const targetUrl = customUrl || this.serverXmltvUrl || (() => {
+                    const baseUrl = localStorage.getItem('mk21_baseUrl') || '';
+                    const user = localStorage.getItem('mk21_username') || '';
+                    const pass = localStorage.getItem('mk21_password') || '';
+                    if (baseUrl && user && pass) {
+                        return `${baseUrl.replace(/\/+$/, '')}/xmltv.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+                    }
+                    return '';
+                })();
+
+                if (!targetUrl) return null;
+                if (this.xmltvPromise) return this.xmltvPromise;
+
+                this.xmltvPromise = (async () => {
+                    try {
+                        const corsMethod = localStorage.getItem('mk21_cors') || 'auto';
+                        const fetchUrl = (typeof getEffectiveProxyMethod === 'function') 
+                            ? getProxyUrl(targetUrl, getEffectiveProxyMethod(targetUrl, corsMethod))
+                            : targetUrl;
+
+                        const res = await fetch(fetchUrl);
+                        if (!res.ok) return null;
+                        const xmlText = await res.text();
+                        if (!xmlText.includes('<tv') || !xmlText.includes('<programme')) return null;
+
+                        const progRegex = /<programme\s+[^>]*start="([^"]+)"\s+[^>]*stop="([^"]+)"\s+[^>]*channel="([^"]+)"[^>]*>([\s\S]*?)<\/programme>/gi;
+                        let match;
+                        let count = 0;
+                        while ((match = progRegex.exec(xmlText)) !== null) {
+                            const [, startStr, stopStr, channelId, inner] = match;
+                            const titleMatch = inner.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+                            const descMatch = inner.match(/<desc[^>]*>([\s\S]*?)<\/desc>/i);
+                            
+                            const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : 'Programa';
+                            const desc = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+                            const start = this.parseXmltvDate(startStr);
+                            const stop = this.parseXmltvDate(stopStr);
+
+                            if (start && stop && channelId) {
+                                const prog = { title, description: desc, start, stop, isReal: true };
+                                const chKey = `tvgid_${channelId.toLowerCase().trim()}`;
+                                if (!this.cache.has(chKey)) {
+                                    this.cache.set(chKey, []);
+                                }
+                                this.cache.get(chKey).push(prog);
+                                count++;
+                            }
+                        }
+                        console.log(`[EPG] XMLTV carregado com sucesso: ${count} programas mapeados.`);
+                        window.dispatchEvent(new CustomEvent('mk21:epg-updated', { detail: { count } }));
+                        return count;
+                    } catch (e) {
+                        console.warn('[EPG] Erro ao carregar XMLTV:', e);
+                        return null;
+                    }
+                })();
+
+                return this.xmltvPromise;
+            },
+
+            getProgramInfo(item) {
+                if (!item) return this.getSimulatedProgramInfo('Canal Geral');
+                const schedule = this.getCachedSchedule(item);
+
+                if (schedule && schedule.length > 0) {
+                    const now = new Date();
+                    const nowMs = now.getTime();
+
+                    let current = schedule.find(p => p.start.getTime() <= nowMs && p.stop.getTime() > nowMs);
+                    if (!current) {
+                        current = schedule.find(p => p.start.getTime() >= nowMs) || schedule[schedule.length - 1];
+                    }
+
+                    let next = null;
+                    if (current) {
+                        const curIdx = schedule.indexOf(current);
+                        if (curIdx >= 0 && curIdx + 1 < schedule.length) {
+                            next = schedule[curIdx + 1];
+                        }
+                    }
+
+                    const startMs = current.start.getTime();
+                    const stopMs = current.stop.getTime();
+                    const total = Math.max(1, stopMs - startMs);
+                    const elapsed = Math.max(0, nowMs - startMs);
+                    const progressPercent = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+
+                    return {
+                        isReal: true,
+                        currentTitle: current.title,
+                        currentDesc: current.description || 'Programação transmitida ao vivo via metadados do servidor.',
+                        timeRange: `${this.formatTime(current.start)} - ${this.formatTime(current.stop)}`,
+                        progressPercent,
+                        nextTitle: next ? next.title : 'Programação a seguir',
+                        nextTime: next ? this.formatTime(next.start) : '',
+                        schedule
+                    };
+                }
+
+                this.fetchRealEpg(item);
+                return this.getSimulatedProgramInfo(item.name || 'Canal Geral');
+            },
+
+            getSimulatedProgramInfo(channelName) {
+                const now = new Date();
+                const curHour = now.getHours();
+                const curMin = now.getMinutes();
+                const curTotalMin = curHour * 60 + curMin;
+                const name = (channelName || '').toUpperCase();
+
+                const rawGrid = (() => {
+                    if (name.includes("GLOBO")) {
+                        return [
+                            { s: [6, 0], e: [8, 30], t: "Bom Dia Brasil", d: "Telejornal matinal com as primeiras notícias do Brasil e do mundo." },
+                            { s: [8, 30], e: [10, 35], t: "Encontro com Patrícia Poeta", d: "Entrevistas, debates de atualidades, música e informação." },
+                            { s: [10, 35], e: [12, 0], t: "Mais Você com Ana Maria Braga", d: "Receitas culinárias, dicas caseiras, convidados e entretenimento." },
+                            { s: [12, 0], e: [13, 25], t: "Praça TV - 1ª Edição", d: "Noticiário regional com foco nos acontecimentos locais ao vivo." },
+                            { s: [13, 25], e: [14, 45], t: "Globo Esporte & Jornal Hoje", d: "Cobertura completa dos esportes e giro internacional de notícias." },
+                            { s: [14, 45], e: [16, 40], t: "Sessão da Tarde", d: "Exibição de grandes sucessos do cinema para toda a família." },
+                            { s: [16, 40], e: [18, 25], t: "Vale a Pena Ver de Novo", d: "Reexibição dos maiores clássicos da teledramaturgia nacional." },
+                            { s: [18, 25], e: [19, 30], t: "Novela das Seis", d: "Capítulo inédito com emoções e reviravoltas da trama de época." },
+                            { s: [19, 30], e: [20, 30], t: "Novela das Sete", d: "Comédia e romance no horário mais descontraído da programação." },
+                            { s: [20, 30], e: [21, 30], t: "Jornal Nacional", d: "O principal telejornal do país com reportagens exclusivas e análises." },
+                            { s: [21, 30], e: [22, 35], t: "Novela das Nove", d: "A trama principal do horário nobre em alta definição." },
+                            { s: [22, 35], e: [23, 59], t: "Tela Quente / Cinema Especial", d: "Superproduções de Hollywood em exibição especial na TV." }
+                        ];
+                    }
+                    if (name.includes("RECORD")) {
+                        return [
+                            { s: [6, 0], e: [8, 45], t: "Balanço Geral Manhã", d: "As primeiras notícias do dia com prestação de serviço ao vivo." },
+                            { s: [8, 45], e: [10, 0], t: "Fala Brasil", d: "Jornalismo dinâmico e cobertura dos temas que afetam o cidadão." },
+                            { s: [10, 0], e: [11, 50], t: "Hoje em Dia", d: "Variedades, moda, culinária e fofocas dos famosos." },
+                            { s: [11, 50], e: [15, 30], t: "Balanço Geral & Hora da Venenosa", d: "Líder de audiência com notícias e entretenimento." },
+                            { s: [15, 30], e: [16, 45], t: "Novela da Tarde", d: "Dramaturgia e histórias bíblicas emocionantes." },
+                            { s: [16, 45], e: [19, 55], t: "Cidade Alerta", d: "Cobertura ao vivo de segurança e helicóptero com notícias urgentes." },
+                            { s: [19, 55], e: [21, 0], t: "Jornal da Record", d: "Análise aprofundada dos principais fatos da política e economia." },
+                            { s: [21, 0], e: [22, 30], t: "Novela Reis / Série Bíblica", d: "Produção épica com grandes efeitos e narrativa histórica." },
+                            { s: [22, 30], e: [23, 59], t: "Super Tela / Reality Show", d: "Filmes de ação e grandes atrações da TV aberta." }
+                        ];
+                    }
+                    if (name.includes("SBT")) {
+                        return [
+                            { s: [6, 0], e: [9, 30], t: "Primeiro Impacto", d: "Noticiário matutino com prestação de serviço e trânsito ao vivo." },
+                            { s: [9, 30], e: [13, 0], t: "Bom Dia & Cia", d: "Desenhos animados clássicos, gincanas e diversão infantil." },
+                            { s: [13, 0], e: [14, 30], t: "Chaves & Séries Amadas", d: "As aventuras mais queridas da vila do Chaves." },
+                            { s: [14, 30], e: [16, 30], t: "Novelas da Tarde", d: "Dramas mexicanos com grandes paixões e vilãs marcantes." },
+                            { s: [16, 30], e: [18, 30], t: "Fofocalizando", d: "O universo dos famosos com notícias exclusivas e bastidores." },
+                            { s: [18, 30], e: [19, 45], t: "SBT Brasil", d: "Telejornalismo ágil com os principais acontecimentos." },
+                            { s: [19, 45], e: [20, 45], t: "A Infância de Romeu e Julieta", d: "Novela infantojuvenil cheia de aventuras e música." },
+                            { s: [20, 45], e: [22, 15], t: "Programa do Ratinho", d: "Auditório animado, teste de DNA, calouros e muito humor." },
+                            { s: [22, 15], e: [23, 59], t: "Cine Espetacular / A Praça é Nossa", d: "Humor tradicional e filmes consagrados da Warner." }
+                        ];
+                    }
+                    if (name.includes("BAND")) {
+                        return [
+                            { s: [6, 0], e: [8, 0], t: "Bora Brasil", d: "Informações do trânsito e principais manchetes do amanhecer." },
+                            { s: [11, 0], e: [13, 0], t: "Jogo Aberto", d: "Debate esportivo irreverente comandado por Renata Fan e Denílson." },
+                            { s: [13, 0], e: [14, 30], t: "Os Donos da Bola", d: "Craque Neto fala tudo sobre os bastidores do futebol." },
+                            { s: [14, 30], e: [16, 0], t: "Melhor da Tarde", d: "Culinária com receitas fáceis, fofocas e astral." },
+                            { s: [16, 0], e: [19, 20], t: "Brasil Urgente", d: "Datena comanda a transmissão ao vivo dos grandes acontecimentos." },
+                            { s: [19, 20], e: [20, 30], t: "Jornal da Band", d: "Referência em jornalismo com grandes correspondentes." },
+                            { s: [20, 30], e: [22, 0], t: "Perrengue na Band", d: "Vídeos mais engraçados da internet comentados no estúdio." },
+                            { s: [22, 0], e: [23, 59], t: "MasterChef Brasil / Esporte Total", d: "Competição gastronômica e os gols da rodada." }
+                        ];
+                    }
+                    if (name.includes("SPORT") || name.includes("ESPN") || name.includes("PREMIERE") || name.includes("COMBATE")) {
+                        return [
+                            { s: [8, 0], e: [11, 0], t: "SportsCenter / Redação SporTV", d: "O resumo matinal dos esportes no Brasil e no mundo." },
+                            { s: [11, 0], e: [13, 0], t: "Futebol 360 / Bate Pronto", d: "Análise tática dos clubes e escalações para os jogos do dia." },
+                            { s: [13, 0], e: [16, 0], t: "Futebol Ao Vivo - Pré-Jogo", d: "Entrevistas exclusivas e chegada das delegações no estádio." },
+                            { s: [16, 0], e: [18, 30], t: "Campeonato Ao Vivo - Transmissão", d: "Narração emocionante lance a lance em alta definição." },
+                            { s: [18, 30], e: [21, 0], t: "Linha de Passe / Troca de Passes", d: "Mesa-redonda com os melhores comentaristas esportivos." },
+                            { s: [21, 0], e: [23, 0], t: "Jogo da Noite Ao Vivo", d: "Clássico decisivo com disputa de pontos e grandes lances." },
+                            { s: [23, 0], e: [23, 59], t: "Gols da Rodada & Melhores Momentos", d: "Todos os gols e polêmicas com câmera lenta e replay." }
+                        ];
+                    }
+                    if (name.includes("TELE") || name.includes("HBO") || name.includes("WARNER") || name.includes("PARAMOUNT") || name.includes("UNIVERSAL") || name.includes("CINEMA")) {
+                        return [
+                            { s: [8, 0], e: [11, 0], t: "Sessão Aventura: Os Vingadores", d: "Os heróis mais poderosos da Terra reunidos para salvar o universo." },
+                            { s: [11, 0], e: [13, 30], t: "Comédia em Alta: Gente Grande 2", d: "Diversão garantida com muita risada e confusões de família." },
+                            { s: [13, 30], e: [16, 0], t: "Ação Pura: Batman - O Cavaleiro das Trevas", d: "Christian Bale e Heath Ledger no aclamado filme de Christopher Nolan." },
+                            { s: [16, 0], e: [18, 30], t: "Superestreia: Duna Parte 2", d: "A ascensão épica na ficção científica interplanetária." },
+                            { s: [18, 30], e: [20, 15], t: "Série Especial: House of the Dragon", d: "Disputas pelo Trono de Ferro com dragões em batalha." },
+                            { s: [20, 15], e: [22, 30], t: "Blockbuster do Ano: Oppenheimer", d: "A história da criação da bomba atômica vencedora do Oscar." },
+                            { s: [22, 30], e: [23, 59], t: "Suspense Noturno: Ilha do Medo", d: "Mistério intrigante com Leonardo DiCaprio em um hospital psiquiátrico." }
+                        ];
+                    }
+                    return [
+                        { s: [6, 0], e: [10, 0], t: "Manhã de Notícias e Entretenimento", d: "Programação matinal com variedades, música e utilidade pública." },
+                        { s: [10, 0], e: [13, 0], t: "Revista Eletrônica", d: "Receitas práticas, dicas de saúde, finanças e convidados." },
+                        { s: [13, 0], e: [16, 0], t: "Tarde de Sucessos", d: "Exibição de filmes, séries populares e atrações ao vivo." },
+                        { s: [16, 0], e: [19, 0], t: "Panorama da Cidade", d: "Giro regional com foco em mobilidade urbana e segurança." },
+                        { s: [19, 0], e: [21, 0], t: "Horário Nobre ao Vivo", d: "Os programas de maior audiência da grade com muita emoção." },
+                        { s: [21, 0], e: [23, 0], t: "Sessão Especial da Noite", d: "Grandes atrações e shows musicais ao vivo." },
+                        { s: [23, 0], e: [23, 59], t: "Madrugada Alternativa", d: "Cinema clássico, documentários e produções independentes." }
+                    ];
+                })();
+
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const schedule = rawGrid.map(item => {
+                    const start = new Date(today.getTime());
+                    start.setHours(item.s[0], item.s[1], 0, 0);
+                    const stop = new Date(today.getTime());
+                    stop.setHours(item.e[0], item.e[1], 59, 999);
+                    return {
+                        title: item.t,
+                        description: item.d,
+                        start,
+                        stop,
+                        isReal: false
+                    };
+                });
+
+                let current = schedule.find(p => {
+                    const sMin = p.start.getHours() * 60 + p.start.getMinutes();
+                    const eMin = p.stop.getHours() * 60 + p.stop.getMinutes();
+                    return curTotalMin >= sMin && curTotalMin <= eMin;
+                }) || schedule[0];
+
+                let curIdx = schedule.indexOf(current);
+                let next = (curIdx >= 0 && curIdx + 1 < schedule.length) ? schedule[curIdx + 1] : null;
+
+                const sMin = current.start.getHours() * 60 + current.start.getMinutes();
+                const eMin = current.stop.getHours() * 60 + current.stop.getMinutes();
+                const total = Math.max(1, eMin - sMin);
+                const elapsed = Math.max(0, curTotalMin - sMin);
+                const progressPercent = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+
+                return {
+                    isReal: false,
+                    currentTitle: current.title,
+                    currentDesc: current.description,
+                    timeRange: `${this.formatTime(current.start)} - ${this.formatTime(current.stop)}`,
+                    progressPercent,
+                    nextTitle: next ? next.title : 'Programação Regular',
+                    nextTime: next ? this.formatTime(next.start) : '',
+                    schedule
+                };
+            },
+
+            updateActiveStreamEpgUI(item) {
+                this.activeEpgItem = item;
+                const epgProg = document.getElementById('detail-epg-program');
+                const epgRealBadge = document.getElementById('detail-epg-real-badge');
+                if (!epgProg) return;
+
+                const info = this.getProgramInfo(item);
+                epgProg.textContent = `NO AR AGORA: ${info.currentTitle}`;
+
+                if (epgRealBadge) {
+                    if (info.isReal) {
+                        epgRealBadge.classList.remove('hidden');
+                        epgRealBadge.textContent = 'XMLTV Real';
+                    } else {
+                        epgRealBadge.classList.add('hidden');
+                    }
+                }
+            },
+
+            openScheduleModal(item) {
+                const modal = document.getElementById('epg-guide-modal');
+                if (!modal) return;
+
+                this.activeEpgItem = item;
+                const chNameEl = document.getElementById('epg-modal-channel-name');
+                const badgeEl = document.getElementById('epg-modal-source-badge');
+                const curTitleEl = document.getElementById('epg-modal-current-title');
+                const curDescEl = document.getElementById('epg-modal-current-desc');
+                const curTimeEl = document.getElementById('epg-modal-current-time');
+                const curProgEl = document.getElementById('epg-modal-current-progress');
+                const listEl = document.getElementById('epg-modal-schedule-list');
+                const logoContainer = document.getElementById('epg-modal-logo-container');
+
+                if (chNameEl) chNameEl.textContent = item.name || 'Canal Desconhecido';
+                if (logoContainer) {
+                    if (item.logo) {
+                        logoContainer.innerHTML = `<img src="${item.logo}" class="w-full h-full object-contain p-1" onerror="this.parentElement.innerHTML='<i class=\\'fa-solid fa-tv text-red-500 text-xl\\'></i>'">`;
+                    } else {
+                        logoContainer.innerHTML = `<i class="fa-solid fa-tv text-red-500 text-xl"></i>`;
+                    }
+                }
+
+                const info = this.getProgramInfo(item);
+
+                if (badgeEl) {
+                    if (info.isReal) {
+                        badgeEl.className = 'text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider bg-emerald-950/70 text-emerald-400 border border-emerald-500/40';
+                        badgeEl.textContent = 'XMLTV Servidor Real';
+                    } else {
+                        badgeEl.className = 'text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider bg-amber-950/70 text-amber-400 border border-amber-500/30';
+                        badgeEl.textContent = 'Grade Estimada';
+                    }
+                }
+
+                if (curTitleEl) curTitleEl.textContent = info.currentTitle;
+                if (curDescEl) curDescEl.textContent = info.currentDesc;
+                if (curTimeEl) curTimeEl.textContent = info.timeRange;
+                if (curProgEl) curProgEl.style.width = `${info.progressPercent}%`;
+
+                if (listEl) {
+                    listEl.innerHTML = '';
+                    const nowMs = Date.now();
+
+                    info.schedule.forEach(prog => {
+                        const startH = this.formatTime(prog.start);
+                        const stopH = this.formatTime(prog.stop);
+                        const isNow = prog.start.getTime() <= nowMs && prog.stop.getTime() > nowMs;
+                        const isPast = prog.stop.getTime() <= nowMs;
+
+                        const itemRow = document.createElement('div');
+                        itemRow.className = `p-3 rounded-xl border transition-all flex flex-col gap-1 ${
+                            isNow 
+                                ? 'bg-red-950/30 border-red-500/40 shadow-sm' 
+                                : (isPast ? 'bg-slate-900/30 border-slate-850 opacity-60' : 'bg-slate-900/50 border-slate-800 hover:border-slate-700')
+                        }`;
+
+                        itemRow.innerHTML = `
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-mono text-slate-350 font-bold flex items-center gap-1.5">
+                                    <i class="fa-regular fa-clock text-[10px] text-slate-500"></i> ${startH} - ${stopH}
+                                </span>
+                                ${isNow ? '<span class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 bg-red-600/30 text-red-400 border border-red-500/30 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> NO AR</span>' : (isPast ? '<span class="text-[9px] font-semibold text-slate-500 uppercase">Encerrado</span>' : '<span class="text-[9px] font-semibold text-slate-400 uppercase">A Seguir</span>')}
+                            </div>
+                            <h5 class="text-sm font-bold text-white ${isNow ? 'text-red-400 font-extrabold' : ''}">${prog.title}</h5>
+                            ${prog.description ? `<p class="text-xs text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">${prog.description}</p>` : ''}
+                        `;
+                        listEl.appendChild(itemRow);
+                    });
+                }
+
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
             }
-            if (name.includes("RECORD")) {
-                if (hour >= 6 && hour <= 8) return "Balanço Geral Manhã";
-                if (hour >= 12 && hour <= 14) return "Balanço Geral";
-                if (hour >= 15 && hour <= 17) return "Cidade Alerta";
-                if (hour >= 20 && hour <= 21) return "Jornal da Record";
-                return "Super Tela";
+        };
+
+        window.EpgManager = EpgManager;
+
+        window.closeEpgGuideModal = function() {
+            const modal = document.getElementById('epg-guide-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
             }
-            if (name.includes("SBT")) {
-                if (hour >= 6 && hour <= 8) return "Primeiro Impacto";
-                if (hour >= 13 && hour <= 14) return "Chaves";
-                if (hour >= 20 && hour <= 21) return "Romeu e Julieta";
-                if (hour >= 22 && hour <= 23) return "Programa do Ratinho";
-                return "Cine Espetacular";
+        };
+
+        window.openCurrentStreamEpgModal = function() {
+            if (currentActiveItem) {
+                window.EpgManager.openScheduleModal(currentActiveItem);
             }
-            if (name.includes("BAND")) {
-                if (hour >= 12 && hour <= 13) return "Jogo Aberto";
-                if (hour >= 14 && hour <= 15) return "Os Donos da Bola";
-                if (hour >= 16 && hour <= 18) return "Brasil Urgente";
-                if (hour >= 19 && hour <= 20) return "Jornal da Band";
-                return "Esporte Total";
+        };
+
+        window.refreshActiveChannelEpg = async function() {
+            if (window.EpgManager && window.EpgManager.activeEpgItem) {
+                const item = window.EpgManager.activeEpgItem;
+                const btn = window.event?.currentTarget;
+                if (btn) btn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Atualizando...';
+                const keys = window.EpgManager.getChannelKeys(item);
+                keys.forEach(k => window.EpgManager.cache.delete(k));
+                await window.EpgManager.fetchRealEpg(item);
+                window.EpgManager.openScheduleModal(item);
+                if (btn) btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Atualizado!';
             }
-            if (name.includes("SPORT") || name.includes("ESPN") || name.includes("PREMIERE")) {
-                if (hour >= 10 && hour <= 12) return "Mesa Redonda ao Vivo";
-                if (hour >= 13 && hour <= 15) return "Futebol Ao Vivo / Gols da Rodada";
-                if (hour >= 16 && hour <= 18) return "SportsCenter";
-                if (hour >= 19 && hour <= 22) return "Brasileirão Campeonato Ao Vivo";
-                return "Linha de Passe";
+        };
+
+        window.addEventListener('mk21:epg-updated', (ev) => {
+            if (currentActiveItem && currentActiveItem.type === 'LIVE') {
+                window.EpgManager.updateActiveStreamEpgUI(currentActiveItem);
             }
-            if (name.includes("TELE") || name.includes("HBO") || name.includes("CINEMA") || name.includes("WARNER") || name.includes("UNIVERSAL")) {
-                if (hour >= 13 && hour <= 15) return "Filme Extra: Batman - O Cavaleiro das Trevas";
-                if (hour >= 16 && hour <= 18) return "Filme Blockbuster: Duna Parte 2";
-                if (hour >= 19 && hour <= 21) return "Série do Ano: House of the Dragon";
-                if (hour >= 22 && hour <= 23) return "Filme Lançamento: Oppenheimer";
-                return "Sessão Cult de Cinema";
+            // Atualiza cartões de canais visíveis que coincidam com o canal atualizado
+            if (ev.detail && ev.detail.item) {
+                const targetName = ev.detail.item.name;
+                const cardLabels = document.querySelectorAll(`[data-epg-for="${targetName.replace(/"/g, '\\"')}"]`);
+                cardLabels.forEach(el => {
+                    const info = window.EpgManager.getProgramInfo(ev.detail.item);
+                    el.innerHTML = `
+                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full inline-block animate-pulse shrink-0"></span>
+                        <span class="truncate text-red-400">NO AR: ${info.currentTitle}</span>
+                        ${info.isReal ? '<span class="text-[8px] px-1 py-0.2 bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 rounded font-black tracking-widest shrink-0">XMLTV</span>' : ''}
+                    `;
+                });
             }
-            
-            if (hour >= 6 && hour <= 11) return "Programação Matinal";
-            if (hour >= 12 && hour <= 17) return "Tarde de Entretenimento";
-            if (hour >= 18 && hour <= 22) return "Jornalismo & Show do Intervalo";
-            return "Sessão Corujão / Madrugada de Filmes";
+        });
+
+        // Mantém compatibilidade com chamadas anteriores
+        function getCurrentEpgProgram(channelName, itemObj = null) {
+            if (window.EpgManager && itemObj) {
+                return window.EpgManager.getProgramInfo(itemObj).currentTitle;
+            }
+            if (window.EpgManager) {
+                return window.EpgManager.getSimulatedProgramInfo(channelName).currentTitle;
+            }
+            return "Programação Ao Vivo";
         }
 
         // App state variables
@@ -2355,6 +2914,14 @@
                     line = line.substring(1).trim();
                 }
 
+                if (line.startsWith('#EXTM3U') || line.startsWith('#extm3u')) {
+                    let urlTvg = fastExtractAttr(line, 'url-tvg=') || fastExtractAttr(line, 'x-tvg-url=');
+                    if (urlTvg && window.EpgManager) {
+                        window.EpgManager.serverXmltvUrl = urlTvg.trim();
+                    }
+                    continue;
+                }
+
                 if (line.startsWith('#EXTINF:') || line.startsWith('#extinf:')) {
                     currentItem = {};
 
@@ -2366,6 +2933,12 @@
                     // Fast category extraction
                     let cat = fastExtractAttr(line, 'group-title=');
                     currentItem.category = cat ? cat.trim() : 'Canais Gerais';
+
+                    // Fast tvg-id and tvg-name extraction for real XMLTV sync
+                    let tvgId = fastExtractAttr(line, 'tvg-id=') || fastExtractAttr(line, 'tvg-ID=');
+                    let tvgName = fastExtractAttr(line, 'tvg-name=') || fastExtractAttr(line, 'tvg-NAME=');
+                    currentItem.tvgId = tvgId ? tvgId.trim() : '';
+                    currentItem.tvgName = tvgName ? tvgName.trim() : '';
 
                     // Fast name extraction
                     const commaIdx = line.lastIndexOf(',');
@@ -2381,6 +2954,8 @@
                             streamUrl = 'http://' + streamUrl.substring(8);
                         }
                         currentItem.url = streamUrl;
+                        const sIdMatch = streamUrl.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
+                        currentItem.streamId = sIdMatch ? sIdMatch[1] : '';
 
                         const categoryUpper = currentItem.category.toUpperCase();
                         const nameUpper = currentItem.name.toUpperCase();
@@ -2752,13 +3327,17 @@
                         ? `<img class="w-12 h-12 rounded-xl object-contain bg-slate-950 p-1 border border-slate-800 shadow" src="${item.logo}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${item.name}">`
                         : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-red-950/30 to-slate-950 text-red-500 flex items-center justify-center font-black text-lg border border-red-500/10 shadow">${item.name.charAt(0).toUpperCase()}</div>`;
 
+                    const epgInfo = window.EpgManager ? window.EpgManager.getProgramInfo(item) : { currentTitle: getCurrentEpgProgram(item.name), isReal: false };
+                    const safeName = item.name.replace(/"/g, '&quot;');
+
                     colCard.innerHTML = `
                         ${logoHtml}
                         <div class="flex-grow min-w-0 flex flex-col justify-center">
                             <h4 class="font-extrabold text-xs truncate text-slate-100 group-hover:text-red-500 transition-colors leading-tight">${item.name}</h4>
-                            <div class="text-[9.5px] text-red-500 font-extrabold truncate mt-1 flex items-center gap-1.5 min-w-0">
+                            <div class="text-[9.5px] text-red-500 font-extrabold truncate mt-1 flex items-center gap-1.5 min-w-0" data-epg-for="${safeName}">
                                 <span class="w-1.5 h-1.5 bg-red-500 rounded-full inline-block animate-pulse shrink-0"></span>
-                                <span class="truncate text-red-400">NO AR: ${getCurrentEpgProgram(item.name)}</span>
+                                <span class="truncate text-red-400">NO AR: ${epgInfo.currentTitle}</span>
+                                ${epgInfo.isReal ? '<span class="text-[8px] px-1 py-0.2 bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 rounded font-black tracking-widest shrink-0">XMLTV</span>' : ''}
                             </div>
                             <div class="flex items-center gap-1.5 mt-1 min-w-0">
                                 <span class="text-[8px] text-red-500 bg-red-950/20 border border-red-500/15 px-1.5 py-0.2 rounded font-black tracking-widest uppercase">AO VIVO</span>
@@ -3179,8 +3758,12 @@
                 // Dynamic EPG show/hide logic for active stream info panel
                 if (item.type === 'LIVE') {
                     if (detailEpgContainer && detailEpgProgram) {
-                        detailEpgProgram.textContent = "NO AR AGORA: " + getCurrentEpgProgram(item.name);
                         detailEpgContainer.classList.remove('hidden');
+                        if (window.EpgManager) {
+                            window.EpgManager.updateActiveStreamEpgUI(item);
+                        } else {
+                            detailEpgProgram.textContent = "NO AR AGORA: " + getCurrentEpgProgram(item.name);
+                        }
                     }
                 } else {
                     if (detailEpgContainer) {

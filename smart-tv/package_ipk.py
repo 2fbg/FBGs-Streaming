@@ -105,6 +105,31 @@ Installed-Size: 1024
     return output_ipk_path
 
 if __name__ == "__main__":
-    src = sys.argv[1] if len(sys.argv) > 1 else "/app/applet/smart-tv/webos"
-    dst = sys.argv[2] if len(sys.argv) > 2 else "/app/applet/smart-tv/com.fbg2.mk21streaming_1.1.0_all.ipk"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(script_dir, "mk21-tv")
+    
+    # Obter versão do appinfo.json dinamicamente
+    app_version = "3.6.0"
+    appinfo_file = os.path.join(src, "appinfo.json")
+    if os.path.exists(appinfo_file):
+        try:
+            with open(appinfo_file, "r") as f:
+                data = json.load(f)
+                if "version" in data:
+                    app_version = data["version"]
+        except Exception:
+            pass
+
+    default_ipk = os.path.join(script_dir, f"mk21play_{app_version}_all.ipk")
+    dst = sys.argv[2] if len(sys.argv) > 2 else default_ipk
     build_ipk(src, dst)
+    
+    # Also generate mirrors for web and compatibility links
+    import shutil
+    web_dir = os.path.join(os.path.dirname(script_dir), "web")
+    if os.path.exists(web_dir):
+        shutil.copy2(dst, os.path.join(web_dir, f"mk21play_{app_version}_all.ipk"))
+        shutil.copy2(dst, os.path.join(web_dir, "mk21.ipk"))
+    shutil.copy2(dst, os.path.join(script_dir, "mk21-tv.ipk"))
+    shutil.copy2(dst, os.path.join(script_dir, "com.fbg2.mk21streaming_1.1.0_all.ipk"))
+
