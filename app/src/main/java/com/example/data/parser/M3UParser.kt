@@ -230,55 +230,109 @@ object M3UParser {
         val uppercaseCategory = category.uppercase()
         val uppercaseUrl = url.uppercase()
 
-        // Explicit URL check first to capitalize on Xtream classification format
-        if (uppercaseUrl.contains("/SERIES/")) {
-            return com.example.data.model.ContentType.SERIES
+        // 1. Explicit URL check first for Xtream Codes patterns
+        if (uppercaseUrl.contains("/LIVE/")) {
+            return com.example.data.model.ContentType.LIVE
         }
         if (uppercaseUrl.contains("/MOVIE/")) {
             return com.example.data.model.ContentType.MOVIE
         }
-        if (uppercaseUrl.contains("/LIVE/")) {
-            return com.example.data.model.ContentType.LIVE
-        }
-
-        // Explicit series keywords
-        val seriesCategories = listOf(
-            "SERIES", "SÉRIES", "SERIADOS", "SEASON", "TEMPORADA", "EPISODIOS", "EPISÓDIOS",
-            "ANIME", "ANIMES", "NOVELAS", "NOVELA"
-        )
-        // Explicit movie keywords
-        val movieCategories = listOf(
-            "FILMES", "MOVIES", "VOD", "CINEMA", "BLOCKBUSTER", "LANCAMENTOS", "LANÇAMENTOS",
-            "PREMIUM FILMES", "CINE", "ACTION", "COMEDY", "DRAMA", "HORROR", "TERROR"
-        )
-
-        // Look for series patterns in category name or stream title first
-        if (seriesCategories.any { uppercaseCategory.contains(it) } || 
-            uppercaseName.contains("S0") || uppercaseName.contains("E0") ||
-            uppercaseName.contains("TEMPORADA") || uppercaseName.contains("CAPITULO") || uppercaseName.contains("EPISODIO")) {
+        if (uppercaseUrl.contains("/SERIES/")) {
             return com.example.data.model.ContentType.SERIES
         }
 
-        // Look for movie patterns in category next
-        if (movieCategories.any { uppercaseCategory.contains(it) }) {
-            return com.example.data.model.ContentType.MOVIE
-        }
+        // 2. Explicit Live TV categories - channels like 24h, aberta, esportes, noticias
+        val isLiveCategory = 
+            uppercaseCategory.startsWith("CANAIS") ||
+            uppercaseCategory.startsWith("CANAL") ||
+            uppercaseCategory.contains("CANAIS |") ||
+            uppercaseCategory.contains("CANAL |") ||
+            uppercaseCategory.contains("CANAIS:") ||
+            uppercaseCategory.contains("CANAL:") ||
+            uppercaseCategory.contains("24H") ||
+            uppercaseCategory.contains("24 HORAS") ||
+            uppercaseCategory.contains("AO VIVO") ||
+            uppercaseCategory.contains("AOVIVO") ||
+            uppercaseCategory.contains("TV ABERTA") ||
+            uppercaseCategory.contains("ABERTOS") ||
+            uppercaseCategory.contains("NOTICIAS") ||
+            uppercaseCategory.contains("ESPORTES") ||
+            uppercaseCategory.contains("PREMIERE") ||
+            uppercaseCategory.contains("COMBATE") ||
+            uppercaseCategory.contains("DAZN") ||
+            uppercaseCategory.contains("TELECINE") ||
+            uppercaseCategory.contains("CINESKY") ||
+            uppercaseCategory.contains("DISCOVERY") ||
+            uppercaseCategory.contains("CANAIS 4K")
 
-        // Fallbacks based on URL extensions
-        if (uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI")) {
-            return if (uppercaseUrl.contains("/SERIES/") || uppercaseUrl.contains("/EPISODES/") || uppercaseUrl.contains("S0") || uppercaseUrl.contains("E0")) {
-                com.example.data.model.ContentType.SERIES
-            } else {
-                com.example.data.model.ContentType.MOVIE
+        if (isLiveCategory) {
+            val isExplicitVodFile = (uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV")) && !uppercaseUrl.contains("/LIVE/")
+            if (!isExplicitVodFile) {
+                return com.example.data.model.ContentType.LIVE
             }
         }
 
-        // Live matches (often ending with .m3u8, .ts, or has /live/)
-        if (uppercaseUrl.contains("/LIVE/") || uppercaseUrl.endsWith(".M3U8") || uppercaseUrl.endsWith(".TS") || uppercaseUrl.contains(".TS?")) {
-            return com.example.data.model.ContentType.LIVE
+        // 3. VOD file extensions
+        val isVodExtension = uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI")
+
+        // 4. Series detection (seasons, episodes, S01E01, providers)
+        val seriesRegex = Regex("(?i)(?:\\b(?:s\\d{1,3}\\s*)?(?:e|ep|ep\\.|episodio|cap|cap\\.|capitulo)\\s*\\d{1,4}\\b|\\b\\d{1,3}x\\d{1,4}\\b|\\bs\\d{1,3}e\\d{1,4}\\b|\\bt\\d{1,3}e\\d{1,4}\\b|\\btemp\\.\\s*\\d+\\s*ep\\.\\s*\\d+\\b|\\btemporada\\s*\\d+\\b)")
+        val hasSeriesPattern = seriesRegex.containsMatchIn(name) ||
+            uppercaseName.contains("TEMPORADA") || uppercaseName.contains("TEMP.") ||
+            uppercaseName.contains("CAPITULO") || uppercaseName.contains("CAPÍTULO") ||
+            uppercaseName.contains("EPISODIO") || uppercaseName.contains("EPISÓDIO")
+
+        val isSeriesCategory = 
+            uppercaseCategory.startsWith("SERIES |") ||
+            uppercaseCategory.startsWith("SÉRIES |") ||
+            uppercaseCategory.startsWith("SERIES:") ||
+            uppercaseCategory.startsWith("SÉRIES:") ||
+            uppercaseCategory.startsWith("SERIE |") ||
+            uppercaseCategory.startsWith("SÉRIE |") ||
+            uppercaseCategory.contains("NETFLIX") ||
+            uppercaseCategory.contains("AMAZON") ||
+            uppercaseCategory.contains("PRIME VIDEO") ||
+            uppercaseCategory.contains("HBO") ||
+            uppercaseCategory.contains("MAX") ||
+            uppercaseCategory.contains("DISNEY") ||
+            uppercaseCategory.contains("APPLE TV") ||
+            uppercaseCategory.contains("PARAMOUNT") ||
+            uppercaseCategory.contains("GLOBOPLAY") ||
+            uppercaseCategory.contains("OUTRAS PRODUTORAS") ||
+            uppercaseCategory.contains("SERIADOS") ||
+            uppercaseCategory.contains("NOVELAS") ||
+            uppercaseCategory.contains("ANIMES") ||
+            uppercaseCategory.contains("DORAMAS") ||
+            uppercaseCategory.contains("MINISSERIE") ||
+            uppercaseCategory.contains("MINISSÉRIE")
+
+        if (isSeriesCategory || hasSeriesPattern) {
+            return com.example.data.model.ContentType.SERIES
         }
 
-        return com.example.data.model.ContentType.LIVE // default is Ao Vivo
+        // 5. Movie detection
+        val isMovieCategory = 
+            uppercaseCategory.startsWith("FILMES |") ||
+            uppercaseCategory.startsWith("FILME |") ||
+            uppercaseCategory.startsWith("FILMES:") ||
+            uppercaseCategory.startsWith("FILME:") ||
+            uppercaseCategory.startsWith("VOD |") ||
+            uppercaseCategory.startsWith("VOD:") ||
+            uppercaseCategory.startsWith("CINEMA |") ||
+            uppercaseCategory.contains("LANCAMENTOS") ||
+            uppercaseCategory.contains("LANÇAMENTOS") ||
+            uppercaseCategory.contains("FILMES 4K") ||
+            uppercaseCategory.contains("FILMES DUBLADOS") ||
+            uppercaseCategory.contains("FILMES LEGENDADOS") ||
+            uppercaseCategory.contains("FILMES ACAO") ||
+            uppercaseCategory.contains("FILMES COMEDIA")
+
+        if (isMovieCategory || isVodExtension) {
+            return com.example.data.model.ContentType.MOVIE
+        }
+
+        // 6. Explicit streaming extensions or default is Ao Vivo
+        return com.example.data.model.ContentType.LIVE
     }
 
     private fun isAdultContent(name: String, category: String): Boolean {

@@ -454,7 +454,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Audio Booster (+200%) -->
+                                    <!-- Áudio Booster (+200%) -->
                                     <div class="relative group/boost">
                                         <button id="yt-boost-btn" class="hover:text-amber-400 transition-colors focus:outline-none flex items-center gap-1 font-bold text-[10px]" title="Ganho de Áudio (+200%)">
                                             <i class="fa-solid fa-bolt text-[10px] text-amber-400"></i>
@@ -467,6 +467,12 @@
                                             <button onclick="window.mk21Remote.setAudioBoost(2.0)" class="px-2 py-1 text-left hover:bg-slate-800 rounded text-red-500 font-bold">200% (Máximo)</button>
                                         </div>
                                     </div>
+
+                                    <!-- Áudio e Legendas (TextTrack) -->
+                                    <button id="yt-tracks-btn" onclick="window.openAudioSubsModal()" class="hover:text-[#ffd54f] text-slate-300 transition-colors focus:outline-none flex items-center justify-center gap-1 text-[11px] font-bold" title="Selecionar Faixas de Áudio e Legendas (TextTrack)" aria-label="Trocar Áudio e Legendas">
+                                        <i class="fa-solid fa-closed-captioning text-xs text-[#ffd54f]"></i>
+                                        <span class="hidden sm:inline text-[9px]">Áudio/Leg</span>
+                                    </button>
 
                                     <!-- Espelhar na Smart TV (Google Cast / AirPlay) -->
                                     <button id="yt-cast-btn" onclick="window.triggerCastToTv()" class="hover:text-amber-400 text-slate-300 transition-colors focus:outline-none flex items-center justify-center" title="Espelhar na Smart TV (Chromecast, AirPlay ou Smart TV)" aria-label="Espelhar na TV">
@@ -774,6 +780,45 @@
         </div>
     </div>
 
+    <!-- MODAL: FAIXAS DE ÁUDIO E LEGENDAS (TEXTTRACK) -->
+    <div id="audio-subs-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4">
+        <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-3xl max-w-lg w-full p-6 text-white shadow-2xl relative">
+            <button onclick="window.closeAudioSubsModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-[#ffd54f] text-2xl">
+                    <i class="fa-solid fa-closed-captioning"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-lg text-white">Áudio & Legendas (TextTrack)</h3>
+                    <p class="text-xs text-slate-400">Alterne faixas de áudio e legendas em tempo real no reprodutor</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 my-5">
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-[#ffd54f] mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-volume-high"></i> Faixas de Áudio Disponíveis
+                    </h4>
+                    <div id="web-audio-tracks-list" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1"></div>
+                </div>
+
+                <div class="border-t border-slate-800 pt-3">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-[#ffd54f] mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-closed-captioning"></i> Legendas Disponíveis (TextTrack)
+                    </h4>
+                    <div id="web-sub-tracks-list" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                <span>MK21 Player Engine</span>
+                <span class="font-bold text-[#E50914]">by FBG2</span>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: INSTALAR NA SMART TV / NAVEGADOR -->
     <div id="smart-tv-install-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4">
         <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-3xl max-w-lg w-full p-6 text-white shadow-2xl relative">
@@ -1019,6 +1064,7 @@
             maxBufferLength: 20,
             autoStartLoad: true
         });
+        window.hlsPlayer = hlsPlayer;
 
         // Detailed error listener to output diagnostic level & fragment logs when stream is interrupted.
         hlsPlayer.on(Hls.Events.ERROR, function (event, data) {
@@ -1564,9 +1610,9 @@
                 baseUrl = 'http://' + baseUrl;
             }
             const profileName = serverSelector.options[serverSelector.selectedIndex].text;
-            const user = userInput.value.trim();
-            const pass = passInput.value.trim();
-            const corsMethod = corsSelector.value;
+            const user = (userInput && userInput.value.trim()) || localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
+            const pass = (passInput && passInput.value.trim()) || localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || '';
+            const corsMethod = (corsSelector && corsSelector.value) || localStorage.getItem('mk21_cors') || 'auto';
 
             if (!user || !pass) {
                 alert('Por favor, insira o usuário e a senha para conectar.');
@@ -2347,12 +2393,85 @@
                             streamType = 'MOVIE';
                         } else if (urlUpper.includes('/LIVE/')) {
                             streamType = 'LIVE';
-                        } else if (categoryUpper.includes('SERIE') || categoryUpper.includes('SÉRIE') || categoryUpper.includes('SERIES') || categoryUpper.includes('TEMPORADA') || categoryUpper.includes('EPISODIO') || categoryUpper.includes('NOVELA') || categoryUpper.includes('ANIME') || nameUpper.includes('S0') || nameUpper.includes('E0')) {
-                            streamType = 'SERIES';
-                        } else if (categoryUpper.includes('FILMES') || categoryUpper.includes('MOVIE') || categoryUpper.includes('VOD') || categoryUpper.includes('CINE') || categoryUpper.includes('LANCAMENTOS') || categoryUpper.includes('LANÇAMENTOS')) {
-                            streamType = 'MOVIE';
                         } else {
-                            streamType = 'LIVE';
+                            const isStreamingTransport = urlUpper.includes('.M3U8') || urlUpper.includes('.TS') || urlUpper.includes('OUTPUT=MPEGTS');
+
+                            const isLiveCat = 
+                                categoryUpper.startsWith("CANAIS") ||
+                                categoryUpper.startsWith("CANAL") ||
+                                categoryUpper.startsWith("TV") ||
+                                categoryUpper.startsWith("AO VIVO") ||
+                                categoryUpper.startsWith("AOVIVO") ||
+                                categoryUpper.startsWith("24H") ||
+                                categoryUpper.startsWith("24 HORAS") ||
+                                categoryUpper.startsWith("ABERTOS") ||
+                                categoryUpper.startsWith("NOTICIAS") ||
+                                categoryUpper.startsWith("ESPORTES") ||
+                                categoryUpper.startsWith("VARIEDADES") ||
+                                categoryUpper.startsWith("INFANTIL") ||
+                                categoryUpper.startsWith("RELIGIOSOS") ||
+                                categoryUpper.startsWith("DOCUMENTARIOS") ||
+                                categoryUpper.startsWith("GLOBO") ||
+                                categoryUpper.startsWith("PREMIERE") ||
+                                categoryUpper.startsWith("COMBATE") ||
+                                categoryUpper.startsWith("DAZN") ||
+                                categoryUpper.includes("CANAIS |") ||
+                                categoryUpper.includes("CANAL |") ||
+                                categoryUpper.includes("TV |") ||
+                                categoryUpper.includes("CANAIS:") ||
+                                categoryUpper.includes("24H |");
+
+                            const isSeriesCat = 
+                                categoryUpper.startsWith("SERIES") ||
+                                categoryUpper.startsWith("SÉRIES") ||
+                                categoryUpper.startsWith("SERIE") ||
+                                categoryUpper.startsWith("SÉRIE") ||
+                                categoryUpper.startsWith("NOVELAS") ||
+                                categoryUpper.startsWith("NOVELA") ||
+                                categoryUpper.startsWith("ANIMES") ||
+                                categoryUpper.startsWith("ANIME") ||
+                                categoryUpper.startsWith("DORAMAS") ||
+                                categoryUpper.startsWith("DORAMA") ||
+                                categoryUpper.startsWith("MINISSÉRIES") ||
+                                categoryUpper.includes("SERIES |") ||
+                                categoryUpper.includes("SÉRIES |");
+
+                            const isMovieCat = 
+                                categoryUpper.startsWith("FILMES") ||
+                                categoryUpper.startsWith("FILME") ||
+                                categoryUpper.startsWith("MOVIES") ||
+                                categoryUpper.startsWith("MOVIE") ||
+                                categoryUpper.startsWith("VOD") ||
+                                categoryUpper.startsWith("CINEMA") ||
+                                categoryUpper.startsWith("LANÇAMENTOS") ||
+                                categoryUpper.startsWith("LANCAMENTOS") ||
+                                categoryUpper.includes("FILMES |") ||
+                                categoryUpper.includes("VOD |") ||
+                                categoryUpper.includes("CINEMA |");
+
+                            const hasSeriesPattern = 
+                                /(?:\b(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\b\d{1,3}x\d{1,4}\b|\bs\d{1,3}e\d{1,4}\b|\bt\d{1,3}e\d{1,4}\b|\btemp\.\s*\d+\s*ep\.\s*\d+\b|\btemporada\s*\d+\b)/i.test(nameUpper) ||
+                                nameUpper.includes("TEMPORADA") || nameUpper.includes("TEMP.") ||
+                                nameUpper.includes("CAPITULO") || nameUpper.includes("EPISODIO");
+
+                            if (isLiveCat) {
+                                const isVodFile = (urlUpper.endsWith('.MP4') || urlUpper.endsWith('.MKV')) && !urlUpper.includes('/LIVE/');
+                                streamType = isVodFile ? (hasSeriesPattern ? 'SERIES' : 'MOVIE') : 'LIVE';
+                            } else if (isSeriesCat || hasSeriesPattern) {
+                                streamType = 'SERIES';
+                            } else if (isMovieCat) {
+                                streamType = 'MOVIE';
+                            } else if ((categoryUpper.includes('NETFLIX') || categoryUpper.includes('AMAZON') || categoryUpper.includes('PRIME VIDEO') || categoryUpper.includes('HBO MAX') || categoryUpper.includes('DISNEY+') || categoryUpper.includes('GLOBOPLAY')) && !isLiveCat) {
+                                if (isStreamingTransport && !urlUpper.includes('.MP4') && !urlUpper.includes('.MKV')) {
+                                    streamType = 'LIVE';
+                                } else {
+                                    streamType = hasSeriesPattern ? 'SERIES' : 'MOVIE';
+                                }
+                            } else if (urlUpper.endsWith('.MP4') || urlUpper.endsWith('.MKV') || urlUpper.endsWith('.AVI')) {
+                                streamType = hasSeriesPattern ? 'SERIES' : 'MOVIE';
+                            } else {
+                                streamType = 'LIVE';
+                            }
                         }
 
                         currentItem.type = streamType;
@@ -3706,6 +3825,137 @@
                 playStream(nextEp.originalItem, true);
             }
         }
+
+        // ==========================================
+        // GESTÃO DE FAIXAS DE ÁUDIO E LEGENDAS (TEXTTRACK)
+        // ==========================================
+        window.openAudioSubsModal = function() {
+            const modal = document.getElementById('audio-subs-modal');
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            const audioList = document.getElementById('web-audio-tracks-list');
+            const subList = document.getElementById('web-sub-tracks-list');
+            if (audioList) audioList.innerHTML = '';
+            if (subList) subList.innerHTML = '';
+
+            const video = document.getElementById('iptv-video');
+
+            // 1. Faixas de Áudio
+            let hasAudio = false;
+            if (window.hlsPlayer && window.hlsPlayer.audioTracks && window.hlsPlayer.audioTracks.length > 0) {
+                hasAudio = true;
+                window.hlsPlayer.audioTracks.forEach((tr, idx) => {
+                    const btn = document.createElement('button');
+                    const isActive = window.hlsPlayer.audioTrack === idx;
+                    btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+                    btn.innerHTML = `<span>🔊 ${tr.name || tr.lang || ('Faixa de Áudio ' + (idx + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.onclick = () => {
+                        window.hlsPlayer.audioTrack = idx;
+                        showNotification(`Áudio alterado: ${tr.name || tr.lang || (idx + 1)}`, 'info');
+                        window.openAudioSubsModal();
+                    };
+                    audioList.appendChild(btn);
+                });
+            } else if (video && video.audioTracks && video.audioTracks.length > 0) {
+                hasAudio = true;
+                for (let i = 0; i < video.audioTracks.length; i++) {
+                    const tr = video.audioTracks[i];
+                    const btn = document.createElement('button');
+                    const isActive = tr.enabled;
+                    btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+                    btn.innerHTML = `<span>🔊 ${tr.label || tr.language || ('Faixa ' + (i + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.onclick = () => {
+                        for (let j = 0; j < video.audioTracks.length; j++) {
+                            video.audioTracks[j].enabled = (j === i);
+                        }
+                        showNotification(`Áudio alterado: ${tr.label || (i + 1)}`, 'info');
+                        window.openAudioSubsModal();
+                    };
+                    audioList.appendChild(btn);
+                }
+            }
+
+            if (!hasAudio && audioList) {
+                audioList.innerHTML = '<div class="text-xs text-slate-400 bg-slate-900/60 p-2.5 rounded-xl">🔊 Áudio Original da Transmissão (Faixa Única)</div>';
+            }
+
+            // 2. Legendas (TextTrack)
+            const offBtn = document.createElement('button');
+            const isOff = (!window.hlsPlayer || window.hlsPlayer.subtitleTrack === -1);
+            offBtn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isOff ? 'bg-slate-800 text-amber-400' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'}`;
+            offBtn.innerHTML = `<span>❌ Desativar Legendas</span> ${isOff ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+            offBtn.onclick = () => {
+                if (window.hlsPlayer) window.hlsPlayer.subtitleTrack = -1;
+                if (video && video.textTracks) {
+                    for (let i = 0; i < video.textTracks.length; i++) {
+                        video.textTracks[i].mode = 'disabled';
+                    }
+                }
+                showNotification('Legendas desativadas', 'info');
+                window.openAudioSubsModal();
+            };
+            if (subList) subList.appendChild(offBtn);
+
+            let hasSubs = false;
+            if (window.hlsPlayer && window.hlsPlayer.subtitleTracks && window.hlsPlayer.subtitleTracks.length > 0) {
+                hasSubs = true;
+                window.hlsPlayer.subtitleTracks.forEach((tr, idx) => {
+                    const btn = document.createElement('button');
+                    const isActive = window.hlsPlayer.subtitleTrack === idx;
+                    btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+                    btn.innerHTML = `<span>💬 ${tr.name || tr.lang || ('Legenda ' + (idx + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.onclick = () => {
+                        window.hlsPlayer.subtitleTrack = idx;
+                        showNotification(`Legenda: ${tr.name || tr.lang || (idx + 1)}`, 'info');
+                        window.openAudioSubsModal();
+                    };
+                    subList.appendChild(btn);
+                });
+            } else if (video && video.textTracks && video.textTracks.length > 0) {
+                hasSubs = true;
+                for (let i = 0; i < video.textTracks.length; i++) {
+                    const tr = video.textTracks[i];
+                    const btn = document.createElement('button');
+                    const isActive = tr.mode === 'showing';
+                    btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
+                    btn.innerHTML = `<span>💬 ${tr.label || tr.language || ('Legenda ' + (i + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.onclick = () => {
+                        for (let j = 0; j < video.textTracks.length; j++) {
+                            video.textTracks[j].mode = (j === i) ? 'showing' : 'disabled';
+                        }
+                        showNotification(`Legenda: ${tr.label || (i + 1)}`, 'info');
+                        window.openAudioSubsModal();
+                    };
+                    subList.appendChild(btn);
+                }
+            }
+
+            if (!hasSubs && subList) {
+                const notice = document.createElement('div');
+                notice.className = 'text-xs text-slate-500 italic px-1 mt-1';
+                notice.textContent = 'Nenhuma legenda embutida detectada no fluxo atual.';
+                subList.appendChild(notice);
+            }
+        };
+
+        window.closeAudioSubsModal = function() {
+            const modal = document.getElementById('audio-subs-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.toggleAudioSubsModal = function() {
+            const modal = document.getElementById('audio-subs-modal');
+            if (modal && !modal.classList.contains('hidden')) {
+                window.closeAudioSubsModal();
+            } else {
+                window.openAudioSubsModal();
+            }
+        };
     </script>
     
     <!-- Accessibility, SEO, Performance, Smart TV Remote & PWA Modules -->

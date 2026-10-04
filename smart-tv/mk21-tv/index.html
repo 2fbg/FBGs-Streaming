@@ -9,6 +9,22 @@
 </head>
 <body>
 
+  <!-- ================= TELA DE INICIALIZAÇÃO PREMIUM (SPLASH SCREEN) ================= -->
+  <div id="startupSplashScreen" class="startup-splash-overlay">
+    <div class="splash-content">
+      <div class="splash-logo-row">
+        <span class="splash-logo-mk">MK</span>
+        <span class="splash-logo-21">21</span>
+      </div>
+      <div><span class="splash-badge">PLAY OTT SMART TV</span></div>
+      <p class="splash-slogan">MAIS QUE UM NÚMERO É RESULTADO</p>
+      <div class="splash-progress-track">
+        <div id="splashProgressBar" class="splash-progress-fill" style="width: 15%;"></div>
+      </div>
+      <div id="splashStatusText" class="splash-status-text">Iniciando MK21 Play OTT...</div>
+    </div>
+  </div>
+
   <!-- ================= 1. CABEÇALHO SUPERIOR COM ABAS ================= -->
   <header class="app-header">
     <div class="header-left">
@@ -17,11 +33,12 @@
         <span class="logo-title">PLAY <span>OTT</span></span>
       </div>
 
-      <!-- ABAS DE CONTEÚDO (IDÊNTICAS AO APK) -->
+      <!-- ABAS DE CONTEÚDO (IDÊNTICAS AO APK E NETFLIX) -->
       <nav class="main-tabs" id="headerTabsNav">
         <button id="tabLive" class="tab-btn active header-focusable" tabindex="0">📺 TV AO VIVO</button>
         <button id="tabMovies" class="tab-btn header-focusable" tabindex="0">🎬 FILMES</button>
         <button id="tabSeries" class="tab-btn header-focusable" tabindex="0">🍿 SÉRIES</button>
+        <button id="tabContinue" class="tab-btn header-focusable" tabindex="0">▶ CONTINUAR</button>
         <button id="tabFavs" class="tab-btn header-focusable" tabindex="0">⭐ FAVORITOS</button>
         <button id="tabSettings" class="tab-btn header-focusable" tabindex="0">⚙️ CONFIGURAÇÕES</button>
       </nav>
@@ -68,6 +85,7 @@
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
           <button id="btnVoiceSearch" class="voice-btn" tabindex="0">🎙️</button>
+          <button id="btnSortOrder" class="voice-btn" tabindex="0" title="Ordem dos Canais" style="width: auto; padding: 0 12px; font-size: 14px;">↕️ A-Z</button>
         </div>
         <ul id="listItems" class="pane-scroll"></ul>
       </div>
@@ -95,6 +113,9 @@
           <button id="btnFullscreen" class="ctrl-btn primary" tabindex="0">⛶ Tela Cheia</button>
           <button id="btnPlayPause" class="ctrl-btn" tabindex="0">⏯ Pausar</button>
           <button id="btnFavorite" class="ctrl-btn" tabindex="0">⭐ Favoritar</button>
+          <button id="btnSpeed" class="ctrl-btn" tabindex="0">⚡ 1x</button>
+          <button id="btnAudioTrack" class="ctrl-btn" tabindex="0">🔊 Áudio</button>
+          <button id="btnSubtitles" class="ctrl-btn" tabindex="0">💬 Legenda</button>
         </div>
       </div>
 
@@ -104,12 +125,13 @@
     <section id="sectionSettings" class="content-section hidden">
       <div class="settings-left-menu">
         <button id="cfgBtnInfo" class="cfg-menu-item active" tabindex="0">⚙️ Informação geral</button>
-        <button id="cfgBtnIdioma" class="cfg-menu-item" tabindex="0">🌐 Mudar idioma</button>
-        <button id="cfgBtnFluxo" class="cfg-menu-item" tabindex="0">📺 Alterar formato de fluxo</button>
-        <button id="cfgBtnPin" class="cfg-menu-item" tabindex="0">🔒 Alterar código pin</button>
-        <button id="cfgBtnCategorias" class="cfg-menu-item" tabindex="0">🚫 Gerenciar categorias</button>
+        <button id="cfgBtnFonte" class="cfg-menu-item" tabindex="0">🔤 Tamanho da fonte</button>
+        <button id="cfgBtnSpeedTest" class="cfg-menu-item" tabindex="0">🚀 Teste de velocidade</button>
         <button id="cfgBtnLimpar" class="cfg-menu-item" tabindex="0">🗑️ Limpar armazenamento</button>
         <button id="cfgBtnTempo" class="cfg-menu-item" tabindex="0">⏱️ Configurações de tempo</button>
+        <button id="cfgBtnCategorias" class="cfg-menu-item" tabindex="0">📁 Gerenciar categorias</button>
+        <button id="cfgBtnFluxo" class="cfg-menu-item" tabindex="0">📺 Alterar formato de fluxo</button>
+        <button id="cfgBtnPin" class="cfg-menu-item" tabindex="0">🔒 Alterar código pin</button>
         <div class="cfg-tmdb-toggle">
           <span>🎬 Usar API TMDB</span>
           <input type="checkbox" id="cfgToggleTmdb" checked style="width:22px; height:22px;">
@@ -131,6 +153,26 @@
   </footer>
 
   <!-- ================= MODAIS ================= -->
+  <!-- Modal de Faixas de Áudio e Legendas -->
+  <div id="modalAudioSubs" class="app-modal hidden">
+    <div class="modal-content" style="width: 780px;">
+      <div class="modal-header">
+        <span>🔊 Faixas de Áudio & 💬 Legendas (TextTrack)</span>
+        <button id="btnCloseAudioSubs" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕ Fechar</button>
+      </div>
+      <div class="audio-subs-modal-body">
+        <div class="track-group-box">
+          <h4 style="margin: 0 0 12px 0; color: #ffd54f; font-size: 18px;">🔊 Faixas de Áudio Disponíveis</h4>
+          <div id="audioTracksList"></div>
+        </div>
+        <div class="track-group-box">
+          <h4 style="margin: 0 0 12px 0; color: #ffd54f; font-size: 18px;">💬 Legendas Disponíveis</h4>
+          <div id="subtitleTracksList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Gerenciador de Servidores & Manutenção de Listas -->
   <div id="modalServerPicker" class="app-modal hidden">
     <div class="modal-content server-manager-modal">
@@ -141,18 +183,20 @@
 
       <div class="server-manager-body">
         <h4 style="margin: 0; color: #cbd5e1; font-size: 18px;">Servidores e Listas Cadastrados:</h4>
-        <!-- Lista de Servidores com Conectar e Excluir -->
+        <!-- Lista de Servidores com Conectar, Editar e Excluir -->
         <div id="serverItemsGrid" class="servers-manager-list"></div>
 
-        <!-- Formulário de Inclusão Manual -->
+        <!-- Formulário de Inclusão e Edição Manual -->
         <div class="add-server-card">
-          <h4 style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
+          <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
+          <input type="hidden" id="inputEditServerIndex" value="-1">
           <div style="display: flex; gap: 12px; margin-bottom: 12px;">
             <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
             <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 10px 22px;" tabindex="0">💾 Salvar e Conectar</button>
+            <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">Cancelar Edição</button>
             <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar 7 Padrões</button>
           </div>
         </div>
@@ -195,6 +239,92 @@
         <button id="btnExitCancel" class="ctrl-btn" style="flex:1; padding: 14px;" tabindex="0">Continuar Assistindo</button>
         <button id="btnExitConfirm" class="ctrl-btn primary" style="flex:1; padding: 14px;" tabindex="0">Sair</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal de Séries (Temporadas e Episódios estilo Netflix / APK) -->
+  <div id="modalSeriesEpisodes" class="app-modal hidden">
+    <div class="modal-content series-episodes-modal" style="width: 1080px; max-height: 85vh; background: #0f121d;">
+      <div class="modal-header">
+        <span id="seriesModalTitle" style="color: #ffd54f; font-size: 22px; font-weight: bold;">📺 Nome da Série</span>
+        <button id="btnCloseSeriesModal" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕ Fechar</button>
+      </div>
+      <div style="display: flex; gap: 20px; padding: 20px; height: 500px; overflow: hidden;">
+        <!-- Coluna de Temporadas -->
+        <div style="width: 280px; background: rgba(0,0,0,0.35); border-radius: 8px; padding: 12px; overflow-y: auto;">
+          <h4 style="margin: 0 0 12px 0; color: #ffd54f; font-size: 18px;">📁 Temporadas</h4>
+          <ul id="listSeasons" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;"></ul>
+        </div>
+        <!-- Coluna de Episódios -->
+        <div style="flex: 1; background: rgba(0,0,0,0.35); border-radius: 8px; padding: 12px; overflow-y: auto;">
+          <h4 id="episodesListHeading" style="margin: 0 0 12px 0; color: #fff; font-size: 18px;">🎬 Episódios Disponíveis</h4>
+          <ul id="listEpisodes" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Atualização Direta do Aplicativo (OTA para Smart TV) -->
+  <div id="modalAppUpdate" class="app-modal hidden">
+    <div class="modal-content" style="width: 640px; background: #0f121d; border: 1px solid rgba(255,213,79,0.3); border-radius: 16px; padding: 0; overflow: hidden;">
+      <div class="modal-header" style="padding: 16px 22px; background: #141724; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <span style="color:#ffd54f; font-size:20px; font-weight:bold;">🚀 Atualização do Aplicativo (OTA)</span>
+        <button id="btnCloseUpdateModal" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
+      </div>
+      <div style="padding: 24px; text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <div style="color: #888; font-size: 13px;">Versão Instalada</div>
+            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.4.0</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="color: #888; font-size: 13px;">Versão Mais Recente</div>
+            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">Verificando...</div>
+          </div>
+        </div>
+
+        <div id="boxUpdateNotes" style="background: #141724; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 20px; max-height: 180px; overflow-y: auto;">
+          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão:</h4>
+          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">Verificando notas da versão no GitHub...</pre>
+        </div>
+
+        <div id="updateProgressBox" class="hidden" style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; font-size: 13px; color: #aaa; margin-bottom: 6px;">
+            <span id="txtUpdateStep">Baixando atualização...</span>
+            <span id="txtUpdatePct">0%</span>
+          </div>
+          <div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden;">
+            <div id="barUpdateProgress" style="background: #e50914; height: 100%; width: 0%; transition: width 0.3s;"></div>
+          </div>
+        </div>
+
+        <div id="updateActionsRow" style="display: flex; gap: 12px;">
+          <button id="btnStartDirectUpdate" class="ctrl-btn primary" style="flex: 2; padding: 14px;" tabindex="0">
+            ⬇️ Baixar e Atualizar Agora na TV
+          </button>
+          <button id="btnCheckAgainUpdate" class="ctrl-btn" style="flex: 1; padding: 14px;" tabindex="0">
+            🔄 Verificar Novamente
+          </button>
+        </div>
+
+        <div id="qrCodeBox" class="hidden" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); text-align: center;">
+          <p style="color: #aaa; font-size: 12px; margin: 0 0 10px 0;">Ou aponte a câmera do celular para baixar o arquivo .ipk direto:</p>
+          <img id="imgUpdateQr" src="" alt="QR Code IPK" style="width: 140px; height: 140px; background: #fff; border-radius: 8px; padding: 6px; display: inline-block;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD de Carregamento em Tempo Real com Porcentagem -->
+  <div id="hudLoadingOverlay" class="hud-loading-overlay hidden">
+    <div class="hud-loading-card">
+      <div class="spinner-ring"></div>
+      <h3 id="hudLoadingTitle" style="margin: 16px 0 8px 0; font-size: 24px; color: #fff;">Atualizando Lista MK21</h3>
+      <p id="hudLoadingSub" style="margin: 0 0 16px 0; font-size: 16px; color: #ffd54f;">Priorizando Canais Ao Vivo...</p>
+      <div class="hud-progress-track">
+        <div id="hudProgressBar" class="hud-progress-fill" style="width: 0%;"></div>
+      </div>
+      <span id="hudProgressPercent" style="display: block; margin-top: 10px; font-weight: 800; font-size: 20px; color: #fff;">0%</span>
     </div>
   </div>
 

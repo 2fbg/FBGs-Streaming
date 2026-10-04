@@ -1,0 +1,9 @@
+{
+  "version": "3.4.0",
+  "versionCode": 340,
+  "title": "MK21 Play v3.4.0",
+  "releaseNotes": "• Separação estrita de Ao Vivo, Filmes e Séries por temporada\n• Submenu com temporadas e episódios ordenados numericamente\n• Carga com prioridade máxima no Ao Vivo e segundo plano para VOD\n• Menu Continuar Assistindo idêntico ao Netflix\n• Player com velocidade ajustável até 4x\n• Novos tamanhos de fontes ampliadas para TV distante\n• Atualização direta pelo aplicativo (OTA)",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21play_3.4.0_all.ipk",
+  "apkUrl": "https://github.com/2fbg/BGs-Streaming/raw/main/web/mk21.apk",
+  "updatedAt": "2026-10-04"
+}

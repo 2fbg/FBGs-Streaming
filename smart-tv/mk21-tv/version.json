@@ -1,0 +1,9 @@
+{
+  "version": "3.5.0",
+  "versionCode": 350,
+  "title": "MK21 Play v3.5.0",
+  "releaseNotes": "• Categorização fidedigna às listas (canais lineares não se misturam com filmes e séries)\n• Player com controle de velocidade até 4x e preservação de áudio (preservesPitch)\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Teclas Play/Pause universais no controle remoto e atalhos de avanço/recuo de 10s\n• Teste de velocidade em tempo real com indicador gauge, ping e taxa de download\n• Gerenciador de servidores com opção de editar listas e reconexão imediata\n• Nova tela de inicialização (Splash Screen) premium com animação e barra de status\n• Escala de fonte ampliada para todos os menus e tela de armazenamento idêntica à Vizzion",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21play_3.5.0_all.ipk",
+  "apkUrl": "https://github.com/2fbg/BGs-Streaming/raw/main/web/mk21.apk",
+  "updatedAt": "2026-10-04"
+}

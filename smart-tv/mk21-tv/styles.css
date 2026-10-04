@@ -1,5 +1,6 @@
 /* MK21 PLAY — Interface Direta Unificada 3 Colunas com Navegação D-Pad LG webOS */
 :root {
+  --font-scale: 1;
   --primary-red: #e50914;
   --primary-hover: #ff1f2d;
   --bg-dark: #0a0c14;
@@ -24,7 +25,7 @@ body {
   background: var(--bg-dark);
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  font-size: 20px;
+  font-size: calc(20px * var(--font-scale, 1));
   overflow: hidden;
   height: 100vh;
   width: 100vw;
@@ -34,7 +35,8 @@ body {
 
 /* ================= 1. CABEÇALHO SUPERIOR ================= */
 .app-header {
-  height: 80px;
+  height: calc(80px * var(--font-scale, 1));
+  min-height: 80px;
   background: var(--header-bg);
   border-bottom: 2px solid rgba(229, 9, 20, 0.4);
   display: flex;
@@ -645,6 +647,412 @@ video {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   cursor: pointer;
+}
+
+/* ================= 8. HUD LOADING OVERLAY COM PORCENTAGEM ================= */
+.hud-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(4, 6, 12, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+
+.hud-loading-card {
+  width: 550px;
+  background: #111422;
+  border: 2px solid rgba(229, 9, 20, 0.6);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  padding: 36px 30px;
+  text-align: center;
+}
+
+.spinner-ring {
+  width: 56px;
+  height: 56px;
+  border: 5px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--primary-red);
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.hud-progress-track {
+  width: 100%;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.hud-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e50914, #ff5252);
+  border-radius: 6px;
+  transition: width 0.2s ease;
+}
+
+/* ================= 9. SÉRIES POR TEMPORADA E EPISÓDIOS ================= */
+.season-tab-btn {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.season-tab-btn:focus,
+.season-tab-btn.active {
+  background: var(--primary-red);
+  border-color: #ff5252;
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
+  transform: translateX(4px);
+}
+
+.episode-item-btn {
+  width: 100%;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.episode-item-btn:focus {
+  background: rgba(229, 9, 20, 0.85);
+  border-color: #fff;
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.8);
+}
+
+/* ================= 10. TAMANHO DA FONTE EXPANDIDO (ACESSIBILIDADE EM TODOS OS MENUS) ================= */
+body.font-large { --font-scale: 1.2; font-size: 24px; }
+body.font-xlarge { --font-scale: 1.4; font-size: 28px; }
+body.font-xxlarge { --font-scale: 1.65; font-size: 33px; }
+body.font-huge { --font-scale: 1.9; font-size: 38px; }
+body.font-ultra { --font-scale: 2.2; font-size: 44px; }
+
+/* Aplica escala a todos os menus, botões, títulos e inputs */
+body[class*="font-"] .cat-item-btn,
+body[class*="font-"] .channel-item-btn,
+body[class*="font-"] .series-card-btn,
+body[class*="font-"] .season-tab-btn,
+body[class*="font-"] .episode-item-btn,
+body[class*="font-"] .cfg-menu-item,
+body[class*="font-"] .tab-btn,
+body[class*="font-"] .action-btn,
+body[class*="font-"] .ctrl-btn,
+body[class*="font-"] .btn-server-connect,
+body[class*="font-"] .btn-server-edit,
+body[class*="font-"] .btn-server-delete,
+body[class*="font-"] .remote-key {
+  font-size: calc(18px * var(--font-scale, 1)) !important;
+  padding-top: calc(10px * var(--font-scale, 1)) !important;
+  padding-bottom: calc(10px * var(--font-scale, 1)) !important;
+}
+
+body[class*="font-"] .epg-name {
+  font-size: calc(24px * var(--font-scale, 1)) !important;
+}
+
+body[class*="font-"] .epg-sub,
+body[class*="font-"] .epg-next-text,
+body[class*="font-"] .badge-quality,
+body[class*="font-"] #epgStatus {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+}
+
+body[class*="font-"] .pane-header,
+body[class*="font-"] .modal-header,
+body[class*="font-"] .settings-detail-panel h3 {
+  font-size: calc(22px * var(--font-scale, 1)) !important;
+}
+
+body[class*="font-"] #inputSearch,
+body[class*="font-"] .voice-btn {
+  font-size: calc(16px * var(--font-scale, 1)) !important;
+}
+
+/* ================= 11. TELA DE INICIALIZAÇÃO PREMIUM (SPLASH SCREEN) ================= */
+.startup-splash-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, #1b0709 0%, #07080c 60%, #000000 100%);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.startup-splash-overlay.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-content {
+  text-align: center;
+  max-width: 600px;
+  width: 90%;
+  animation: splashFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes splashFadeIn {
+  0% { transform: scale(0.92); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.splash-logo-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.splash-logo-mk {
+  font-size: 80px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -2px;
+  background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 45%, #64748b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.8));
+}
+
+.splash-logo-21 {
+  font-size: 96px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -3px;
+  margin-left: -4px;
+  background: linear-gradient(180deg, #ff3344 0%, #e50914 50%, #990000 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 25px rgba(229, 9, 20, 0.7));
+  animation: neonGlow 2.5s infinite alternate;
+}
+
+@keyframes neonGlow {
+  0% { filter: drop-shadow(0 0 15px rgba(229, 9, 20, 0.5)); }
+  100% { filter: drop-shadow(0 0 35px rgba(255, 30, 45, 0.9)); }
+}
+
+.splash-badge {
+  background: linear-gradient(135deg, #e50914, #990000);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  padding: 4px 14px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-top: 4px;
+  box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4);
+}
+
+.splash-slogan {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: #94a3b8;
+  margin: 12px 0 28px 0;
+}
+
+.splash-progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.splash-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #e50914, #ffd54f);
+  box-shadow: 0 0 14px rgba(255, 213, 79, 0.8);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.splash-status-text {
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+/* ================= 12. TESTE DE VELOCIDADE REAL COM GAUGE ================= */
+.speed-meter-box {
+  background: #141724;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  margin: 16px 0;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.speed-gauge-wrap {
+  position: relative;
+  width: 200px;
+  height: 110px;
+  margin: 0 auto 12px;
+  overflow: hidden;
+}
+
+.speed-gauge-arc {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 14px solid rgba(255, 255, 255, 0.08);
+  border-top-color: #e50914;
+  border-right-color: #ffd54f;
+  transform: rotate(-45deg);
+  transition: transform 0.2s ease-out;
+}
+
+.speed-meter-val {
+  font-size: 58px;
+  font-weight: 900;
+  color: #ffd54f;
+  text-shadow: 0 0 25px rgba(255, 213, 79, 0.45);
+  line-height: 1;
+}
+
+.speed-meter-unit {
+  font-size: 20px;
+  color: #94a3b8;
+  margin-left: 6px;
+  font-weight: bold;
+}
+
+.speed-progress-bar-wrap {
+  width: 80%;
+  margin: 16px auto 8px;
+  height: 10px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.speed-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #e50914, #4caf50);
+  transition: width 0.2s linear;
+}
+
+.speed-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
+  text-align: left;
+}
+
+.speed-metric-card {
+  background: #1a1e2d;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ================= 13. MODAL DE ÁUDIO E LEGENDAS ================= */
+.audio-subs-modal-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 20px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.track-group-box {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.track-item-btn {
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: #191d2c;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.track-item-btn:hover,
+.track-item-btn:focus {
+  background: #252b40;
+  border-color: #ffd54f;
+  transform: translateX(4px);
+  outline: none;
+}
+
+.track-item-btn.active {
+  background: rgba(229, 9, 20, 0.25);
+  border-color: #e50914;
+  color: #ffd54f;
+  font-weight: bold;
+}
+
+/* ================= 14. BOTÃO EDITAR SERVIDOR ================= */
+.btn-server-edit {
+  padding: 8px 14px;
+  background: #1e3a8a;
+  color: #93c5fd;
+  border: 1px solid rgba(147, 197, 253, 0.3);
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-server-edit:hover,
+.btn-server-edit:focus {
+  background: #2563eb;
+  color: #fff;
+  outline: none;
 }
 
 .hidden {
