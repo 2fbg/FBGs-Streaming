@@ -2084,6 +2084,7 @@ async function openAppUpdateModal(manualCheck = true) {
     const candidateEndpoints = [
       'version.json?t=' + Date.now(),
       './version.json?t=' + Date.now(),
+      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=' + Date.now(),
       'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/version.json?t=' + Date.now()
     ];
 
@@ -2178,6 +2179,7 @@ async function startDirectUpdate() {
       const jsCandidates = [
         './app.js?t=' + Date.now(),
         'app.js?t=' + Date.now(),
+        'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/app.js?t=' + Date.now(),
         'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21-tv/app.js?t=' + Date.now()
       ];
 
@@ -2198,6 +2200,7 @@ async function startDirectUpdate() {
       const cssCandidates = [
         './styles.css?t=' + Date.now(),
         'styles.css?t=' + Date.now(),
+        'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=' + Date.now(),
         'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=' + Date.now()
       ];
 
