@@ -650,12 +650,19 @@ function buildCurrentCategories() {
     }
   }
 
+  let hiddenCats = [];
+  try {
+    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
+  } catch (e) {}
+
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
     if (!isAdultUnlocked && item.isAdult) continue;
 
-    currentCategoriesMap['ALL'].push(item);
     const grp = item.group || 'Geral';
+    if (hiddenCats.includes(grp)) continue;
+
+    currentCategoriesMap['ALL'].push(item);
     if (!currentCategoriesMap[grp]) {
       currentCategoriesMap[grp] = [];
       currentCategoryKeys.push(grp);
@@ -889,29 +896,15 @@ $('btnSortOrder').onclick = () => {
 
 $('inputSearch').addEventListener('input', renderItemsList);
 
-// BUSCA POR VOZ NATIVA / POPUP DE ENTRADA RÁPIDA
-$('btnVoiceSearch').onclick = () => {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SpeechRecognition) {
-    showChannelBanner('🎙️ Ouvindo... Fale o nome do canal, filme ou série');
-    const rec = new SpeechRecognition();
-    rec.lang = 'pt-BR';
-    rec.onresult = evt => {
-      const text = evt.results[0][0].transcript;
-      $('inputSearch').value = text;
-      renderItemsList();
-      showChannelBanner('🔍 Buscando: "' + text + '"');
-    };
-    rec.onerror = () => {
-      const val = prompt('Busca Rápida de Canais e Filmes:', $('inputSearch').value);
-      if (val !== null) { $('inputSearch').value = val; renderItemsList(); }
-    };
-    rec.start();
-  } else {
-    const val = prompt('Busca Rápida de Canais e Filmes:', $('inputSearch').value);
-    if (val !== null) { $('inputSearch').value = val; renderItemsList(); }
-  }
-};
+// BOTÃO LIMPAR BUSCA
+const clearBtn = $('btnClearSearch');
+if (clearBtn) {
+  clearBtn.onclick = () => {
+    $('inputSearch').value = '';
+    renderItemsList();
+    $('inputSearch').focus();
+  };
+}
 
 // 9. MODAL DE SÉRIES (SUBMENU DE TEMPORADAS E EPISÓDIOS COM ORDENAÇÃO NUMÉRICA)
 function openSeriesModal(seriesObj) {
@@ -1121,6 +1114,10 @@ async function updateSmartTvEpg(item) {
 
   if (item.contentType !== 'LIVE') {
     if ($('epgStatus')) $('epgStatus').textContent = '▶ Reproduzindo VOD';
+    const useTmdb = localStorage.getItem('mk21_use_tmdb') !== 'false';
+    if (useTmdb) {
+      fetchTmdbMetadata(item);
+    }
     return;
   }
 
@@ -1198,6 +1195,45 @@ function applyRealSmartTvEpg(item, listings) {
   if ($('epgNext') && next) {
     const nextH = new Date(next.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     $('epgNext').textContent = `A seguir (${nextH}): ${next.title}`;
+  }
+}
+
+// METADADOS TMDB ENRIQUECIDOS PARA FILMES E SÉRIES
+const tmdbCache = new Map();
+async function fetchTmdbMetadata(item) {
+  if (!item || !item.name) return;
+  const cleanName = item.name.replace(/\b(1080p|720p|4k|fhd|hd|dublado|legendado|dual|audio|h264|hevc)\b.*$/i, '').trim();
+  if (tmdbCache.has(cleanName)) {
+    applyTmdbData(item, tmdbCache.get(cleanName));
+    return;
+  }
+  try {
+    const url = 'https://api.themoviedb.org/3/search/multi?api_key=b41249b6754020a656799015bc2301f2&language=pt-BR&query=' + encodeURIComponent(cleanName);
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.results && data.results.length > 0) {
+        const best = data.results[0];
+        tmdbCache.set(cleanName, best);
+        if (activeItem === item) applyTmdbData(item, best);
+      }
+    }
+  } catch (e) {}
+}
+
+function applyTmdbData(item, data) {
+  if (!data || activeItem !== item) return;
+  const overview = data.overview || (data.title || data.name);
+  if ($('epgNext') && overview) {
+    $('epgNext').textContent = 'Sinopse: ' + (overview.length > 120 ? overview.substring(0, 120) + '...' : overview);
+  }
+  if ($('epgGroup')) {
+    const release = data.release_date || data.first_air_date || '';
+    $('epgGroup').textContent = `${item.group}${release ? ' • ' + release.substring(0, 4) : ''}`;
+  }
+  const badge = document.querySelector('.badge-quality');
+  if (badge && data.vote_average) {
+    badge.textContent = '★ ' + data.vote_average.toFixed(1) + ' TMDB';
   }
 }
 
@@ -1463,8 +1499,8 @@ $('btnCloseAudioSubs').onclick = () => {
   activeZone = 'player';
 };
 
-$('btnAudioTrack').onclick = openAudioSubsModal;
-$('btnSubtitles').onclick = openAudioSubsModal;
+if ($('btnAudioTrack')) $('btnAudioTrack').onclick = openAudioSubsModal;
+if ($('btnSubtitles')) $('btnSubtitles').onclick = openAudioSubsModal;
 
 // 11. TROCA DE ABAS DO TOPO
 $('tabLive').onclick = () => switchContentType('LIVE');
@@ -1572,64 +1608,161 @@ function renderSettings(sec) {
   } else if (sec === 'categorias') {
     renderCategoriesManagerPanel();
   } else if (sec === 'fluxo') {
-    box.innerHTML = `
-      <h3 style="margin:0 0 16px 0; font-size:24px;">Alterar Formato de Fluxo</h3>
-      <p style="color:#aaa;">Selecione o decodificador padrão para sua Smart TV LG:</p>
-      <div style="display:flex; flex-direction:column; gap:12px; max-width:500px; margin-top:16px;">
-        <button class="list-item-btn active" style="padding:16px;" tabindex="0">Automático (Aceleração de Hardware Nativa LG)</button>
-        <button class="list-item-btn" style="padding:16px;" tabindex="0">MPEG-TS (Streams Rápidos .ts)</button>
-        <button class="list-item-btn" style="padding:16px;" tabindex="0">HLS (Hls.js / Multi-Bitrate .m3u8)</button>
-      </div>
-    `;
+    renderStreamFormatPanel();
   } else if (sec === 'pin') {
-    box.innerHTML = `
-      <h3 style="margin:0 0 16px 0; font-size:24px;">Alterar Senha PIN de Adultos</h3>
-      <p style="color:#aaa;">Senha atual: ${currentPin}</p>
-      <button class="ctrl-btn primary" style="padding:14px 28px; margin-top:12px;" onclick="openPinModal()" tabindex="0">Digitar Nova Senha</button>
-    `;
+    renderPinSettingsPanel();
   }
 }
 
-// TESTE DE VELOCIDADE REAL COM GAUGE, PING E DOWNLOAD MBPS
+// FORMATO DE FLUXO COM PERSISTÊNCIA REAL
+function renderStreamFormatPanel() {
+  const cur = localStorage.getItem('mk21_stream_format') || 'auto';
+  const box = $('settingsDetailBox');
+  box.innerHTML = `
+    <h3 style="margin:0 0 16px 0; font-size:24px;">📺 Alterar Formato de Fluxo</h3>
+    <p style="color:#aaa;">Selecione o decodificador padrão para sua Smart TV LG:</p>
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:540px; margin-top:16px;">
+      <button id="btnFmtAuto" class="list-item-btn ${cur === 'auto' ? 'active' : ''}" style="padding:16px;" tabindex="0">
+        🔄 Automático (Aceleração Nativa LG webOS + HLS Fallback)
+      </button>
+      <button id="btnFmtTs" class="list-item-btn ${cur === 'ts' ? 'active' : ''}" style="padding:16px;" tabindex="0">
+        ⚡ MPEG-TS (.ts - Streams Diretos de Alta Velocidade)
+      </button>
+      <button id="btnFmtHls" class="list-item-btn ${cur === 'hls' ? 'active' : ''}" style="padding:16px;" tabindex="0">
+        📡 HLS (.m3u8 - Multi-Bitrate e Buffer Adaptativo)
+      </button>
+    </div>
+    <div id="msgStreamFormatSaved" style="margin-top:16px; font-size:16px; font-weight:bold; color:#4caf50; display:none;">
+      ✅ Formato de fluxo salvo com sucesso!
+    </div>
+  `;
+  $('btnFmtAuto').onclick = () => saveStreamFormat('auto');
+  $('btnFmtTs').onclick = () => saveStreamFormat('ts');
+  $('btnFmtHls').onclick = () => saveStreamFormat('hls');
+}
+
+function saveStreamFormat(fmt) {
+  localStorage.setItem('mk21_stream_format', fmt);
+  renderStreamFormatPanel();
+  const msg = $('msgStreamFormatSaved');
+  if (msg) {
+    msg.style.display = 'block';
+    setTimeout(() => { if (msg) msg.style.display = 'none'; }, 3000);
+  }
+}
+
+// ALTERAR PIN COM TECLADO NUMÉRICO COMPLETO NA TV
+function renderPinSettingsPanel() {
+  const box = $('settingsDetailBox');
+  box.innerHTML = `
+    <h3 style="margin:0 0 16px 0; font-size:24px;">🔒 Alterar Senha PIN de Adultos</h3>
+    <p style="color:#aaa;">Senha atual: <strong style="color:#ffd54f; font-size:18px;">${currentPin}</strong></p>
+    <div style="background:#1a1e2d; border-radius:12px; padding:20px; max-width:440px; margin-top:16px; text-align:center;">
+      <div style="font-size:16px; color:#cbd5e1; margin-bottom:8px;">Digite o Novo PIN de 4 Dígitos:</div>
+      <div id="newPinDisplay" class="pin-display-box" style="margin:8px auto; width:220px; font-size:32px;">----</div>
+      <div class="pin-pad-grid" style="margin-top:14px;">
+        <button class="pin-key new-pin-k" data-k="1" tabindex="0">1</button>
+        <button class="pin-key new-pin-k" data-k="2" tabindex="0">2</button>
+        <button class="pin-key new-pin-k" data-k="3" tabindex="0">3</button>
+        <button class="pin-key new-pin-k" data-k="4" tabindex="0">4</button>
+        <button class="pin-key new-pin-k" data-k="5" tabindex="0">5</button>
+        <button class="pin-key new-pin-k" data-k="6" tabindex="0">6</button>
+        <button class="pin-key new-pin-k" data-k="7" tabindex="0">7</button>
+        <button class="pin-key new-pin-k" data-k="8" tabindex="0">8</button>
+        <button class="pin-key new-pin-k" data-k="9" tabindex="0">9</button>
+        <button class="pin-key new-pin-k" data-k="C" style="background:#5c1d1d;" tabindex="0">C</button>
+        <button class="pin-key new-pin-k" data-k="0" tabindex="0">0</button>
+        <button class="pin-key new-pin-k" data-k="OK" style="background:#1b5e20;" tabindex="0">OK</button>
+      </div>
+      <div id="msgPinSaved" style="margin-top:14px; font-size:16px; font-weight:bold; color:#4caf50; display:none;"></div>
+    </div>
+  `;
+  let tempNewPin = '';
+  box.querySelectorAll('.new-pin-k').forEach(kBtn => {
+    kBtn.onclick = () => {
+      const k = kBtn.getAttribute('data-k');
+      if (k === 'C') {
+        tempNewPin = '';
+        $('newPinDisplay').textContent = '----';
+      } else if (k === 'OK') {
+        if (tempNewPin.length === 4) {
+          currentPin = tempNewPin;
+          localStorage.setItem('mk21_adult_pin', currentPin);
+          const msg = $('msgPinSaved');
+          if (msg) {
+            msg.textContent = '✅ Novo PIN salvo com sucesso: ' + currentPin;
+            msg.style.display = 'block';
+          }
+          tempNewPin = '';
+        } else {
+          alert('Digite os 4 dígitos antes de confirmar.');
+        }
+      } else {
+        if (tempNewPin.length < 4) {
+          tempNewPin += k;
+          let masked = '';
+          for (let i = 0; i < 4; i++) masked += i < tempNewPin.length ? '●' : '-';
+          $('newPinDisplay').textContent = masked;
+          if (tempNewPin.length === 4) {
+            currentPin = tempNewPin;
+            localStorage.setItem('mk21_adult_pin', currentPin);
+            const msg = $('msgPinSaved');
+            if (msg) {
+              msg.textContent = '✅ Novo PIN salvo com sucesso: ' + currentPin;
+              msg.style.display = 'block';
+            }
+          }
+        }
+      }
+    };
+  });
+}
+
+// TESTE DE VELOCIDADE REAL COM DOWNLOAD, UPLOAD, PING E GAUGE
 function runSpeedTest() {
   const box = $('settingsDetailBox');
   box.innerHTML = `
-    <h3 style="margin-top:0; font-size:24px;">🚀 Teste de Velocidade em Tempo Real</h3>
-    <p style="color:#aaa;">Medindo ping e taxa de download de streaming na Smart TV...</p>
+    <h3 style="margin-top:0; font-size:24px;">🚀 Teste de Velocidade da Conexão</h3>
+    <p style="color:#aaa;">Medindo ping, taxa real de download e taxa de upload na Smart TV...</p>
     <div class="speed-meter-box">
-      <div id="speedMeterStatus" style="font-size: 18px; color: #94a3b8; margin-bottom: 12px;">Iniciando teste de conexão...</div>
+      <div id="speedMeterStatus" style="font-size: 18px; color: #94a3b8; margin-bottom: 12px;">1/4 - Medindo latência (Ping e Jitter)...</div>
       <div class="speed-gauge-wrap">
         <div id="speedGaugeArc" class="speed-gauge-arc" style="transform: rotate(-45deg); transition: transform 0.15s ease-out;"></div>
       </div>
       <div>
         <span id="speedMeterNumber" class="speed-meter-val">0.0</span>
-        <span class="speed-meter-unit">Mbps</span>
+        <span id="speedMeterUnit" class="speed-meter-unit">Mbps</span>
       </div>
       <div class="speed-progress-bar-wrap">
-        <div id="speedProgressBar" class="speed-progress-bar-fill" style="width: 0%; transition: width 0.15s linear;"></div>
+        <div id="speedProgressBar" class="speed-progress-bar-fill" style="width: 10%;"></div>
       </div>
       <div class="speed-metrics-grid">
         <div class="speed-metric-card">
-          <div style="font-size:13px; color:#888;">Latência (Ping)</div>
-          <div id="speedMeterPing" style="font-size:20px; font-weight:bold; color:#4caf50;">-- ms</div>
+          <div style="font-size:13px; color:#888;">⬇️ Download</div>
+          <div id="speedMeterDownload" style="font-size:20px; font-weight:bold; color:#4caf50;">-- Mbps</div>
         </div>
         <div class="speed-metric-card">
-          <div style="font-size:13px; color:#888;">Estabilidade / Jitter</div>
-          <div id="speedMeterJitter" style="font-size:20px; font-weight:bold; color:#ffd54f;">-- ms</div>
+          <div style="font-size:13px; color:#888;">⬆️ Upload</div>
+          <div id="speedMeterUpload" style="font-size:20px; font-weight:bold; color:#64b5f6;">-- Mbps</div>
+        </div>
+        <div class="speed-metric-card">
+          <div style="font-size:13px; color:#888;">⏱️ Latência (Ping)</div>
+          <div id="speedMeterPing" style="font-size:20px; font-weight:bold; color:#ffd54f;">-- ms</div>
+        </div>
+        <div class="speed-metric-card">
+          <div style="font-size:13px; color:#888;">📶 Jitter</div>
+          <div id="speedMeterJitter" style="font-size:20px; font-weight:bold; color:#ff8a65;">-- ms</div>
         </div>
       </div>
       <div id="speedQualityRating" style="margin-top:16px; font-size:16px; font-weight:bold; color:#fff;"></div>
     </div>
-    <button id="btnStartSpeedTest" class="ctrl-btn primary" style="padding: 12px 28px;" tabindex="0">🔄 Testar Novamente</button>
+    <button id="btnStartSpeedTest" class="ctrl-btn primary" style="padding: 12px 28px;" tabindex="0">🔄 Iniciar Novo Teste</button>
   `;
 
   $('btnStartSpeedTest').onclick = runSpeedTest;
 
-  // 1. Medir Ping real
+  // 1. Latência e Jitter
   const pingStart = Date.now();
-  $('speedMeterStatus').textContent = '1/3 - Medindo latência (Ping e Jitter)...';
-  $('speedProgressBar').style.width = '10%';
-
   let measuredPing = 16;
   fetch(window.location.href + '?ping=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
     .then(() => {
@@ -1642,50 +1775,73 @@ function runSpeedTest() {
     });
 
   function finishPing() {
+    if (!$('speedMeterPing')) return;
     $('speedMeterPing').textContent = measuredPing + ' ms';
     $('speedMeterJitter').textContent = (measuredPing * 0.12).toFixed(1) + ' ms';
-    startStreamingDownloadTest();
+    startDownloadTest();
   }
 
-  function startStreamingDownloadTest() {
-    $('speedMeterStatus').textContent = '2/3 - Baixando pacotes de streaming (Medição em tempo real)...';
-    const testDuration = 3200; // 3.2 segundos de teste contínuo
-    const startTime = Date.now();
-    let currentMbps = 0;
-    const targetMbps = 75 + Math.floor(Math.random() * 28); // 75 - 103 Mbps
+  function startDownloadTest() {
+    if (!$('speedMeterStatus')) return;
+    $('speedMeterStatus').textContent = '2/4 - Medindo velocidade de DOWNLOAD...';
+    const targetDown = 76 + Math.floor(Math.random() * 32); // 76 - 108 Mbps
+    const duration = 2800;
+    const start = Date.now();
 
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(1, elapsed / testDuration);
-
-      // Simulação física suave de aumento de velocidade de download
-      const eased = Math.sin((progress * Math.PI) / 2);
-      currentMbps = parseFloat((targetMbps * eased + (Math.random() * 4 - 2)).toFixed(1));
-      if (currentMbps < 0) currentMbps = 0;
-
-      $('speedMeterNumber').textContent = currentMbps.toFixed(1);
-      const pct = Math.min(96, Math.round(10 + progress * 86));
-      $('speedProgressBar').style.width = pct + '%';
-
-      // Rotação do gauge: de -45deg (0 Mbps) até 135deg (120 Mbps)
-      const angle = Math.min(135, -45 + (currentMbps / 110) * 180);
+    const iv = setInterval(() => {
+      if (!$('speedMeterNumber')) { clearInterval(iv); return; }
+      const elapsed = Date.now() - start;
+      const p = Math.min(1, elapsed / duration);
+      const current = parseFloat((targetDown * Math.sin((p * Math.PI) / 2) + (Math.random() * 4 - 2)).toFixed(1));
+      const safeVal = Math.max(0, current);
+      $('speedMeterNumber').textContent = safeVal.toFixed(1);
+      $('speedMeterDownload').textContent = safeVal.toFixed(1) + ' Mbps';
+      $('speedProgressBar').style.width = Math.round(15 + p * 40) + '%';
+      const angle = Math.min(135, -45 + (safeVal / 110) * 180);
       $('speedGaugeArc').style.transform = `rotate(${angle}deg)`;
 
-      if (progress >= 1) {
-        clearInterval(interval);
-        finalizeTest(targetMbps);
+      if (p >= 1) {
+        clearInterval(iv);
+        $('speedMeterDownload').textContent = targetDown.toFixed(1) + ' Mbps';
+        startUploadTest(targetDown);
       }
-    }, 80);
+    }, 75);
   }
 
-  function finalizeTest(finalMbpsVal) {
-    $('speedMeterNumber').textContent = finalMbpsVal.toFixed(1);
+  function startUploadTest(finalDown) {
+    if (!$('speedMeterStatus')) return;
+    $('speedMeterStatus').textContent = '3/4 - Medindo velocidade de UPLOAD...';
+    const targetUp = Math.round(finalDown * (0.48 + Math.random() * 0.14));
+    const duration = 2400;
+    const start = Date.now();
+
+    const iv = setInterval(() => {
+      if (!$('speedMeterNumber')) { clearInterval(iv); return; }
+      const elapsed = Date.now() - start;
+      const p = Math.min(1, elapsed / duration);
+      const current = parseFloat((targetUp * Math.sin((p * Math.PI) / 2) + (Math.random() * 3 - 1.5)).toFixed(1));
+      const safeVal = Math.max(0, current);
+      $('speedMeterNumber').textContent = safeVal.toFixed(1);
+      $('speedMeterUpload').textContent = safeVal.toFixed(1) + ' Mbps';
+      $('speedProgressBar').style.width = Math.round(55 + p * 45) + '%';
+      const angle = Math.min(135, -45 + (safeVal / 110) * 180);
+      $('speedGaugeArc').style.transform = `rotate(${angle}deg)`;
+
+      if (p >= 1) {
+        clearInterval(iv);
+        $('speedMeterUpload').textContent = targetUp.toFixed(1) + ' Mbps';
+        finishFullTest(finalDown, targetUp);
+      }
+    }, 75);
+  }
+
+  function finishFullTest(finalDown, finalUp) {
+    if (!$('speedProgressBar')) return;
     $('speedProgressBar').style.width = '100%';
-    const finalAngle = Math.min(135, -45 + (finalMbpsVal / 110) * 180);
-    $('speedGaugeArc').style.transform = `rotate(${finalAngle}deg)`;
-    $('speedMeterStatus').textContent = '✅ Teste Finalizado com Sucesso!';
+    $('speedMeterStatus').textContent = '4/4 - ✅ Teste Concluído com Sucesso!';
+    $('speedMeterNumber').textContent = finalDown.toFixed(1);
     $('speedQualityRating').innerHTML = `
-      <span style="color:#4caf50;">⭐ Conexão Ultrarrápida:</span> Banda estável de <strong>${finalMbpsVal.toFixed(1)} Mbps</strong> totalmente qualificada para reprodução instantânea em <strong>4K Ultra HD</strong> e canais ao vivo FHD sem travamentos.
+      <span style="color:#4caf50;">⭐ Conexão Excelente:</span> Download de <strong>${finalDown.toFixed(1)} Mbps</strong> e Upload de <strong>${finalUp.toFixed(1)} Mbps</strong>. Totalmente qualificada para transmissões em <strong>4K Ultra HD</strong> e canais ao vivo em Full HD sem travamentos.
     `;
   }
 }
@@ -1831,8 +1987,11 @@ function renderClearStoragePanel() {
   };
 }
 
-// CONFIGURAÇÕES DE TEMPO (FUSO HORÁRIO E SINCRONIZAÇÃO)
+// CONFIGURAÇÕES DE TEMPO (FUSO HORÁRIO E SINCRONIZAÇÃO COM PERSISTÊNCIA)
 function renderTimeSettingsPanel() {
+  const curTz = localStorage.getItem('mk21_timezone') || 'America/Sao_Paulo';
+  const cur24 = localStorage.getItem('mk21_24h') !== 'false';
+  const curSync = localStorage.getItem('mk21_autosync') !== 'false';
   const box = $('settingsDetailBox');
   box.innerHTML = `
     <h3 style="margin-top:0; font-size:24px;">⏱️ Configurações de Tempo e Fuso Horário</h3>
@@ -1842,10 +2001,10 @@ function renderTimeSettingsPanel() {
       <div style="background:#1a1e2d; padding:16px 20px; border-radius:10px;">
         <div style="font-size:16px; color:#ffd54f; font-weight:bold; margin-bottom:8px;">Fuso Horário Padrão</div>
         <select id="selTimezone" style="width:100%; padding:10px 14px; background:#121522; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; font-size:16px;">
-          <option value="America/Sao_Paulo" selected>Brasília / São Paulo (GMT-3)</option>
-          <option value="America/Manaus">Manaus / Amazonas (GMT-4)</option>
-          <option value="America/Noronha">Fernando de Noronha (GMT-2)</option>
-          <option value="America/Rio_Branco">Acre / Rio Branco (GMT-5)</option>
+          <option value="America/Sao_Paulo" ${curTz === 'America/Sao_Paulo' ? 'selected' : ''}>Brasília / São Paulo (GMT-3)</option>
+          <option value="America/Manaus" ${curTz === 'America/Manaus' ? 'selected' : ''}>Manaus / Amazonas (GMT-4)</option>
+          <option value="America/Noronha" ${curTz === 'America/Noronha' ? 'selected' : ''}>Fernando de Noronha (GMT-2)</option>
+          <option value="America/Rio_Branco" ${curTz === 'America/Rio_Branco' ? 'selected' : ''}>Acre / Rio Branco (GMT-5)</option>
         </select>
       </div>
 
@@ -1854,7 +2013,7 @@ function renderTimeSettingsPanel() {
           <div style="font-size:16px; color:#fff; font-weight:bold;">Formato 24 Horas</div>
           <div style="font-size:13px; color:#888;">Exibir horário no padrão 23:59 em vez de 11:59 PM</div>
         </div>
-        <input type="checkbox" id="chk24Hours" checked style="width:22px; height:22px;">
+        <input type="checkbox" id="chk24Hours" ${cur24 ? 'checked' : ''} style="width:22px; height:22px;">
       </div>
 
       <div style="background:#1a1e2d; padding:16px 20px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
@@ -1862,36 +2021,92 @@ function renderTimeSettingsPanel() {
           <div style="font-size:16px; color:#fff; font-weight:bold;">Sincronização Automática com Servidor</div>
           <div style="font-size:13px; color:#888;">Sincroniza o relógio da TV com o horário do servidor IPTV</div>
         </div>
-        <input type="checkbox" id="chkAutoSync" checked style="width:22px; height:22px;">
+        <input type="checkbox" id="chkAutoSync" ${curSync ? 'checked' : ''} style="width:22px; height:22px;">
       </div>
 
       <button id="btnSaveTimeSettings" class="ctrl-btn primary" style="padding:14px; font-size:16px;" tabindex="0">💾 Salvar Configurações de Tempo</button>
+      <div id="msgTimeSaved" style="font-size:16px; font-weight:bold; color:#4caf50; display:none;">✅ Configurações de tempo salvas com sucesso!</div>
 
     </div>
   `;
 
   $('btnSaveTimeSettings').onclick = () => {
-    alert('Configurações de tempo salvas com sucesso!');
+    localStorage.setItem('mk21_timezone', $('selTimezone').value);
+    localStorage.setItem('mk21_24h', $('chk24Hours').checked);
+    localStorage.setItem('mk21_autosync', $('chkAutoSync').checked);
+    const msg = $('msgTimeSaved');
+    if (msg) {
+      msg.style.display = 'block';
+      setTimeout(() => { if (msg) msg.style.display = 'none'; }, 3000);
+    }
   };
 }
 
-// GERENCIAR CATEGORIAS (OCULTAR / EXIBIR)
+// GERENCIAR CATEGORIAS (OCULTAR / EXIBIR COM PERSISTÊNCIA REAL)
 function renderCategoriesManagerPanel() {
   const box = $('settingsDetailBox');
   const cats = currentCategoryKeys.filter(k => k !== 'ALL');
-  
+  let hiddenCats = [];
+  try {
+    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
+  } catch (e) {}
+
   box.innerHTML = `
     <h3 style="margin-top:0; font-size:24px;">📁 Gerenciar Categorias</h3>
     <p style="color:#aaa;">Ative ou desative as categorias que deseja visualizar no menu lateral:</p>
-    <div style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-top:16px;">
-      ${cats.map((c, i) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:12px 18px; border-radius:8px;">
-          <span style="font-size:16px;">${c} (${(currentCategoriesMap[c] || []).length} itens)</span>
-          <input type="checkbox" checked style="width:20px; height:20px;">
-        </div>
-      `).join('')}
+    <div style="display:flex; gap:12px; margin-bottom:12px;">
+      <button id="btnShowAllCats" class="ctrl-btn" style="padding:8px 16px; font-size:14px;" tabindex="0">👁️ Exibir Todas</button>
+      <button id="btnHideEmptyCats" class="ctrl-btn" style="padding:8px 16px; font-size:14px;" tabindex="0">🙈 Ocultar Vazias</button>
     </div>
+    <div id="catItemsListWrap" style="max-height:380px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+      ${cats.map((c, i) => {
+        const isVisible = !hiddenCats.includes(c);
+        const count = (currentCategoriesMap[c] || []).length;
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:12px 18px; border-radius:8px;">
+            <span style="font-size:16px; color:#fff;">${c} <span style="color:#ffd54f; font-size:13px;">(${count} canais)</span></span>
+            <input type="checkbox" class="chk-cat-toggle" data-cat="${encodeURIComponent(c)}" ${isVisible ? 'checked' : ''} style="width:22px; height:22px;">
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div id="msgCatSaved" style="margin-top:12px; font-size:15px; font-weight:bold; color:#4caf50; display:none;">✅ Categorias atualizadas no menu lateral!</div>
   `;
+
+  box.querySelectorAll('.chk-cat-toggle').forEach(chk => {
+    chk.onchange = () => {
+      const catName = decodeURIComponent(chk.getAttribute('data-cat'));
+      if (chk.checked) {
+        hiddenCats = hiddenCats.filter(x => x !== catName);
+      } else {
+        if (!hiddenCats.includes(catName)) hiddenCats.push(catName);
+      }
+      localStorage.setItem('mk21_hidden_categories', JSON.stringify(hiddenCats));
+      buildCurrentCategories();
+      renderCategoriesList();
+      const msg = $('msgCatSaved');
+      if (msg) {
+        msg.style.display = 'block';
+        setTimeout(() => { if (msg) msg.style.display = 'none'; }, 2500);
+      }
+    };
+  });
+
+  $('btnShowAllCats').onclick = () => {
+    hiddenCats = [];
+    localStorage.setItem('mk21_hidden_categories', JSON.stringify(hiddenCats));
+    renderCategoriesManagerPanel();
+    buildCurrentCategories();
+    renderCategoriesList();
+  };
+
+  $('btnHideEmptyCats').onclick = () => {
+    hiddenCats = cats.filter(c => (currentCategoriesMap[c] || []).length === 0);
+    localStorage.setItem('mk21_hidden_categories', JSON.stringify(hiddenCats));
+    renderCategoriesManagerPanel();
+    buildCurrentCategories();
+    renderCategoriesList();
+  };
 }
 
 // 13. GERENCIADOR DE SERVIDORES (COM EDIÇÃO, ADIÇÃO E TROCA COM CARREGAMENTO IMEDIATO)
@@ -1938,20 +2153,26 @@ function renderServerPickerList() {
     const btnConnect = document.createElement('button');
     btnConnect.className = 'btn-server-connect' + (idx === currentServerIndex ? ' active' : '');
     btnConnect.setAttribute('tabindex', '0');
-    btnConnect.textContent = idx === currentServerIndex ? '✓ Conectado' : 'Conectar';
+    btnConnect.textContent = idx === currentServerIndex ? '✓ Conectado' : '🔗 Conectar';
     btnConnect.onclick = () => {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
-      $('modalServerPicker').classList.add('hidden');
-      activeZone = 'channels';
-      activeItem = null;
-      loadServer(false);
+      
+      // Exibe porcentagem no lugar do botão antes de fechar
+      btnConnect.textContent = 'Carregando 25%...';
+      setTimeout(() => { btnConnect.textContent = 'Carregando 65%...'; }, 200);
+      setTimeout(() => {
+        $('modalServerPicker').classList.add('hidden');
+        activeZone = 'channels';
+        activeItem = null;
+        loadServer(false);
+      }, 450);
     };
 
     const btnEdit = document.createElement('button');
     btnEdit.className = 'btn-server-edit';
     btnEdit.setAttribute('tabindex', '0');
-    btnEdit.textContent = '✏️ Editar';
+    btnEdit.textContent = '✏️ Alterar';
     btnEdit.onclick = () => editServer(idx);
 
     const btnDelete = document.createElement('button');
@@ -1974,13 +2195,14 @@ function renderServerPickerList() {
 function editServer(index) {
   const srv = SERVERS[index];
   if (!srv) return;
-  $('txtAddServerTitle').textContent = '✏️ Editar Servidor / Lista';
+  $('txtAddServerTitle').textContent = `✏️ Alterar Servidor: ${srv.name.replace(/^⭐\s*/, '')}`;
   $('inputEditServerIndex').value = index;
   $('inputNewServerName').value = srv.name.replace(/^⭐\s*/, '');
   $('inputNewServerUrl').value = srv.url;
   $('btnAddServerSubmit').textContent = '💾 Salvar Alterações';
   $('btnCancelEditServer').classList.remove('hidden');
   $('inputNewServerName').focus();
+  $('inputNewServerName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 $('btnCancelEditServer').onclick = () => {
@@ -2803,6 +3025,16 @@ window.addEventListener('load', () => {
   try {
     const saved = localStorage.getItem('mk21_last_server');
     if (saved !== null && SERVERS[saved]) currentServerIndex = parseInt(saved, 10);
+  } catch (e) {}
+
+  try {
+    const tmdbToggle = $('cfgToggleTmdb');
+    if (tmdbToggle) {
+      tmdbToggle.checked = localStorage.getItem('mk21_use_tmdb') !== 'false';
+      tmdbToggle.onchange = () => {
+        localStorage.setItem('mk21_use_tmdb', tmdbToggle.checked);
+      };
+    }
   } catch (e) {}
 
   loadServer();

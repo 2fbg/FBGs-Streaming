@@ -364,22 +364,28 @@ video {
 
 .player-controls {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  width: 100%;
 }
 
 .ctrl-btn {
   flex: 1;
-  padding: 13px;
+  min-width: 0;
+  padding: 11px 8px;
   background: #252a3b;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ctrl-btn.primary {
@@ -519,9 +525,9 @@ video {
 
 /* MODAL GERENCIADOR DE SERVIDORES & MANUTENÇÃO */
 .server-manager-modal {
-  width: 840px;
-  max-width: 95vw;
-  max-height: 88vh;
+  width: 920px;
+  max-width: 96vw;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
 }
@@ -538,7 +544,7 @@ video {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 260px;
+  max-height: 280px;
   overflow-y: auto;
 }
 
@@ -546,11 +552,12 @@ video {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: #181b28;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   gap: 12px;
+  min-height: 56px;
 }
 
 .server-manager-row.active-server {
@@ -560,15 +567,20 @@ video {
 
 .server-info-col {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
 }
 
 .server-info-name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .server-info-url {
@@ -577,39 +589,67 @@ video {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 480px;
+  max-width: 440px;
 }
 
 .server-row-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .btn-server-connect {
-  padding: 8px 16px;
+  padding: 8px 14px;
   background: #252a3b;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .btn-server-connect.active {
   background: #2e7d32;
   border-color: #4caf50;
+  color: #fff;
+}
+
+.btn-server-edit {
+  padding: 8px 12px;
+  background: #2a3350;
+  color: #ffd54f;
+  border: 1px solid rgba(255, 213, 79, 0.3);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .btn-server-delete {
-  padding: 8px 14px;
+  padding: 8px 12px;
   background: #5c1d1d;
-  color: #fff;
+  color: #ffcdd2;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.server-loading-badge {
+  font-size: 13px;
+  font-weight: bold;
+  color: #ffd54f;
+  background: rgba(255, 213, 79, 0.15);
+  border: 1px solid rgba(255, 213, 79, 0.4);
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
 }
 
 .add-server-card {
@@ -980,17 +1020,23 @@ body[class*="font-"] .voice-btn {
 
 .speed-metrics-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
   margin-top: 18px;
-  text-align: left;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .speed-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .speed-metric-card {
   background: #1a1e2d;
-  padding: 12px 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
+  padding: 12px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ================= 13. MODAL DE ÁUDIO E LEGENDAS ================= */

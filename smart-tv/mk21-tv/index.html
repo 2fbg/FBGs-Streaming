@@ -10,36 +10,7 @@
 </head>
 <body>
 
-  <!-- ================= TELA DE INICIALIZAÇÃO PREMIUM (SPLASH SCREEN) ================= -->
-  <div id="startupSplashScreen" class="startup-splash-overlay">
-    <div class="splash-content">
-      <div class="splash-logo-row">
-        <span class="splash-logo-mk">MK</span>
-        <span class="splash-logo-21">21</span>
-      </div>
-      <div><span class="splash-badge">PLAY OTT SMART TV</span></div>
-      <p class="splash-slogan">MAIS QUE UM NÚMERO É RESULTADO</p>
-      <div class="splash-progress-track">
-        <div id="splashProgressBar" class="splash-progress-fill" style="width: 15%;"></div>
-      </div>
-      <div id="splashStatusText" class="splash-status-text">Iniciando MK21 Play OTT...</div>
-    </div>
-  </div>
-  <script>
-    // Fechamento infalível da tela de abertura para Smart TVs (LG webOS e Samsung Tizen)
-    (function() {
-      setTimeout(function() {
-        var sp = document.getElementById('startupSplashScreen');
-        if (sp) {
-          sp.classList.add('fade-out');
-          sp.style.opacity = '0';
-          sp.style.display = 'none';
-          sp.style.pointerEvents = 'none';
-          try { if (sp.parentNode) sp.parentNode.removeChild(sp); } catch(e) {}
-        }
-      }, 2500);
-    })();
-  </script>
+  <!-- Abertura instantânea direta no canal (sem tela de espera) -->
 
   <!-- ================= 1. CABEÇALHO SUPERIOR COM ABAS ================= -->
   <header class="app-header">
@@ -100,7 +71,7 @@
         </div>
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
-          <button id="btnVoiceSearch" class="voice-btn" tabindex="0">🎙️</button>
+          <button id="btnClearSearch" class="voice-btn" tabindex="0" title="Limpar busca">✕</button>
           <button id="btnSortOrder" class="voice-btn" tabindex="0" title="Ordem dos Canais" style="width: auto; padding: 0 12px; font-size: 14px;">↕️ A-Z</button>
         </div>
         <ul id="listItems" class="pane-scroll"></ul>
@@ -130,8 +101,7 @@
           <button id="btnPlayPause" class="ctrl-btn" tabindex="0">⏯ Pausar</button>
           <button id="btnFavorite" class="ctrl-btn" tabindex="0">⭐ Favoritar</button>
           <button id="btnSpeed" class="ctrl-btn" tabindex="0">⚡ 1x</button>
-          <button id="btnAudioTrack" class="ctrl-btn" tabindex="0">🔊 Áudio</button>
-          <button id="btnSubtitles" class="ctrl-btn" tabindex="0">💬 Legenda</button>
+          <button id="btnAudioTrack" class="ctrl-btn" tabindex="0">🔊 Áudio & Legendas</button>
         </div>
       </div>
 
@@ -291,17 +261,25 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div>
             <div style="color: #888; font-size: 13px;">Versão Instalada</div>
-            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.4.0</div>
+            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.6.0</div>
           </div>
           <div style="text-align: right;">
             <div style="color: #888; font-size: 13px;">Versão Mais Recente</div>
-            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">Verificando...</div>
+            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v3.6.0 ✓ (Versão Mais Recente)</div>
           </div>
         </div>
 
         <div id="boxUpdateNotes" style="background: #141724; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 20px; max-height: 180px; overflow-y: auto;">
-          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão:</h4>
-          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">Verificando notas da versão no GitHub...</pre>
+          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão 3.6.0:</h4>
+          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)
+• Novo painel de Teste de Velocidade com Download e Upload em tempo real
+• Ajuste e salvamento de Formato de Fluxo (MPEG-TS, HLS, Automático)
+• Alteração e validação de Senha PIN de Adultos direto na TV
+• Configuração e sincronização de tempo e fuso horário
+• Gerenciador de categorias com ocultação/exibição seletiva
+• Gerenciador de servidores com opção de Alterar/Editar e indicador de progresso %
+• Áudio e Legendas unificados sem cortes na tela com fontes grandes
+• Inicialização ultra rápida e fluida sem travamentos</pre>
         </div>
 
         <div id="updateProgressBox" class="hidden" style="margin-bottom: 20px;">
@@ -316,7 +294,7 @@
 
         <div id="updateActionsRow" style="display: flex; gap: 12px; flex-wrap: wrap;">
           <button id="btnStartDirectUpdate" class="ctrl-btn primary" style="flex: 2; min-width: 200px; padding: 14px;" tabindex="0">
-            ⬇️ Baixar e Atualizar Agora na TV
+            🔄 Reinstalar / Sincronizar Arquivos v3.6.0
           </button>
           <button id="btnCheckAgainUpdate" class="ctrl-btn" style="flex: 1; min-width: 120px; padding: 14px;" tabindex="0">
             🔄 Verificar

@@ -8,8 +8,6 @@
   "requiredACG": [],
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "bgImage": "splash.png",
-  "splashBackground": "splash.png",
   "resolution": "1920x1080",
   "transparent": false,
   "handlesRelaunch": true,
