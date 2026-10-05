@@ -109,8 +109,8 @@ graph TD
 
 1. **Clone o repositório:**
    ```bash
-   git clone https://github.com/2fbg/BGs-Streaming.git
-   cd BGs-Streaming
+   git clone https://github.com/2fbg/FBGs-Streaming.git
+   cd FBGs-Streaming
    ```
 
 2. **Configure o arquivo de ambiente `.env`:**

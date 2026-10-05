@@ -12,16 +12,22 @@ function updateSplash(percent, text) {
 
 function hideSplash() {
   const splash = $('startupSplashScreen');
-  if (splash && !splash.classList.contains('fade-out')) {
-    updateSplash(100, 'Tudo Pronto! Iniciando reprodução...');
+  if (splash) {
+    updateSplash(100, 'Tudo Pronto!');
+    splash.classList.add('fade-out');
+    splash.style.opacity = '0';
+    splash.style.display = 'none';
+    splash.style.pointerEvents = 'none';
     setTimeout(() => {
-      splash.classList.add('fade-out');
-      setTimeout(() => {
-        if (splash.parentNode) splash.parentNode.removeChild(splash);
-      }, 500);
-    }, 400);
+      try {
+        if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+      } catch (e) {}
+    }, 200);
   }
 }
+
+// Timeout de segurança absoluto: a tela de splash NUNCA trava mais de 3.5 segundos na TV
+setTimeout(hideSplash, 3500);
 
 // 2. POLYFILLS PARA NAVEGADORES CHROMIUM WEBOS
 if (!Element.prototype.replaceChildren) {
@@ -375,7 +381,10 @@ async function fetchPlaylistContent(url) {
   ];
   for (let u of attempts) {
     try {
-      const res = await fetch(u);
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+      const res = await fetch(u, controller ? { signal: controller.signal } : {});
+      if (timeoutId) clearTimeout(timeoutId);
       if (res.ok) {
         const text = await res.text();
         if (text && text.length > 50) return text;
@@ -522,7 +531,29 @@ async function loadServer(forceRefresh = false) {
     console.error('Server error:', err);
     if (hud) hud.classList.add('hidden');
     hideSplash();
-    alert('Erro ao carregar ' + srv.name + ': ' + err.message);
+
+    // Fallback instantâneo: canais abertos e públicos para a TV nunca ficar vazia
+    if (!allCatalog || !allCatalog.LIVE || allCatalog.LIVE.length === 0) {
+      allCatalog = {
+        LIVE: [
+          { name: 'Record News HD', group: 'Notícias', logo: 'https://i.imgur.com/G34Z6d7.png', url: 'https://recordnews.newsline.com.br/live/smil:live.smil/playlist.m3u8', contentType: 'LIVE' },
+          { name: 'TV Brasil HD', group: 'Abertos', logo: 'https://i.imgur.com/d5mK70w.png', url: 'https://ebc-live.ebc.com.br/tvbrasil/tvbrasil.m3u8', contentType: 'LIVE' },
+          { name: 'CNN Brasil', group: 'Notícias', logo: 'https://i.imgur.com/4qJd2R6.png', url: 'https://d2e9h20wvvj09u.cloudfront.net/out/v1/25687a74070a4a82b9b26574fbcda4ff/index.m3u8', contentType: 'LIVE' },
+          { name: 'Pluto TV Filmes', group: 'Filmes', logo: 'https://i.imgur.com/6UaR8Gq.png', url: 'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d63f736c28f08a46cf7f8a7/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=1&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=1&userId=', contentType: 'LIVE' }
+        ],
+        MOVIE: [],
+        SERIES: []
+      };
+      buildCurrentCategories();
+      renderCategoriesList();
+      selectCategory('ALL');
+      if (allCatalog.LIVE.length > 0) {
+        playStream(allCatalog.LIVE[0]);
+      }
+    }
+    if ($('txtCurrentCategoryTitle')) {
+      $('txtCurrentCategoryTitle').textContent = 'Pressione o botão Vermelho para trocar de Servidor';
+    }
   }
 }
 
@@ -2108,7 +2139,7 @@ async function openAppUpdateModal(manualCheck = true) {
         versionCode: 360,
         title: 'MK21 Play v3.6.0',
         releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/mk21play_3.6.0_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.6.0_all.ipk',
         isPendingPush: (!data || compareSemver(data.version, '3.6.0') < 0)
       };
     }
