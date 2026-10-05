@@ -1510,7 +1510,7 @@
         window.refreshActiveChannelEpg = async function() {
             if (window.EpgManager && window.EpgManager.activeEpgItem) {
                 const item = window.EpgManager.activeEpgItem;
-                const btn = window.event?.currentTarget;
+                const btn = (window.event && window.event.currentTarget) ? window.event.currentTarget : null;
                 if (btn) btn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Atualizando...';
                 const keys = window.EpgManager.getChannelKeys(item);
                 keys.forEach(k => window.EpgManager.cache.delete(k));

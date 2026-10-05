@@ -25,6 +25,21 @@
       <div id="splashStatusText" class="splash-status-text">Iniciando MK21 Play OTT...</div>
     </div>
   </div>
+  <script>
+    // Fechamento infalível da tela de abertura para Smart TVs (LG webOS e Samsung Tizen)
+    (function() {
+      setTimeout(function() {
+        var sp = document.getElementById('startupSplashScreen');
+        if (sp) {
+          sp.classList.add('fade-out');
+          sp.style.opacity = '0';
+          sp.style.display = 'none';
+          sp.style.pointerEvents = 'none';
+          try { if (sp.parentNode) sp.parentNode.removeChild(sp); } catch(e) {}
+        }
+      }, 2500);
+    })();
+  </script>
 
   <!-- ================= 1. CABEÇALHO SUPERIOR COM ABAS ================= -->
   <header class="app-header">

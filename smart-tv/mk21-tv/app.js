@@ -1125,7 +1125,11 @@ async function updateSmartTvEpg(item) {
   }
 
   const srv = SERVERS[currentServerIndex] || DEFAULT_SERVERS[0];
-  const streamId = item.streamId || (item.url && item.url.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/)?.[1]);
+  let streamId = item.streamId;
+  if (!streamId && item.url) {
+    const sIdMatch = item.url.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
+    if (sIdMatch && sIdMatch[1]) streamId = sIdMatch[1];
+  }
   const user = localStorage.getItem('mk21_username') || '';
   const pass = localStorage.getItem('mk21_password') || '';
 
@@ -2188,7 +2192,7 @@ async function startDirectUpdate() {
   $('btnStartDirectUpdate').disabled = true;
   $('btnCheckAgainUpdate').disabled = true;
 
-  const targetVer = latestRemoteUpdateData?.version || '3.6.0';
+  const targetVer = (latestRemoteUpdateData && latestRemoteUpdateData.version) ? latestRemoteUpdateData.version : '3.6.0';
 
   const steps = [
     { pct: 15, text: 'Conectando ao repositório de atualização...' },
