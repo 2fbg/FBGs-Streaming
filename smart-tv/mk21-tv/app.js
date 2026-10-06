@@ -39,11 +39,12 @@ if (!Element.prototype.replaceChildren) {
 
 // 3. CONFIGURAÇÃO DOS SERVIDORES MK21
 const DEFAULT_SERVERS = [
+  { id: 'canais_br', name: '🇧🇷 CANAIS BRASIL (Abertos)', url: 'https://iptv-org.github.io/iptv/countries/br.m3u' },
+  { id: 'tannix', name: '🟣 TANNIX', url: 'http://poptvcdn.online' },
   { id: 'cb6000', name: '🔵 CB6000', url: 'http://cdn.caterlune.top' },
   { id: 'vlog', name: '🔴 VLOG', url: 'http://myopbx.beer' },
   { id: 'lubtv', name: '🟢 LUB TV', url: 'http://pottermax.sbs' },
   { id: 'cinelon', name: '🟡 CINELON21', url: 'http://coliseuop.site' },
-  { id: 'tannix', name: '🟣 TANNIX', url: 'http://poptvcdn.online' },
   { id: 'mk21pro', name: '🟠 MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
   { id: 'cinevo', name: '⚪ CINEVO', url: 'http://antaresfusion.shop' }
 ];
@@ -395,11 +396,24 @@ async function fetchPlaylistContent(srv) {
       if (timeoutId) clearTimeout(timeoutId);
       if (res.ok) {
         const text = await res.text();
-        if (text && text.length > 50) return text;
+        if (text && text.length > 20) {
+          // Detectar erro explícito de credenciais do Xtream Codes / XUI.one
+          if (text.includes('INVALID_CREDENTIALS') || text.includes('Username or password is invalid')) {
+            throw new Error(`Credenciais inválidas: O servidor "${(typeof srv === 'object' && srv.name) ? srv.name : 'IPTV'}" recusou o Usuário ou a Senha. Pressione o botão Vermelho no controle para ajustar.`);
+          }
+          if ((text.includes('<!DOCTYPE html') || text.includes('<html') || text.includes('404 Not Found')) && !text.includes('#EXTINF') && !text.includes('#EXTM3U')) {
+            continue; // Página web de erro ou proxy, tenta próximo endpoint
+          }
+          if (text.includes('#EXTINF') || text.includes('#EXTM3U') || text.includes('.m3u') || text.includes('http://') || text.includes('https://')) {
+            return text;
+          }
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      if (e && e.message && e.message.includes('Credenciais')) throw e;
+    }
   }
-  throw new Error('Falha ao conectar com o servidor após múltiplas tentativas.');
+  throw new Error(`Não foi possível obter a lista do servidor "${(typeof srv === 'object' && srv.name) ? srv.name : ''}". Verifique sua conexão ou configure Usuário e Senha (botão Vermelho).`);
 }
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
@@ -562,6 +576,13 @@ async function loadServer(forceRefresh = false) {
     if (hud) hud.classList.add('hidden');
     hideSplash();
 
+    const msg = (err && err.message) ? err.message : 'Falha ao conectar com o servidor.';
+    if ($('txtCurrentCategoryTitle')) {
+      $('txtCurrentCategoryTitle').textContent = '⚠️ ' + msg;
+    }
+    showChannelBanner('⚠️ ' + msg);
+    alert('Aviso MK21 Play:\n\n' + msg + '\n\nPressione o botão Vermelho no controle remoto para verificar o Usuário e Senha.');
+
     // Fallback instantâneo: canais abertos e públicos para a TV nunca ficar vazia
     if (!allCatalog || !allCatalog.LIVE || allCatalog.LIVE.length === 0) {
       allCatalog = {
@@ -581,83 +602,10 @@ async function loadServer(forceRefresh = false) {
         playStream(allCatalog.LIVE[0]);
       }
     }
-    if ($('txtCurrentCategoryTitle')) {
-      $('txtCurrentCategoryTitle').textContent = 'Pressione o botão Vermelho para trocar de Servidor';
-    }
   }
 }
 
-// PARSER NÃO-BLOQUEANTE DE FILMES E SÉRIES EM SEGUNDO PLANO
-function parseVodInBackground(lines, srvId) {
-  let curName = 'Item';
-  let curGroup = 'Geral';
-  let curLogo = '';
-
-  let idx = 0;
-  const chunkSize = 4000;
-
-  function processChunk() {
-    const end = Math.min(lines.length, idx + chunkSize);
-    for (; idx < end; idx++) {
-      const line = lines[idx].trim();
-      if (line.startsWith('#EXTINF:')) {
-        const commaIndex = line.lastIndexOf(',');
-        curName = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : 'Item';
-        const gMatch = line.match(/group-title="([^"]*)"/i);
-        curGroup = gMatch && gMatch[1] && gMatch[1].trim() ? gMatch[1].trim() : 'Geral';
-        const lMatch = line.match(/tvg-logo="([^"]*)"/i);
-        curLogo = lMatch && lMatch[1] ? lMatch[1].trim() : '';
-      } else if (/^https?:\/\//i.test(line)) {
-        const cType = determineType(curName, curGroup, line);
-        if (cType === 'MOVIE') {
-          allCatalog.MOVIE.push({
-            name: curName,
-            group: curGroup,
-            logo: curLogo,
-            url: line,
-            contentType: 'MOVIE',
-            isAdult: isAdult(curName) || isAdult(curGroup)
-          });
-        } else if (cType === 'SERIES') {
-          allCatalog.SERIES.push({
-            name: curName,
-            group: curGroup,
-            logo: curLogo,
-            url: line,
-            contentType: 'SERIES',
-            isAdult: isAdult(curName) || isAdult(curGroup)
-          });
-        }
-        curName = 'Item';
-        curGroup = 'Geral';
-        curLogo = '';
-      }
-    }
-
-    if (idx < lines.length) {
-      // Atualiza visualmente a cada bloco caso o usuário já esteja nas abas Filmes ou Séries
-      if ((currentContentType === 'MOVIE' || currentContentType === 'SERIES') && idx % 12000 === 0) {
-        buildCurrentCategories();
-        renderCategoriesList();
-        renderItemsList();
-      }
-      setTimeout(processChunk, 10);
-    } else {
-      // Finalizado: Salva no IndexedDB para carregamento instantâneo no futuro
-      saveStoredData(srvId, allCatalog);
-      // Se o usuário estiver navegando em Filmes ou Séries, atualiza a tela
-      if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') {
-        buildCurrentCategories();
-        renderCategoriesList();
-        renderItemsList();
-      }
-    }
-  }
-
-  processChunk();
-}
-
-// 7. AGRUPAMENTO DE CATEGORIAS DA ABA ATIVA
+// 7. AGRUPAMENTO DE CATEGORIAS DA ABA ATIVA (TODAS AS CATEGORIAS 100% VISÍVEIS)
 function buildCurrentCategories() {
   currentCategoriesMap = { 'ALL': [] };
   currentCategoryKeys = ['ALL'];
@@ -680,17 +628,11 @@ function buildCurrentCategories() {
     }
   }
 
-  let hiddenCats = [];
-  try {
-    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
-  } catch (e) {}
-
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
     if (!isAdultUnlocked && item.isAdult) continue;
 
     const grp = item.group || 'Geral';
-    if (hiddenCats.includes(grp)) continue;
 
     currentCategoriesMap['ALL'].push(item);
     if (!currentCategoriesMap[grp]) {
@@ -1568,7 +1510,7 @@ function switchContentType(type) {
 }
 
 // 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
-const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin'];
+const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnFluxo', 'cfgBtnPin'];
 
 CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
@@ -3263,6 +3205,12 @@ $('btnExitConfirm').onclick = () => {
 function bootApp() {
   if (window._mk21Booted) return;
   window._mk21Booted = true;
+
+  try {
+    localStorage.removeItem('mk21_hidden_categories');
+    localStorage.removeItem('mk21_ota_app_js');
+    localStorage.removeItem('mk21_ota_styles_css');
+  } catch (e) {}
 
   try {
     const savedFont = localStorage.getItem('mk21_font_size');
