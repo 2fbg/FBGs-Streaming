@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=3.6.1">
+  <link rel="stylesheet" href="styles.css?v=3.6.3">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -82,6 +82,62 @@
         <div id="videoContainer" class="video-box" tabindex="0">
           <video id="tvPlayer" playsinline></video>
           <div id="channelOverlay" class="channel-overlay hidden">Animal Planet FHD</div>
+
+          <!-- ================= HUD COMPLETO DO PLAYER PRINCIPAL (TELA CHEIA) ================= -->
+          <div id="playerMainHud" class="player-main-hud hidden">
+            <!-- TOPO DO PLAYER: Nome do canal/filme, metadados e relógio -->
+            <div class="hud-top-bar">
+              <div class="hud-top-left">
+                <span id="hudChannelLogo" class="hud-channel-logo">📺</span>
+                <div class="hud-title-col">
+                  <h2 id="hudChannelTitle" class="hud-channel-title">Carregando...</h2>
+                  <div class="hud-channel-meta">
+                    <span id="hudChannelCategory" class="hud-meta-pill">Geral</span>
+                    <span id="hudLiveBadge" class="hud-meta-pill badge-live">🔴 AO VIVO</span>
+                    <span id="hudResolutionBadge" class="hud-meta-pill">1080p FHD</span>
+                    <span id="hudCurrentSpeedBadge" class="hud-meta-pill badge-speed">⚡ 1x</span>
+                  </div>
+                </div>
+              </div>
+              <div class="hud-top-right">
+                <div class="hud-clock" id="hudClockDisplay">00:00:00</div>
+              </div>
+            </div>
+
+            <!-- MEIO: BARRA DE TEMPO / TIMELINE (PARA FILMES E SÉRIES VOD) -->
+            <div id="hudTimelineWrapper" class="hud-timeline-wrapper hidden">
+              <div class="hud-timeline-track" id="hudTimelineTrack">
+                <div id="hudTimelineProgress" class="hud-timeline-progress" style="width: 0%;"></div>
+              </div>
+              <div class="hud-time-row">
+                <span id="hudTimeCurrent">00:00:00</span>
+                <span id="hudTimeDuration">00:00:00</span>
+              </div>
+            </div>
+
+            <!-- BARRA INFERIOR DE CONTROLES DO PLAYER PRINCIPAL (VELOCIDADE ATÉ 4X, ÁUDIO, LEGENDA) -->
+            <div class="hud-controls-bar">
+              <button id="btnHudBack" class="hud-ctrl-btn" tabindex="0" title="Voltar (Sair da Tela Cheia)">⮌ Sair Tela Cheia</button>
+              <button id="btnHudPrev" class="hud-ctrl-btn" tabindex="0" title="Canal Anterior ou -10s">⏮ Anterior</button>
+              <button id="btnHudPlayPause" class="hud-ctrl-btn primary" tabindex="0" title="Reproduzir / Pausar">⏯ Pausar</button>
+              <button id="btnHudNext" class="hud-ctrl-btn" tabindex="0" title="Próximo Canal ou +10s">⏭ Próximo</button>
+              
+              <!-- Ajustes Solicitados: Velocidade até 4x no Player Principal -->
+              <button id="btnHudSpeed" class="hud-ctrl-btn hud-speed-btn" tabindex="0" title="Velocidade de Reprodução até 4x">⚡ 1x</button>
+              
+              <!-- Ajustes Solicitados: Faixa de Áudio no Player Principal -->
+              <button id="btnHudAudio" class="hud-ctrl-btn" tabindex="0" title="Selecionar Faixa de Áudio">🔊 Áudio</button>
+              
+              <!-- Ajustes Solicitados: Legendas no Player Principal -->
+              <button id="btnHudSubs" class="hud-ctrl-btn" tabindex="0" title="Selecionar Legendas">💬 Legenda</button>
+              
+              <!-- Proporção de Tela / Aspect Ratio -->
+              <button id="btnHudAspect" class="hud-ctrl-btn" tabindex="0" title="Proporção de Tela">📐 16:9</button>
+              
+              <!-- Favoritar -->
+              <button id="btnHudFav" class="hud-ctrl-btn" tabindex="0" title="Adicionar aos Favoritos">⭐ Favorito</button>
+            </div>
+          </div>
         </div>
 
         <!-- EPG / INFORMAÇÕES DO STREAM -->
@@ -340,13 +396,47 @@
     </div>
   </div>
 
-  <!-- Limpeza de cache antigo para garantir execução da versão 3.6.0 estável -->
+  <!-- Carregador Inteligente OTA para Smart TV (executa versão atualizada do GitHub sem reinstalar) -->
   <script>
-    try {
-      localStorage.removeItem('mk21_ota_app_js');
-      localStorage.removeItem('mk21_ota_styles_css');
-    } catch(e) {}
+    (function() {
+      var BASE_VER = '3.6.3';
+      try {
+        var otaVer = localStorage.getItem('mk21_ota_app_version');
+        var otaJs = localStorage.getItem('mk21_ota_app_js');
+        var otaCss = localStorage.getItem('mk21_ota_styles_css');
+        
+        function semverGt(a, b) {
+          if (!a || !b) return false;
+          var pa = a.split('.').map(Number);
+          var pb = b.split('.').map(Number);
+          for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+            var na = pa[i] || 0;
+            var nb = pb[i] || 0;
+            if (na > nb) return true;
+            if (na < nb) return false;
+          }
+          return false;
+        }
+
+        if (otaCss && otaVer && semverGt(otaVer, BASE_VER)) {
+          var el = document.getElementById('mk21-ota-override-css');
+          if (el) el.textContent = otaCss;
+        }
+
+        if (otaJs && otaVer && semverGt(otaVer, BASE_VER) && otaJs.length > 5000 && otaJs.indexOf('playStream') !== -1) {
+          console.log('[MK21 OTA] Executando versão atualizada v' + otaVer + ' da Smart TV');
+          var s = document.createElement('script');
+          s.textContent = otaJs;
+          document.body.appendChild(s);
+          return;
+        }
+      } catch(e) {
+        console.warn('[MK21 OTA] Erro ao carregar cache OTA, usando pacote base:', e);
+      }
+      var s = document.createElement('script');
+      s.src = 'app.js?v=' + BASE_VER;
+      document.body.appendChild(s);
+    })();
   </script>
-  <script src="app.js"></script>
 </body>
 </html>

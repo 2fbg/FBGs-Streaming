@@ -1,9 +1,9 @@
 {
-  "version": "3.6.0",
-  "versionCode": 360,
-  "title": "MK21 Play v3.6.0",
-  "releaseNotes": "• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Gerenciador de servidores com restauração e troca rápida\n• Nova tela de inicialização (Splash) premium com animação e status",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.6.0_all.ipk",
+  "version": "3.6.3",
+  "versionCode": 363,
+  "title": "MK21 Play v3.6.3",
+  "releaseNotes": "• Suporte a listas gigantescas (>280k canais/VODs) com streaming parser zero-copy (elimina reinício por memória na TV)\n• Filmes VOD e Séries priorizados e categorizados exatamente de acordo com o group-title da lista\n• Atualização dos Canais Ao Vivo executada em segundo plano com categorização fiel à lista\n• Persistência garantida no IndexedDB da TV: nunca apaga o que já foi baixado\n• Indicador de status do servidor ON/OFF em tempo real com medição de latência no seletor de servidores\n• Credenciais de usuário e senha na manutenção compartilhadas para todos os servidores\n• Atualização direta na TV (OTA) totalmente funcional com carregamento inteligente",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.6.3_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
-  "updatedAt": "2026-10-04"
+  "updatedAt": "2026-10-06"
 }
