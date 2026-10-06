@@ -1,4 +1,4 @@
-// MK21 PLAY v3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.6.1 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -362,15 +362,23 @@ function groupSeriesItems(items) {
   return Object.values(map).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// CONEXÃO COM FALLBACK DE PROXIES PARA NUNCA FALHAR NA SMART TV
-async function fetchPlaylistContent(url) {
-  let targetUrl = url;
-  const savedUser = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || localStorage.getItem('iptv_user') || 'demo';
-  const savedPass = localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || localStorage.getItem('iptv_pass') || 'demo';
+// CONEXÃO COM CREDENCIAIS DE SERVIDOR (XTREAM CODES / M3U) E FALLBACK
+async function fetchPlaylistContent(srv) {
+  let targetUrl = typeof srv === 'string' ? srv : (srv && srv.url ? srv.url : '');
+  const user = (typeof srv === 'object' && srv.username) ? srv.username : (localStorage.getItem('mk21_username') || 'demo');
+  const pass = (typeof srv === 'object' && srv.password) ? srv.password : (localStorage.getItem('mk21_password') || 'demo');
+
+  // Se a URL contiver parâmetros username ou password, atualiza se o usuário configurou
+  if (targetUrl.includes('username=') && user && user !== 'demo') {
+    targetUrl = targetUrl.replace(/([?&])username=[^&]*/i, `$1username=${encodeURIComponent(user)}`);
+  }
+  if (targetUrl.includes('password=') && pass && pass !== 'demo') {
+    targetUrl = targetUrl.replace(/([?&])password=[^&]*/i, `$1password=${encodeURIComponent(pass)}`);
+  }
 
   // Se for apenas o domínio base do Xtream Codes, anexa rota da lista M3U Plus
   if (!targetUrl.includes('get.php') && !targetUrl.includes('.m3u') && !targetUrl.includes('.ts') && !targetUrl.includes('.m3u8')) {
-    targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(savedUser)}&password=${encodeURIComponent(savedPass)}&type=m3u_plus&output=mpegts`;
+    targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=mpegts`;
   }
 
   const attempts = [
@@ -382,7 +390,7 @@ async function fetchPlaylistContent(url) {
   for (let u of attempts) {
     try {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timeoutId = controller ? setTimeout(() => controller.abort(), 3500) : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 4500) : null;
       const res = await fetch(u, controller ? { signal: controller.signal } : {});
       if (timeoutId) clearTimeout(timeoutId);
       if (res.ok) {
@@ -469,9 +477,9 @@ async function loadServer(forceRefresh = false) {
   updateSplash(40, 'Baixando grade de programação...');
 
   try {
-    const text = await fetchPlaylistContent(srv.url);
+    const text = await fetchPlaylistContent(srv);
 
-    // 1º PASSO: PRIORIDADE MÁXIMA NO AO VIVO (Instantâneo)
+    // PARSE COMPLETO EM PASSE ÚNICO (Ao Vivo, Filmes e Séries 100% carregados)
     const lines = text.split(/\r?\n/);
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
 
@@ -483,6 +491,7 @@ async function loadServer(forceRefresh = false) {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
+      if (!line) continue;
       if (line.startsWith('#EXTM3U')) {
         const urlMatch = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
         if (urlMatch && urlMatch[1]) {
@@ -499,22 +508,29 @@ async function loadServer(forceRefresh = false) {
         curTvgId = idMatch && idMatch[1] ? idMatch[1].trim() : '';
         const nMatch = line.match(/tvg-name="([^"]*)"/i);
         curTvgName = nMatch && nMatch[1] ? nMatch[1].trim() : '';
-      } else if (/^https?:\/\//i.test(line)) {
+      } else if (!line.startsWith('#') && line.length > 5) {
         const cType = determineType(curName, curGroup, line);
+        const itemObj = {
+          name: curName,
+          group: curGroup,
+          logo: curLogo,
+          tvgId: curTvgId,
+          tvgName: curTvgName,
+          url: line,
+          contentType: cType,
+          isAdult: isAdult(curName) || isAdult(curGroup)
+        };
+
         if (cType === 'LIVE') {
           const sIdMatch = line.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
-          allCatalog.LIVE.push({
-            name: curName,
-            group: curGroup,
-            logo: curLogo,
-            tvgId: curTvgId,
-            tvgName: curTvgName,
-            streamId: sIdMatch ? sIdMatch[1] : '',
-            url: line,
-            contentType: 'LIVE',
-            isAdult: isAdult(curName) || isAdult(curGroup)
-          });
+          itemObj.streamId = sIdMatch ? sIdMatch[1] : '';
+          allCatalog.LIVE.push(itemObj);
+        } else if (cType === 'MOVIE') {
+          allCatalog.MOVIE.push(itemObj);
+        } else if (cType === 'SERIES') {
+          allCatalog.SERIES.push(itemObj);
         }
+
         curName = 'Canal';
         curGroup = 'Geral';
         curLogo = '';
@@ -523,8 +539,11 @@ async function loadServer(forceRefresh = false) {
       }
     }
 
-    // Já exibe a TV ao vivo imediatamente e inicia o primeiro canal!
-    updateSplash(90, 'Renderizando canais ao vivo...');
+    // Salva o catálogo completo no IndexedDB
+    saveStoredData(srv.id, allCatalog);
+
+    // Atualiza a tela imediatamente
+    updateSplash(90, 'Renderizando canais...');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
       if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
@@ -537,11 +556,6 @@ async function loadServer(forceRefresh = false) {
       playStream(allCatalog.LIVE[0]);
     }
     hideSplash();
-
-    // 2º PASSO: CARREGA FILMES E SÉRIES EM SEGUNDO PLANO SEM TRAVAR A TV
-    setTimeout(() => {
-      parseVodInBackground(lines, srv.id);
-    }, 150);
 
   } catch (err) {
     console.error('Server error:', err);
@@ -1910,7 +1924,7 @@ function applyFontSize(size) {
   renderFontSizePanel();
 }
 
-// LIMPAR ARMAZENAMENTO — CLONE IDÊNTICO À FOTO DO USUÁRIO (VIZZION PLAY)
+// LIMPAR ARMAZENAMENTO — NOVO LAYOUT PREMIUM E CLARO PARA SMART TV
 function renderClearStoragePanel() {
   const box = $('settingsDetailBox');
   const favChannelsCount = Array.from(favoriteUrls).filter(u => allCatalog.LIVE.some(i => i.url === u)).length;
@@ -1919,40 +1933,62 @@ function renderClearStoragePanel() {
   const continueCount = continueWatchingList.length;
 
   box.innerHTML = `
-    <h3 style="margin-top:0; font-size:24px;">🗑️ Limpar Armazenamento</h3>
-    <p style="color:#aaa;">Selecione os dados armazenados que deseja apagar da TV:</p>
-    <div style="display:flex; flex-direction:column; gap:14px; max-width:620px; margin-top:16px;">
+    <h3 style="margin-top:0; font-size:24px; color:#ffd54f;">🗑️ Limpar Armazenamento</h3>
+    <p style="color:#cbd5e1; font-size:16px;">Selecione os dados armazenados que deseja apagar da TV para liberar espaço e otimizar a velocidade:</p>
+    
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:850px; margin-top:20px;">
       
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
-        <span style="font-size:18px;">Canais favoritos (${favChannelsCount})</span>
-        <button id="btnClearFavChannels" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+      <div class="storage-card" style="background:#151928; border:1px solid #2a334d; border-radius:12px; padding:18px; display:flex; flex-direction:column; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:18px; font-weight:bold; color:#fff;">⭐ Canais Favoritos</div>
+          <div style="font-size:14px; color:#94a3b8; margin-top:4px;">${favChannelsCount} canais salvos</div>
+        </div>
+        <button id="btnClearFavChannels" class="ctrl-btn settings-action-btn" style="padding:10px 18px; font-size:15px; width:100%;" tabindex="0">
+          🗑️ Limpar Canais
+        </button>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
-        <span style="font-size:18px;">Filmes favoritos (${favMoviesCount})</span>
-        <button id="btnClearFavMovies" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+      <div class="storage-card" style="background:#151928; border:1px solid #2a334d; border-radius:12px; padding:18px; display:flex; flex-direction:column; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:18px; font-weight:bold; color:#fff;">🎬 Filmes Favoritos</div>
+          <div style="font-size:14px; color:#94a3b8; margin-top:4px;">${favMoviesCount} filmes salvos</div>
+        </div>
+        <button id="btnClearFavMovies" class="ctrl-btn settings-action-btn" style="padding:10px 18px; font-size:15px; width:100%;" tabindex="0">
+          🗑️ Limpar Filmes
+        </button>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
-        <span style="font-size:18px;">Séries favoritas (${favSeriesCount})</span>
-        <button id="btnClearFavSeries" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+      <div class="storage-card" style="background:#151928; border:1px solid #2a334d; border-radius:12px; padding:18px; display:flex; flex-direction:column; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:18px; font-weight:bold; color:#fff;">🍿 Séries Favoritas</div>
+          <div style="font-size:14px; color:#94a3b8; margin-top:4px;">${favSeriesCount} séries salvas</div>
+        </div>
+        <button id="btnClearFavSeries" class="ctrl-btn settings-action-btn" style="padding:10px 18px; font-size:15px; width:100%;" tabindex="0">
+          🗑️ Limpar Séries
+        </button>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
-        <span style="font-size:18px;">Filmes assistidos (Histórico)</span>
-        <button id="btnClearWatchedMovies" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+      <div class="storage-card" style="background:#151928; border:1px solid #2a334d; border-radius:12px; padding:18px; display:flex; flex-direction:column; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:18px; font-weight:bold; color:#fff;">🕒 Histórico de Assistidos</div>
+          <div style="font-size:14px; color:#94a3b8; margin-top:4px;">${continueCount} títulos em continuar</div>
+        </div>
+        <button id="btnClearWatchedMovies" class="ctrl-btn settings-action-btn" style="padding:10px 18px; font-size:15px; width:100%;" tabindex="0">
+          🗑️ Limpar Histórico
+        </button>
       </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
-        <span style="font-size:18px;">Séries assistidas (Histórico)</span>
-        <button id="btnClearWatchedSeries" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
-      </div>
+    </div>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; background:#291114; border:1px solid #e50914; padding:14px 20px; border-radius:10px; margin-top:8px;">
-        <span style="font-size:18px; font-weight:bold; color:#ffd54f;">Limpar tudo</span>
-        <button id="btnClearAllStorage" class="ctrl-btn primary" style="padding:10px 26px;" tabindex="0">Limpar</button>
+    <!-- Limpar Tudo com destaque vermelho -->
+    <div style="background:#2b1216; border:1px solid #e50914; border-radius:12px; padding:20px; max-width:850px; margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-size:19px; font-weight:bold; color:#ffd54f;">⚠️ Redefinição Total da Aplicação</div>
+        <div style="font-size:14px; color:#fca5a5; margin-top:4px;">Apaga o cache local, histórico e favoritos, reiniciando o MK21 Play como novo.</div>
       </div>
-
+      <button id="btnClearAllStorage" class="ctrl-btn primary settings-action-btn" style="padding:12px 28px; font-size:16px; font-weight:bold; min-width:180px;" tabindex="0">
+        🧹 Limpar Tudo
+      </button>
     </div>
   `;
 
@@ -1978,17 +2014,10 @@ function renderClearStoragePanel() {
   };
 
   $('btnClearWatchedMovies').onclick = () => {
-    continueWatchingList = continueWatchingList.filter(it => it.contentType !== 'MOVIE');
+    continueWatchingList = continueWatchingList.filter(it => it.contentType !== 'MOVIE' && it.contentType !== 'SERIES');
     try { localStorage.setItem('mk21_continue_watching', JSON.stringify(continueWatchingList)); } catch (e) {}
     renderClearStoragePanel();
-    alert('Histórico de filmes assistidos esvaziado.');
-  };
-
-  $('btnClearWatchedSeries').onclick = () => {
-    continueWatchingList = continueWatchingList.filter(it => it.contentType !== 'SERIES');
-    try { localStorage.setItem('mk21_continue_watching', JSON.stringify(continueWatchingList)); } catch (e) {}
-    renderClearStoragePanel();
-    alert('Histórico de séries assistidas esvaziado.');
+    alert('Histórico de assistidos esvaziado.');
   };
 
   $('btnClearAllStorage').onclick = async () => {
@@ -2058,30 +2087,68 @@ function renderTimeSettingsPanel() {
   };
 }
 
-// GERENCIAR CATEGORIAS (OCULTAR / EXIBIR COM PERSISTÊNCIA REAL)
+// GERENCIAR CATEGORIAS (COM COLETA DE TODAS AS CATEGORIAS REAIS DO CATÁLOGO)
+let currentCategoryManagerTab = 'LIVE';
+
 function renderCategoriesManagerPanel() {
   const box = $('settingsDetailBox');
-  const cats = currentCategoryKeys.filter(k => k !== 'ALL');
+  
+  // Coleta todas as categorias existentes do catálogo completo
+  const liveCats = Array.from(new Set(allCatalog.LIVE.map(i => i.group || 'Geral'))).filter(Boolean).sort();
+  const movieCats = Array.from(new Set(allCatalog.MOVIE.map(i => i.group || 'Geral'))).filter(Boolean).sort();
+  const seriesCats = Array.from(new Set(allCatalog.SERIES.map(i => i.group || 'Geral'))).filter(Boolean).sort();
+
+  let targetCats = liveCats;
+  let targetItems = allCatalog.LIVE;
+  if (currentCategoryManagerTab === 'MOVIE') {
+    targetCats = movieCats;
+    targetItems = allCatalog.MOVIE;
+  } else if (currentCategoryManagerTab === 'SERIES') {
+    targetCats = seriesCats;
+    targetItems = allCatalog.SERIES;
+  }
+
   let hiddenCats = [];
   try {
     hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
   } catch (e) {}
 
   box.innerHTML = `
-    <h3 style="margin-top:0; font-size:24px;">📁 Gerenciar Categorias</h3>
-    <p style="color:#aaa;">Ative ou desative as categorias que deseja visualizar no menu lateral:</p>
-    <div style="display:flex; gap:12px; margin-bottom:12px;">
-      <button id="btnShowAllCats" class="ctrl-btn" style="padding:8px 16px; font-size:14px;" tabindex="0">👁️ Exibir Todas</button>
-      <button id="btnHideEmptyCats" class="ctrl-btn" style="padding:8px 16px; font-size:14px;" tabindex="0">🙈 Ocultar Vazias</button>
+    <h3 style="margin-top:0; font-size:24px; color:#ffd54f;">📁 Gerenciar Categorias</h3>
+    <p style="color:#aaa; font-size:16px;">Ative ou desative as categorias que deseja visualizar no menu lateral da TV:</p>
+    
+    <!-- Abas de seleção de tipo de categoria -->
+    <div style="display:flex; gap:10px; margin-bottom:14px;">
+      <button id="tabCatLive" class="ctrl-btn ${currentCategoryManagerTab === 'LIVE' ? 'primary' : ''}" style="padding:8px 18px;" tabindex="0">
+        📺 TV Ao Vivo (${liveCats.length})
+      </button>
+      <button id="tabCatMovie" class="ctrl-btn ${currentCategoryManagerTab === 'MOVIE' ? 'primary' : ''}" style="padding:8px 18px;" tabindex="0">
+        🎬 Filmes (${movieCats.length})
+      </button>
+      <button id="tabCatSeries" class="ctrl-btn ${currentCategoryManagerTab === 'SERIES' ? 'primary' : ''}" style="padding:8px 18px;" tabindex="0">
+        🍿 Séries (${seriesCats.length})
+      </button>
     </div>
-    <div id="catItemsListWrap" style="max-height:380px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
-      ${cats.map((c, i) => {
+
+    <div style="display:flex; gap:12px; margin-bottom:14px;">
+      <button id="btnShowAllCats" class="ctrl-btn" style="padding:8px 18px; font-size:14px;" tabindex="0">👁️ Exibir Todas</button>
+      <button id="btnHideEmptyCats" class="ctrl-btn" style="padding:8px 18px; font-size:14px;" tabindex="0">🙈 Ocultar Vazias</button>
+    </div>
+
+    <div id="catItemsListWrap" style="max-height:420px; overflow-y:auto; display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-right:6px;">
+      ${targetCats.length === 0 ? `<div style="grid-column:1/-1; padding:20px; color:#94a3b8; font-size:16px; text-align:center;">Nenhuma categoria encontrada nesta seção. Conecte a um servidor para listar.</div>` : ''}
+      ${targetCats.map((c) => {
         const isVisible = !hiddenCats.includes(c);
-        const count = (currentCategoriesMap[c] || []).length;
+        const count = targetItems.filter(it => (it.group || 'Geral') === c).length;
         return `
-          <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:12px 18px; border-radius:8px;">
-            <span style="font-size:16px; color:#fff;">${c} <span style="color:#ffd54f; font-size:13px;">(${count} canais)</span></span>
-            <input type="checkbox" class="chk-cat-toggle" data-cat="${encodeURIComponent(c)}" ${isVisible ? 'checked' : ''} style="width:22px; height:22px;">
+          <div class="category-manage-item" style="display:flex; justify-content:space-between; align-items:center; background:#161a29; border:1px solid #2a334d; padding:10px 14px; border-radius:8px;">
+            <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:10px;">
+              <span style="font-size:15px; font-weight:600; color:#fff;">${c}</span>
+              <span style="color:#ffd54f; font-size:13px; margin-left:6px;">(${count})</span>
+            </div>
+            <button class="ctrl-btn btn-cat-toggle ${isVisible ? 'primary' : ''}" data-cat="${encodeURIComponent(c)}" style="padding:6px 12px; font-size:13px; min-width:85px;" tabindex="0">
+              ${isVisible ? '✓ Visível' : '✕ Oculto'}
+            </button>
           </div>
         `;
       }).join('')}
@@ -2089,21 +2156,26 @@ function renderCategoriesManagerPanel() {
     <div id="msgCatSaved" style="margin-top:12px; font-size:15px; font-weight:bold; color:#4caf50; display:none;">✅ Categorias atualizadas no menu lateral!</div>
   `;
 
-  box.querySelectorAll('.chk-cat-toggle').forEach(chk => {
-    chk.onchange = () => {
-      const catName = decodeURIComponent(chk.getAttribute('data-cat'));
-      if (chk.checked) {
+  $('tabCatLive').onclick = () => { currentCategoryManagerTab = 'LIVE'; renderCategoriesManagerPanel(); };
+  $('tabCatMovie').onclick = () => { currentCategoryManagerTab = 'MOVIE'; renderCategoriesManagerPanel(); };
+  $('tabCatSeries').onclick = () => { currentCategoryManagerTab = 'SERIES'; renderCategoriesManagerPanel(); };
+
+  box.querySelectorAll('.btn-cat-toggle').forEach(btn => {
+    btn.onclick = () => {
+      const catName = decodeURIComponent(btn.getAttribute('data-cat'));
+      if (hiddenCats.includes(catName)) {
         hiddenCats = hiddenCats.filter(x => x !== catName);
       } else {
-        if (!hiddenCats.includes(catName)) hiddenCats.push(catName);
+        hiddenCats.push(catName);
       }
       localStorage.setItem('mk21_hidden_categories', JSON.stringify(hiddenCats));
+      renderCategoriesManagerPanel();
       buildCurrentCategories();
       renderCategoriesList();
       const msg = $('msgCatSaved');
       if (msg) {
         msg.style.display = 'block';
-        setTimeout(() => { if (msg) msg.style.display = 'none'; }, 2500);
+        setTimeout(() => { if (msg) msg.style.display = 'none'; }, 2000);
       }
     };
   });
@@ -2117,7 +2189,7 @@ function renderCategoriesManagerPanel() {
   };
 
   $('btnHideEmptyCats').onclick = () => {
-    hiddenCats = cats.filter(c => (currentCategoriesMap[c] || []).length === 0);
+    hiddenCats = targetCats.filter(c => targetItems.filter(it => (it.group || 'Geral') === c).length === 0);
     localStorage.setItem('mk21_hidden_categories', JSON.stringify(hiddenCats));
     renderCategoriesManagerPanel();
     buildCurrentCategories();
@@ -2125,7 +2197,7 @@ function renderCategoriesManagerPanel() {
   };
 }
 
-// 13. GERENCIADOR DE SERVIDORES (COM EDIÇÃO, ADIÇÃO E TROCA COM CARREGAMENTO IMEDIATO)
+// 13. GERENCIADOR DE SERVIDORES (COM EDIÇÃO REAL DE SENHA E USUÁRIO)
 function saveServersToStorage() {
   try {
     localStorage.setItem('mk21_servers_list', JSON.stringify(SERVERS));
@@ -2158,7 +2230,9 @@ function renderServerPickerList() {
 
     const urlLine = document.createElement('div');
     urlLine.className = 'server-info-url';
-    urlLine.textContent = srv.url;
+    const displayUser = srv.username || localStorage.getItem('mk21_username') || 'demo';
+    const displayPass = srv.password || localStorage.getItem('mk21_password') || '';
+    urlLine.innerHTML = `<span style="color:#ffd54f;">${srv.url}</span> <span style="color:#94a3b8; font-size:13px; margin-left:8px;">(Usuário: <strong style="color:#fff;">${displayUser}</strong> • Senha: <strong style="color:#fff;">${displayPass ? '••••••••' : 'demo'}</strong>)</span>`;
 
     infoCol.appendChild(nameLine);
     infoCol.appendChild(urlLine);
@@ -2174,7 +2248,6 @@ function renderServerPickerList() {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
       
-      // Exibe porcentagem no lugar do botão antes de fechar
       btnConnect.textContent = 'Carregando 25%...';
       setTimeout(() => { btnConnect.textContent = 'Carregando 65%...'; }, 200);
       setTimeout(() => {
@@ -2182,7 +2255,7 @@ function renderServerPickerList() {
         activeZone = 'channels';
         activeItem = null;
         loadServer(false);
-      }, 450);
+      }, 400);
     };
 
     const btnEdit = document.createElement('button');
@@ -2214,19 +2287,38 @@ function editServer(index) {
   $('txtAddServerTitle').textContent = `✏️ Alterar Servidor: ${srv.name.replace(/^⭐\s*/, '')}`;
   $('inputEditServerIndex').value = index;
   $('inputNewServerName').value = srv.name.replace(/^⭐\s*/, '');
+  
+  // Extrai credenciais se a URL tiver parâmetros
+  let user = srv.username || '';
+  let pass = srv.password || '';
+  try {
+    const uMatch = srv.url.match(/[?&]username=([^&]+)/i);
+    const pMatch = srv.url.match(/[?&]password=([^&]+)/i);
+    if (uMatch && !user) user = decodeURIComponent(uMatch[1]);
+    if (pMatch && !pass) pass = decodeURIComponent(pMatch[1]);
+  } catch (e) {}
+
+  if (!user) user = localStorage.getItem('mk21_username') || '';
+  if (!pass) pass = localStorage.getItem('mk21_password') || '';
+
   $('inputNewServerUrl').value = srv.url;
-  $('btnAddServerSubmit').textContent = '💾 Salvar Alterações';
+  if ($('inputNewServerUser')) $('inputNewServerUser').value = user;
+  if ($('inputNewServerPass')) $('inputNewServerPass').value = pass;
+
+  $('btnAddServerSubmit').textContent = '💾 Salvar Alterações e Conectar';
   $('btnCancelEditServer').classList.remove('hidden');
   $('inputNewServerName').focus();
   $('inputNewServerName').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 $('btnCancelEditServer').onclick = () => {
-  $('txtAddServerTitle').textContent = '➕ Adicionar Novo Servidor / Lista Manual';
+  $('txtAddServerTitle').textContent = '➕ Adicionar / Alterar Servidor';
   $('inputEditServerIndex').value = '-1';
   $('inputNewServerName').value = '';
   $('inputNewServerUrl').value = '';
-  $('btnAddServerSubmit').textContent = '💾 Salvar e Conectar';
+  if ($('inputNewServerUser')) $('inputNewServerUser').value = '';
+  if ($('inputNewServerPass')) $('inputNewServerPass').value = '';
+  $('btnAddServerSubmit').textContent = '💾 Salvar Alterações e Conectar';
   $('btnCancelEditServer').classList.add('hidden');
 };
 
@@ -2246,14 +2338,32 @@ function deleteServer(index) {
 $('btnAddServerSubmit').onclick = () => {
   const editIdx = parseInt($('inputEditServerIndex').value, 10);
   const name = $('inputNewServerName').value.trim();
-  const url = $('inputNewServerUrl').value.trim();
+  let url = $('inputNewServerUrl').value.trim();
+  const user = $('inputNewServerUser') ? $('inputNewServerUser').value.trim() : '';
+  const pass = $('inputNewServerPass') ? $('inputNewServerPass').value.trim() : '';
 
   if (!name) { alert('Informe o nome do servidor.'); return; }
   if (!url.startsWith('http')) { alert('URL inválida. Deve iniciar com http:// ou https://'); return; }
 
+  // Se o usuário digitou usuário e senha, salva globalmente também
+  if (user) {
+    localStorage.setItem('mk21_username', user);
+    if (url.includes('username=')) {
+      url = url.replace(/([?&])username=[^&]*/i, `$1username=${encodeURIComponent(user)}`);
+    }
+  }
+  if (pass) {
+    localStorage.setItem('mk21_password', pass);
+    if (url.includes('password=')) {
+      url = url.replace(/([?&])password=[^&]*/i, `$1password=${encodeURIComponent(pass)}`);
+    }
+  }
+
   if (editIdx >= 0 && editIdx < SERVERS.length) {
     SERVERS[editIdx].name = '⭐ ' + name;
     SERVERS[editIdx].url = url;
+    SERVERS[editIdx].username = user;
+    SERVERS[editIdx].password = pass;
     currentServerIndex = editIdx;
     saveServersToStorage();
     try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
@@ -2262,7 +2372,7 @@ $('btnAddServerSubmit').onclick = () => {
     activeZone = 'channels';
     activeItem = null;
     loadServer(true);
-    alert(`Servidor "${name}" atualizado e conectado!`);
+    alert(`Servidor "${name}" atualizado com sucesso! Senha salva.`);
     return;
   }
 
@@ -2270,7 +2380,9 @@ $('btnAddServerSubmit').onclick = () => {
   const newServer = {
     id: 'custom_' + Date.now(),
     name: '⭐ ' + name,
-    url: url
+    url: url,
+    username: user,
+    password: pass
   };
 
   SERVERS.push(newServer);
@@ -2280,6 +2392,8 @@ $('btnAddServerSubmit').onclick = () => {
 
   $('inputNewServerName').value = '';
   $('inputNewServerUrl').value = '';
+  if ($('inputNewServerUser')) $('inputNewServerUser').value = '';
+  if ($('inputNewServerPass')) $('inputNewServerPass').value = '';
   $('modalServerPicker').classList.add('hidden');
   activeZone = 'channels';
   activeItem = null;
@@ -2316,7 +2430,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.6.0';
+const BASE_PACKAGE_VERSION = '3.6.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2325,16 +2439,14 @@ try {
 let CURRENT_APP_VERSION = BASE_PACKAGE_VERSION;
 if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) > 0) {
   CURRENT_APP_VERSION = savedOtaVer;
-} else if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) < 0) {
-  // Pacote físico recém instalado é mais recente que o OTA salvo: limpar hot-patch anterior
+} else {
+  // Versão local do pacote é 3.6.1 ou superior: limpa qualquer versão antiga gravada
   try {
     localStorage.removeItem('mk21_ota_app_js');
     localStorage.removeItem('mk21_ota_styles_css');
     localStorage.setItem('mk21_ota_app_version', BASE_PACKAGE_VERSION);
   } catch (e) {}
   CURRENT_APP_VERSION = BASE_PACKAGE_VERSION;
-} else {
-  CURRENT_APP_VERSION = savedOtaVer || BASE_PACKAGE_VERSION;
 }
 
 let latestRemoteUpdateData = null;
@@ -2374,15 +2486,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.6.0
-    if (!data || compareSemver(data.version, '3.6.0') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.6.1
+    if (!data || compareSemver(data.version, '3.6.1') < 0) {
       data = {
-        version: '3.6.0',
-        versionCode: 360,
-        title: 'MK21 Play v3.6.0',
-        releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.6.0_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.6.0') < 0)
+        version: '3.6.1',
+        versionCode: 361,
+        title: 'MK21 Play v3.6.1',
+        releaseNotes: '• Manutenção do Servidor completa com campos de Usuário e Senha\n• Carregamento de listas M3U / Xtream 100% completas em passe único\n• Novo layout de Limpeza de Armazenamento com botões e foco D-pad precisos\n• Navegação pelo controle remoto em todas as abas de Configurações\n• Gerenciador de Categorias exibindo todas as categorias com contagem de canais\n• Teclado numérico do controle remoto (0-9) para inserção de PIN',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.6.1_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.6.1') < 0)
       };
     }
     latestRemoteUpdateData = data;
@@ -2653,6 +2765,16 @@ document.addEventListener('keydown', e => {
       return;
     }
 
+    if (currentContentType === 'SETTINGS' && activeZone === 'settings') {
+      if ($('settingsDetailBox').contains(document.activeElement)) {
+        const activeLeftBtn = $('sectionSettings').querySelector('.cfg-menu-item.active') || $('cfgBtnInfo');
+        activeLeftBtn.focus();
+        return;
+      }
+      switchContentType('LIVE');
+      return;
+    }
+
     if (currentContentType !== 'LIVE') {
       switchContentType('LIVE');
       return;
@@ -2675,10 +2797,104 @@ document.addEventListener('keydown', e => {
     return;
   }
 
+  // ================= NAVEGAÇÃO D-PAD NO MODAL PIN (SUPORTE A TECLADO NUMÉRICO 0-9) =================
+  if (activeZone === 'modalPin') {
+    if ((k >= 48 && k <= 57) || (k >= 96 && k <= 105)) {
+      const num = k >= 96 ? String(k - 96) : String(k - 48);
+      const pinKeyBtn = $('modalPin').querySelector(`.pin-key[data-k="${num}"]`);
+      if (pinKeyBtn) {
+        e.preventDefault();
+        pinKeyBtn.click();
+        return;
+      }
+    }
+  }
+
+  // ================= NAVEGAÇÃO D-PAD COMPLETA EM CONFIGURAÇÕES =================
+  if (currentContentType === 'SETTINGS' || activeZone === 'settings') {
+    const leftBtns = CFG_BUTTONS.map(id => $(id)).filter(Boolean);
+    const activeLeftBtn = $('sectionSettings').querySelector('.cfg-menu-item.active') || $('cfgBtnInfo');
+    const isFocusOnLeftMenu = leftBtns.includes(document.activeElement);
+    const rightFocusables = Array.from($('settingsDetailBox').querySelectorAll('button, input, select, [tabindex="0"]')).filter(el => el.offsetParent !== null);
+
+    // Suporte aos números do controle (0-9) se estiver na aba do PIN
+    if ((k >= 48 && k <= 57) || (k >= 96 && k <= 105)) {
+      const num = k >= 96 ? String(k - 96) : String(k - 48);
+      const pinKeyBtn = $('settingsDetailBox').querySelector(`.pin-key[data-k="${num}"]`);
+      if (pinKeyBtn) {
+        e.preventDefault();
+        pinKeyBtn.click();
+        return;
+      }
+    }
+
+    if (isFocusOnLeftMenu) {
+      const curIdx = leftBtns.indexOf(document.activeElement);
+      if (k === 38) { // Cima
+        e.preventDefault();
+        if (curIdx > 0) {
+          leftBtns[curIdx - 1].focus();
+          leftBtns[curIdx - 1].click();
+        } else {
+          activeZone = 'header';
+          focusedHeaderIdx = 5;
+          $(headerElements[5]).focus();
+        }
+        return;
+      }
+      if (k === 40) { // Baixo
+        e.preventDefault();
+        if (curIdx < leftBtns.length - 1) {
+          leftBtns[curIdx + 1].focus();
+          leftBtns[curIdx + 1].click();
+        }
+        return;
+      }
+      if (k === 39) { // Direita -> entra no painel de detalhes da direita
+        e.preventDefault();
+        if (rightFocusables.length > 0) {
+          rightFocusables[0].focus();
+        }
+        return;
+      }
+      if (k === 13) { // OK
+        if (document.activeElement) document.activeElement.click();
+        return;
+      }
+    } else {
+      // Foco está no painel da direita
+      const curIdx = rightFocusables.indexOf(document.activeElement);
+      if (k === 38) { // Cima dentro do painel
+        e.preventDefault();
+        if (curIdx > 0) {
+          rightFocusables[curIdx - 1].focus();
+        }
+        return;
+      }
+      if (k === 40) { // Baixo dentro do painel
+        e.preventDefault();
+        if (curIdx < rightFocusables.length - 1) {
+          rightFocusables[curIdx + 1].focus();
+        }
+        return;
+      }
+      if (k === 37) { // Esquerda -> volta para o menu da esquerda
+        e.preventDefault();
+        activeLeftBtn.focus();
+        return;
+      }
+      if (k === 13) { // OK dentro do painel
+        if (document.activeElement) document.activeElement.click();
+        return;
+      }
+    }
+    return;
+  }
+
   // ================= NAVEGAÇÃO D-PAD NO MODAL DE SERVIDORES =================
   if (activeZone === 'modalServerPicker') {
-    const focusables = $('modalServerPicker').querySelectorAll('.btn-server-connect, .btn-server-delete, #inputNewServerName, #inputNewServerUrl, #btnAddServerSubmit, #btnRestoreDefaultServers, #btnCloseServerPicker');
-    const arr = Array.from(focusables);
+    const focusables = $('modalServerPicker').querySelectorAll('.btn-server-connect, .btn-server-edit, .btn-server-delete, #inputNewServerName, #inputNewServerUrl, #inputNewServerUser, #inputNewServerPass, #btnAddServerSubmit, #btnCancelEditServer, #btnRestoreDefaultServers, #btnCloseServerPicker');
+    const arr = Array.from(focusables).filter(el => el.offsetParent !== null);
     const curIdx = arr.indexOf(document.activeElement);
 
     if (k === 38) { // Cima

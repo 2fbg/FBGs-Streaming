@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=3.6.0">
+  <link rel="stylesheet" href="styles.css?v=3.6.1">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -172,18 +172,34 @@
         <!-- Lista de Servidores com Conectar, Editar e Excluir -->
         <div id="serverItemsGrid" class="servers-manager-list"></div>
 
-        <!-- Formulário de Inclusão e Edição Manual -->
-        <div class="add-server-card">
-          <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
+        <!-- Formulário de Inclusão e Edição Manual com Nome, URL, Usuário e Senha -->
+        <div class="add-server-card" style="background:#161b2a; border:1px solid #334155; border-radius:12px; padding:18px; margin-top:16px;">
+          <h4 id="txtAddServerTitle" style="margin: 0 0 12px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar / Alterar Servidor</h4>
           <input type="hidden" id="inputEditServerIndex" value="-1">
-          <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-            <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
-            <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div>
+              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Nome da Lista / Servidor:</label>
+              <input id="inputNewServerName" type="text" placeholder="Ex: TANNIX ou Minha Lista" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+            </div>
+            <div>
+              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Servidor / Host (URL M3U ou Xtream):</label>
+              <input id="inputNewServerUrl" type="url" placeholder="http://servidor.com:8080" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+            </div>
+            <div>
+              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Usuário (Login Xtream / M3U):</label>
+              <input id="inputNewServerUser" type="text" placeholder="Usuário (ex: demo)" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+            </div>
+            <div>
+              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Senha (Password Xtream / M3U):</label>
+              <input id="inputNewServerPass" type="text" placeholder="Senha do servidor" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #ffd54f; font-weight:bold; font-size: 16px;" tabindex="0">
+            </div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 10px 22px;" tabindex="0">💾 Salvar e Conectar</button>
-            <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">Cancelar Edição</button>
-            <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar 7 Padrões</button>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+            <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 12px 24px; font-size:16px;" tabindex="0">💾 Salvar Alterações e Conectar</button>
+            <div style="display: flex; gap: 10px;">
+              <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 18px; font-size: 14px;" tabindex="0">Cancelar</button>
+              <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 18px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar Servidores Padrão</button>
+            </div>
           </div>
         </div>
       </div>
@@ -261,25 +277,22 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div>
             <div style="color: #888; font-size: 13px;">Versão Instalada</div>
-            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.6.0</div>
+            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.6.1</div>
           </div>
           <div style="text-align: right;">
             <div style="color: #888; font-size: 13px;">Versão Mais Recente</div>
-            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v3.6.0 ✓ (Versão Mais Recente)</div>
+            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v3.6.1 ✓ (Versão Mais Recente)</div>
           </div>
         </div>
 
         <div id="boxUpdateNotes" style="background: #141724; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 20px; max-height: 180px; overflow-y: auto;">
-          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão 3.6.0:</h4>
-          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)
-• Novo painel de Teste de Velocidade com Download e Upload em tempo real
-• Ajuste e salvamento de Formato de Fluxo (MPEG-TS, HLS, Automático)
-• Alteração e validação de Senha PIN de Adultos direto na TV
-• Configuração e sincronização de tempo e fuso horário
-• Gerenciador de categorias com ocultação/exibição seletiva
-• Gerenciador de servidores com opção de Alterar/Editar e indicador de progresso %
-• Áudio e Legendas unificados sem cortes na tela com fontes grandes
-• Inicialização ultra rápida e fluida sem travamentos</pre>
+          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão 3.6.1:</h4>
+          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Manutenção do Servidor completa com campos de Usuário e Senha
+• Carregamento de listas M3U / Xtream 100% completas em passe único
+• Novo layout de Limpeza de Armazenamento com botões e foco D-pad precisos
+• Navegação pelo controle remoto em todas as abas de Configurações
+• Gerenciador de Categorias exibindo todas as categorias com contagem de canais
+• Teclado numérico do controle remoto (0-9) para inserção de PIN</pre>
         </div>
 
         <div id="updateProgressBox" class="hidden" style="margin-bottom: 20px;">
@@ -294,7 +307,7 @@
 
         <div id="updateActionsRow" style="display: flex; gap: 12px; flex-wrap: wrap;">
           <button id="btnStartDirectUpdate" class="ctrl-btn primary" style="flex: 2; min-width: 200px; padding: 14px;" tabindex="0">
-            🔄 Reinstalar / Sincronizar Arquivos v3.6.0
+            🔄 Reinstalar / Sincronizar Arquivos v3.6.1
           </button>
           <button id="btnCheckAgainUpdate" class="ctrl-btn" style="flex: 1; min-width: 120px; padding: 14px;" tabindex="0">
             🔄 Verificar
