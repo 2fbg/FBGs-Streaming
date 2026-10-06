@@ -67,6 +67,7 @@ const ADULT_KEYWORDS = [
 const DB_NAME = 'mk21_play_db_v5';
 const DB_VERSION = 1;
 const STORE_NAME = 'catalog_cache_v5';
+const PLAYLIST_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias de retenção máxima para listas
 
 function openDB() {
   return new Promise(resolve => {
@@ -90,7 +91,21 @@ async function getStoredData(id) {
     return new Promise(res => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const req = tx.objectStore(STORE_NAME).get(id);
-      req.onsuccess = () => res(req.result ? req.result.payload : null);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (!item) { res(null); return; }
+        const now = Date.now();
+        const updatedAt = item.updatedAt || 0;
+        // Validação de expiração de 7 dias: se a lista tiver mais de 7 dias, invalida e limpa para forçar atualização
+        if (!updatedAt || (now - updatedAt) > PLAYLIST_CACHE_TTL_MS) {
+          const daysOld = Math.round((now - updatedAt) / (24 * 3600 * 1000));
+          console.warn(`[MK21 Cache] Entrada '${id}' expirada (${daysOld} dias). Limpando do cache para garantir lista atualizada.`);
+          deleteStoredData(id);
+          res(null); // Retorna nulo para garantir que o loadServer baixe uma lista fresca
+          return;
+        }
+        res(item.payload || null);
+      };
       req.onerror = () => res(null);
     });
   } catch (e) { return null; }
@@ -103,6 +118,50 @@ async function saveStoredData(id, payload) {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put({ id, payload, updatedAt: Date.now() });
   } catch (e) {}
+}
+
+async function deleteStoredData(id) {
+  try {
+    const db = await openDB();
+    if (!db) return;
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+  } catch (e) {}
+}
+
+// Limpeza proativa de todas as entradas de playlists com mais de 7 dias
+async function cleanExpiredPlaylistCache() {
+  try {
+    const db = await openDB();
+    if (!db) return 0;
+    return new Promise(res => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.openCursor();
+      const now = Date.now();
+      let cleaned = 0;
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (cursor) {
+          const entry = cursor.value;
+          const updatedAt = entry ? (entry.updatedAt || 0) : 0;
+          if (!updatedAt || (now - updatedAt) > PLAYLIST_CACHE_TTL_MS) {
+            cursor.delete();
+            cleaned++;
+          }
+          cursor.continue();
+        } else {
+          if (cleaned > 0) {
+            console.log(`[MK21 Cache] ${cleaned} playlist(s) expirada(s) (> 7 dias) foram limpas do IndexedDB.`);
+          }
+          res(cleaned);
+        }
+      };
+      req.onerror = () => res(0);
+    });
+  } catch (e) {
+    return 0;
+  }
 }
 
 // 3. ESTADO GLOBAL
@@ -1920,6 +1979,16 @@ function renderClearStoragePanel() {
         </button>
       </div>
 
+      <div class="storage-card" style="background:#151928; border:1px solid #2a334d; border-radius:12px; padding:18px; display:flex; flex-direction:column; justify-content:space-between; gap:12px;">
+        <div>
+          <div style="font-size:18px; font-weight:bold; color:#fff;">⚡ Cache de Listas (IndexedDB)</div>
+          <div style="font-size:14px; color:#38bdf8; margin-top:4px;">Auto-limpeza ativa: expira em 7 dias</div>
+        </div>
+        <button id="btnClearPlaylistCache" class="ctrl-btn settings-action-btn" style="padding:10px 18px; font-size:15px; width:100%;" tabindex="0">
+          🧹 Limpar Cache de Listas
+        </button>
+      </div>
+
     </div>
 
     <!-- Limpar Tudo com destaque vermelho -->
@@ -1961,6 +2030,23 @@ function renderClearStoragePanel() {
     renderClearStoragePanel();
     alert('Histórico de assistidos esvaziado.');
   };
+
+  const btnClearCache = $('btnClearPlaylistCache');
+  if (btnClearCache) {
+    btnClearCache.onclick = async () => {
+      try {
+        const db = await openDB();
+        if (db) {
+          const tx = db.transaction(STORE_NAME, 'readwrite');
+          tx.objectStore(STORE_NAME).clear();
+        }
+        alert('Cache de playlists limpo com sucesso! A lista será atualizada diretamente do servidor na próxima inicialização.');
+      } catch (e) {
+        alert('Cache de playlists limpo!');
+      }
+      renderClearStoragePanel();
+    };
+  }
 
   $('btnClearAllStorage').onclick = async () => {
     if (confirm('Deseja realmente apagar todos os favoritos, históricos e cache e reiniciar o aplicativo?')) {
@@ -3205,6 +3291,11 @@ $('btnExitConfirm').onclick = () => {
 function bootApp() {
   if (window._mk21Booted) return;
   window._mk21Booted = true;
+
+  // Limpeza automática de playlists em cache com mais de 7 dias
+  try {
+    cleanExpiredPlaylistCache();
+  } catch (e) {}
 
   try {
     localStorage.removeItem('mk21_hidden_categories');

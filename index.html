@@ -1510,7 +1510,7 @@
         window.refreshActiveChannelEpg = async function() {
             if (window.EpgManager && window.EpgManager.activeEpgItem) {
                 const item = window.EpgManager.activeEpgItem;
-                const btn = window.event?.currentTarget;
+                const btn = (window.event && window.event.currentTarget) ? window.event.currentTarget : null;
                 if (btn) btn.innerHTML = '<i class="fa-solid fa-arrows-rotate fa-spin"></i> Atualizando...';
                 const keys = window.EpgManager.getChannelKeys(item);
                 keys.forEach(k => window.EpgManager.cache.delete(k));
@@ -1789,6 +1789,11 @@
             
             // Auto run parallel proxy latency check in background
             runProxyLatencyCheck();
+
+            // Auto-limpeza de playlists expiradas (> 7 dias) do IndexedDB
+            try {
+                cleanExpiredPlaylistCache();
+            } catch (e) {}
 
             // Check and handle Picture-in-Picture support
             const pipBtn = document.getElementById('pip-button');
@@ -2101,6 +2106,7 @@
         const DB_NAME = 'mk21_cache_db';
         const DB_VERSION = 1;
         const STORE_NAME = 'playlists';
+        const PLAYLIST_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias de retenção máxima para playlists
 
         function openCacheDB() {
             return new Promise((resolve) => {
@@ -2128,7 +2134,21 @@
                     const tx = db.transaction(STORE_NAME, 'readonly');
                     const store = tx.objectStore(STORE_NAME);
                     const req = store.get(key);
-                    req.onsuccess = () => resolve(req.result || null);
+                    req.onsuccess = () => {
+                        const result = req.result;
+                        if (!result) { resolve(null); return; }
+                        const now = Date.now();
+                        const timestamp = result.timestamp || 0;
+                        // Validação de expiração de 7 dias: se a lista tiver mais de 7 dias, invalida e remove para forçar atualização
+                        if (!timestamp || (now - timestamp) > PLAYLIST_CACHE_TTL_MS) {
+                            const daysOld = Math.round((now - timestamp) / (24 * 3600 * 1000));
+                            console.warn(`[MK21 Cache] Entrada '${key}' expirada (${daysOld} dias). Excluindo para forçar sincronização fresca.`);
+                            deleteCachedPlaylist(key);
+                            resolve(null);
+                            return;
+                        }
+                        resolve(result);
+                    };
                     req.onerror = () => resolve(null);
                 });
             } catch (e) {
@@ -2147,6 +2167,63 @@
                 console.warn('Falha ao salvar no IndexedDB cache:', e);
             }
         }
+
+        async function deleteCachedPlaylist(key) {
+            try {
+                const db = await openCacheDB();
+                if (!db) return;
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                store.delete(key);
+            } catch (e) {}
+        }
+
+        // Limpeza proativa de todas as entradas de playlists com mais de 7 dias
+        async function cleanExpiredPlaylistCache() {
+            try {
+                const db = await openCacheDB();
+                if (!db) return 0;
+                return new Promise((resolve) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.openCursor();
+                    const now = Date.now();
+                    let removed = 0;
+                    req.onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            const val = cursor.value;
+                            const ts = val ? (val.timestamp || 0) : 0;
+                            if (!ts || (now - ts) > PLAYLIST_CACHE_TTL_MS) {
+                                cursor.delete();
+                                removed++;
+                            }
+                            cursor.continue();
+                        } else {
+                            if (removed > 0) {
+                                console.log(`[MK21 Cache] ${removed} playlist(s) expirada(s) (> 7 dias) foram limpas do IndexedDB.`);
+                            }
+                            resolve(removed);
+                        }
+                    };
+                    req.onerror = () => resolve(0);
+                });
+            } catch (e) {
+                return 0;
+            }
+        }
+
+        async function clearAllCachedPlaylists() {
+            try {
+                const db = await openCacheDB();
+                if (!db) return;
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                tx.objectStore(STORE_NAME).clear();
+                console.log('[MK21 Cache] Todo o cache de playlists do IndexedDB foi limpo.');
+            } catch (e) {}
+        }
+        window.cleanExpiredPlaylistCache = cleanExpiredPlaylistCache;
+        window.clearAllCachedPlaylists = clearAllCachedPlaylists;
 
         // Action: Login to chosen provider with High-Speed IndexedDB Cache & Parallel Proxy Racing
         async function performLogin(forceRefresh = false) {
