@@ -60,15 +60,54 @@
                     <p class="text-[11px] text-slate-400 font-medium pb-1 border-b border-slate-800/40 w-4/5 mx-auto">Versão Web IPTV de Alto Desempenho</p>
                 </div>
 
+                <!-- Quick Profile Picker (Estilo TopIbo / Netflix) -->
+                <div id="quick-profiles-section" class="mb-5 hidden">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+                            <i class="fa-solid fa-users text-[#E50914] mr-1.5"></i>Perfis Salvos
+                        </span>
+                        <span class="text-[10px] text-slate-500 font-medium">Toque para entrar direto</span>
+                    </div>
+                    <div id="quick-profiles-list" class="grid grid-cols-2 gap-2.5">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                    <div class="relative flex py-3 items-center">
+                        <div class="flex-grow border-t border-slate-800"></div>
+                        <span class="flex-shrink mx-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">ou entre com seus dados</span>
+                        <div class="flex-grow border-t border-slate-800"></div>
+                    </div>
+                </div>
+
                 <!-- Form -->
-                <div class="space-y-5">
+                <div class="space-y-4">
+                    <!-- Código do Servidor / Atalho Rápido -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest" for="server-code-input">
+                                Código do Servidor
+                            </label>
+                            <span class="text-[10px] font-semibold text-slate-500" title="Digite o código (ex: CB6000, 5, VLOG) ou escolha na lista abaixo">
+                                <i class="fa-solid fa-bolt text-[#E50914]"></i> Autodetectar
+                            </span>
+                        </div>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#E50914]">
+                                <i class="fa-solid fa-hashtag"></i>
+                            </span>
+                            <input id="server-code-input" type="text" placeholder="Ex: CB6000, 5, VLOG, LUB TV" class="w-full pl-11 pr-20 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold uppercase text-xs">
+                            <div id="server-code-badge" class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <span class="text-[10px] font-bold text-slate-500 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">Opcional</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Server Profile Picker -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2" for="server-selector">
-                            Selecionar Servidor
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="server-selector">
+                            Selecionar Servidor na Lista
                         </label>
                         <div class="relative">
-                            <select id="server-selector" class="w-full px-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent transition-all duration-200 appearance-none outline-none font-semibold">
+                            <select id="server-selector" class="w-full px-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent transition-all duration-200 appearance-none outline-none font-semibold text-sm">
                                 <!-- Loaded dynamically via JS -->
                             </select>
                             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
@@ -79,27 +118,27 @@
 
                     <!-- Username -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2" for="user-input">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="user-input">
                             Usuário
                         </label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#E50914]">
                                 <i class="fa-solid fa-user"></i>
                             </span>
-                            <input id="user-input" type="text" autocomplete="username" placeholder="Digite seu usuário" class="w-full pl-11 pr-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold">
+                            <input id="user-input" type="text" autocomplete="username" placeholder="Digite seu usuário" class="w-full pl-11 pr-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold text-sm">
                         </div>
                     </div>
 
                     <!-- Password -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2" for="pass-input">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="pass-input">
                             Senha
                         </label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#E50914]">
                                 <i class="fa-solid fa-lock"></i>
                             </span>
-                            <input id="pass-input" type="password" autocomplete="current-password" placeholder="Digite sua senha" class="w-full pl-11 pr-12 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold">
+                            <input id="pass-input" type="password" autocomplete="current-password" placeholder="Digite sua senha" class="w-full pl-11 pr-12 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold text-sm">
                             <button id="toggle-password" type="button" class="absolute inset-y-0 right-0 flex items-center px-4 text-slate-400 hover:text-[#E50914] transition-colors">
                                 <i class="fa-solid fa-eye-slash" id="password-eye-icon"></i>
                             </button>
@@ -107,23 +146,23 @@
                     </div>
 
                     <!-- Access CORS Settings / Info -->
-                    <div class="bg-red-950/15 border border-red-900/35 rounded-2xl p-4 text-xs font-medium text-red-100 leading-relaxed shadow-sm">
-                        <div class="flex items-start gap-3">
-                            <i class="fa-solid fa-circle-exclamation text-base mt-0.5 text-[#E50914] animate-pulse"></i>
-                            <div>
-                                <span class="font-bold text-white block mb-1">Informação sobre Navegadores (CORS):</span>
-                                A maioria dos servidores IPTV limita conexões web diretas (CORS). Se a lista falhar ao carregar, habilite uma extensão CORS (ex: "Allow CORS" na Chrome Store) ou use a opção de Proxy abaixo.
+                    <div class="bg-red-950/15 border border-red-900/35 rounded-2xl p-3 text-xs font-medium text-red-100 leading-relaxed shadow-sm">
+                        <div class="flex items-start gap-2.5">
+                            <i class="fa-solid fa-circle-exclamation text-base mt-0.5 text-[#E50914] shrink-0"></i>
+                            <div class="text-[11px] text-slate-300">
+                                <span class="font-bold text-white block mb-0.5">Informação sobre Navegadores (CORS):</span>
+                                Se sua lista não carregar por limitação do navegador, use a opção de Proxy recomendada ou ative uma extensão CORS.
                             </div>
                         </div>
                     </div>
 
                     <!-- CORS Proxy Method Selector -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2" for="cors-selector">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="cors-selector">
                             Método de Conexão (Proxy)
                         </label>
                         <div class="relative">
-                            <select id="cors-selector" class="w-full px-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent transition-all duration-200 appearance-none outline-none font-semibold">
+                            <select id="cors-selector" class="w-full px-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent transition-all duration-200 appearance-none outline-none font-semibold text-xs">
                                 <option value="auto">⚡ Conexão Automática (Fallback Inteligente c/ Vercel)</option>
                                 <option value="vercel">🛡️ Proxy Vercel Dedicado (Recomendado - 100% Funcional)</option>
                                 <option value="direct">Sem Proxy (Conexão Direta - Necessita Extensão CORS)</option>
@@ -136,11 +175,11 @@
                                 <i class="fa-solid fa-chevron-down text-[#E50914]"></i>
                             </div>
                         </div>
-                        <div id="latency-status-indicator" class="mt-2 text-xs text-slate-400 hidden"></div>
+                        <div id="latency-status-indicator" class="mt-1.5 text-xs text-slate-400 hidden"></div>
                     </div>
 
                     <!-- Action Button -->
-                    <button id="login-button" class="w-full py-4 bg-gradient-to-r from-[#E50914] to-red-650 outline-none text-white font-semibold rounded-2xl shadow-lg shadow-red-950/40 hover:shadow-red-500/10 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2 mt-2">
+                    <button id="login-button" class="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-red-650 outline-none text-white font-semibold rounded-2xl shadow-lg shadow-red-950/40 hover:shadow-red-500/10 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2 mt-2">
                         <span>Acessar Portal IPTV</span>
                         <i class="fa-solid fa-arrow-right"></i>
                     </button>
@@ -1728,6 +1767,10 @@
         const loginScreen = document.getElementById('login-screen');
         const playerScreen = document.getElementById('player-screen');
         const serverSelector = document.getElementById('server-selector');
+        const serverCodeInput = document.getElementById('server-code-input');
+        const serverCodeBadge = document.getElementById('server-code-badge');
+        const quickProfilesSection = document.getElementById('quick-profiles-section');
+        const quickProfilesList = document.getElementById('quick-profiles-list');
         const userInput = document.getElementById('user-input');
         const passInput = document.getElementById('pass-input');
         const togglePassword = document.getElementById('toggle-password');
@@ -1854,6 +1897,161 @@
             }
         }
 
+        // Helper: Resolve o servidor a partir do código digitado (Ex: CB6000, 5, VLOG, LUB TV, etc.)
+        function resolveServerByCode(code) {
+            if (!code) return null;
+            const cleaned = code.trim().toLowerCase();
+            if (!cleaned) return null;
+
+            // 1. Número direto (1 a 10)
+            const num = parseInt(cleaned, 10);
+            if (!isNaN(num) && num >= 1 && num <= PREDEFINED_SERVERS.length) {
+                return PREDEFINED_SERVERS[num - 1];
+            }
+
+            // 2. Busca por ID, nome ou fragmento de URL
+            for (let i = 0; i < PREDEFINED_SERVERS.length; i++) {
+                const srv = PREDEFINED_SERVERS[i];
+                const srvName = (srv.name || '').toLowerCase();
+                const srvId = (srv.id || '').toLowerCase();
+                const srvBase = (srv.baseUrl || '').toLowerCase();
+
+                if (srvName === cleaned || srvId === cleaned || srvId === `server_${cleaned}`) {
+                    return srv;
+                }
+                if (cleaned.includes('cb6000') || cleaned.includes('cb6') || cleaned.includes('caterlune')) {
+                    if (srvName.includes('cb6000') || srvBase.includes('caterlune')) return srv;
+                }
+                if (cleaned.includes('vlog') || cleaned.includes('opbx')) {
+                    if (srvName.includes('vlog') || srvBase.includes('myopbx')) return srv;
+                }
+                if (cleaned.includes('lub') || cleaned.includes('pottermax')) {
+                    if (srvName.includes('lub') || srvBase.includes('pottermax')) return srv;
+                }
+                if (cleaned.includes('cinelon') || cleaned.includes('coliseu')) {
+                    if (srvName.includes('cinelon') || srvBase.includes('coliseuop')) return srv;
+                }
+                if (cleaned.includes('tannix') || cleaned.includes('poptv')) {
+                    if (srvName.includes('tannix') || srvBase.includes('poptvcdn')) return srv;
+                }
+                if (cleaned.includes('mk21') || cleaned.includes('vivoxi')) {
+                    if (srvName.includes('mk21') || srvBase.includes('vivoxi')) return srv;
+                }
+                if (cleaned.includes('new tv') || cleaned.includes('cp2026')) {
+                    if (srvName.includes('new') || srvBase.includes('cp2026')) return srv;
+                }
+                if (cleaned.includes('multt tv') || cleaned.includes('dali')) {
+                    if (srvName.includes('multt tv') || srvBase.includes('dali-as')) return srv;
+                }
+                if (cleaned.includes('cinevo') || cleaned.includes('antares')) {
+                    if (srvName.includes('cinevo') || srvBase.includes('antaresfusion')) return srv;
+                }
+                if (cleaned.includes('multt box') || cleaned.includes('cdnconn')) {
+                    if (srvName.includes('multt box') || srvBase.includes('cdnconn')) return srv;
+                }
+            }
+
+            // Busca tolerante parcial de nome
+            for (let i = 0; i < PREDEFINED_SERVERS.length; i++) {
+                const srv = PREDEFINED_SERVERS[i];
+                if ((srv.name || '').toLowerCase().includes(cleaned)) {
+                    return srv;
+                }
+            }
+            return null;
+        }
+
+        // Salva perfil no histórico de login rápido (estilo TopIbo / Netflix)
+        function saveQuickProfile(serverName, baseUrl, username, password) {
+            try {
+                if (!username || !password || !baseUrl) return;
+                let profiles = [];
+                try {
+                    profiles = JSON.parse(localStorage.getItem('mk21_saved_profiles') || '[]');
+                } catch (e) { profiles = []; }
+
+                // Remove se já existir o mesmo usuário e servidor
+                profiles = profiles.filter(p => !(p.username === username && p.baseUrl === baseUrl));
+                profiles.unshift({
+                    serverName: serverName || 'Servidor IPTV',
+                    baseUrl: baseUrl,
+                    username: username,
+                    password: password,
+                    lastLogin: Date.now()
+                });
+
+                // Limita aos 4 perfis mais recentes
+                if (profiles.length > 4) profiles = profiles.slice(0, 4);
+                localStorage.setItem('mk21_saved_profiles', JSON.stringify(profiles));
+                renderQuickProfiles();
+            } catch (e) {
+                console.warn('Erro ao salvar quick profile:', e);
+            }
+        }
+
+        // Renderiza os cards de perfis salvos no login
+        function renderQuickProfiles() {
+            if (!quickProfilesSection || !quickProfilesList) return;
+            try {
+                let profiles = [];
+                try {
+                    profiles = JSON.parse(localStorage.getItem('mk21_saved_profiles') || '[]');
+                } catch (e) { profiles = []; }
+
+                if (profiles.length === 0) {
+                    quickProfilesSection.classList.add('hidden');
+                    return;
+                }
+
+                quickProfilesSection.classList.remove('hidden');
+                quickProfilesList.innerHTML = '';
+
+                const avatarBgs = [
+                    'bg-gradient-to-tr from-blue-600 to-indigo-700',
+                    'bg-gradient-to-tr from-amber-500 to-red-600',
+                    'bg-gradient-to-tr from-emerald-600 to-teal-700',
+                    'bg-gradient-to-tr from-purple-600 to-pink-600'
+                ];
+
+                profiles.forEach((prof, idx) => {
+                    const card = document.createElement('button');
+                    card.type = 'button';
+                    card.className = 'flex items-center gap-2.5 p-2.5 bg-black/60 hover:bg-slate-900 border border-slate-800 hover:border-[#E50914] rounded-xl transition-all duration-200 text-left group';
+                    
+                    const bgClass = avatarBgs[idx % avatarBgs.length];
+                    const initial = (prof.username || 'U').charAt(0).toUpperCase();
+
+                    card.innerHTML = `
+                        <div class="w-9 h-9 rounded-lg ${bgClass} flex items-center justify-center text-white font-extrabold text-sm shrink-0 shadow-md">
+                            ${initial}
+                        </div>
+                        <div class="overflow-hidden flex-grow min-w-0">
+                            <p class="text-xs font-bold text-slate-100 truncate group-hover:text-[#E50914] transition-colors">${prof.username}</p>
+                            <p class="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${prof.serverName}
+                            </p>
+                        </div>
+                        <i class="fa-solid fa-arrow-right text-[10px] text-slate-600 group-hover:text-[#E50914] pr-1"></i>
+                    `;
+
+                    card.onclick = () => {
+                        if (serverSelector) serverSelector.value = prof.baseUrl;
+                        if (userInput) userInput.value = prof.username;
+                        if (passInput) passInput.value = prof.password;
+                        if (serverCodeInput) serverCodeInput.value = prof.serverName;
+                        if (serverCodeBadge) {
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${prof.serverName}</span>`;
+                        }
+                        performLogin();
+                    };
+
+                    quickProfilesList.appendChild(card);
+                });
+            } catch (e) {
+                console.warn('Erro ao renderizar quick profiles:', e);
+            }
+        }
+
         function loadCachedCredentials() {
             const cachedUrl = localStorage.getItem('mk21_baseUrl');
             const cachedUser = localStorage.getItem('mk21_username');
@@ -1869,6 +2067,17 @@
                 corsSelector.value = 'auto';
             }
 
+            // Exibe badge do servidor se já estiver selecionado
+            if (serverCodeInput && serverSelector && serverSelector.selectedIndex >= 0) {
+                const selName = serverSelector.options[serverSelector.selectedIndex].text;
+                serverCodeInput.value = selName;
+                if (serverCodeBadge) {
+                    serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${selName}</span>`;
+                }
+            }
+
+            renderQuickProfiles();
+
             const autoExternalToggle = document.getElementById('auto-external-toggle');
             if (autoExternalToggle) {
                 autoExternalToggle.checked = localStorage.getItem('mk21_auto_external') === 'true';
@@ -1876,6 +2085,45 @@
         }
 
         function setupEventListeners() {
+            // Live Autodetection quando o usuário digita o Código do Servidor
+            if (serverCodeInput) {
+                const handleServerCodeChange = () => {
+                    const code = serverCodeInput.value.trim();
+                    if (!code) {
+                        if (serverCodeBadge) {
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-slate-500 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">Opcional</span>`;
+                        }
+                        return;
+                    }
+                    const matched = resolveServerByCode(code);
+                    if (matched) {
+                        serverSelector.value = matched.baseUrl;
+                        if (serverCodeBadge) {
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${matched.name}</span>`;
+                        }
+                    } else {
+                        if (serverCodeBadge) {
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-md">Manual</span>`;
+                        }
+                    }
+                };
+                serverCodeInput.addEventListener('input', handleServerCodeChange);
+                serverCodeInput.addEventListener('change', handleServerCodeChange);
+            }
+
+            // Atualiza o input de código se o usuário mudar o select manualmente
+            if (serverSelector) {
+                serverSelector.addEventListener('change', () => {
+                    if (serverCodeInput && serverSelector.selectedIndex >= 0) {
+                        const selName = serverSelector.options[serverSelector.selectedIndex].text;
+                        serverCodeInput.value = selName;
+                        if (serverCodeBadge) {
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${selName}</span>`;
+                        }
+                    }
+                });
+            }
+
             // Password toggle
             togglePassword.addEventListener('click', () => {
                 if (passInput.type === 'password') {
@@ -1884,6 +2132,17 @@
                 } else {
                     passInput.type = 'password';
                     passwordEyeIcon.classList.replace('fa-eye', 'fa-eye-slash');
+                }
+            });
+
+            // Enter key trigger no login
+            [userInput, passInput, serverCodeInput].forEach(inp => {
+                if (inp) {
+                    inp.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            performLogin();
+                        }
+                    });
                 }
             });
 
@@ -2290,13 +2549,23 @@
             }
             playlistItems = [];
 
+            // Se o usuário digitou um código no campo serverCodeInput, resolve automaticamente
+            if (serverCodeInput && serverCodeInput.value.trim()) {
+                const matched = resolveServerByCode(serverCodeInput.value.trim());
+                if (matched && serverSelector) {
+                    serverSelector.value = matched.baseUrl;
+                }
+            }
+
             let baseUrl = serverSelector.value;
             if (baseUrl.startsWith('https://')) {
                 baseUrl = 'http://' + baseUrl.substring(8);
             } else if (!baseUrl.startsWith('http://')) {
                 baseUrl = 'http://' + baseUrl;
             }
-            const profileName = serverSelector.options[serverSelector.selectedIndex].text;
+            const profileName = (serverSelector.selectedIndex >= 0 && serverSelector.options[serverSelector.selectedIndex]) 
+                ? serverSelector.options[serverSelector.selectedIndex].text 
+                : 'Servidor IPTV';
             const user = (userInput && userInput.value.trim()) || localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
             const pass = (passInput && passInput.value.trim()) || localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || '';
             const corsMethod = (corsSelector && corsSelector.value) || localStorage.getItem('mk21_cors') || 'auto';
@@ -2311,6 +2580,12 @@
             localStorage.setItem('mk21_username', user);
             localStorage.setItem('mk21_password', pass);
             localStorage.setItem('mk21_cors', corsMethod);
+            if (serverCodeInput && serverCodeInput.value.trim()) {
+                localStorage.setItem('mk21_server_code', serverCodeInput.value.trim());
+            }
+
+            // Salvar no histórico de perfis rápidos
+            saveQuickProfile(profileName, baseUrl, user, pass);
 
             showLoader('Conectando ao canal de multisserviço...');
 
