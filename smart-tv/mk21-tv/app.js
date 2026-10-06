@@ -406,11 +406,15 @@ async function loadServer(forceRefresh = false) {
 
   const hud = $('hudLoadingOverlay');
   if (hud) {
-    if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Conectando ao ' + srv.name;
-    if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Conectando e baixando grade de programação...';
-    if ($('hudProgressBar')) $('hudProgressBar').style.width = '25%';
-    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '25%';
-    hud.classList.remove('hidden');
+    if (forceRefresh) {
+      if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Conectando ao ' + srv.name;
+      if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Conectando e baixando grade de programação...';
+      if ($('hudProgressBar')) $('hudProgressBar').style.width = '25%';
+      if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '25%';
+      hud.classList.remove('hidden');
+    } else {
+      hud.classList.add('hidden');
+    }
   }
 
   // Interrompe qualquer stream anterior
@@ -429,11 +433,7 @@ async function loadServer(forceRefresh = false) {
     if (cached && cached.LIVE && cached.LIVE.length > 0) {
       allCatalog = cached;
       updateSplash(85, 'Iniciando TV Ao Vivo...');
-      if (hud) {
-        if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
-        if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
-        setTimeout(() => hud.classList.add('hidden'), 300);
-      }
+      if (hud) hud.classList.add('hidden');
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
@@ -445,12 +445,28 @@ async function loadServer(forceRefresh = false) {
     }
   }
 
+  // Garante que a lista de canais nunca fique vazia nem bloqueie os botões
+  if (!allCatalog || !allCatalog.LIVE || allCatalog.LIVE.length === 0) {
+    allCatalog = {
+      LIVE: [
+        { name: 'Record News HD', group: 'Notícias', logo: 'https://i.imgur.com/G34Z6d7.png', url: 'https://recordnews.newsline.com.br/live/smil:live.smil/playlist.m3u8', contentType: 'LIVE' },
+        { name: 'TV Brasil HD', group: 'Abertos', logo: 'https://i.imgur.com/d5mK70w.png', url: 'https://ebc-live.ebc.com.br/tvbrasil/tvbrasil.m3u8', contentType: 'LIVE' },
+        { name: 'CNN Brasil', group: 'Notícias', logo: 'https://i.imgur.com/4qJd2R6.png', url: 'https://d2e9h20wvvj09u.cloudfront.net/out/v1/25687a74070a4a82b9b26574fbcda4ff/index.m3u8', contentType: 'LIVE' },
+        { name: 'Pluto TV Filmes', group: 'Filmes', logo: 'https://i.imgur.com/6UaR8Gq.png', url: 'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d63f736c28f08a46cf7f8a7/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=1&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=1&userId=', contentType: 'LIVE' }
+      ],
+      MOVIE: [],
+      SERIES: []
+    };
+    buildCurrentCategories();
+    renderCategoriesList();
+    selectCategory('ALL');
+    if (allCatalog.LIVE.length > 0) {
+      playStream(allCatalog.LIVE[0]);
+    }
+  }
+
   $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
   updateSplash(40, 'Baixando grade de programação...');
-  if (hud) {
-    if ($('hudProgressBar')) $('hudProgressBar').style.width = '55%';
-    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '55%';
-  }
 
   try {
     const text = await fetchPlaylistContent(srv.url);
@@ -2536,6 +2552,18 @@ function togglePlayPause() {
 document.addEventListener('keydown', e => {
   const k = e.keyCode;
 
+  // Auto-recuperação do foco se perdido ou se estiver no body
+  if (!document.activeElement || document.activeElement === document.body || document.activeElement.tagName === 'BODY') {
+    if (activeZone === 'categories') {
+      const cat = $('listCategories') ? $('listCategories').querySelector('.cat-item-btn') : null;
+      if (cat) cat.focus();
+    } else {
+      activeZone = 'channels';
+      const item = $('listItems') ? $('listItems').querySelector('.list-item-btn') : null;
+      if (item) item.focus();
+    }
+  }
+
   // TECLAS DE CONTROLE DE MÍDIA UNIVERSAIS (LG WEBOS, TIZEN, ANDROID TV, CONTROLE REMOTO)
   // Suporte a 'Play/Pause', 'MediaPlay', 'MediaPause', 'MediaPlayPause', etc.
   const isPlayPauseKey = 
@@ -3015,8 +3043,11 @@ $('btnExitConfirm').onclick = () => {
   else window.close();
 };
 
-// 16. INICIALIZAÇÃO AUTOMÁTICA
-window.addEventListener('load', () => {
+// 16. INICIALIZAÇÃO AUTOMÁTICA ROBUSTA
+function bootApp() {
+  if (window._mk21Booted) return;
+  window._mk21Booted = true;
+
   try {
     const savedFont = localStorage.getItem('mk21_font_size');
     if (savedFont) applyFontSize(savedFont);
@@ -3038,4 +3069,17 @@ window.addEventListener('load', () => {
   } catch (e) {}
 
   loadServer();
-});
+
+  // Foco inicial garantido após carregamento para o controle remoto responder no 1º segundo
+  setTimeout(() => {
+    activeZone = 'channels';
+    focusActiveElement();
+  }, 200);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
+  window.addEventListener('load', bootApp);
+} else {
+  bootApp();
+}

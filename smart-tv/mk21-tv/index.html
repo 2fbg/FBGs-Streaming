@@ -325,59 +325,13 @@
     </div>
   </div>
 
-  <!-- BOOTLOADER OTA INTELIGENTE MK21 PLAY (LG webOS & Samsung Tizen) -->
+  <!-- Limpeza de cache antigo para garantir execução da versão 3.6.0 estável -->
   <script>
-    (function() {
-      // 1. Injetar CSS de atualização OTA se presente no cache local
-      try {
-        var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        if (otaCss && otaCss.length > 100) {
-          var styleEl = document.getElementById('mk21-ota-override-css') || document.createElement('style');
-          styleEl.id = 'mk21-ota-override-css';
-          styleEl.textContent = otaCss;
-          document.head.appendChild(styleEl);
-        }
-      } catch (e) {
-        console.warn('OTA CSS load error:', e);
-      }
-
-      // 2. Executar script OTA armazenado ou carregar app.js com cache buster
-      var otaJs = null;
-      try {
-        otaJs = localStorage.getItem('mk21_ota_app_js');
-      } catch (e) {}
-
-      var loadedViaOta = false;
-      if (otaJs && otaJs.length > 5000 && otaJs.indexOf('playStream') !== -1) {
-        try {
-          var otaScript = document.createElement('script');
-          otaScript.type = 'text/javascript';
-          otaScript.text = otaJs;
-          document.body.appendChild(otaScript);
-          loadedViaOta = true;
-          console.log('[MK21 OTA] Inicializado via Hot-Patch OTA armazenado com sucesso.');
-        } catch (err) {
-          console.error('[MK21 OTA] Erro ao executar Hot-Patch OTA. Limpando cache e revertendo...', err);
-          try {
-            localStorage.removeItem('mk21_ota_app_js');
-          } catch(e) {}
-          loadedViaOta = false;
-        }
-      }
-
-      if (!loadedViaOta) {
-        var appScript = document.createElement('script');
-        appScript.type = 'text/javascript';
-        var ver = '3.6.0';
-        try {
-          var savedVer = localStorage.getItem('mk21_ota_app_version');
-          if (savedVer) ver = savedVer;
-        } catch(e) {}
-        appScript.src = 'app.js?v=' + encodeURIComponent(ver) + '&t=' + Date.now();
-        document.body.appendChild(appScript);
-        console.log('[MK21 Boot] Inicializado pacote local v' + ver);
-      }
-    })();
+    try {
+      localStorage.removeItem('mk21_ota_app_js');
+      localStorage.removeItem('mk21_ota_styles_css');
+    } catch(e) {}
   </script>
+  <script src="app.js"></script>
 </body>
 </html>
