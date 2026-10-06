@@ -72,7 +72,7 @@ module.exports = function handler(req, res) {
     }
 
     // Rate limiting check
-    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const clientIp = (req.headers && req.headers['x-forwarded-for']) || (req.socket && req.socket.remoteAddress) || 'unknown';
     if (isRateLimited(clientIp)) {
         res.statusCode = 429;
         res.setHeader('Content-Type', 'application/json');
