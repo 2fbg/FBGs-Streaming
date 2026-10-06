@@ -383,6 +383,30 @@
     </div>
   </div>
 
+  <!-- Modal Pop-up de Aviso de Nova Atualização na TV (ao clicar já atualiza direto) -->
+  <div id="modalUpdateNotice" class="app-modal hidden" style="z-index: 10000;">
+    <div class="modal-content" style="width: 580px; background: #0d111e; border: 2px solid #e50914; border-radius: 20px; padding: 24px; text-align: center; box-shadow: 0 0 45px rgba(229,9,20,0.6);">
+      <div style="font-size: 46px; margin-bottom: 12px; animation: bounce 1.5s infinite;">🚀</div>
+      <h2 style="margin: 0 0 10px 0; font-size: 26px; color: #ffd54f;">Nova Atualização Disponível!</h2>
+      <p id="txtUpdateNoticeDesc" style="color: #cbd5e1; font-size: 16px; line-height: 1.5; margin: 0 0 18px 0;">
+        Uma nova versão do MK21 Play foi publicada no GitHub com melhorias críticas de desempenho e correções para a Smart TV.
+      </p>
+      <div id="boxUpdateNoticeVersion" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; margin-bottom: 22px; font-size: 15px;">
+        <span style="color: #888;">Versão Instalada:</span> <strong id="lblNoticeCurrentVer" style="color: #fff;">v3.6.3</strong>
+        <span style="margin: 0 10px; color: #ffd54f;">➔</span>
+        <span style="color: #888;">Nova Versão:</span> <strong id="lblNoticeNewVer" style="color: #4ade80;">v3.6.3</strong>
+      </div>
+      <div style="display: flex; gap: 14px; justify-content: center;">
+        <button id="btnNoticeUpdateNow" class="ctrl-btn primary" style="flex: 2; padding: 16px; font-size: 17px; font-weight: bold; border-radius: 10px; box-shadow: 0 0 20px rgba(229,9,20,0.5);" tabindex="0">
+          ⚡ Atualizar Agora na TV
+        </button>
+        <button id="btnNoticeUpdateLater" class="ctrl-btn" style="flex: 1; padding: 16px; font-size: 15px; border-radius: 10px; background: rgba(255,255,255,0.1);" tabindex="0">
+          Mais Tarde
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- HUD de Carregamento em Tempo Real com Porcentagem -->
   <div id="hudLoadingOverlay" class="hud-loading-overlay hidden">
     <div class="hud-loading-card">

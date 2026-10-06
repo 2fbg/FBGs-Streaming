@@ -3019,6 +3019,72 @@ if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) > 0) {
 
 let latestRemoteUpdateData = null;
 
+// Verifica silenciosamente se há nova versão no GitHub e exibe pop-up de aviso na TV
+async function checkForRemoteUpdateNotice() {
+  try {
+    const candidateEndpoints = [
+      'version.json?t=' + Date.now(),
+      './version.json?t=' + Date.now(),
+      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=' + Date.now(),
+      'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/version.json?t=' + Date.now()
+    ];
+
+    let remoteData = null;
+    for (const url of candidateEndpoints) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.version) {
+            remoteData = json;
+            break;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (remoteData && compareSemver(remoteData.version, CURRENT_APP_VERSION) > 0) {
+      latestRemoteUpdateData = remoteData;
+      showUpdateNoticePopup(remoteData);
+    }
+  } catch (err) {
+    console.warn('[MK21 Update] Verificação em background falhou:', err);
+  }
+}
+
+function showUpdateNoticePopup(remoteData) {
+  const modal = $('modalUpdateNotice');
+  if (!modal) return;
+
+  if ($('lblNoticeCurrentVer')) $('lblNoticeCurrentVer').textContent = 'v' + CURRENT_APP_VERSION;
+  if ($('lblNoticeNewVer')) $('lblNoticeNewVer').textContent = 'v' + remoteData.version;
+  if ($('txtUpdateNoticeDesc')) {
+    $('txtUpdateNoticeDesc').textContent = remoteData.releaseNotes 
+      ? `Novidades da versão v${remoteData.version}:\n${remoteData.releaseNotes.substring(0, 180)}...`
+      : `Uma nova versão v${remoteData.version} do MK21 Play está pronta no GitHub! Clique abaixo para instalar diretamente na Smart TV.`;
+  }
+
+  modal.classList.remove('hidden');
+  activeZone = 'modalUpdateNotice';
+  const btnUpdate = $('btnNoticeUpdateNow');
+  if (btnUpdate) btnUpdate.focus();
+}
+
+function closeUpdateNoticePopup() {
+  const modal = $('modalUpdateNotice');
+  if (modal) modal.classList.add('hidden');
+  activeZone = 'channels';
+  focusActiveElement();
+}
+
+async function triggerDirectUpdateFromNotice() {
+  closeUpdateNoticePopup();
+  openAppUpdateModal(false);
+  setTimeout(() => {
+    startDirectUpdate();
+  }, 400);
+}
+
 async function openAppUpdateModal(manualCheck = true) {
   const modal = $('modalAppUpdate');
   if (!modal) return;
@@ -3204,6 +3270,13 @@ function forceResetTvAppCache() {
   }
 }
 
+// BINDINGS DO MODAL DE AVISO DE ATUALIZAÇÃO (POP-UP NA TV)
+const btnNoticeUpdate = $('btnNoticeUpdateNow');
+if (btnNoticeUpdate) btnNoticeUpdate.onclick = triggerDirectUpdateFromNotice;
+
+const btnNoticeLater = $('btnNoticeUpdateLater');
+if (btnNoticeLater) btnNoticeLater.onclick = closeUpdateNoticePopup;
+
 $('btnCloseUpdateModal').onclick = () => {
   $('modalAppUpdate').classList.add('hidden');
   activeZone = 'settings';
@@ -3331,6 +3404,12 @@ document.addEventListener('keydown', e => {
       activeZone = 'settings';
       return;
     }
+    if (!$('modalUpdateNotice').classList.contains('hidden')) {
+      $('modalUpdateNotice').classList.add('hidden');
+      activeZone = 'channels';
+      focusActiveElement();
+      return;
+    }
     if (!$('modalExitConfirm').classList.contains('hidden')) {
       $('modalExitConfirm').classList.add('hidden');
       activeZone = 'channels';
@@ -3367,6 +3446,24 @@ document.addEventListener('keydown', e => {
     $('modalExitConfirm').classList.remove('hidden');
     $('btnExitCancel').focus();
     return;
+  }
+
+  // ================= NAVEGAÇÃO D-PAD NO MODAL AVISO DE ATUALIZAÇÃO =================
+  if (activeZone === 'modalUpdateNotice') {
+    if (k === 37 || k === 39) { // Esquerda / Direita
+      e.preventDefault();
+      if (document.activeElement === $('btnNoticeUpdateNow')) {
+        $('btnNoticeUpdateLater').focus();
+      } else {
+        $('btnNoticeUpdateNow').focus();
+      }
+      return;
+    }
+    if (k === 13) { // Enter / OK
+      e.preventDefault();
+      if (document.activeElement) document.activeElement.click();
+      return;
+    }
   }
 
   // ================= NAVEGAÇÃO D-PAD NO MODAL PIN (SUPORTE A TECLADO NUMÉRICO 0-9) =================
@@ -3893,8 +3990,6 @@ function bootApp() {
 
   try {
     localStorage.removeItem('mk21_hidden_categories');
-    localStorage.removeItem('mk21_ota_app_js');
-    localStorage.removeItem('mk21_ota_styles_css');
   } catch (e) {}
 
   try {
@@ -3924,6 +4019,11 @@ function bootApp() {
     activeZone = 'channels';
     focusActiveElement();
   }, 200);
+
+  // Verificação assíncrona de atualização no GitHub com pop-up automático na TV
+  setTimeout(() => {
+    checkForRemoteUpdateNotice();
+  }, 3500);
 }
 
 // MONITORAMENTO DE MEMÓRIA DA TV (webOS Low Memory Guard)
