@@ -129,8 +129,9 @@ async function deleteStoredData(id) {
   } catch (e) {}
 }
 
-// Limpeza proativa de todas as entradas de playlists com mais de 7 dias
-async function cleanExpiredPlaylistCache() {
+// Verificação de integridade no cache IndexedDB na inicialização:
+// Remove silenciosamente objetos corrompidos, entradas duplicadas ou expiradas (> 7 dias)
+async function verifyAndCleanIndexedDBCache() {
   try {
     const db = await openDB();
     if (!db) return 0;
@@ -139,20 +140,80 @@ async function cleanExpiredPlaylistCache() {
       const store = tx.objectStore(STORE_NAME);
       const req = store.openCursor();
       const now = Date.now();
+      const seenIds = new Set();
       let cleaned = 0;
+
       req.onsuccess = e => {
         const cursor = e.target.result;
         if (cursor) {
-          const entry = cursor.value;
-          const updatedAt = entry ? (entry.updatedAt || 0) : 0;
-          if (!updatedAt || (now - updatedAt) > PLAYLIST_CACHE_TTL_MS) {
-            cursor.delete();
-            cleaned++;
+          try {
+            const entry = cursor.value;
+            const entryId = cursor.key || (entry ? entry.id : null);
+
+            // 1. Remover silenciosamente chaves nulas ou registros duplicados no banco
+            if (!entryId || seenIds.has(entryId)) {
+              cursor.delete();
+              cleaned++;
+              cursor.continue();
+              return;
+            }
+            seenIds.add(entryId);
+
+            // 2. Remover silenciosamente objetos corrompidos (sem payload válido)
+            if (!entry || typeof entry !== 'object' || !entry.payload || typeof entry.payload !== 'object') {
+              cursor.delete();
+              cleaned++;
+              cursor.continue();
+              return;
+            }
+
+            const payload = entry.payload;
+            const hasValidArrays = Array.isArray(payload.LIVE) || Array.isArray(payload.MOVIE) || Array.isArray(payload.SERIES);
+            if (!hasValidArrays) {
+              cursor.delete();
+              cleaned++;
+              cursor.continue();
+              return;
+            }
+
+            // 3. Remover silenciosamente entradas expiradas (> 7 dias ou timestamp inválido)
+            const updatedAt = entry.updatedAt || 0;
+            if (!updatedAt || (now - updatedAt) > PLAYLIST_CACHE_TTL_MS) {
+              cursor.delete();
+              cleaned++;
+              cursor.continue();
+              return;
+            }
+
+            // 4. Limpeza interna de canais duplicados dentro do payload para reduzir uso de RAM na TV
+            let modified = false;
+            ['LIVE', 'MOVIE', 'SERIES'].forEach(type => {
+              if (Array.isArray(payload[type]) && payload[type].length > 0) {
+                const initialLen = payload[type].length;
+                const seenUrls = new Set();
+                payload[type] = payload[type].filter(item => {
+                  if (!item || !item.url) return false;
+                  if (seenUrls.has(item.url)) return false;
+                  seenUrls.add(item.url);
+                  return true;
+                });
+                if (payload[type].length !== initialLen) {
+                  modified = true;
+                }
+              }
+            });
+
+            if (modified) {
+              cursor.update(entry);
+            }
+          } catch(err) {
+            // Em caso de erro de desserialização ou corrupção, remove silenciosamente
+            try { cursor.delete(); cleaned++; } catch(_) {}
           }
           cursor.continue();
         } else {
           if (cleaned > 0) {
-            console.log(`[MK21 Cache] ${cleaned} playlist(s) expirada(s) (> 7 dias) foram limpas do IndexedDB.`);
+            console.log(`[MK21 Cache] Verificação de integridade: ${cleaned} item(ns) corrompidos/duplicados/expirados removidos com sucesso.`);
           }
           res(cleaned);
         }
@@ -163,6 +224,7 @@ async function cleanExpiredPlaylistCache() {
     return 0;
   }
 }
+const cleanExpiredPlaylistCache = verifyAndCleanIndexedDBCache;
 
 // 3. ESTADO GLOBAL
 let currentServerIndex = 0;
@@ -425,10 +487,12 @@ function groupSeriesItems(items) {
 // CONEXÃO COM CREDENCIAIS DE SERVIDOR (XTREAM CODES / M3U) E FALLBACK
 async function fetchPlaylistContent(srv) {
   let targetUrl = typeof srv === 'string' ? srv : (srv && srv.url ? srv.url : '');
-  const user = (typeof srv === 'object' && srv.username) ? srv.username : (localStorage.getItem('mk21_username') || 'demo');
-  const pass = (typeof srv === 'object' && srv.password) ? srv.password : (localStorage.getItem('mk21_password') || 'demo');
+  const globalUser = localStorage.getItem('mk21_username') || '';
+  const globalPass = localStorage.getItem('mk21_password') || '';
+  const user = globalUser || ((typeof srv === 'object' && srv.username) ? srv.username : 'demo');
+  const pass = globalPass || ((typeof srv === 'object' && srv.password) ? srv.password : 'demo');
 
-  // Se a URL contiver parâmetros username ou password, atualiza se o usuário configurou
+  // Se a URL contiver parâmetros username ou password, atualiza com as credenciais válidas para todos os servidores
   if (targetUrl.includes('username=') && user && user !== 'demo') {
     targetUrl = targetUrl.replace(/([?&])username=[^&]*/i, `$1username=${encodeURIComponent(user)}`);
   }
@@ -555,6 +619,7 @@ async function loadServer(forceRefresh = false) {
     // PARSE COMPLETO EM PASSE ÚNICO (Ao Vivo, Filmes e Séries 100% carregados)
     const lines = text.split(/\r?\n/);
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    const seenUrlsInPlaylist = new Set();
 
     let curName = 'Canal';
     let curGroup = 'Geral';
@@ -582,6 +647,13 @@ async function loadServer(forceRefresh = false) {
         const nMatch = line.match(/tvg-name="([^"]*)"/i);
         curTvgName = nMatch && nMatch[1] ? nMatch[1].trim() : '';
       } else if (!line.startsWith('#') && line.length > 5) {
+        // Evita canais ou streams duplicados para economizar memória da TV
+        if (seenUrlsInPlaylist.has(line)) {
+          curName = 'Canal'; curGroup = 'Geral'; curLogo = ''; curTvgId = ''; curTvgName = '';
+          continue;
+        }
+        seenUrlsInPlaylist.add(line);
+
         const cType = determineType(curName, curGroup, line);
         const itemObj = {
           name: curName,
@@ -611,6 +683,7 @@ async function loadServer(forceRefresh = false) {
         curTvgName = '';
       }
     }
+    seenUrlsInPlaylist.clear();
 
     // Salva o catálogo completo no IndexedDB
     saveStoredData(srv.id, allCatalog);
@@ -760,11 +833,11 @@ function selectCategory(catKey) {
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')))
   ) : '📁 ' + catKey;
   $('inputSearch').value = '';
-  itemsDisplayLimit = 350;
+  itemsDisplayLimit = 120;
   renderItemsList();
 }
 
-let itemsDisplayLimit = 350;
+let itemsDisplayLimit = 120; // Otimizado para Smart TV (evita estourar RAM com excesso de elementos no DOM)
 
 // 8. RENDERIZAÇÃO DA LISTA DE ITENS COM SÉRIES AGRUPADAS E ORDENAÇÃO
 function renderItemsList() {
@@ -838,9 +911,9 @@ function renderItemsList() {
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Séries (+150 de ${currentGroupedSeries.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Séries (+60 de ${currentGroupedSeries.length - limit} restantes)...`;
       moreBtn.onclick = () => {
-        itemsDisplayLimit += 150;
+        itemsDisplayLimit += 60;
         renderItemsList();
       };
       moreLi.appendChild(moreBtn);
@@ -889,9 +962,9 @@ function renderItemsList() {
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Itens (+150 de ${currentFilteredItems.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Itens (+60 de ${currentFilteredItems.length - limit} restantes)...`;
       moreBtn.onclick = () => {
-        itemsDisplayLimit += 150;
+        itemsDisplayLimit += 60;
         renderItemsList();
       };
       moreLi.appendChild(moreBtn);
@@ -1300,8 +1373,10 @@ function playStream(item) {
     hlsInstance = new Hls({
       enableWorker: true,
       lowLatencyMode: true,
+      backBufferLength: 0, // Libera instantaneamente o buffer de vídeo já assistido para não esgotar a RAM da TV
+      maxBufferSize: 6 * 1024 * 1024, // Limite de 6MB de buffer em vez do padrão de 60MB
       maxBufferLength: 4,
-      maxMaxBufferLength: 8,
+      maxMaxBufferLength: 6,
       liveSyncDurationCount: 2
     });
     hlsInstance.loadSource(item.url);
@@ -2234,6 +2309,8 @@ function saveServersToStorage() {
 
 function openServerPicker() {
   renderServerPickerList();
+  if ($('inputNewServerUser')) $('inputNewServerUser').value = localStorage.getItem('mk21_username') || '';
+  if ($('inputNewServerPass')) $('inputNewServerPass').value = localStorage.getItem('mk21_password') || '';
   $('modalServerPicker').classList.remove('hidden');
   activeZone = 'modalServerPicker';
   focusedServerRowIdx = 0;
@@ -2244,6 +2321,9 @@ function openServerPicker() {
 function renderServerPickerList() {
   const container = $('serverItemsGrid');
   container.innerHTML = '';
+
+  const globalUser = localStorage.getItem('mk21_username') || '';
+  const globalPass = localStorage.getItem('mk21_password') || '';
 
   SERVERS.forEach((srv, idx) => {
     const row = document.createElement('div');
@@ -2258,8 +2338,8 @@ function renderServerPickerList() {
 
     const urlLine = document.createElement('div');
     urlLine.className = 'server-info-url';
-    const displayUser = srv.username || localStorage.getItem('mk21_username') || 'demo';
-    const displayPass = srv.password || localStorage.getItem('mk21_password') || '';
+    const displayUser = globalUser || srv.username || 'demo';
+    const displayPass = globalPass || srv.password || '';
     urlLine.innerHTML = `<span style="color:#ffd54f;">${srv.url}</span> <span style="color:#94a3b8; font-size:13px; margin-left:8px;">(Usuário: <strong style="color:#fff;">${displayUser}</strong> • Senha: <strong style="color:#fff;">${displayPass ? '••••••••' : 'demo'}</strong>)</span>`;
 
     infoCol.appendChild(nameLine);
@@ -2283,7 +2363,7 @@ function renderServerPickerList() {
         activeZone = 'channels';
         activeItem = null;
         loadServer(false);
-      }, 400);
+      }, 350);
     };
 
     const btnEdit = document.createElement('button');
@@ -2316,18 +2396,17 @@ function editServer(index) {
   $('inputEditServerIndex').value = index;
   $('inputNewServerName').value = srv.name.replace(/^⭐\s*/, '');
   
-  // Extrai credenciais se a URL tiver parâmetros
-  let user = srv.username || '';
-  let pass = srv.password || '';
+  // O usuário e senha é compartilhado e vale para todos os servidores
+  const globalUser = localStorage.getItem('mk21_username') || '';
+  const globalPass = localStorage.getItem('mk21_password') || '';
+  let user = globalUser || srv.username || '';
+  let pass = globalPass || srv.password || '';
   try {
     const uMatch = srv.url.match(/[?&]username=([^&]+)/i);
     const pMatch = srv.url.match(/[?&]password=([^&]+)/i);
     if (uMatch && !user) user = decodeURIComponent(uMatch[1]);
     if (pMatch && !pass) pass = decodeURIComponent(pMatch[1]);
   } catch (e) {}
-
-  if (!user) user = localStorage.getItem('mk21_username') || '';
-  if (!pass) pass = localStorage.getItem('mk21_password') || '';
 
   $('inputNewServerUrl').value = srv.url;
   if ($('inputNewServerUser')) $('inputNewServerUser').value = user;
@@ -2344,8 +2423,8 @@ $('btnCancelEditServer').onclick = () => {
   $('inputEditServerIndex').value = '-1';
   $('inputNewServerName').value = '';
   $('inputNewServerUrl').value = '';
-  if ($('inputNewServerUser')) $('inputNewServerUser').value = '';
-  if ($('inputNewServerPass')) $('inputNewServerPass').value = '';
+  if ($('inputNewServerUser')) $('inputNewServerUser').value = localStorage.getItem('mk21_username') || '';
+  if ($('inputNewServerPass')) $('inputNewServerPass').value = localStorage.getItem('mk21_password') || '';
   $('btnAddServerSubmit').textContent = '💾 Salvar Alterações e Conectar';
   $('btnCancelEditServer').classList.add('hidden');
 };
@@ -2373,25 +2452,35 @@ $('btnAddServerSubmit').onclick = () => {
   if (!name) { alert('Informe o nome do servidor.'); return; }
   if (!url.startsWith('http')) { alert('URL inválida. Deve iniciar com http:// ou https://'); return; }
 
-  // Se o usuário digitou usuário e senha, salva globalmente também
+  // O usuário e senha configurados na manutenção valem para TODOS os servidores!
   if (user) {
     localStorage.setItem('mk21_username', user);
-    if (url.includes('username=')) {
-      url = url.replace(/([?&])username=[^&]*/i, `$1username=${encodeURIComponent(user)}`);
-    }
   }
   if (pass) {
     localStorage.setItem('mk21_password', pass);
-    if (url.includes('password=')) {
-      url = url.replace(/([?&])password=[^&]*/i, `$1password=${encodeURIComponent(pass)}`);
-    }
   }
+
+  // Propaga o usuário e senha para todos os servidores cadastrados
+  SERVERS.forEach(s => {
+    if (user) {
+      s.username = user;
+      if (s.url && s.url.includes('username=')) {
+        s.url = s.url.replace(/([?&])username=[^&]*/i, `$1username=${encodeURIComponent(user)}`);
+      }
+    }
+    if (pass) {
+      s.password = pass;
+      if (s.url && s.url.includes('password=')) {
+        s.url = s.url.replace(/([?&])password=[^&]*/i, `$1password=${encodeURIComponent(pass)}`);
+      }
+    }
+  });
 
   if (editIdx >= 0 && editIdx < SERVERS.length) {
     SERVERS[editIdx].name = '⭐ ' + name;
     SERVERS[editIdx].url = url;
-    SERVERS[editIdx].username = user;
-    SERVERS[editIdx].password = pass;
+    SERVERS[editIdx].username = user || localStorage.getItem('mk21_username') || '';
+    SERVERS[editIdx].password = pass || localStorage.getItem('mk21_password') || '';
     currentServerIndex = editIdx;
     saveServersToStorage();
     try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
@@ -2400,7 +2489,7 @@ $('btnAddServerSubmit').onclick = () => {
     activeZone = 'channels';
     activeItem = null;
     loadServer(true);
-    alert(`Servidor "${name}" atualizado com sucesso! Senha salva.`);
+    alert(`Servidor "${name}" atualizado! O usuário e senha foram salvos para todos os servidores.`);
     return;
   }
 
@@ -2409,8 +2498,8 @@ $('btnAddServerSubmit').onclick = () => {
     id: 'custom_' + Date.now(),
     name: '⭐ ' + name,
     url: url,
-    username: user,
-    password: pass
+    username: user || localStorage.getItem('mk21_username') || '',
+    password: pass || localStorage.getItem('mk21_password') || ''
   };
 
   SERVERS.push(newServer);
@@ -2420,14 +2509,14 @@ $('btnAddServerSubmit').onclick = () => {
 
   $('inputNewServerName').value = '';
   $('inputNewServerUrl').value = '';
-  if ($('inputNewServerUser')) $('inputNewServerUser').value = '';
-  if ($('inputNewServerPass')) $('inputNewServerPass').value = '';
+  if ($('inputNewServerUser')) $('inputNewServerUser').value = localStorage.getItem('mk21_username') || '';
+  if ($('inputNewServerPass')) $('inputNewServerPass').value = localStorage.getItem('mk21_password') || '';
   $('modalServerPicker').classList.add('hidden');
   activeZone = 'channels';
   activeItem = null;
 
   loadServer(true);
-  alert(`Servidor "${name}" adicionado e conectado com sucesso!`);
+  alert(`Servidor "${name}" adicionado! As credenciais foram aplicadas para todos os servidores.`);
 };
 
 $('btnRestoreDefaultServers').onclick = () => {
@@ -3292,9 +3381,10 @@ function bootApp() {
   if (window._mk21Booted) return;
   window._mk21Booted = true;
 
-  // Limpeza automática de playlists em cache com mais de 7 dias
+  // Verificação de integridade no cache IndexedDB na inicialização:
+  // Remove silenciosamente entradas corrompidas, duplicatas e listas expiradas (> 7 dias)
   try {
-    cleanExpiredPlaylistCache();
+    verifyAndCleanIndexedDBCache();
   } catch (e) {}
 
   try {
@@ -3330,6 +3420,19 @@ function bootApp() {
     activeZone = 'channels';
     focusActiveElement();
   }, 200);
+}
+
+// MONITORAMENTO DE MEMÓRIA DA TV (webOS Low Memory Guard)
+// Previne que o sistema feche ou reinicie o app por falta de RAM
+if (typeof document !== 'undefined') {
+  document.addEventListener('webOSLowMemory', function() {
+    console.warn('[MK21 webOS] Notificação de memória baixa recebida do sistema. Liberando buffers...');
+    if (hlsInstance) {
+      try { hlsInstance.trigger(Hls.Events.BUFFER_FLUSHING, { startOffset: 0, endOffset: Infinity }); } catch (e) {}
+    }
+    itemsDisplayLimit = 50;
+    renderItemsList();
+  }, false);
 }
 
 if (document.readyState === 'loading') {

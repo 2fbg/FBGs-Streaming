@@ -9,6 +9,6 @@
   "largeIcon": "largeIcon.png",
   "resolution": "1920x1080",
   "handlesRelaunch": true,
-  "requiredMemory": 128,
+  "requiredMemory": 256,
   "disableBackHistoryAPI": true
 }

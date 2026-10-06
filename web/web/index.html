@@ -2178,8 +2178,9 @@
             } catch (e) {}
         }
 
-        // Limpeza proativa de todas as entradas de playlists com mais de 7 dias
-        async function cleanExpiredPlaylistCache() {
+        // Verificação de integridade no cache IndexedDB na inicialização:
+        // Remove silenciosamente objetos corrompidos, entradas duplicadas ou expiradas (> 7 dias)
+        async function verifyAndCleanIndexedDBCache() {
             try {
                 const db = await openCacheDB();
                 if (!db) return 0;
@@ -2188,20 +2189,68 @@
                     const store = tx.objectStore(STORE_NAME);
                     const req = store.openCursor();
                     const now = Date.now();
+                    const seenKeys = new Set();
                     let removed = 0;
+
                     req.onsuccess = (e) => {
                         const cursor = e.target.result;
                         if (cursor) {
-                            const val = cursor.value;
-                            const ts = val ? (val.timestamp || 0) : 0;
-                            if (!ts || (now - ts) > PLAYLIST_CACHE_TTL_MS) {
-                                cursor.delete();
-                                removed++;
+                            try {
+                                const val = cursor.value;
+                                const entryKey = cursor.key || (val ? val.key : null);
+
+                                // 1. Chaves nulas ou registros duplicados
+                                if (!entryKey || seenKeys.has(entryKey)) {
+                                    cursor.delete();
+                                    removed++;
+                                    cursor.continue();
+                                    return;
+                                }
+                                seenKeys.add(entryKey);
+
+                                // 2. Objetos corrompidos
+                                if (!val || typeof val !== 'object' || (!Array.isArray(val.lives) && !Array.isArray(val.movies) && !Array.isArray(val.series))) {
+                                    cursor.delete();
+                                    removed++;
+                                    cursor.continue();
+                                    return;
+                                }
+
+                                // 3. Expiração (> 7 dias)
+                                const ts = val.timestamp || 0;
+                                if (!ts || (now - ts) > PLAYLIST_CACHE_TTL_MS) {
+                                    cursor.delete();
+                                    removed++;
+                                    cursor.continue();
+                                    return;
+                                }
+
+                                // 4. Desduplicar canais internos para economia de memória
+                                let modified = false;
+                                ['lives', 'movies', 'series'].forEach(prop => {
+                                    if (Array.isArray(val[prop]) && val[prop].length > 0) {
+                                        const originalLen = val[prop].length;
+                                        const seenUrls = new Set();
+                                        val[prop] = val[prop].filter(it => {
+                                            if (!it || !it.url) return false;
+                                            if (seenUrls.has(it.url)) return false;
+                                            seenUrls.add(it.url);
+                                            return true;
+                                        });
+                                        if (val[prop].length !== originalLen) modified = true;
+                                    }
+                                });
+
+                                if (modified) {
+                                    cursor.update(val);
+                                }
+                            } catch (err) {
+                                try { cursor.delete(); removed++; } catch(_) {}
                             }
                             cursor.continue();
                         } else {
                             if (removed > 0) {
-                                console.log(`[MK21 Cache] ${removed} playlist(s) expirada(s) (> 7 dias) foram limpas do IndexedDB.`);
+                                console.log(`[MK21 Cache] Integridade concluída: ${removed} playlist(s) corrompidas/duplicadas/expiradas removidas.`);
                             }
                             resolve(removed);
                         }
@@ -2212,6 +2261,7 @@
                 return 0;
             }
         }
+        const cleanExpiredPlaylistCache = verifyAndCleanIndexedDBCache;
 
         async function clearAllCachedPlaylists() {
             try {
@@ -2222,6 +2272,7 @@
                 console.log('[MK21 Cache] Todo o cache de playlists do IndexedDB foi limpo.');
             } catch (e) {}
         }
+        window.verifyAndCleanIndexedDBCache = verifyAndCleanIndexedDBCache;
         window.cleanExpiredPlaylistCache = cleanExpiredPlaylistCache;
         window.clearAllCachedPlaylists = clearAllCachedPlaylists;
 
