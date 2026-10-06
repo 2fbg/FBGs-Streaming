@@ -39,15 +39,39 @@
         }
     };
 
+    window.requestPwaInstall = function() {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(({ outcome }) => {
+                console.log(`[PWA] Escolha do usuário: ${outcome}`);
+                if (outcome === 'accepted') {
+                    deferredPrompt = null;
+                    window.closeSmartTvInstallModal();
+                }
+            }).catch((e) => {
+                console.warn('[PWA] Erro no prompt:', e);
+            });
+        } else {
+            // Se o navegador já está em modo standalone ou não disparou prompt
+            alert('Para instalar pelo navegador Android (Brave / Chrome):\n\n1. Toque nos 3 pontinhos (⋮) no topo ou rodapé do navegador.\n2. Selecione "Instalar aplicativo" ou "Adicionar à tela inicial".');
+        }
+    };
+
     window.triggerPwaInstall = function() {
         if (deferredPrompt) {
             deferredPrompt.prompt();
             deferredPrompt.userChoice.then(({ outcome }) => {
                 console.log(`[PWA] Escolha do usuário: ${outcome}`);
-                deferredPrompt = null;
+                if (outcome === 'accepted') {
+                    deferredPrompt = null;
+                } else {
+                    window.openSmartTvInstallModal();
+                }
+            }).catch(() => {
+                window.openSmartTvInstallModal();
             });
         } else {
-            // Em Smart TVs (LG webOS, Samsung Tizen) ou navegadores sem prompt nativo:
+            // Em Android (sem prompt capturado), TV ou Desktop: abre o modal com opções claras (Baixar APK ou PWA)
             window.openSmartTvInstallModal();
         }
     };

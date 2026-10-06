@@ -916,7 +916,7 @@
         </div>
     </div>
 
-    <!-- MODAL: INSTALAR NA SMART TV / NAVEGADOR -->
+    <!-- MODAL: INSTALAR APP (ANDROID APK, PWA OU SMART TV) -->
     <div id="smart-tv-install-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4">
         <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-3xl max-w-lg w-full p-6 text-white shadow-2xl relative">
             <button onclick="window.closeSmartTvInstallModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
@@ -924,45 +924,65 @@
             </button>
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-12 h-12 rounded-2xl bg-red-600/10 border border-red-500/30 flex items-center justify-center text-[#E50914] text-2xl">
-                    <i class="fa-solid fa-tv"></i>
+                    <i class="fa-solid fa-download"></i>
                 </div>
                 <div>
-                    <h3 class="font-black text-lg text-white">Instalar MK21 na Smart TV</h3>
-                    <p class="text-xs text-slate-400">Como adicionar aos favoritos ou fixar na tela inicial da TV</p>
+                    <h3 class="font-black text-lg text-white">Instalar Aplicativo MK21</h3>
+                    <p class="text-xs text-slate-400">Escolha a melhor opção para seu Android, Celular ou TV</p>
                 </div>
             </div>
 
             <div class="space-y-3.5 my-5 text-xs text-slate-300">
-                <!-- Seção 1: Smart TV LG webOS & Samsung Tizen -->
-                <div class="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-2">
-                    <div class="flex items-center gap-2 font-bold text-white text-sm">
-                        <i class="fa-solid fa-star text-amber-400"></i>
-                        <span>Smart TV LG (webOS) e Samsung (Tizen)</span>
+                <!-- Opção 1: Baixar App Nativo Android (APK) -->
+                <a href="/mk21.apk" download="mk21.apk" class="p-4 bg-gradient-to-r from-red-950/60 to-slate-900 border border-red-600/40 hover:border-red-500 rounded-2xl flex items-center justify-between group transition-all duration-200 shadow-lg shadow-red-950/30 block">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-[#E50914] text-white flex items-center justify-center text-lg font-black shrink-0 shadow-md">
+                            <i class="fa-brands fa-android"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white text-sm">Baixar App Android (APK Nativo)</span>
+                                <span class="text-[9px] bg-red-600/30 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-bold uppercase">Recomendado</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">Instalação direta para Celular Android, TV Box e Fire TV Stick</div>
+                        </div>
                     </div>
-                    <ol class="list-decimal list-inside space-y-1.5 text-slate-400 text-[11px] leading-relaxed">
-                        <li>No controle da TV (Magic Remote), aponte para o <strong>topo da tela</strong> do navegador.</li>
-                        <li>Clique no ícone de <strong>Estrela (⭐)</strong> ou nos <strong>3 Pontinhos (⋮)</strong> ao lado da barra de endereço.</li>
-                        <li>Selecione <strong>"Adicionar aos Favoritos"</strong> ou <strong>"Fixar na Barra de Apps"</strong>.</li>
-                        <li>O <strong>MK21 Streaming</strong> ficará salvo com 1 clique no menu da sua TV, mantendo seu login sempre ativo!</li>
-                    </ol>
-                </div>
+                    <i class="fa-solid fa-arrow-down-to-bracket text-lg text-white group-hover:translate-y-0.5 transition-transform"></i>
+                </a>
 
-                <!-- Seção 2: Android TV / TV Box / Celular -->
-                <div class="p-4 bg-slate-950/80 border border-slate-800/80 rounded-2xl space-y-2">
-                    <div class="flex items-center gap-2 font-bold text-white text-sm">
-                        <i class="fa-solid fa-mobile-screen text-[#E50914]"></i>
-                        <span>Celular, Computador ou TV Box</span>
+                <!-- Opção 2: Adicionar à Tela Inicial (PWA Web) -->
+                <div class="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2 font-bold text-white text-sm">
+                            <i class="fa-solid fa-mobile-screen text-[#E50914]"></i>
+                            <span>Atalho na Tela Inicial (Web / PWA)</span>
+                        </div>
+                        <button id="pwa-force-prompt-btn" onclick="if(window.requestPwaInstall) window.requestPwaInstall();" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white font-bold text-[11px] rounded-lg border border-slate-700 flex items-center gap-1.5">
+                            <i class="fa-solid fa-plus text-[#E50914]"></i>
+                            <span>Instalar</span>
+                        </button>
                     </div>
                     <p class="text-[11px] text-slate-400 leading-relaxed">
-                        No <strong>Chrome / Brave / Edge</strong>, clique no menu de 3 pontinhos <i class="fa-solid fa-ellipsis-vertical text-slate-300"></i> e selecione <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong>. No <strong>iPhone (Safari)</strong>, toque em Compartilhar <i class="fa-solid fa-arrow-up-from-bracket text-slate-300"></i> e <strong>"Adicionar à Tela de Início"</strong>.
+                        No <strong>Brave / Chrome / Edge</strong> do Android: toque no menu de <strong>3 pontinhos (⋮)</strong> no canto do navegador e escolha <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong>.
+                    </p>
+                </div>
+
+                <!-- Opção 3: Smart TV LG webOS & Samsung Tizen -->
+                <div class="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl space-y-1.5">
+                    <div class="flex items-center gap-2 font-bold text-slate-300 text-xs">
+                        <i class="fa-solid fa-tv text-amber-400"></i>
+                        <span>Smart TV LG (webOS) e Samsung (Tizen)</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                        No navegador da TV, clique no ícone de <strong>Estrela (⭐)</strong> ou menu <strong>⋮</strong> e selecione <strong>"Adicionar aos Favoritos"</strong> ou <strong>"Fixar na Barra de Apps"</strong>.
                     </p>
                 </div>
             </div>
 
             <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
-                <span>MK21 Web App • Instalação Rápida</span>
+                <span>MK21 Streaming • Instalação Rápida</span>
                 <button onclick="window.closeSmartTvInstallModal()" class="px-4 py-1.5 bg-[#E50914] hover:bg-red-700 text-white font-bold rounded-lg transition-colors">
-                    Entendi
+                    Fechar
                 </button>
             </div>
         </div>

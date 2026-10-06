@@ -1,0 +1,256 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    --color-bg-dark: #000000;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #9ca3af;
+    --color-red-primary: #E50914;
+    --color-red-dark: #7f0a0a;
+    --color-slate-900: #070708;
+    --color-slate-800: #111113;
+    --color-slate-700: #1e1e21;
+    --color-glass-bg: rgba(4, 4, 5, 0.95);
+    --transition-fast: 150ms ease-in-out;
+    --transition-normal: 300ms ease-in-out;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.hidden {
+    display: none !important;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: var(--color-bg-dark);
+    color: var(--color-text-primary);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.jetbrains {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Glassmorphism utility */
+.glass-card {
+    background: var(--color-glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(229, 9, 20, 0.12);
+}
+
+/* Ambient glowing effects */
+.glowing-bg {
+    background: radial-gradient(circle at 50% -20%, rgba(229, 9, 20, 0.12) 0%, rgba(0, 0, 0, 0) 65%);
+    background-color: #000000;
+}
+
+/* Custom scrollbars - optimized */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.95);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(229, 9, 20, 0.3);
+    border-radius: 4px;
+    transition: background var(--transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(229, 9, 20, 0.6);
+}
+
+/* Smooth transitions */
+button, a, input, select, textarea {
+    transition: all var(--transition-fast);
+}
+
+/* Optimize animations */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Image optimization */
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* Lazy loading placeholder */
+img[loading="lazy"] {
+    background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Loading animation */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.5);
+    outline-offset: 2px;
+}
+
+/* Responsive text utilities */
+@media (max-width: 640px) {
+    body {
+        font-size: 14px;
+    }
+}
+
+/* Print styles */
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+    
+    .glass-card {
+        border: 1px solid #ccc;
+        background: white;
+    }
+}
+
+/* ==========================================================================
+   ALTO CONTRASTE (VERMELHO/PRETO) ACCESSIBILITY OVERRIDES
+   ========================================================================== */
+body.high-contrast {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+body.high-contrast * {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    border-color: #ff0000 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+}
+
+body.high-contrast a, 
+body.high-contrast button, 
+body.high-contrast select, 
+body.high-contrast input {
+    color: #ffffff !important;
+    background-color: #000000 !important;
+    border: 2px dashed #ff0000 !important;
+    border-radius: 4px !important;
+}
+
+body.high-contrast a:hover, 
+body.high-contrast button:hover, 
+body.high-contrast select:focus, 
+body.high-contrast input:focus {
+    background-color: #ff0000 !important;
+    color: #000000 !important;
+    border-style: solid !important;
+}
+
+body.high-contrast .text-[#E50914], 
+body.high-contrast .text-red-400, 
+body.high-contrast .text-red-500, 
+body.high-contrast .text-emerald-400, 
+body.high-contrast .text-blue-400, 
+body.high-contrast .text-amber-400 {
+    color: #ff0000 !important;
+    font-weight: 900 !important;
+}
+
+body.high-contrast .bg-[#E50914], 
+body.high-contrast .bg-slate-800, 
+body.high-contrast .bg-slate-900, 
+body.high-contrast .bg-black {
+    background-color: #000000 !important;
+}
+
+body.high-contrast .type-filter-btn[data-type] {
+    border: 2px solid #ff0000 !important;
+}
+
+body.high-contrast .type-filter-btn.bg-\[\#E50914\] {
+    background: #ff0000 !important;
+    color: #000000 !important;
+}
+
+/* ==========================================
+   SMART TV 10-FOOT UI & D-PAD FOCUS ENGINE
+   ========================================== */
+:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+    outline: none !important;
+    border-color: #E50914 !important;
+    box-shadow: 0 0 0 3px #E50914, 0 0 20px rgba(229, 9, 20, 0.75) !important;
+    transform: scale(1.03);
+    transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+body.smart-tv-device {
+    cursor: default;
+    user-select: none;
+    font-size: 105%;
+}
+
+body.smart-tv-device .glass-card {
+    border-width: 2px;
+}
+
+body.smart-tv-device button,
+body.smart-tv-device select,
+body.smart-tv-device input {
+    min-height: 44px;
+}
+
+body.smart-tv-device [data-stream-url]:focus-visible {
+    transform: scale(1.05);
+    z-index: 20;
+    box-shadow: 0 0 0 4px #E50914, 0 8px 30px rgba(229, 9, 20, 0.9) !important;
+}
+
