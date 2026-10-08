@@ -8470,7 +8470,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                 ) {
                                     CircularProgressIndicator(color = GoldPremium, modifier = Modifier.size(32.dp))
                                     Spacer(modifier = Modifier.height(10.dp))
-                                    Text("Verificando repositório GitHub...", color = Color.Gray, fontSize = 11.sp)
+                                    Text("Verificando atualizações...", color = Color.Gray, fontSize = 11.sp)
                                 }
                             }
                             is com.example.viewmodel.AppViewModel.UpdateCheckState.Available -> {
@@ -8592,22 +8592,6 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Green, modifier = Modifier.size(36.dp))
                                     Text(state.message, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                     
-                                    // Button to force re-download/update directly inside the app
-                                    OutlinedButton(
-                                        onClick = {
-                                            viewModel.startInAppDownloadAndInstall(
-                                                context,
-                                                "https://github.com/2fbg/BGs-Streaming/releases/download/v1.2/MK21-v1.2.apk"
-                                            )
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.5f))
-                                    ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, tint = GoldPremium, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("REINSTALAR / ATUALIZAR DIRETO NO APP", color = GoldPremium, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                                    }
                                 }
                             }
                             is com.example.viewmodel.AppViewModel.UpdateCheckState.Error -> {
