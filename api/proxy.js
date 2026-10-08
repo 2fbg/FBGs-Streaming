@@ -192,7 +192,8 @@ module.exports = function handler(req, res) {
                     'Access-Control-Allow-Origin': origin || '*',
                     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
                     'Access-Control-Allow-Headers': '*',
-                    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Content-Encoding'
+                    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Content-Encoding',
+                    'X-Content-Type-Options': 'nosniff'
                 };
 
                 // Smart Caching Headers:
@@ -230,6 +231,16 @@ module.exports = function handler(req, res) {
 
                 // Stream binary chunks from source to client response
                 proxyRes.pipe(res);
+            });
+
+            // Encerrar a conexão upstream quando o navegador/cliente sair da página.
+            // Evita sockets e streams órfãos em funções serverless do Vercel.
+            const abortUpstream = () => {
+                if (!proxyReq.destroyed) proxyReq.destroy();
+            };
+            req.on('aborted', abortUpstream);
+            res.on('close', () => {
+                if (!res.writableEnded) abortUpstream();
             });
 
             proxyReq.on('error', (err) => {

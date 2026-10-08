@@ -27,5 +27,6 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "version": "3.8.5"
 }

@@ -283,7 +283,7 @@
 
             <!-- Dashboard Columns (Left Nav - Mid Lists - Right View/Player) -->
             <div class="flex-grow flex gap-4 overflow-hidden h-[calc(100%-6.5rem)]">
-                
+
                 <!-- COLUMN 1: Category Selector (Accordion design) -->
                 <aside id="desktop-category-sidebar" class="w-72 glass-card rounded-2xl flex flex-col overflow-hidden shrink-0 hidden md:flex transition-all duration-300 transform origin-left">
                     <div class="p-4 border-b border-slate-800">
@@ -330,7 +330,7 @@
                                 <img id="hero-banner-image" class="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform duration-700 opacity-80" src="" alt="Destaque">
                                 <div class="absolute inset-0 bg-gradient-to-t from-[#0e0f12] via-[#0e0f12]/50 to-transparent"></div>
                                 <div class="absolute inset-0 bg-gradient-to-r from-[#0e0f12]/90 via-transparent to-transparent"></div>
-                                
+
                                 <div class="absolute top-3 left-3 flex items-center gap-2">
                                     <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-black/70 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1 backdrop-blur-md">
                                         <i class="fa-solid fa-arrow-trend-up"></i> TENDÊNCIAS — HOJE
@@ -343,7 +343,7 @@
                                         <span id="hero-banner-rating" class="text-amber-400 text-xs font-extrabold flex items-center gap-1">⭐ 8.5</span>
                                     </div>
                                     <h3 id="hero-banner-title" class="text-lg sm:text-2xl font-black text-white line-clamp-1 drop-shadow-lg">Título do Destaque</h3>
-                                    
+
                                     <div class="flex items-center gap-2.5 mt-1">
                                         <button id="hero-banner-play-btn" class="px-4 py-2 bg-white hover:bg-slate-200 text-black font-black text-xs rounded-xl flex items-center gap-2 transition-all shadow-lg active:scale-95">
                                             <i class="fa-solid fa-play text-xs text-[#E50914]"></i>
@@ -408,7 +408,7 @@
                     <div id="video-player-container" class="w-full aspect-video bg-black relative group overflow-hidden border-b border-slate-800 select-none">
                         <!-- Native Video Element (WITHOUT Browser Controls for custom skinning) -->
                         <video id="iptv-video" class="w-full h-full object-contain cursor-pointer" preload="auto"></video>
-                        
+
                         <!-- D-Pad / Remote Channel Change Banner (OSD) -->
                         <div id="remote-osd-banner" class="absolute top-4 left-4 right-4 bg-black/90 border border-[#E50914]/50 backdrop-blur-md rounded-xl p-3 flex items-center justify-between text-white pointer-events-none transition-all duration-300 opacity-0 -translate-y-4 z-30 shadow-2xl">
                             <div class="flex items-center gap-3">
@@ -438,7 +438,7 @@
                                 <button id="restart-vod-btn" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition-colors">Do Início</button>
                             </div>
                         </div>
-                        
+
                         <!-- YouTube-style Big Central Play/Pause button overlay -->
                         <div id="yt-big-play-btn" class="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none transition-all duration-300 z-10 opacity-0 transform scale-75">
                             <div class="w-16 h-16 rounded-full bg-[#E50914] flex items-center justify-center text-white text-2xl shadow-lg shadow-red-950/50">
@@ -467,7 +467,7 @@
 
                         <!-- YouTube-style Custom Bottom Control Bar overlay -->
                         <div id="yt-controls" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/75 to-transparent pt-12 pb-3.5 px-4 flex flex-col gap-2.5 translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-20">
-                            
+
                             <!-- 1. Progress Bar / Scrubber -->
                             <div id="yt-progress-container" class="w-full h-1 hover:h-2 group/progress cursor-pointer flex items-center relative transition-all duration-150">
                                 <!-- Background rail -->
@@ -610,7 +610,7 @@
                             <p class="text-[11.5px] text-slate-350 max-w-md mt-2 leading-relaxed px-2 font-medium">
                                 Esta transmissão utiliza o formato <strong class="text-amber-400 font-bold">MPEG-TS (.ts)</strong> ou possui conexão insegura <strong class="text-amber-400 font-bold">HTTP (port :80)</strong>, sendo impedida de rodar pelo navegador por segurança.
                             </p>
-                            
+
                             <div class="bg-black/60 border border-slate-850 rounded-xl p-3 my-3 text-left w-full max-w-md space-y-1.5 shadow-inner">
                                 <span class="text-[10px] uppercase font-black tracking-wider text-[#E50914] block">💡 Soluções Rápidas & Garantidas:</span>
                                 <div class="flex items-start gap-1.5 text-[10.5px] text-slate-300">
@@ -622,7 +622,7 @@
                                     <span><strong>Aplicativo Nativo:</strong> Use a versão Android instalada em seu celular. O aplicativo nativo MK21 utiliza ExoPlayer de alta aceleração sem qualquer bloqueio.</span>
                                 </div>
                             </div>
-                            
+
                             <div class="flex flex-wrap justify-center gap-2">
                                 <a id="overlay-vlc-btn" href="" class="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-lg shadow-orange-950/30 decoration-none">
                                     <i class="fa-solid fa-play-circle text-base"></i> Abrir no VLC Player
@@ -647,7 +647,7 @@
                                             <span id="detail-type" class="px-2 py-0.5 bg-red-950/40 text-[10px] uppercase font-bold text-red-500 border border-red-900/20 rounded-md jetbrains tracking-wider">LIVE</span>
                                             <span id="detail-category" class="text-xs text-slate-400 font-medium truncate">Canais Gerais</span>
                                         </div>
-                                        
+
                                         <!-- Favoritar -->
                                         <button id="detail-fav-btn" onclick="onDetailFavoriteClick()" class="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-red-500/20 rounded-xl text-slate-400 hover:text-red-500 transition-all outline-none" title="Favoritar">
                                             <i id="detail-fav-icon" class="fa-regular fa-heart"></i>
@@ -707,15 +707,15 @@
                                                 Este canal de transmissão usa <strong class="text-amber-200">HTTP simples</strong>, mas o site está carregado via <strong class="text-amber-200">HTTPS seguro</strong>. Navegadores modernos (como Brave e Chrome) bloqueiam a reprodução web direta neste cenário por padrão.
                                             </div>
                                         </div>
-                                        
+
                                         <div class="pt-2 border-t border-amber-900/30 flex flex-col gap-2">
                                             <button onclick="accessViaHttp()" class="w-full px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all outline-none">
                                                 <i class="fa-solid fa-unlock"></i> Acessar por Conexão HTTP (Sem Bloqueio)
                                             </button>
-                                            
+
                                             <div class="bg-slate-950/50 p-2.5 rounded-lg text-slate-300 space-y-1.5 leading-snug">
                                                 <span class="font-bold text-amber-200 block text-[10px] uppercase tracking-wider">Como assistir sem travamento ou bloqueio:</span>
-                                                
+
                                                 <!-- Dedicated Vercel streaming warning -->
                                                 <div id="vercel-redirect-tip" class="hidden pb-2 mb-2 border-b border-slate-800/80">
                                                     <p class="text-[10px] text-slate-300">
@@ -940,7 +940,7 @@
                     <p id="epg-modal-subtitle" class="text-xs text-slate-400 truncate">Grade em tempo real via metadados do servidor</p>
                 </div>
             </div>
-            
+
             <!-- Progress / current on-air highlight card -->
             <div id="epg-modal-current-card" class="mb-4 p-3.5 bg-gradient-to-r from-red-950/40 to-slate-900/60 border border-red-500/20 rounded-2xl">
                 <div class="flex items-center justify-between text-xs mb-1.5">
@@ -1069,7 +1069,7 @@
                     <span class="text-2xl font-black text-white tracking-wider">MK<span class="text-[#E50914]">21</span></span>
                 </div>
             </div>
-            
+
             <h3 class="text-xs font-black tracking-[0.2em] text-slate-400 uppercase mb-6 flex items-center gap-2">
                 <i class="fa-solid fa-satellite-dish text-[#E50914] animate-pulse"></i>
                 <span id="loader-message">CARREGANDO CATÁLOGO</span>
@@ -1130,7 +1130,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <p id="loader-substatus" class="text-[10px] text-slate-500 mt-4 tracking-wide font-medium">Sincronizando canais e metadados...</p>
         </div>
     </div>
@@ -1141,7 +1141,7 @@
             <button onclick="window.closeAccountModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
                 <i class="fa-solid fa-xmark"></i>
             </button>
-            
+
             <h3 class="font-black text-lg text-white mb-4">Configurações</h3>
 
             <!-- Tabs: Conta / Preferências / Notificações -->
@@ -1163,7 +1163,7 @@
             <!-- Tab Content 1: CONTA -->
             <div id="tab-content-account" class="space-y-4">
                 <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">INFORMAÇÕES DA CONTA</div>
-                
+
                 <!-- Card Principal com Avatar e Status -->
                 <div class="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center gap-3.5">
                     <div id="settings-avatar-badge" class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 text-slate-950 font-black text-xl flex items-center justify-center shrink-0 shadow-md">
@@ -1217,7 +1217,7 @@
             <!-- Tab Content 2: PREFERÊNCIAS -->
             <div id="tab-content-preferences" class="space-y-4 hidden text-xs">
                 <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">INTERFACE & CATÁLOGO</div>
-                
+
                 <div class="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center justify-between">
                     <div>
                         <div class="font-bold text-white">Cache Inteligente</div>
@@ -1304,7 +1304,7 @@
                 <div class="space-y-3 pt-2">
                     <div class="flex items-center justify-between">
                         <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">EPISÓDIOS</span>
-                        
+
                         <!-- Dropdown de Temporada -->
                         <div class="relative w-44">
                             <select id="series-modal-season-select" onchange="renderSeriesModalEpisodes(this.value)" class="w-full px-3 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-100 text-xs font-bold rounded-xl appearance-none outline-none cursor-pointer pr-8 focus:ring-1 focus:ring-amber-400">
@@ -1478,8 +1478,8 @@
                 try {
                     const cleanBase = baseUrl.replace(/\/+$/, '');
                     const epgApiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=12`;
-                    
-                    const fetchUrl = (typeof getEffectiveProxyMethod === 'function') 
+
+                    const fetchUrl = (typeof getEffectiveProxyMethod === 'function')
                         ? getProxyUrl(epgApiUrl, getEffectiveProxyMethod(epgApiUrl, corsMethod))
                         : epgApiUrl;
 
@@ -1544,7 +1544,7 @@
                 this.xmltvPromise = (async () => {
                     try {
                         const corsMethod = localStorage.getItem('mk21_cors') || 'auto';
-                        const fetchUrl = (typeof getEffectiveProxyMethod === 'function') 
+                        const fetchUrl = (typeof getEffectiveProxyMethod === 'function')
                             ? getProxyUrl(targetUrl, getEffectiveProxyMethod(targetUrl, corsMethod))
                             : targetUrl;
 
@@ -1560,7 +1560,7 @@
                             const [, startStr, stopStr, channelId, inner] = match;
                             const titleMatch = inner.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
                             const descMatch = inner.match(/<desc[^>]*>([\s\S]*?)<\/desc>/i);
-                            
+
                             const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : 'Programa';
                             const desc = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
                             const start = this.parseXmltvDate(startStr);
@@ -1839,8 +1839,8 @@
 
                         const itemRow = document.createElement('div');
                         itemRow.className = `p-3 rounded-xl border transition-all flex flex-col gap-1 ${
-                            isNow 
-                                ? 'bg-red-950/30 border-red-500/40 shadow-sm' 
+                            isNow
+                                ? 'bg-red-950/30 border-red-500/40 shadow-sm'
                                 : (isPast ? 'bg-slate-900/30 border-slate-850 opacity-60' : 'bg-slate-900/50 border-slate-800 hover:border-slate-700')
                         }`;
 
@@ -1940,16 +1940,16 @@
         function addLog(msg, type = 'info') {
             const consoleEl = document.getElementById('diagnostic-log-console');
             if (!consoleEl) return;
-            
+
             // Remove placeholder if present
             if (consoleEl.innerHTML.includes('[Sem logs.') || consoleEl.innerHTML.includes('[Logs limpos.')) {
                 consoleEl.innerHTML = '';
             }
-            
+
             const timestamp = new Date().toLocaleTimeString('pt-BR', { hour12: false });
             let typeClass = 'text-slate-350';
             let icon = '⚡';
-            
+
             if (type === 'debug') {
                 typeClass = 'text-purple-400';
                 icon = '⚙️';
@@ -1963,7 +1963,7 @@
                 typeClass = 'text-emerald-400 font-semibold';
                 icon = '✔️';
             }
-            
+
             const logItem = document.createElement('div');
             logItem.className = `flex gap-1.5 border-b border-white/5 pb-0.5 leading-snug ${typeClass}`;
             logItem.innerHTML = `
@@ -1971,18 +1971,18 @@
                 <span class="select-none shrink-0 font-bold">${icon}</span>
                 <span class="break-all font-mono">${msg}</span>
             `;
-            
+
             consoleEl.appendChild(logItem);
-            
+
             // Keep maximum of 150 items to prevent DOM bloat
             while (consoleEl.children.length > 150) {
                 consoleEl.removeChild(consoleEl.firstChild);
             }
-            
+
             // Auto scroll to bottom
             consoleEl.scrollTop = consoleEl.scrollHeight;
         }
-        
+
         function clearDiagnosticLogs() {
             const consoleEl = document.getElementById('diagnostic-log-console');
             if (consoleEl) {
@@ -2113,23 +2113,23 @@
         const corsSelector = document.getElementById('cors-selector');
         const activeServerDisplay = document.getElementById('active-server-display');
         const activeUserDisplay = document.getElementById('active-user-display');
-        
+
         const loader = document.getElementById('app-loader');
         const loaderMessage = document.getElementById('loader-message');
         const loaderProgress = document.getElementById('loader-progress');
-        
+
         const categoryList = document.getElementById('category-list');
         const categoryCount = document.getElementById('category-count');
         const searchInput = document.getElementById('search-input');
         const mediaGrid = document.getElementById('media-grid');
         const emptyState = document.getElementById('empty-state');
-        
+
         const mobileCategoryTrigger = document.getElementById('mobile-category-trigger');
         const mobileCategoryLabel = document.getElementById('mobile-category-label');
         const mobileCategoryModal = document.getElementById('mobile-category-modal');
         const mobileCategoryList = document.getElementById('mobile-category-list');
         const closeCategoryModal = document.getElementById('close-category-modal');
-        
+
         const videoElement = document.getElementById('iptv-video');
         const playerBanner = document.getElementById('player-banner');
         const detailPane = document.getElementById('detail-pane');
@@ -2159,10 +2159,10 @@
             populateServers();
             loadCachedCredentials();
             setupEventListeners();
-            
+
             // Initialize YouTube-style Premium Player skin
             initYouTubePlayer();
-            
+
             // Auto run parallel proxy latency check in background
             runProxyLatencyCheck();
 
@@ -2194,14 +2194,14 @@
         function populateHeaderServers() {
             if (!activeServerDisplay) return;
             activeServerDisplay.innerHTML = '';
-            
+
             let currentBaseUrl = localStorage.getItem('mk21_baseUrl') || '';
             if (currentBaseUrl.startsWith('https://')) {
                 currentBaseUrl = 'http://' + currentBaseUrl.substring(8);
             } else if (currentBaseUrl && !currentBaseUrl.startsWith('http://')) {
                 currentBaseUrl = 'http://' + currentBaseUrl;
             }
-            
+
             let found = false;
             PREDEFINED_SERVERS.forEach(srv => {
                 let srvBaseUrl = srv.baseUrl;
@@ -2213,14 +2213,14 @@
                 const opt = document.createElement('option');
                 opt.value = srv.baseUrl;
                 opt.textContent = srv.name;
-                
+
                 if (srvBaseUrl.replace(/\/$/, "") === currentBaseUrl.replace(/\/$/, "")) {
                     opt.selected = true;
                     found = true;
                 }
                 activeServerDisplay.appendChild(opt);
             });
-            
+
             if (!found && currentBaseUrl) {
                 const opt = document.createElement('option');
                 opt.value = currentBaseUrl;
@@ -2350,7 +2350,7 @@
                     const card = document.createElement('button');
                     card.type = 'button';
                     card.className = 'flex items-center gap-2.5 p-2.5 bg-black/60 hover:bg-slate-900 border border-slate-800 hover:border-[#E50914] rounded-xl transition-all duration-200 text-left group';
-                    
+
                     const bgClass = avatarBgs[idx % avatarBgs.length];
                     const initial = (prof.username || 'U').charAt(0).toUpperCase();
 
@@ -2554,7 +2554,7 @@
                     addLog("[Player] Ignored error event during stream reset/teardown.", "debug");
                     return;
                 }
-                
+
                 // If there's no src, or the src is just the page origin itself (from removing src attribute), it's a false error during reset
                 if (!videoElement.src || videoElement.src === window.location.href || videoElement.src === 'about:blank' || videoElement.src === '') {
                     console.log("[PLAYER] Ignored false error caused by empty source/reset.");
@@ -2576,7 +2576,7 @@
                 }
 
                 // If using a library player like hls.js or mpegts.js, let them handle their own errors.
-                // The native video element might throw misleading errors (like CODE 4: Format not supported) 
+                // The native video element might throw misleading errors (like CODE 4: Format not supported)
                 // because it doesn't natively speak ts/m3u8, even though the JS demuxer/library is handling it perfectly.
                 if (mpegtsPlayer !== null || (hlsPlayer && hlsPlayer.attachedElement !== null)) {
                     console.warn("[PLAYER] HTML5 video tag fired native error but library player (mpegts/hls) is actively demuxing. Ignoring native error.");
@@ -2594,7 +2594,7 @@
                 activeServerDisplay.addEventListener('change', () => {
                     const selectedVal = activeServerDisplay.value;
                     const selectedText = activeServerDisplay.options[activeServerDisplay.selectedIndex].text;
-                    
+
                     if (serverSelector) {
                         let optExists = false;
                         for (let i = 0; i < serverSelector.options.length; i++) {
@@ -2635,11 +2635,11 @@
 
         function handlePlaybackError() {
             if (!currentStreamUrl) return;
-            
+
             if (currentProxyRotationIndex < PROXY_ROTATION_LIST.length - 1) {
                 currentProxyRotationIndex++;
                 const nextProxyMethod = PROXY_ROTATION_LIST[currentProxyRotationIndex];
-                
+
                 let proxyLabel = 'Conexão Direta (Sem Proxy)';
                 if (nextProxyMethod === 'corsproxy') proxyLabel = 'Servidor de Transmissão 1 (CorsProxy)';
                 if (nextProxyMethod === 'vercel') proxyLabel = 'Servidor de Transmissão Integrado (Vercel)';
@@ -2649,7 +2649,7 @@
                 console.warn(`[PLAYER-FALLBACK] Playback failed. Restructuring connection under: ${nextProxyMethod} (${currentProxyRotationIndex}/${PROXY_ROTATION_LIST.length - 1})`);
                 addLog(`[Player Fallback] Falha na reprodução corrente. Rotacionando conexão para: ${nextProxyMethod.toUpperCase()} (${proxyLabel})`, 'warn');
                 showNotification(`Instabilidade sob IP direto. Reconectando canais em modo seguro pelo ${proxyLabel}... 🔄`, 'info');
-                
+
                 const itemToPlay = currentActiveEpisodeItem || currentActiveItem;
                 if (itemToPlay) {
                     playStream(itemToPlay, true, nextProxyMethod);
@@ -2682,13 +2682,13 @@
             const loaderProgEl = document.getElementById('loader-progress');
             if (loaderMsgEl) loaderMsgEl.textContent = message || "CARREGANDO CATÁLOGO";
             if (loaderProgEl) loaderProgEl.textContent = "0%";
-            
+
             // Reset individual category bars
             updateCategoryLoaderProgress('live', 0);
             updateCategoryLoaderProgress('series', 0);
             updateCategoryLoaderProgress('movies', 0);
             updateCategoryLoaderProgress('total', 0);
-            
+
             if (loader) loader.classList.remove('hidden');
         }
 
@@ -2711,7 +2711,7 @@
         function updateLoaderProgress(pct, message = null) {
             const p = Math.min(100, Math.max(0, Math.round(pct)));
             updateCategoryLoaderProgress('total', p);
-            
+
             // Estima o carregamento progressivo das 3 categorias
             if (p <= 40) {
                 updateCategoryLoaderProgress('live', Math.round((p / 40) * 100));
@@ -2938,8 +2938,8 @@
             } else if (!baseUrl.startsWith('http://')) {
                 baseUrl = 'http://' + baseUrl;
             }
-            const profileName = (serverSelector.selectedIndex >= 0 && serverSelector.options[serverSelector.selectedIndex]) 
-                ? serverSelector.options[serverSelector.selectedIndex].text 
+            const profileName = (serverSelector.selectedIndex >= 0 && serverSelector.options[serverSelector.selectedIndex])
+                ? serverSelector.options[serverSelector.selectedIndex].text
                 : 'Servidor IPTV';
             const user = (userInput && userInput.value.trim()) || localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
             const pass = (passInput && passInput.value.trim()) || localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || '';
@@ -3130,10 +3130,10 @@
                 saveCachedPlaylist(cacheKey, segments);
 
                 updateLoaderProgress(95, 'Indexando canais ao vivo...');
-                
+
                 // Initialize with LIVE streams first for fast initial rendering
                 playlistItems = segments.lives;
-                
+
                 // If there are no live channels on the IPTV but we have movies/series, load them
                 if (playlistItems.length === 0) {
                     playlistItems = [...segments.movies, ...segments.series];
@@ -3192,7 +3192,7 @@
                     syncIndicator.classList.remove('flex');
                 }
                 playlistItems = [];
-                
+
                 playerScreen.classList.add('scale-95', 'opacity-0');
                 setTimeout(() => {
                     playerScreen.classList.add('hidden');
@@ -3208,7 +3208,7 @@
         function showNotification(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl border font-bold text-xs shadow-xl flex items-center gap-2.5 transition-all duration-350 transform translate-y-12 opacity-0`;
-            
+
             if (type === 'success') {
                 toast.className += ' bg-emerald-950/90 border-emerald-500/30 text-emerald-400';
                 toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> ${message}`;
@@ -3219,14 +3219,14 @@
                 toast.className += ' bg-slate-900/95 border-slate-800 text-slate-300';
                 toast.innerHTML = `<i class="fa-solid fa-circle-info text-red-500"></i> ${message}`;
             }
-            
+
             document.body.appendChild(toast);
-            
+
             // Trigger animation
             setTimeout(() => {
                 toast.classList.remove('translate-y-12', 'opacity-0');
             }, 50);
-            
+
             // Auto hide
             setTimeout(() => {
                 toast.classList.add('translate-y-12', 'opacity-0');
@@ -3249,7 +3249,7 @@
             let list = getContinueWatching();
             // Evita duplicados (checa por URL ou nome de mídia)
             list = list.filter(i => i.url !== item.url && i.name !== item.name);
-            
+
             list.unshift({
                 name: item.name,
                 logo: item.logo,
@@ -3258,12 +3258,12 @@
                 type: item.type,
                 timestamp: Date.now()
             });
-            
+
             // Limita a 12 items para design Netflix limpo
             if (list.length > 12) {
                 list = list.slice(0, 12);
             }
-            
+
             localStorage.setItem('mk21_continue', JSON.stringify(list));
             renderContinueWatching();
         }
@@ -3280,24 +3280,24 @@
             const container = document.getElementById('continue-watching-section');
             const listGrid = document.getElementById('continue-watching-list');
             if (!container || !listGrid) return;
-            
+
             const list = getContinueWatching();
             if (list.length === 0) {
                 container.classList.add('hidden');
                 return;
             }
-            
+
             container.classList.remove('hidden');
             listGrid.innerHTML = '';
-            
+
             list.forEach(item => {
                 const card = document.createElement('div');
                 card.className = "flex-shrink-0 w-36 bg-slate-900/60 p-2.5 border border-slate-850 hover:border-red-600/30 rounded-xl cursor-pointer hover:bg-slate-850 transition-all flex flex-col relative group snap-start";
-                
-                const logoHtml = item.logo 
+
+                const logoHtml = item.logo
                     ? `<img class="w-full h-16 rounded-lg object-contain bg-slate-950 p-1 border border-slate-800 group-hover:scale-105 transition-transform duration-300" src="${item.logo}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%222%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="">`
                     : `<div class="w-full h-16 rounded-lg bg-red-950/20 text-red-500 font-extrabold text-sm flex items-center justify-center border border-red-500/10 group-hover:scale-105 transition-transform duration-300">${item.name.charAt(0).toUpperCase()}</div>`;
-                
+
                 let sBadge = '';
                 if (item.type === 'LIVE') sBadge = '<span class="absolute top-3 left-3 z-10 px-1.5 py-0.5 bg-[#E50914] text-white text-[8px] font-black uppercase rounded shadow-md tracking-wider">AO VIVO</span>';
                 else if (item.type === 'MOVIE') sBadge = '<span class="absolute top-3 left-3 z-10 px-1.5 py-0.5 bg-black/80 text-slate-305 border border-slate-800 text-[8px] font-black uppercase rounded shadow-md tracking-wider">FILME</span>';
@@ -3321,7 +3321,7 @@
                         </div>
                     </div>
                 `;
-                
+
                 card.addEventListener('click', (e) => {
                     const deleteBtn = e.target.closest('.remove-history-btn');
                     if (deleteBtn) {
@@ -3331,7 +3331,7 @@
                     }
                     playStream(item);
                 });
-                
+
                 listGrid.appendChild(card);
             });
         }
@@ -3357,7 +3357,7 @@
             if (!item) return;
             let list = getFavorites();
             const index = list.findIndex(f => f.url === item.url && f.name === item.name);
-            
+
             if (index === -1) {
                 list.push({
                     name: item.name,
@@ -3371,13 +3371,13 @@
                 list.splice(index, 1);
                 showNotification('Removido dos Favoritos', 'success');
             }
-            
+
             localStorage.setItem('mk21_favorites', JSON.stringify(list));
             updateFavoriteButtonUI(item);
-            
+
             // Re-render categories layout and counters if needed
             renderCategories();
-            
+
             // If active category is FAVORITES, update the grid lists
             if (activeCategory === 'FAVORITES') {
                 renderMediaItems();
@@ -3388,7 +3388,7 @@
             const favBtn = document.getElementById('detail-fav-btn');
             const favIcon = document.getElementById('detail-fav-icon');
             if (!favBtn || !favIcon) return;
-            
+
             if (item && isFavorite(item)) {
                 favIcon.className = "fa-solid fa-heart text-[#E50914] scale-110 transition-transform duration-200";
                 favBtn.title = "Remover dos Favoritos";
@@ -3419,14 +3419,14 @@
         // ==========================================
         function groupSeriesItems(items) {
             const shows = {}; // Title -> Show details
-            
+
             items.forEach(item => {
                 const name = item.name;
                 let showTitle = name;
                 let seasonNum = 1;
                 let episodeNum = 1;
                 let epTitle = "";
-                
+
                 // Detailed parsing of name to match Season and Episode including Portuguese notations
                 let match = name.match(/^(.*?)\s+S(\d+)\s*E(\d+)(.*)$/i);
                 if (match) {
@@ -3491,13 +3491,13 @@
                         }
                     }
                 }
-                
+
                 // Limpeza de hífens, colchetes, pipes no título da série
                 showTitle = showTitle.replace(/\s*[-–—:|\[\]\(\)]\s*$/, "").trim();
                 if (!showTitle) {
                     showTitle = name;
                 }
-                
+
                 if (!shows[showTitle]) {
                     shows[showTitle] = {
                         title: showTitle,
@@ -3507,17 +3507,17 @@
                         episodes: []
                     };
                 }
-                
+
                 if (!shows[showTitle].logo && item.logo) {
                     shows[showTitle].logo = item.logo;
                 }
-                
+
                 // Formata o título do episódio de forma bonita
                 let cleanEpTitle = epTitle.replace(/^\s*[-–—:|]\s*/, "").trim();
                 if (!cleanEpTitle) {
                     cleanEpTitle = `Episódio ${episodeNum}`;
                 }
-                
+
                 shows[showTitle].episodes.push({
                     originalItem: item,
                     name: item.name,
@@ -3528,7 +3528,7 @@
                     logo: item.logo || shows[showTitle].logo
                 });
             });
-            
+
             // Ordenação interna de temporadas e episódios
             Object.values(shows).forEach(show => {
                 show.episodes.sort((a, b) => {
@@ -3536,58 +3536,58 @@
                     return a.episode - b.episode;
                 });
             });
-            
+
             return Object.values(shows);
         }
 
         function selectShow(show) {
             currentActiveShow = show;
             currentActiveEpisodeItem = null;
-            
+
             // Show details panel
             detailEmpty.classList.add('hidden');
             detailPane.classList.remove('hidden');
-            
+
             detailName.textContent = show.title;
             detailCategory.textContent = show.category;
             detailType.textContent = "Série";
-            
+
             if (show.logo) {
                 detailLogo.src = show.logo;
                 detailLogo.classList.remove('hidden');
             } else {
                 detailLogo.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="%23E50914" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="m9 m12 l3 l-3 l-3"/></svg>';
             }
-            
+
             // Sync Favorites icon
             if (show.episodes && show.episodes.length > 0) {
                 updateFavoriteButtonUI(show.episodes[0].originalItem);
             }
-            
+
             // Build Seasons selector
             const seasonSelector = document.getElementById('season-selector');
             const episodesContainer = document.getElementById('episodes-container');
             seasonSelector.innerHTML = '';
-            
+
             // Get unique sorted list of seasons
             const seasonsSet = new Set(show.episodes.map(ev => ev.season));
             const seasons = Array.from(seasonsSet).sort((a, b) => a - b);
-            
+
             seasons.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s;
                 opt.textContent = `Temporada ${s}`;
                 seasonSelector.appendChild(opt);
             });
-            
+
             episodesContainer.classList.remove('hidden');
-            
+
             // Trigger rendering of Episode list for first season
             if (seasons.length > 0) {
                 seasonSelector.value = seasons[0];
                 renderEpisodesForSeason(seasons[0]);
             }
-            
+
             // Se possuir episódios, bota o primeiro no player para ficar pronto
             if (show.episodes && show.episodes.length > 0) {
                 const epObj = show.episodes[0];
@@ -3602,7 +3602,7 @@
                     if (externalLauncher) externalLauncher.href = getExternalPlayerUrl(epObj.originalItem.url);
                 }
             }
-            
+
             // On mobile, slide open player panel
             const playerCol = document.getElementById('player-column');
             if (playerCol && window.innerWidth < 1024) {
@@ -3614,21 +3614,21 @@
         function renderEpisodesForSeason(seasonNum) {
             const listEl = document.getElementById('episodes-list');
             if (!listEl || !currentActiveShow) return;
-            
+
             listEl.innerHTML = '';
-            
+
             const seasonEpisodes = currentActiveShow.episodes.filter(ep => ep.season === parseInt(seasonNum, 10));
-            
+
             seasonEpisodes.forEach(ep => {
                 const isSelected = currentActiveEpisodeItem && currentActiveEpisodeItem.url === ep.url;
-                
+
                 const epRow = document.createElement('div');
                 epRow.className = `p-2.5 rounded-xl cursor-pointer border flex items-center gap-3 transition-all ${
-                    isSelected 
-                        ? 'bg-red-950/25 border-red-500/40 text-red-400 font-extrabold shadow shadow-red-950/40' 
+                    isSelected
+                        ? 'bg-red-950/25 border-red-500/40 text-red-400 font-extrabold shadow shadow-red-950/40'
                         : 'bg-slate-950/40 border-slate-900/60 hover:bg-slate-800/80 hover:border-slate-700 text-slate-350'
                 }`;
-                
+
                 epRow.innerHTML = `
                     <div class="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-mono text-[10px] font-bold text-slate-400 shrink-0">
                         ${ep.episode < 10 ? '0' + ep.episode : ep.episode}
@@ -3641,11 +3641,11 @@
                         <i class="fa-solid ${isSelected ? 'fa-volume-high text-red-500 animate-pulse' : 'fa-circle-play text-slate-500 hover:text-red-500'} text-xs"></i>
                     </div>
                 `;
-                
+
                 epRow.addEventListener('click', () => {
                     playStream(ep.originalItem, true); // true is preserveLayout context
                 });
-                
+
                 listEl.appendChild(epRow);
             });
         }
@@ -3749,7 +3749,7 @@
                         } else {
                             const isStreamingTransport = urlUpper.includes('.M3U8') || urlUpper.includes('.TS') || urlUpper.includes('OUTPUT=MPEGTS');
 
-                            const isLiveCat = 
+                            const isLiveCat =
                                 categoryUpper.startsWith("CANAIS") ||
                                 categoryUpper.startsWith("CANAL") ||
                                 categoryUpper.startsWith("TV") ||
@@ -3774,7 +3774,7 @@
                                 categoryUpper.includes("CANAIS:") ||
                                 categoryUpper.includes("24H |");
 
-                            const isSeriesCat = 
+                            const isSeriesCat =
                                 categoryUpper.startsWith("SERIES") ||
                                 categoryUpper.startsWith("SÉRIES") ||
                                 categoryUpper.startsWith("SERIE") ||
@@ -3789,7 +3789,7 @@
                                 categoryUpper.includes("SERIES |") ||
                                 categoryUpper.includes("SÉRIES |");
 
-                            const isMovieCat = 
+                            const isMovieCat =
                                 categoryUpper.startsWith("FILMES") ||
                                 categoryUpper.startsWith("FILME") ||
                                 categoryUpper.startsWith("MOVIES") ||
@@ -3802,7 +3802,7 @@
                                 categoryUpper.includes("VOD |") ||
                                 categoryUpper.includes("CINEMA |");
 
-                            const hasSeriesPattern = 
+                            const hasSeriesPattern =
                                 /(?:\b(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\b\d{1,3}x\d{1,4}\b|\bs\d{1,3}e\d{1,4}\b|\bt\d{1,3}e\d{1,4}\b|\btemp\.\s*\d+\s*ep\.\s*\d+\b|\btemporada\s*\d+\b)/i.test(nameUpper) ||
                                 nameUpper.includes("TEMPORADA") || nameUpper.includes("TEMP.") ||
                                 nameUpper.includes("CAPITULO") || nameUpper.includes("EPISODIO");
@@ -3908,7 +3908,7 @@
         // Category Menu Creator (High Performance O(N) - Ultra-lightweight for Smart TVs)
         function renderCategories() {
             const filteredItems = playlistItems.filter(item => item.type === activeType);
-            
+
             // Single pass O(N) frequency counter map to avoid N^2 array filters
             const categoryCounts = Object.create(null);
             for (let i = 0; i < filteredItems.length; i++) {
@@ -3925,7 +3925,7 @@
                     <span class="flex items-center gap-1.5"><i class="fa-solid fa-list-ul text-[#E50914]"></i> Todas as Categorias</span>
                     <span class="text-[10px] bg-slate-950 px-1.5 py-0.5 rounded-md font-mono ${activeCategory === 'ALL' ? 'text-red-400 border border-red-900/30' : 'text-slate-500 border border-slate-900'}">${filteredItems.length}</span>
                 </button>
-                
+
                 <button data-cat="FAVORITES" class="cat-select-btn w-full text-left px-3 py-2.5 text-xs font-semibold rounded-xl flex items-center justify-between transition-all duration-200 ${activeCategory === 'FAVORITES' ? 'bg-gradient-to-r from-red-950/25 to-slate-900/10 text-red-400 border-l-[3px] border-l-[#E50914] pl-2 font-black shadow-md shadow-black/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/40' }">
                     <span class="flex items-center gap-1.5 text-red-500"><i class="fa-solid fa-heart text-[#E50914]"></i> Meus Favoritos</span>
                     <span id="fav-count-badge" class="text-[10px] bg-slate-950 px-1.5 py-0.5 rounded-md font-mono ${activeCategory === 'FAVORITES' ? 'text-red-400 border border-red-900/30' : 'text-slate-500 border border-slate-900'}">${getFavorites().filter(i => i.type === activeType).length}</span>
@@ -3947,7 +3947,7 @@
 
             // Apply Desktop View
             categoryList.innerHTML = html;
-            
+
             // Apply Mobile View and map triggers
             mobileCategoryList.innerHTML = html;
 
@@ -3960,7 +3960,7 @@
 
                     // Close mobile modal if open
                     mobileCategoryModal.classList.add('hidden');
-                    
+
                     renderCategories();
                     renderMediaItems();
                 });
@@ -3970,7 +3970,7 @@
         // Media Item lists Populator
         function renderMediaItems() {
             const query = searchInput.value.toLowerCase().trim();
-            
+
             // Match Category and Type filtering
             let items = playlistItems.filter(item => item.type === activeType);
             if (activeCategory === 'FAVORITES') {
@@ -3996,25 +3996,25 @@
             // Handle SERIES ( Netflix TV Show Grouping )
             if (activeType === 'SERIES') {
                 const groupedShows = groupSeriesItems(items);
-                
+
                 if (groupedShows.length === 0) {
                     emptyState.classList.remove('hidden');
                     return;
                 } else {
                     emptyState.classList.add('hidden');
                 }
-                
+
                 groupedShows.slice(0, itemsLimit).forEach(show => {
                     const colCard = document.createElement('div');
                     colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/30 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/10";
-                    
+
                     const countShow = show.episodes.length;
                     const seasonsSet = new Set(show.episodes.map(e => e.season));
                     const countSeas = seasonsSet.size;
-                    
+
                     const epText = countShow === 1 ? '1 ep' : `${countShow} eps`;
                     const seText = countSeas === 1 ? '1 temp' : `${countSeas} temps`;
-                    
+
                     const posterUrl = show.logo || '';
                     const imageHtml = posterUrl
                         ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-500" src="${posterUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${show.title}">`
@@ -4022,7 +4022,7 @@
                              <i class="fa-solid fa-tv text-3xl mb-2 opacity-40"></i>
                              <span class="font-extrabold text-[10px] text-center uppercase tracking-wider line-clamp-2">${show.title}</span>
                           </div>`;
-                        
+
                     colCard.innerHTML = `
                         <div class="relative overflow-hidden w-full aspect-[2/3] bg-slate-950/80 shrink-0">
                             ${imageHtml}
@@ -4038,14 +4038,14 @@
                             </div>
                         </div>
                     `;
-                    
+
                     colCard.addEventListener('click', () => {
                         selectShow(show);
                     });
-                    
+
                     mediaGrid.appendChild(colCard);
                 });
-                
+
                 if (groupedShows.length > itemsLimit) {
                     const loadMoreBtn = document.createElement('button');
                     loadMoreBtn.className = "col-span-full py-3.5 px-6 my-4 bg-gradient-to-r from-red-950/25 to-slate-900 border border-slate-800 hover:border-[#E50914]/40 hover:bg-[#E50914]/10 rounded-2xl text-slate-250 text-xs font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 outline-none shadow-md shadow-black/40";
@@ -4070,10 +4070,10 @@
             // Display list items cleanly (Live Channels and Movies)
             items.slice(0, itemsLimit).forEach(item => { // Slice rendering list to itemsLimit items to keep UI responsive
                 const colCard = document.createElement('div');
-                
+
                 if (activeType === 'MOVIE') {
                     colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/30 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/10";
-                    
+
                     const posterUrl = item.logo || '';
                     const imageHtml = posterUrl
                         ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-500" src="${posterUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${item.name}">`
@@ -4100,8 +4100,8 @@
                 } else {
                     // LIVE channels - Horizontal List with elegant badge
                     colCard.className = "group p-3 bg-slate-900/60 hover:bg-slate-850/50 border border-slate-850 hover:border-red-500/20 rounded-xl cursor-pointer flex gap-3.5 items-center transition-all duration-300 transform hover:scale-[1.015] hover:shadow";
-                    
-                    const logoHtml = item.logo 
+
+                    const logoHtml = item.logo
                         ? `<img class="w-12 h-12 rounded-xl object-contain bg-slate-950 p-1 border border-slate-800 shadow" src="${item.logo}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${item.name}">`
                         : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-red-950/30 to-slate-950 text-red-500 flex items-center justify-center font-black text-lg border border-red-500/10 shadow">${item.name.charAt(0).toUpperCase()}</div>`;
 
@@ -4131,7 +4131,7 @@
 
                 mediaGrid.appendChild(colCard);
             });
-            
+
             // Helpful loading more indicator
             if (items.length > itemsLimit) {
                 const loadMoreBtn = document.createElement('button');
@@ -4261,7 +4261,7 @@
         async function runProxyLatencyCheck() {
             if (isTestingLatency) return;
             isTestingLatency = true;
-            
+
             const targetUrl = 'https://www.cloudflare.com/cdn-cgi/trace';
             const methodsToTest = [
                 { name: 'vercel', label: 'Proxy Vercel Dedicado', getUrl: (url) => `${window.location.origin}/api/proxy?url=${encodeURIComponent(url)}` },
@@ -4286,16 +4286,16 @@
                 try {
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout for latency testing
-                    
+
                     const fetchUrl = m.getUrl(targetUrl);
-                    const response = await fetch(fetchUrl, { 
+                    const response = await fetch(fetchUrl, {
                         method: 'GET',
                         signal: controller.signal,
                         cache: 'no-store'
                     });
-                    
+
                     clearTimeout(timeoutId);
-                    
+
                     if (response.ok) {
                         const duration = Math.round(performance.now() - startTime);
                         return { name: m.name, label: m.label, latency: duration, ok: true };
@@ -4308,15 +4308,15 @@
 
             const resolvedResults = await Promise.all(pingPromises);
             const successfulResults = resolvedResults.filter(r => r.ok && r.latency < 9999);
-            
+
             if (successfulResults.length > 0) {
                 successfulResults.sort((a, b) => a.latency - b.latency);
                 fastestCalculatedProxy = successfulResults[0].name;
-                
+
                 const fastest = successfulResults[0];
                 console.log(`[Proxy Checker] Fastest proxy: ${fastest.label} (${fastest.latency}ms)`);
                 addLog(`[Proxy Checker] Fastest proxy: ${fastest.label} com latência de ${fastest.latency}ms.`, "success");
-                
+
                 successfulResults.forEach(r => {
                     proxyLatencies[r.name] = r.latency;
                     addLog(`[Proxy Checker] Resultado do teste para ${r.label}: ${r.latency}ms`, "debug");
@@ -4353,7 +4353,7 @@
             if (!streamUrl) return "";
             const ua = navigator.userAgent.toLowerCase();
             const cleanedUrl = streamUrl.replace(':80/', '/').replace(':443/', '/');
-            
+
             if (ua.includes('android')) {
                 let scheme = 'http';
                 let hostAndPath = cleanedUrl;
@@ -4381,7 +4381,7 @@
             if (!streamUrl) return "";
             const ua = navigator.userAgent.toLowerCase();
             const cleanedUrl = streamUrl.replace(':80/', '/').replace(':443/', '/');
-            
+
             if (ua.includes('android')) {
                 let scheme = 'http';
                 let hostAndPath = cleanedUrl;
@@ -4483,12 +4483,12 @@
         function playStream(item, preserveLayout = false, customProxyMethod = null) {
             currentStreamUrl = item.url;
             upgradedHttpsAttempted = false;
-            
+
             if (customProxyMethod === null) {
                 currentProxyRotationIndex = 0;
                 hlsAttemptFailed = false;
             }
-            
+
             // Show player column on mobile if hidden
             const playerCol = document.getElementById('player-column');
             if (playerCol && window.innerWidth < 1024) {
@@ -4513,7 +4513,7 @@
                 vlcLauncher.href = getVlcUrl(item.url);
                 if (externalLauncher) externalLauncher.href = getExternalPlayerUrl(item.url);
                 updateFavoriteButtonUI(item);
-                
+
                 // Keep episode selection glowing in list
                 const seasonSelector = document.getElementById('season-selector');
                 if (seasonSelector) {
@@ -4524,7 +4524,7 @@
                 currentActiveItem = item;
                 currentActiveEpisodeItem = null;
                 currentActiveShow = null;
-                
+
                 if (episodesContainer) {
                     episodesContainer.classList.add('hidden');
                 }
@@ -4532,7 +4532,7 @@
                 detailName.textContent = item.name;
                 detailCategory.textContent = item.category;
                 detailType.textContent = item.type === 'LIVE' ? 'Ao Vivo' : (item.type === 'MOVIE' ? 'Filme' : 'Série');
-                
+
                 // Dynamic EPG show/hide logic for active stream info panel
                 if (item.type === 'LIVE') {
                     if (detailEpgContainer && detailEpgProgram) {
@@ -4548,7 +4548,7 @@
                         detailEpgContainer.classList.add('hidden');
                     }
                 }
-                
+
                 if (item.logo) {
                     detailLogo.src = item.logo;
                     detailLogo.classList.remove('hidden');
@@ -4607,10 +4607,10 @@
             }
 
             let streamToPlayUrl = item.url;
-            
+
             const isMpegTs = (streamToPlayUrl.includes('/ts') || streamToPlayUrl.includes('.ts') || streamToPlayUrl.includes('output=mpegts') || streamToPlayUrl.includes('type=mpegts')) && !streamToPlayUrl.toLowerCase().includes('.m3u8');
             const isStaticVideo = streamToPlayUrl.includes('.mp4') || streamToPlayUrl.includes('.mkv') || streamToPlayUrl.includes('.webm') || streamToPlayUrl.includes('.avi');
-            
+
             const playable = getPlayableStreamUrl(streamToPlayUrl, effectiveSelectorValue);
             const proxiedUrl = playable.url;
 
@@ -4727,13 +4727,13 @@
             } catch (e) {
                 console.warn(e);
             }
-            
+
             // Restore visual layout helper placeholder banner
             const pb = document.getElementById('player-banner');
             if (pb) {
                 pb.classList.remove('hidden', 'opacity-0');
             }
-            
+
             // Tiny delay to let any asynchronously triggered videoElement error events clear themselves
             setTimeout(() => {
                 isStreamStopping = false;
@@ -4887,7 +4887,7 @@
                 if (!bigPlayBtn) return;
                 bigPlayBtn.classList.remove('opacity-0', 'scale-75');
                 bigPlayBtn.classList.add('opacity-100', 'scale-100');
-                
+
                 if (video.paused) {
                     centralIcon.className = "fa-solid fa-pause text-2xl";
                 } else {
@@ -5069,7 +5069,7 @@
                 let percentage = (e.clientX - rect.left) / rect.width;
                 if (percentage < 0) percentage = 0;
                 if (percentage > 1) percentage = 1;
-                
+
                 if (progressFill) progressFill.style.width = (percentage * 100) + '%';
                 video.currentTime = percentage * video.duration;
             }
@@ -5115,26 +5115,26 @@
             function toggleTheaterMode() {
                 const playerCol = document.getElementById('player-column');
                 const centralFeed = document.getElementById('media-grid-column'); // Grid / list container
-                
+
                 if (playerCol && centralFeed) {
                     if (playerCol.classList.contains('lg:col-span-4') || playerCol.classList.contains('lg:col-span-5')) {
                         // Activate cinema mode (expanding the width of player column to make it dominant)
                         playerCol.classList.remove('lg:col-span-4', 'lg:col-span-5');
                         playerCol.classList.add('lg:col-span-7');
-                        
+
                         centralFeed.classList.remove('lg:col-span-8', 'lg:col-span-7');
                         centralFeed.classList.add('lg:col-span-5');
-                        
+
                         theaterBtn.innerHTML = '<i class="fa-solid fa-compress-arrows-alt text-xs"></i>';
                         showNotification('Modo Cinema Ativado 🍿', 'success');
                     } else if (playerCol.classList.contains('lg:col-span-7')) {
                         // Return back to standard layout
                         playerCol.classList.add('lg:col-span-4');
                         playerCol.classList.remove('lg:col-span-7');
-                        
+
                         centralFeed.classList.add('lg:col-span-8');
                         centralFeed.classList.remove('lg:col-span-5');
-                        
+
                         theaterBtn.innerHTML = '<i class="fa-solid fa-expand-arrows-alt text-xs"></i>';
                     }
                 }
@@ -5169,7 +5169,7 @@
                     controls.classList.add('translate-y-full', 'opacity-0');
                 }
             });
-            
+
             // Expose Play Episode context for next episode dynamic launcher
             // Checks if a next episode is listable
             video.addEventListener('ended', () => {
@@ -5318,7 +5318,7 @@
             }
         };
     </script>
-    
+
     <!-- Accessibility, SEO, Performance, Smart TV Remote & PWA Modules -->
     <script src="js/performance.js"></script>
     <script src="js/accessibility.js"></script>
