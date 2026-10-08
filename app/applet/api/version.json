@@ -1,7 +1,7 @@
 {
-  "version": "1.1",
-  "tagName": "v1.1",
-  "name": "MK21 MultiServidor v1.1",
+  "version": "1.4",
+  "tagName": "v1.4",
+  "name": "MK21 MultiServidor v1.4",
   "downloadUrl": "https://bgstreaming.vercel.app/mk21.apk",
-  "body": "Novidades da versão 1.1:\n• Áudio e Legendas embutidas corrigidas com seleção dinâmica no ExoPlayer\n• Seletor de velocidade até 4.0x com rolagem horizontal\n• Tempo dos controles do player aumentado para 8 segundos (toque na tela para ocultar)\n• Mini Player de vídeo ao vivo com prévia e Guia EPG completo"
+  "body": "Atualizador com manifesto Vercel e fallback GitHub; Room e importação em lotes para listas grandes."
 }

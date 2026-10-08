@@ -725,7 +725,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 targets.add(customUrl)
             }
             
-            val defaultUrl = "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/servers.json"
+            val defaultUrl = "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/servers.json"
             if (!targets.contains(defaultUrl)) {
                 targets.add(defaultUrl)
             }
@@ -1704,48 +1704,74 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun checkForUpdates() {
         viewModelScope.launch(Dispatchers.IO) {
             _updateCheckState.value = UpdateCheckState.Checking
+            val endpoints = listOf(
+                "https://bgstreaming.vercel.app/app/applet/api/version.json",
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json",
+                "https://api.github.com/repos/2fbg/FBGs-Streaming/releases/latest"
+            )
+            var responseText: String? = null
+            var lastError: String? = null
+            for (endpoint in endpoints) {
+                var conn: HttpURLConnection? = null
+                try {
+                    conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        setRequestProperty("User-Agent", "MK21-Android-Updater")
+                        setRequestProperty("Accept", "application/json")
+                        connectTimeout = 8000
+                        readTimeout = 10000
+                        instanceFollowRedirects = true
+                    }
+                    if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                        responseText = conn.inputStream.bufferedReader().use { it.readText() }
+                        if (!responseText.isNullOrBlank()) break
+                    } else {
+                        lastError = "HTTP ${conn.responseCode}"
+                    }
+                } catch (e: Exception) {
+                    lastError = e.message
+                } finally {
+                    conn?.disconnect()
+                }
+            }
             try {
-                val url = URL("https://api.github.com/repos/2fbg/BGs-Streaming/releases/latest")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.setRequestProperty("User-Agent", "MK21-Android")
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
-                if (conn.responseCode == 200) {
-                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                    val response = reader.readText()
-                    reader.close()
-                    val json = JSONObject(response)
-                    val tagName = json.getString("tag_name")
-                    val name = json.optString("name", tagName)
-                    val body = json.optString("body", "Melhorias de desempenho e correções.")
-                    var downloadUrl = json.optString("html_url", "https://github.com/2fbg/BGs-Streaming/releases")
-                    val assets = json.optJSONArray("assets")
-                    if (assets != null && assets.length() > 0) {
-                        for (i in 0 until assets.length()) {
-                            val asset = assets.getJSONObject(i)
-                            val assetName = asset.getString("name")
-                            if (assetName.endsWith(".apk")) {
-                                downloadUrl = asset.getString("browser_download_url")
-                                break
-                            }
+                val response = responseText ?: throw IllegalStateException(lastError ?: "nenhum manifesto disponível")
+                val json = JSONObject(response)
+                val tagName = json.optString("version", json.optString("tag_name", ""))
+                if (tagName.isBlank()) throw IllegalStateException("manifesto sem versão")
+                val name = json.optString("name", "MK21 MultiServidor v$tagName")
+                val body = json.optString("body", json.optString("releaseNotes", "Melhorias de desempenho e correções."))
+                var downloadUrl = json.optString("downloadUrl", "")
+                if (downloadUrl.isBlank()) downloadUrl = json.optString("html_url", "https://github.com/2fbg/FBGs-Streaming/releases")
+                val assets = json.optJSONArray("assets")
+                if (downloadUrl.contains("/releases") && assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
+                            downloadUrl = asset.optString("browser_download_url", downloadUrl)
+                            break
                         }
                     }
-                    val currentVersion = BuildConfig.VERSION_NAME
-                    val tagClean = tagName.replace("[^0-9.]".toRegex(), "")
-                    val currentClean = currentVersion.replace("[^0-9.]".toRegex(), "")
-                    val isNewer = tagClean.isNotEmpty() && currentClean.isNotEmpty() && tagClean > currentClean
-                    if (isNewer) {
-                        _updateCheckState.value = UpdateCheckState.Available(
-                            GithubReleaseInfo(tagName, name, body, downloadUrl, true)
-                        )
-                    } else {
-                        _updateCheckState.value = UpdateCheckState.UpToDate("Seu app está na versão mais recente (v$currentVersion)")
-                    }
+                }
+                val currentVersion = BuildConfig.VERSION_NAME
+                fun versionParts(value: String): List<Int> = value
+                    .replace("[^0-9.]".toRegex(), "")
+                    .split('.')
+                    .filter { it.isNotBlank() }
+                    .map { it.toIntOrNull() ?: 0 }
+                    .let { it + List((4 - it.size).coerceAtLeast(0)) { 0 } }
+                val remoteParts = versionParts(tagName)
+                val localParts = versionParts(currentVersion)
+                val isNewer = remoteParts.zip(localParts).firstOrNull { it.first != it.second }?.let { it.first > it.second } ?: false
+                if (isNewer && downloadUrl.isNotBlank()) {
+                    _updateCheckState.value = UpdateCheckState.Available(
+                        GithubReleaseInfo(tagName, name, body, downloadUrl, true)
+                    )
                 } else {
-                    _updateCheckState.value = UpdateCheckState.UpToDate("Seu app está na versão mais recente (v${BuildConfig.VERSION_NAME})")
+                    _updateCheckState.value = UpdateCheckState.UpToDate("Seu app está na versão mais recente (v$currentVersion)")
                 }
             } catch (e: Exception) {
-                _updateCheckState.value = UpdateCheckState.Error("Não foi possível conectar ao GitHub (${e.message})")
+                _updateCheckState.value = UpdateCheckState.Error("Não foi possível verificar atualizações: ${e.message ?: "rede indisponível"}")
             }
         }
     }

@@ -57,3 +57,15 @@ O build de release usa o keystore de debug como fallback quando as credenciais d
 ## Conclusão
 
 O APK entregue está íntegro e sua arquitetura Android já utiliza Room e inserção em lotes, que é equivalente ao objetivo de persistência paginada para Smart TV. Ele não está na mesma numeração das versões 3.8.x porque pertence a uma linha Android nativa separada. Antes de uma nova publicação Android, os pontos de assinatura, SDK, HTTP global, segredos hardcoded e fallback de keystore devem ser tratados.
+
+## Correção do atualizador após erro de conexão
+
+Foi corrigido o atualizador em `app/src/main/java/com/example/viewmodel/AppViewModel.kt`. A ordem atual de consulta é:
+
+1. Manifesto Vercel: `https://bgstreaming.vercel.app/app/applet/api/version.json`;
+2. Manifesto bruto do GitHub: `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json`;
+3. API de releases correta: `https://api.github.com/repos/2fbg/FBGs-Streaming/releases/latest`.
+
+Também foi corrigida a URL antiga do arquivo `servers.json`, removida a comparação lexicográfica de versões e adicionada comparação numérica por componentes. O manifesto Android foi alinhado para a versão instalada 1.4.
+
+A correção exige uma nova compilação/instalação do APK. O APK 1.4 já instalado não pode receber alterações de código remotamente.
