@@ -1,4 +1,4 @@
-// MK21 PLAY v3.7.6 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.8.0 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -138,6 +138,85 @@ async function saveStoredData(id, payload) {
   } catch (e) {
     console.warn('[MK21] save cache falhou', e);
   }
+}
+
+// ÍNDICE PERSISTENTE DO CATÁLOGO — mantém a lista completa fora do heap JS.
+const CATALOG_INDEX_DB = 'mk21_catalog_index_v1';
+const CATALOG_INDEX_VERSION = 1;
+const CATALOG_INDEX_STORE = 'items';
+const CATALOG_META_STORE = 'meta';
+const CATALOG_MEMORY_LIMITS = { LIVE: 12000, MOVIE: 15000, SERIES: 12000 };
+
+function openCatalogIndexDb() {
+  return new Promise(resolve => {
+    try {
+      if (!window.indexedDB) return resolve(null);
+      const req = indexedDB.open(CATALOG_INDEX_DB, CATALOG_INDEX_VERSION);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(CATALOG_INDEX_STORE)) {
+          const store = db.createObjectStore(CATALOG_INDEX_STORE, { keyPath: 'key' });
+          store.createIndex('serverType', ['serverId', 'contentType'], { unique: false });
+          store.createIndex('serverGroup', ['serverId', 'contentType', 'group'], { unique: false });
+          store.createIndex('serverName', ['serverId', 'contentType', 'normalizedName'], { unique: false });
+        }
+        if (!db.objectStoreNames.contains(CATALOG_META_STORE)) db.createObjectStore(CATALOG_META_STORE, { keyPath: 'serverId' });
+      };
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+}
+
+async function createCatalogIndexWriter(serverId) {
+  const db = await openCatalogIndexDb();
+  if (!db) return { add() {}, async finish() {} };
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
+      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
+      // Remove somente os itens deste servidor, preservando índices de outros servidores.
+      const req = index.openCursor(IDBKeyRange.bound([serverId, 'LIVE'], [serverId, 'SERIES']));
+      req.onsuccess = e => { const c=e.target.result; if (c) { c.delete(); c.continue(); } };
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { console.warn('[MK21] limpeza do índice falhou', e); }
+  let batch = [];
+  let pending = Promise.resolve();
+  let position = 0;
+  const flush = () => {
+    if (!batch.length) return;
+    const toWrite = batch; batch = [];
+    pending = pending.then(() => new Promise(resolve => {
+      try {
+        const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
+        const store = tx.objectStore(CATALOG_INDEX_STORE);
+        toWrite.forEach(item => store.put({
+          key: serverId + ':' + item.contentType + ':' + position++,
+          serverId, contentType: item.contentType, name: item.name || 'Item',
+          normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
+          group: item.group || 'Geral', logo: item.logo || '', tvgId: item.tvgId || '',
+          tvgName: item.tvgName || '', url: item.url, isAdult: !!item.isAdult,
+          position: position - 1
+        }));
+        tx.oncomplete = resolve; tx.onerror = resolve;
+      } catch (e) { resolve(); }
+    }));
+  };
+  return {
+    add(item) { batch.push(item); if (batch.length >= 500) flush(); },
+    async finish() {
+      flush(); await pending;
+      try {
+        await new Promise(resolve => {
+          const tx=db.transaction(CATALOG_META_STORE,'readwrite');
+          tx.objectStore(CATALOG_META_STORE).put({serverId, updatedAt:Date.now(), itemCount:position});
+          tx.oncomplete=resolve; tx.onerror=resolve;
+        });
+      } catch (e) {}
+      try { db.close(); } catch (e) {}
+    }
+  };
 }
 
 function slimItem(it) {
@@ -672,6 +751,8 @@ async function loadServer(forceRefresh = false) {
 
   try {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    const indexWriter = await createCatalogIndexWriter(srv.id);
+    const overflow = { LIVE: 0, MOVIE: 0, SERIES: 0 };
     let liveVisible = false;
     let lastProgressUi = 0;
     const revealLive = () => {
@@ -690,14 +771,14 @@ async function loadServer(forceRefresh = false) {
       activePlaylistController && activePlaylistController.signal,
       (item) => {
         if (loadId !== serverLoadGeneration) return;
-        if (item.contentType === 'LIVE') {
-          allCatalog.LIVE.push(item);
-          if (allCatalog.LIVE.length === 1 || allCatalog.LIVE.length === 40) revealLive();
-        } else if (item.contentType === 'MOVIE') {
-          allCatalog.MOVIE.push(item);
-        } else if (item.contentType === 'SERIES') {
-          allCatalog.SERIES.push(item);
+        indexWriter.add(item);
+        const type = item.contentType;
+        if (allCatalog[type] && allCatalog[type].length < CATALOG_MEMORY_LIMITS[type]) {
+          allCatalog[type].push(item);
+        } else if (overflow[type] !== undefined) {
+          overflow[type]++;
         }
+        if (type === 'LIVE' && (allCatalog.LIVE.length === 1 || allCatalog.LIVE.length === 40)) revealLive();
       },
       (received, total) => {
         if (loadId !== serverLoadGeneration) return;
@@ -721,8 +802,13 @@ async function loadServer(forceRefresh = false) {
       if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
       setTimeout(() => hud.classList.add('hidden'), 250);
     }
+    await indexWriter.finish();
     saveStoredData(srv.id, allCatalog);
     if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') renderItemsList();
+    const totalIndexed = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length + overflow.LIVE + overflow.MOVIE + overflow.SERIES;
+    if ($('txtCurrentCategoryTitle') && totalIndexed > allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) {
+      $('txtCurrentCategoryTitle').textContent = 'Catálogo indexado: ' + totalIndexed.toLocaleString('pt-BR') + ' itens';
+    }
   } catch (err) {
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
@@ -2512,7 +2598,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.7.6';
+const BASE_PACKAGE_VERSION = '3.8.0';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2564,15 +2650,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.7.6
-    if (!data || compareSemver(data.version, '3.7.6') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.0
+    if (!data || compareSemver(data.version, '3.8.0') < 0) {
       data = {
-        version: '3.7.6',
+        version: '3.8.0',
         versionCode: 360,
-        title: 'MK21 Play v3.7.6',
+        title: 'MK21 Play v3.8.0',
         releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.6_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.7.6') < 0)
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.0_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.8.0') < 0)
       };
     }
     latestRemoteUpdateData = data;

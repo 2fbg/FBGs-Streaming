@@ -1,9 +1,9 @@
 {
-  "version": "3.7.6",
-  "versionCode": 376,
-  "title": "MK21 Play v3.7.6",
-  "releaseNotes": "• Menos cópias do catálogo em renderizações\n• Ordenação só copia quando necessária\n• Parser legado removido do código ativo\n• Higiene do repositório e CI de validação",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.6_all.ipk",
+  "version": "3.8.0",
+  "versionCode": 380,
+  "title": "MK21 Play v3.8.0",
+  "releaseNotes": "• Índice completo do catálogo em IndexedDB\n• Importação em lotes durante o streaming\n• Janela limitada de itens em memória JavaScript\n• Contadores de itens indexados\n• Menor risco de travas em listas gigantes",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.0_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
   "updatedAt": "2026-10-08"
 }
