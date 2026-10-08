@@ -1,9 +1,10 @@
 {
-  "version": "3.7.3",
-  "versionCode": 373,
-  "title": "MK21 Play v3.7.3",
-  "releaseNotes": "• Retoma o último canal ao vivo ao abrir (cache)\n• Feedback imediato ao trocar canal/aba (Sintonizando...)\n• Busca com debounce (mais fluida na TV)\n• Ordenação lembrada entre sessões\n• HUD de tela cheia auto-oculta e reaparece com as setas\n• Canal ativo destacado e rolado na lista\n• Buffer HLS mais enxuto na troca de canais",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.3_all.ipk",
+  "version": "3.7.6",
+  "versionCode": 376,
+  "title": "MK21 Play v3.7.6",
+  "releaseNotes": "• Menos cópias do catálogo em renderizações\n• Ordenação só copia quando necessária\n• Parser legado removido do código ativo\n• Higiene do repositório e CI de validação",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.6_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
-  "updatedAt": "2026-10-07"
+  "updatedAt": "2026-10-08",
+  "sha256": "089a0db9f04332bcaf2017daf5166e5c4749466663671d9cdadb326eb1b1832b"
 }

@@ -1,4 +1,4 @@
-// MK21 PLAY v3.7.3 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.7.6 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -155,6 +155,8 @@ function slimItem(it) {
 
 // 3. ESTADO GLOBAL
 let currentServerIndex = 0;
+let serverLoadGeneration = 0;
+let activePlaylistController = null;
 let currentContentType = 'LIVE'; // 'LIVE', 'MOVIE', 'SERIES', 'FAVORITES', 'CONTINUE', 'SETTINGS'
 let allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
 let favoriteUrls = new Set();
@@ -511,50 +513,93 @@ function groupSeriesItems(items) {
   return Object.values(map).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// CONEXÃO COM FALLBACK DE PROXIES PARA NUNCA FALHAR NA SMART TV
-async function fetchPlaylistContent(url) {
+// LEITOR INCREMENTAL DE LISTAS M3U: não mantém texto bruto nem array de 300k linhas
+async function streamPlaylistContent(url, signal, onItem, onProgress) {
   let targetUrl = url;
   ensureSharedCredentialsStored();
   const creds = getSharedCredentials();
   const savedUser = creds.user;
   const savedPass = creds.pass;
-
-  // Se for apenas o domínio base do Xtream Codes, anexa rota da lista M3U Plus
-  // Credenciais compartilhadas para TODOS os servidores
   if (!targetUrl.includes('get.php') && !targetUrl.includes('.m3u') && !targetUrl.includes('.ts') && !targetUrl.includes('.m3u8')) {
     targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(savedUser)}&password=${encodeURIComponent(savedPass)}&type=m3u_plus&output=ts`;
   }
-
-  console.log('[MK21] Baixando lista:', targetUrl.replace(savedPass, '***'));
-
-  const attempts = [
-    targetUrl,
-    'https://corsproxy.io/?' + encodeURIComponent(targetUrl),
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl),
-    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(targetUrl)
-  ];
-  for (let u of attempts) {
-    try {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      // Timeout maior: listas M3U grandes demoram na TV
-      const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
-      const res = await fetch(u, controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' });
-      if (timeoutId) clearTimeout(timeoutId);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.length > 50 && (text.indexOf('#EXTM3U') !== -1 || text.indexOf('#EXTINF') !== -1 || text.length > 500)) {
-          return text;
+  console.log('[MK21] Streaming da lista:', targetUrl.replace(savedPass, '***'));
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
+  try {
+    const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
+    if (signal) options.signal = signal;
+    const res = await fetch(targetUrl, options);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
+      const text = await res.text();
+      if (!text || text.length < 50) throw new Error('Lista vazia ou inválida');
+      const lines = text.split(/\r?\n/);
+      let meta = null;
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (line.startsWith('#EXTINF:')) {
+          const comma = line.lastIndexOf(',');
+          const gm = line.match(/group-title="([^"]*)"/i);
+          const lm = line.match(/tvg-logo="([^"]*)"/i);
+          const im = line.match(/tvg-id="([^"]*)"/i);
+          const nm = line.match(/tvg-name="([^"]*)"/i);
+          meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
+        } else if (meta && /^https?:\/\//i.test(line)) {
+          const type = determineType(meta.name, meta.group, line);
+          onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
+          meta = null;
         }
       }
-    } catch (e) {
-      console.warn('[MK21] tentativa lista falhou', e && e.message);
+      return;
     }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let meta = null;
+    let received = 0;
+    const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
+    const consume = (raw) => {
+      const line = raw.trim();
+      if (!line) return;
+      if (line.startsWith('#EXTM3U')) {
+        const xm = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
+        if (xm && xm[1]) window.serverXmltvUrl = xm[1].trim();
+      } else if (line.startsWith('#EXTINF:')) {
+        const comma = line.lastIndexOf(',');
+        const gm = line.match(/group-title="([^"]*)"/i);
+        const lm = line.match(/tvg-logo="([^"]*)"/i);
+        const im = line.match(/tvg-id="([^"]*)"/i);
+        const nm = line.match(/tvg-name="([^"]*)"/i);
+        meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
+      } else if (meta && /^https?:\/\//i.test(line)) {
+        const type = determineType(meta.name, meta.group, line);
+        onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
+        meta = null;
+      }
+    };
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      received += part.value.byteLength || part.value.length || 0;
+      buffer += decoder.decode(part.value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) consume(line);
+      if (onProgress) onProgress(received, total);
+    }
+    buffer += decoder.decode();
+    if (buffer) consume(buffer);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
-  throw new Error('Falha ao conectar com o servidor após múltiplas tentativas.');
 }
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
+  const loadId = ++serverLoadGeneration;
+  if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
+  activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
   if (SERVERS.length === 0) SERVERS = [...DEFAULT_SERVERS];
   if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
 
@@ -585,6 +630,7 @@ async function loadServer(forceRefresh = false) {
   // Cache prioritário: não baixa de novo se já tiver lista no IndexedDB
   if (!forceRefresh) {
     const cached = await getStoredData(srv.id);
+    if (loadId !== serverLoadGeneration) return;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     if (cached && (liveN > 0 || movN > 0)) {
@@ -625,81 +671,60 @@ async function loadServer(forceRefresh = false) {
   }
 
   try {
-    const text = await fetchPlaylistContent(srv.url);
-
-    // 1º PASSO: PRIORIDADE MÁXIMA NO AO VIVO (Instantâneo)
-    const lines = text.split(/\r?\n/);
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
-
-    let curName = 'Canal';
-    let curGroup = 'Geral';
-    let curLogo = '';
-    let curTvgId = '';
-    let curTvgName = '';
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith('#EXTM3U')) {
-        const urlMatch = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
-        if (urlMatch && urlMatch[1]) {
-          window.serverXmltvUrl = urlMatch[1].trim();
+    let liveVisible = false;
+    let lastProgressUi = 0;
+    const revealLive = () => {
+      if (liveVisible || loadId !== serverLoadGeneration || allCatalog.LIVE.length === 0) return;
+      liveVisible = true;
+      updateSplash(75, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
+      buildCurrentCategories();
+      renderCategoriesList();
+      selectCategory('ALL');
+      renderItemsList();
+      if (!activeItem) playStream(allCatalog.LIVE[0]);
+      hideSplash();
+    };
+    await streamPlaylistContent(
+      srv.url,
+      activePlaylistController && activePlaylistController.signal,
+      (item) => {
+        if (loadId !== serverLoadGeneration) return;
+        if (item.contentType === 'LIVE') {
+          allCatalog.LIVE.push(item);
+          if (allCatalog.LIVE.length === 1 || allCatalog.LIVE.length === 40) revealLive();
+        } else if (item.contentType === 'MOVIE') {
+          allCatalog.MOVIE.push(item);
+        } else if (item.contentType === 'SERIES') {
+          allCatalog.SERIES.push(item);
         }
-      } else if (line.startsWith('#EXTINF:')) {
-        const commaIndex = line.lastIndexOf(',');
-        curName = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : 'Canal';
-        const gMatch = line.match(/group-title="([^"]*)"/i);
-        curGroup = gMatch && gMatch[1] && gMatch[1].trim() ? gMatch[1].trim() : 'Geral';
-        const lMatch = line.match(/tvg-logo="([^"]*)"/i);
-        curLogo = lMatch && lMatch[1] ? lMatch[1].trim() : '';
-        const idMatch = line.match(/tvg-id="([^"]*)"/i);
-        curTvgId = idMatch && idMatch[1] ? idMatch[1].trim() : '';
-        const nMatch = line.match(/tvg-name="([^"]*)"/i);
-        curTvgName = nMatch && nMatch[1] ? nMatch[1].trim() : '';
-      } else if (/^https?:\/\//i.test(line)) {
-        const cType = determineType(curName, curGroup, line);
-        if (cType === 'LIVE') {
-          const sIdMatch = line.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
-          allCatalog.LIVE.push({
-            name: curName,
-            group: curGroup,
-            logo: curLogo,
-            tvgId: curTvgId,
-            tvgName: curTvgName,
-            streamId: sIdMatch ? sIdMatch[1] : '',
-            url: line,
-            contentType: 'LIVE',
-            isAdult: isAdult(curName) || isAdult(curGroup)
-          });
-        }
-        curName = 'Canal';
-        curGroup = 'Geral';
-        curLogo = '';
-        curTvgId = '';
-        curTvgName = '';
+      },
+      (received, total) => {
+        if (loadId !== serverLoadGeneration) return;
+        const now = Date.now();
+        if (now - lastProgressUi < 250) return;
+        lastProgressUi = now;
+        const pct = total ? Math.min(78, 40 + Math.round(received / total * 38)) : 55;
+        updateSplash(pct, 'Lendo lista — ' + allCatalog.LIVE.length + ' canais ao vivo');
+        if ($('hudProgressBar')) $('hudProgressBar').style.width = pct + '%';
+        if ($('hudProgressPercent')) $('hudProgressPercent').textContent = pct + '%';
       }
-    }
-
-    // Já exibe a TV ao vivo imediatamente e inicia o primeiro canal!
-    updateSplash(90, 'Renderizando canais ao vivo...');
+    );
+    if (loadId !== serverLoadGeneration) return;
+    revealLive();
+    buildCurrentCategories();
+    renderCategoriesList();
+    if (!liveVisible) selectCategory('ALL');
+    updateSplash(100, 'Lista carregada — ' + allCatalog.LIVE.length + ' canais ao vivo');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
       if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
-      setTimeout(() => hud.classList.add('hidden'), 350);
+      setTimeout(() => hud.classList.add('hidden'), 250);
     }
-    buildCurrentCategories();
-    renderCategoriesList();
-    selectCategory('ALL');
-    if (allCatalog.LIVE.length > 0) {
-      playStream(allCatalog.LIVE[0]);
-    }
-    hideSplash();
-
-    // 2º PASSO: CARREGA FILMES E SÉRIES EM SEGUNDO PLANO SEM TRAVAR A TV
-    setTimeout(() => {
-      parseVodInBackground(lines, srv.id);
-    }, 150);
-
+    saveStoredData(srv.id, allCatalog);
+    if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') renderItemsList();
   } catch (err) {
+    if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
     if (hud) hud.classList.add('hidden');
     hideSplash();
@@ -729,79 +754,7 @@ async function loadServer(forceRefresh = false) {
   }
 }
 
-// PARSER NÃO-BLOQUEANTE DE FILMES E SÉRIES EM SEGUNDO PLANO
-function parseVodInBackground(lines, srvId) {
-  let curName = 'Item';
-  let curGroup = 'Geral';
-  let curLogo = '';
-
-  let idx = 0;
-  const chunkSize = 4000;
-
-  function processChunk() {
-    const end = Math.min(lines.length, idx + chunkSize);
-    for (; idx < end; idx++) {
-      const line = lines[idx].trim();
-      if (line.startsWith('#EXTINF:')) {
-        const commaIndex = line.lastIndexOf(',');
-        curName = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : 'Item';
-        const gMatch = line.match(/group-title="([^"]*)"/i);
-        curGroup = gMatch && gMatch[1] && gMatch[1].trim() ? gMatch[1].trim() : 'Geral';
-        const lMatch = line.match(/tvg-logo="([^"]*)"/i);
-        curLogo = lMatch && lMatch[1] ? lMatch[1].trim() : '';
-      } else if (/^https?:\/\//i.test(line)) {
-        const cType = determineType(curName, curGroup, line);
-        if (cType === 'MOVIE') {
-          allCatalog.MOVIE.push({
-            name: curName,
-            group: curGroup,
-            logo: curLogo,
-            url: line,
-            contentType: 'MOVIE',
-            isAdult: isAdult(curName) || isAdult(curGroup)
-          });
-        } else if (cType === 'SERIES') {
-          allCatalog.SERIES.push({
-            name: curName,
-            group: curGroup,
-            logo: curLogo,
-            url: line,
-            contentType: 'SERIES',
-            isAdult: isAdult(curName) || isAdult(curGroup)
-          });
-        }
-        curName = 'Item';
-        curGroup = 'Geral';
-        curLogo = '';
-      }
-    }
-
-    if (idx < lines.length) {
-      // Atualiza visualmente a cada bloco caso o usuário já esteja nas abas Filmes ou Séries
-      if ((currentContentType === 'MOVIE' || currentContentType === 'SERIES') && idx % 12000 === 0) {
-        buildCurrentCategories();
-        renderCategoriesList();
-        renderItemsList();
-      }
-      setTimeout(processChunk, 10);
-    } else {
-      // Finalizado: Salva no IndexedDB para carregamento instantâneo no futuro
-      saveStoredData(srvId, allCatalog);
-      // Se o usuário estiver navegando em Filmes ou Séries, atualiza a tela
-      if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') {
-        buildCurrentCategories();
-        renderCategoriesList();
-        renderItemsList();
-      }
-    }
-  }
-
-
-    // Grava cache parcial (só LIVE) para sobreviver a reinício por memória
-    try { saveStoredData(srv.id, allCatalog); } catch (e) {}
-
-  processChunk();
-}
+// Parser legado removido: o carregamento moderno classifica itens durante o streaming.
 
 // 7. AGRUPAMENTO DE CATEGORIAS DA ABA ATIVA
 function buildCurrentCategories() {
@@ -916,7 +869,10 @@ function renderItemsList() {
   const query = $('inputSearch').value.toLowerCase().trim();
   const base = currentCategoriesMap[activeCategoryKey] || [];
 
-  let items = query ? base.filter(c => c.name.toLowerCase().includes(query)) : [...base];
+  // Evita duplicar o array inteiro quando a categoria está na ordem padrão.
+  // Em listas com centenas de milhares de itens isso reduz um pico de memória
+  // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
+  let items = query ? base.filter(c => c.name.toLowerCase().includes(query)) : base;
 
   // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
   function mk21ExtractYear(name) {
@@ -924,15 +880,15 @@ function renderItemsList() {
     return m ? parseInt(m[1], 10) : 0;
   }
   if (currentSortOrder === 'AZ') {
-    items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    items = items.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
   } else if (currentSortOrder === 'ZA') {
-    items.sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
+    items = items.slice().sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
   } else if (currentSortOrder === 'RECENT') {
     // Ordem da lista invertida (últimos da playlist primeiro)
-    items.reverse();
+    items = items.slice().reverse();
   } else if (currentSortOrder === 'YEAR') {
     // Por ano no título (mais recente primeiro); sem ano no fim
-    items.sort((a, b) => {
+    items = items.slice().sort((a, b) => {
       const ya = mk21ExtractYear(a.name);
       const yb = mk21ExtractYear(b.name);
       if (ya && yb && ya !== yb) return yb - ya;
@@ -2002,131 +1958,71 @@ function renderPinSettingsPanel() {
   });
 }
 
-// TESTE DE VELOCIDADE REAL COM DOWNLOAD, UPLOAD, PING E GAUGE
-function runSpeedTest() {
+// TESTE DE VELOCIDADE REAL: mede bytes/tempo e nunca inventa Mbps
+async function runSpeedTest() {
   const box = $('settingsDetailBox');
   box.innerHTML = `
     <h3 style="margin-top:0; font-size:24px;">🚀 Teste de Velocidade da Conexão</h3>
-    <p style="color:#aaa;">Medindo ping, taxa real de download e taxa de upload na Smart TV...</p>
+    <p style="color:#aaa;">Medição real da rede da Smart TV. O upload depende do endpoint configurado.</p>
     <div class="speed-meter-box">
-      <div id="speedMeterStatus" style="font-size: 18px; color: #94a3b8; margin-bottom: 12px;">1/4 - Medindo latência (Ping e Jitter)...</div>
-      <div class="speed-gauge-wrap">
-        <div id="speedGaugeArc" class="speed-gauge-arc" style="transform: rotate(-45deg); transition: transform 0.15s ease-out;"></div>
-      </div>
-      <div>
-        <span id="speedMeterNumber" class="speed-meter-val">0.0</span>
-        <span id="speedMeterUnit" class="speed-meter-unit">Mbps</span>
-      </div>
-      <div class="speed-progress-bar-wrap">
-        <div id="speedProgressBar" class="speed-progress-bar-fill" style="width: 10%;"></div>
-      </div>
+      <div id="speedMeterStatus" style="font-size:18px;color:#94a3b8;margin-bottom:12px;">1/4 - Medindo latência...</div>
+      <div class="speed-gauge-wrap"><div id="speedGaugeArc" class="speed-gauge-arc" style="transform:rotate(-45deg);"></div></div>
+      <div><span id="speedMeterNumber" class="speed-meter-val">0.0</span><span id="speedMeterUnit" class="speed-meter-unit">Mbps</span></div>
+      <div class="speed-progress-bar-wrap"><div id="speedProgressBar" class="speed-progress-bar-fill" style="width:0%;"></div></div>
       <div class="speed-metrics-grid">
-        <div class="speed-metric-card">
-          <div style="font-size:13px; color:#888;">⬇️ Download</div>
-          <div id="speedMeterDownload" style="font-size:20px; font-weight:bold; color:#4caf50;">-- Mbps</div>
-        </div>
-        <div class="speed-metric-card">
-          <div style="font-size:13px; color:#888;">⬆️ Upload</div>
-          <div id="speedMeterUpload" style="font-size:20px; font-weight:bold; color:#64b5f6;">-- Mbps</div>
-        </div>
-        <div class="speed-metric-card">
-          <div style="font-size:13px; color:#888;">⏱️ Latência (Ping)</div>
-          <div id="speedMeterPing" style="font-size:20px; font-weight:bold; color:#ffd54f;">-- ms</div>
-        </div>
-        <div class="speed-metric-card">
-          <div style="font-size:13px; color:#888;">📶 Jitter</div>
-          <div id="speedMeterJitter" style="font-size:20px; font-weight:bold; color:#ff8a65;">-- ms</div>
-        </div>
-      </div>
-      <div id="speedQualityRating" style="margin-top:16px; font-size:16px; font-weight:bold; color:#fff;"></div>
-    </div>
-    <button id="btnStartSpeedTest" class="ctrl-btn primary" style="padding: 12px 28px;" tabindex="0">🔄 Iniciar Novo Teste</button>
-  `;
-
+        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">⬇️ Download</div><div id="speedMeterDownload" style="font-size:20px;font-weight:bold;color:#4caf50;">-- Mbps</div></div>
+        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">⬆️ Upload</div><div id="speedMeterUpload" style="font-size:20px;font-weight:bold;color:#64b5f6;">-- Mbps</div></div>
+        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">⏱️ Latência</div><div id="speedMeterPing" style="font-size:20px;font-weight:bold;color:#ffd54f;">-- ms</div></div>
+        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">📶 Jitter</div><div id="speedMeterJitter" style="font-size:20px;font-weight:bold;color:#ff8a65;">-- ms</div></div>
+      </div><div id="speedQualityRating" style="margin-top:16px;font-size:16px;font-weight:bold;color:#fff;"></div>
+    </div><button id="btnStartSpeedTest" class="ctrl-btn primary" style="padding:12px 28px;" tabindex="0">🔄 Iniciar Novo Teste</button>`;
   $('btnStartSpeedTest').onclick = runSpeedTest;
-
-  // 1. Latência e Jitter
-  const pingStart = Date.now();
-  let measuredPing = 16;
-  fetch(window.location.href + '?ping=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
-    .then(() => {
-      measuredPing = Math.max(8, Date.now() - pingStart);
-      finishPing();
-    })
-    .catch(() => {
-      measuredPing = Math.max(12, Math.floor(Math.random() * 8) + 14);
-      finishPing();
-    });
-
-  function finishPing() {
-    if (!$('speedMeterPing')) return;
-    $('speedMeterPing').textContent = measuredPing + ' ms';
-    $('speedMeterJitter').textContent = (measuredPing * 0.12).toFixed(1) + ' ms';
-    startDownloadTest();
-  }
-
-  function startDownloadTest() {
-    if (!$('speedMeterStatus')) return;
-    $('speedMeterStatus').textContent = '2/4 - Medindo velocidade de DOWNLOAD...';
-    const targetDown = 76 + Math.floor(Math.random() * 32); // 76 - 108 Mbps
-    const duration = 2800;
-    const start = Date.now();
-
-    const iv = setInterval(() => {
-      if (!$('speedMeterNumber')) { clearInterval(iv); return; }
-      const elapsed = Date.now() - start;
-      const p = Math.min(1, elapsed / duration);
-      const current = parseFloat((targetDown * Math.sin((p * Math.PI) / 2) + (Math.random() * 4 - 2)).toFixed(1));
-      const safeVal = Math.max(0, current);
-      $('speedMeterNumber').textContent = safeVal.toFixed(1);
-      $('speedMeterDownload').textContent = safeVal.toFixed(1) + ' Mbps';
-      $('speedProgressBar').style.width = Math.round(15 + p * 40) + '%';
-      const angle = Math.min(135, -45 + (safeVal / 110) * 180);
-      $('speedGaugeArc').style.transform = `rotate(${angle}deg)`;
-
-      if (p >= 1) {
-        clearInterval(iv);
-        $('speedMeterDownload').textContent = targetDown.toFixed(1) + ' Mbps';
-        startUploadTest(targetDown);
-      }
-    }, 75);
-  }
-
-  function startUploadTest(finalDown) {
-    if (!$('speedMeterStatus')) return;
-    $('speedMeterStatus').textContent = '3/4 - Medindo velocidade de UPLOAD...';
-    const targetUp = Math.round(finalDown * (0.48 + Math.random() * 0.14));
-    const duration = 2400;
-    const start = Date.now();
-
-    const iv = setInterval(() => {
-      if (!$('speedMeterNumber')) { clearInterval(iv); return; }
-      const elapsed = Date.now() - start;
-      const p = Math.min(1, elapsed / duration);
-      const current = parseFloat((targetUp * Math.sin((p * Math.PI) / 2) + (Math.random() * 3 - 1.5)).toFixed(1));
-      const safeVal = Math.max(0, current);
-      $('speedMeterNumber').textContent = safeVal.toFixed(1);
-      $('speedMeterUpload').textContent = safeVal.toFixed(1) + ' Mbps';
-      $('speedProgressBar').style.width = Math.round(55 + p * 45) + '%';
-      const angle = Math.min(135, -45 + (safeVal / 110) * 180);
-      $('speedGaugeArc').style.transform = `rotate(${angle}deg)`;
-
-      if (p >= 1) {
-        clearInterval(iv);
-        $('speedMeterUpload').textContent = targetUp.toFixed(1) + ' Mbps';
-        finishFullTest(finalDown, targetUp);
-      }
-    }, 75);
-  }
-
-  function finishFullTest(finalDown, finalUp) {
-    if (!$('speedProgressBar')) return;
-    $('speedProgressBar').style.width = '100%';
-    $('speedMeterStatus').textContent = '4/4 - ✅ Teste Concluído com Sucesso!';
-    $('speedMeterNumber').textContent = finalDown.toFixed(1);
-    $('speedQualityRating').innerHTML = `
-      <span style="color:#4caf50;">⭐ Conexão Excelente:</span> Download de <strong>${finalDown.toFixed(1)} Mbps</strong> e Upload de <strong>${finalUp.toFixed(1)} Mbps</strong>. Totalmente qualificada para transmissões em <strong>4K Ultra HD</strong> e canais ao vivo em Full HD sem travamentos.
-    `;
+  const setStatus = text => { if ($('speedMeterStatus')) $('speedMeterStatus').textContent = text; };
+  const setProgress = pct => { if ($('speedProgressBar')) $('speedProgressBar').style.width = pct + '%'; };
+  const setGauge = value => { if ($('speedGaugeArc')) $('speedGaugeArc').style.transform = `rotate(${Math.min(135, -45 + (Math.min(value, 150) / 150) * 180)}deg)`; };
+  const formatMbps = value => Number.isFinite(value) ? value.toFixed(1) + ' Mbps' : 'Indisponível';
+  const endpoint = localStorage.getItem('mk21_speed_test_endpoint') || 'https://speed.cloudflare.com';
+  try {
+    setStatus('1/4 - Medindo latência e jitter...');
+    const samples = [];
+    for (let i = 0; i < 3; i++) {
+      const t0 = performance.now();
+      const r = await fetch(endpoint + '/__down?bytes=1&cache=' + Date.now() + '-' + i, { cache: 'no-store' });
+      if (!r.ok) throw new Error('Endpoint de teste indisponível');
+      await r.arrayBuffer();
+      samples.push(performance.now() - t0);
+    }
+    const ping = samples.reduce((a,b) => a+b, 0) / samples.length;
+    const jitter = samples.reduce((a,b) => a + Math.abs(b - ping), 0) / samples.length;
+    $('speedMeterPing').textContent = Math.round(ping) + ' ms';
+    $('speedMeterJitter').textContent = jitter.toFixed(1) + ' ms';
+    setProgress(15);
+    setStatus('2/4 - Medindo download real...');
+    const downStart = performance.now();
+    const downRes = await fetch(endpoint + '/__down?bytes=10000000&cache=' + Date.now(), { cache: 'no-store' });
+    if (!downRes.ok) throw new Error('Download de teste indisponível');
+    let bytes = 0;
+    if (downRes.body && downRes.body.getReader) {
+      const reader = downRes.body.getReader();
+      while (true) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; setProgress(Math.min(55, 15 + Math.round(bytes / 10000000 * 40))); }
+    } else { bytes = (await downRes.arrayBuffer()).byteLength; setProgress(55); }
+    const downMbps = bytes * 8 / ((performance.now() - downStart) / 1000) / 1000000;
+    $('speedMeterNumber').textContent = downMbps.toFixed(1); $('speedMeterDownload').textContent = formatMbps(downMbps); setGauge(downMbps);
+    setStatus('3/4 - Medindo upload real...');
+    const uploadBytes = 1000000;
+    const payload = new Uint8Array(uploadBytes);
+    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(payload.subarray(0, 65536));
+    const upStart = performance.now();
+    const upRes = await fetch(endpoint + '/__up?cache=' + Date.now(), { method: 'POST', body: payload, cache: 'no-store', headers: { 'Content-Type': 'application/octet-stream' } });
+    if (!upRes.ok) throw new Error('Upload não permitido pelo endpoint');
+    try { await upRes.arrayBuffer(); } catch (e) {}
+    const upMbps = uploadBytes * 8 / ((performance.now() - upStart) / 1000) / 1000000;
+    $('speedMeterNumber').textContent = upMbps.toFixed(1); $('speedMeterUpload').textContent = formatMbps(upMbps); setGauge(upMbps); setProgress(95);
+    setStatus('4/4 - ✅ Teste concluído com medição real!'); setProgress(100);
+    $('speedQualityRating').textContent = `Download ${formatMbps(downMbps)} • Upload ${formatMbps(upMbps)} • Latência ${Math.round(ping)} ms`;
+  } catch (err) {
+    setProgress(0); setStatus('Teste não disponível nesta rede/TV');
+    if ($('speedQualityRating')) $('speedQualityRating').textContent = 'Não foi possível medir com segurança: ' + (err.message || 'endpoint bloqueado') + '. Configure mk21_speed_test_endpoint em um endpoint próprio com CORS.';
   }
 }
 
@@ -2616,26 +2512,20 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.7.3';
+const BASE_PACKAGE_VERSION = '3.7.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
 } catch (e) {}
 
+// A versão efetiva é sempre a do pacote instalado; cache local não pode
+// executar código nem mascarar a versão real do IPK.
 let CURRENT_APP_VERSION = BASE_PACKAGE_VERSION;
-if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) > 0) {
-  CURRENT_APP_VERSION = savedOtaVer;
-} else if (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) < 0) {
-  // Pacote físico recém instalado é mais recente que o OTA salvo: limpar hot-patch anterior
-  try {
-    localStorage.removeItem('mk21_ota_app_js');
-    localStorage.removeItem('mk21_ota_styles_css');
-    localStorage.setItem('mk21_ota_app_version', BASE_PACKAGE_VERSION);
-  } catch (e) {}
-  CURRENT_APP_VERSION = BASE_PACKAGE_VERSION;
-} else {
-  CURRENT_APP_VERSION = savedOtaVer || BASE_PACKAGE_VERSION;
-}
+try {
+  localStorage.removeItem('mk21_ota_app_js');
+  localStorage.removeItem('mk21_ota_styles_css');
+  localStorage.removeItem('mk21_ota_app_version');
+} catch (e) {}
 
 let latestRemoteUpdateData = null;
 
@@ -2658,7 +2548,7 @@ async function openAppUpdateModal(manualCheck = true) {
       'version.json?t=' + Date.now(),
       './version.json?t=' + Date.now(),
       'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=' + Date.now(),
-      'https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/smart-tv/version.json?t=' + Date.now()
+      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=' + Date.now()
     ];
 
     for (const url of candidateEndpoints) {
@@ -2674,15 +2564,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.7.3
-    if (!data || compareSemver(data.version, '3.7.3') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.7.6
+    if (!data || compareSemver(data.version, '3.7.6') < 0) {
       data = {
-        version: '3.7.3',
+        version: '3.7.6',
         versionCode: 360,
-        title: 'MK21 Play v3.7.3',
+        title: 'MK21 Play v3.7.6',
         releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.3_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.7.3') < 0)
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.6_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.7.6') < 0)
       };
     }
     latestRemoteUpdateData = data;
@@ -2727,63 +2617,32 @@ async function openAppUpdateModal(manualCheck = true) {
 }
 
 async function startDirectUpdate() {
-  const box = $('updateProgressBox');
-  const fill = $('updateProgressFill');
-  const lbl = $('txtUpdateProgress');
-  if (box) box.classList.remove('hidden');
-  if ($('btnStartDirectUpdate')) $('btnStartDirectUpdate').disabled = true;
-  if ($('btnCheckAgainUpdate')) $('btnCheckAgainUpdate').disabled = true;
-
-  function setProg(p, t) {
-    if (fill) fill.style.width = p + '%';
-    if (lbl) lbl.textContent = t;
+  const meta = latestRemoteUpdateData;
+  const pBox = $('updateProgressBox');
+  if (!meta || !meta.ipkUrl) { alert('Atualização sem pacote IPK válido.'); return; }
+  if (!meta.sha256 || !/^[a-f0-9]{64}$/i.test(meta.sha256)) {
+    alert('Atualização recusada: o manifesto não contém SHA-256 válido do IPK.');
+    return;
   }
-
-  setProg(15, 'Limpando cache OTA antigo...');
   try {
-    localStorage.removeItem('mk21_ota_app_js');
-    localStorage.removeItem('mk21_ota_styles_css');
-  } catch (e) {}
-
-  setProg(40, 'Preparando instalação...');
-  const targetVer = (latestRemoteUpdateData && latestRemoteUpdateData.version) ? latestRemoteUpdateData.version : BASE_PACKAGE_VERSION;
-  const ipkUrl = (latestRemoteUpdateData && latestRemoteUpdateData.ipkUrl) ? latestRemoteUpdateData.ipkUrl : '';
-
-  // Homebrew Channel (LG)
-  let hbOk = false;
-  try {
-    if (window.webOS && window.webOS.service && ipkUrl) {
-      setProg(70, 'Enviando IPK ao Homebrew Channel...');
-      window.webOS.service.request('luna://org.webosbrew.hbchannel.service', {
-        method: 'install',
-        parameters: { ipkUrl: ipkUrl },
-        onSuccess: function () { hbOk = true; },
-        onFailure: function () { hbOk = false; }
-      });
-      await new Promise(function (r) { setTimeout(r, 1200); });
-    }
-  } catch (e) {}
-
-  setProg(100, 'Concluído');
-  if ($('btnStartDirectUpdate')) $('btnStartDirectUpdate').disabled = false;
-  if ($('btnCheckAgainUpdate')) $('btnCheckAgainUpdate').disabled = false;
-
-  if (hbOk) {
-    alert('Pedido de instalação enviado ao Homebrew Channel.\nConfirme na TV e reinicie o app.');
-  } else {
-    alert(
-      'Atualização in-app (hot-patch) foi desativada para estabilidade dos controles.\n\n' +
-      'Versão atual: v' + CURRENT_APP_VERSION + '\n' +
-      'Pacote: v' + targetVer + '\n\n' +
-      'Instale o arquivo IPK via Modo Desenvolvedor / Homebrew:\n' +
-      (ipkUrl || 'mk21play_' + targetVer + '_all.ipk') +
-      '\n\nCache OTA local foi limpo. O app vai recarregar.'
-    );
+    $('btnStartDirectUpdate').disabled = true; $('btnCheckAgainUpdate').disabled = true;
+    pBox.classList.remove('hidden'); $('txtUpdateStep').textContent = 'Verificando integridade do IPK...'; $('txtUpdatePct').textContent = '20%'; $('barUpdateProgress').style.width = '20%';
+    const response = await fetch(meta.ipkUrl + (meta.ipkUrl.includes('?') ? '&' : '?') + 'cache=' + Date.now(), { cache: 'no-store' });
+    if (!response.ok) throw new Error('Não foi possível baixar o IPK');
+    const bytes = await response.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const actual = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    if (actual.toLowerCase() !== meta.sha256.toLowerCase()) throw new Error('SHA-256 do IPK não confere com o manifesto');
+    $('txtUpdateStep').textContent = 'IPK íntegro. Solicitando instalação ao webOS...'; $('txtUpdatePct').textContent = '70%'; $('barUpdateProgress').style.width = '70%';
+    if (!(window.webOS && webOS.service)) throw new Error('Serviço de instalação webOS indisponível');
+    webOS.service.request('luna://org.webosbrew.hbchannel.service/install', { ipkUrl: meta.ipkUrl });
+    $('txtUpdateStep').textContent = '✅ Instalação solicitada com integridade verificada'; $('txtUpdatePct').textContent = '100%'; $('barUpdateProgress').style.width = '100%';
+  } catch (err) {
+    $('txtUpdateStep').textContent = 'Atualização recusada'; $('txtUpdatePct').textContent = '0%'; $('barUpdateProgress').style.width = '0%';
+    alert('Não foi possível atualizar com segurança: ' + (err.message || err));
+    $('btnStartDirectUpdate').disabled = false; $('btnCheckAgainUpdate').disabled = false;
   }
-  try { localStorage.setItem('mk21_ota_app_version', BASE_PACKAGE_VERSION); } catch (e) {}
-  setTimeout(function () { location.reload(); }, 800);
 }
-
 
 function forceResetTvAppCache() {
   if (!confirm('Limpar cache de atualização OTA e voltar à versão do pacote instalado (v' + BASE_PACKAGE_VERSION + ')?')) return;
@@ -2960,9 +2819,13 @@ function focusActiveElement() {
 }
 
 document.addEventListener('keydown', function (e) {
-  const k = e.keyCode || e.which;
   const key = e.key || '';
+  const code = e.code || '';
+  const keyCodes = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27, Backspace: 8, GoBack: 461 };
+  const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
+  const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+  if (isTextInput && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)) return;
 
   // Voz nativa
   if (key === 'Voice' || key === 'VoiceCommand' || k === 1022 || k === 1016 || k === 166) {
@@ -3254,7 +3117,8 @@ window.addEventListener('load', () => {
   // Limpa OTA antigo que quebrava os eventos de seta/botão
   try {
     localStorage.removeItem('mk21_ota_app_js');
-    localStorage.setItem('mk21_ota_app_version', '3.7.3');
+    localStorage.removeItem('mk21_ota_styles_css');
+    localStorage.removeItem('mk21_ota_app_version');
   } catch (e) {}
 
   try {
@@ -3279,10 +3143,11 @@ window.addEventListener('load', () => {
 
   loadServer();
 
-  setTimeout(function () {
+  const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
+  scheduleFrame(function () {
     activeZone = 'header';
     focusedHeaderIdx = 0;
     if ($('tabLive')) $('tabLive').focus();
     else focusActiveElement();
-  }, 500);
+  });
 });

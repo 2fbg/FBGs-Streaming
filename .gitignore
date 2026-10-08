@@ -23,3 +23,8 @@ my-upload-key.jks
 *.keystore
 secrets.properties
 .build-outputs/
+# Build and local runtime artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store

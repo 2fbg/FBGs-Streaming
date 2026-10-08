@@ -1,32 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns="http://www.w3.org/ns/widgets" 
-        xmlns:tizen="http://tizen.org/ns/widgets" 
-        id="http://mk21.streaming/tizen" 
-        version="3.6.0" 
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://mk21.streaming/tizen"
+        version="3.7.6"
         viewmodes="maximized">
-    <tizen:application id="Mk21Stream.App" 
-                       package="Mk21Stream" 
+    <tizen:application id="Mk21Stream.App"
+                       package="Mk21Stream"
                        required_version="3.0"/>
-    
+
     <!-- Configuração de Janela e Orientação Paisagem para TV -->
     <content src="https://fbgs-streaming.vercel.app/web/index.html"/>
     <feature name="http://tizen.org/feature/screen.size.all"/>
-    
+
     <!-- Privilégios para Controle Remoto e Rede -->
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
     <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.display"/>
-    
-    <tizen:setting screen-orientation="landscape" 
-                   context-menu="disable" 
-                   background-support="disable" 
-                   encryption="disable" 
+
+    <tizen:setting screen-orientation="landscape"
+                   context-menu="disable"
+                   background-support="disable"
+                   encryption="disable"
                    install-location="auto"/>
-    
+
     <tizen:metadata key="http://samsung.com/tv/metadata/use.preview" value="true"/>
-    
+
     <name>MK21 Streaming</name>
     <description>Reprodutor MK21 MultiServidor para Samsung Smart TV</description>
     <author href="https://fbgs-streaming.vercel.app" email="FabioGuarniere@gmail.com">by FBG2</author>

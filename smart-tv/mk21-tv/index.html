@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=3.7.3">
+  <link rel="stylesheet" href="styles.css?v=3.7.6">
   <style id="mk21-ota-override-css"></style>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
 </head>
 <body>
 
@@ -331,25 +331,7 @@
     </div>
   </div>
 
-  <!-- BOOTLOADER OTA INTELIGENTE MK21 PLAY (LG webOS & Samsung Tizen) -->
-    <!-- Boot estático v3.7.3: app.js do pacote (setas DPAD estáveis). OTA JS antigo é ignorado. -->
-  <script>
-    (function () {
-      try {
-        localStorage.removeItem('mk21_ota_app_js');
-        localStorage.setItem('mk21_ota_app_version', '3.7.3');
-      } catch (e) {}
-      try {
-        var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        if (otaCss && otaCss.length > 100) {
-          var el = document.getElementById('mk21-ota-override-css') || document.createElement('style');
-          el.id = 'mk21-ota-override-css';
-          el.textContent = otaCss;
-          document.head.appendChild(el);
-        }
-      } catch (e) {}
-    })();
-  </script>
-  <script src="app.js?v=3.7.3"></script>
+  <!-- Boot estático: o pacote instalado é a única fonte de código. -->
+  <script src="app.js?v=3.7.6"></script>
 </body>
 </html>

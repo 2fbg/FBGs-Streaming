@@ -1,14 +1,15 @@
 {
   "id": "org.mk21.tv",
-  "version": "3.7.3",
+  "version": "3.7.6",
   "vendor": "MK21",
   "type": "web",
   "main": "index.html",
-  "title": "MK21 Play",
+  "title": "MK21 Play v3.7.6",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
   "resolution": "1920x1080",
   "handlesRelaunch": true,
   "requiredMemory": 256,
-  "disableBackHistoryAPI": true
+  "disableBackHistoryAPI": true,
+  "updatedAt": "2026-10-08"
 }
