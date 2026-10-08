@@ -1,4 +1,4 @@
-// MK21 PLAY v3.8.1 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.8.2 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -219,6 +219,80 @@ async function createCatalogIndexWriter(serverId) {
       try { db.close(); } catch (e) {}
     }
   };
+}
+
+async function queryCatalogIndexPage(serverId, type, offset, limit, group) {
+  const db = await openCatalogIndexDb();
+  if (!db) return [];
+  return new Promise(resolve => {
+    const result = [];
+    try {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
+      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
+      const range = IDBKeyRange.bound([serverId, type], [serverId, type + '\uffff']);
+      const req = index.openCursor(range);
+      let skipped = 0;
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (!cursor || result.length >= limit) return;
+        const item = cursor.value;
+        if (!group || item.group === group) {
+          if (skipped < offset) skipped++;
+          else result.push(item);
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = () => { try { db.close(); } catch (e) {} resolve(result); };
+      tx.onerror = () => { try { db.close(); } catch (e) {} resolve(result); };
+    } catch (e) { try { db.close(); } catch (e) {} resolve([]); }
+  });
+}
+
+let indexedPageLoading = false;
+let indexedOffsets = {};
+async function loadMoreIndexedItems() {
+  if (indexedPageLoading) return;
+  const type = currentContentType;
+  if (!['LIVE', 'MOVIE', 'SERIES'].includes(type)) {
+    itemsDisplayLimit += 60;
+    renderItemsList();
+    return;
+  }
+  const base = currentCategoriesMap[activeCategoryKey] || [];
+  if (itemsDisplayLimit < base.length) {
+    itemsDisplayLimit += 60;
+    renderItemsList();
+    return;
+  }
+  const srv = SERVERS[currentServerIndex];
+  if (!srv) return;
+  indexedPageLoading = true;
+  try {
+    const arr = allCatalog[type] || [];
+    const group = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
+    const key = type + '|' + (group || 'ALL');
+    const existing = group ? arr.filter(it => (it.group || 'Geral') === group).length : arr.length;
+    const offset = Number.isFinite(indexedOffsets[key]) ? indexedOffsets[key] : existing;
+    const page = await queryCatalogIndexPage(srv.id, type, offset, 240, group);
+    indexedOffsets[key] = offset + page.length;
+    if (page.length) {
+      // Mantém somente uma janela: a navegação avança por páginas sem acumular
+      // centenas de milhares de objetos no heap JavaScript.
+      if (arr.length >= CATALOG_MEMORY_LIMITS[type]) {
+        allCatalog[type] = page;
+        itemsDisplayLimit = page.length;
+      } else {
+        const known = new Set(arr.map(it => it.url));
+        page.forEach(item => { if (!known.has(item.url) && arr.length < CATALOG_MEMORY_LIMITS[type]) arr.push(item); });
+        itemsDisplayLimit += 60;
+      }
+      buildCurrentCategories();
+      renderCategoriesList();
+      renderItemsList();
+    } else {
+      showChannelBanner('Fim do catálogo nesta categoria');
+    }
+  } finally { indexedPageLoading = false; }
 }
 
 function slimItem(it) {
@@ -753,6 +827,7 @@ async function loadServer(forceRefresh = false) {
 
   try {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
     const overflow = { LIVE: 0, MOVIE: 0, SERIES: 0 };
     let liveVisible = false;
@@ -956,6 +1031,8 @@ let itemsDisplayLimit = 80;
 function renderItemsList() {
   const query = $('inputSearch').value.toLowerCase().trim();
   const base = currentCategoriesMap[activeCategoryKey] || [];
+  const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
+  const indexedMoreAvailable = Object.prototype.hasOwnProperty.call(indexedOffsets, indexedPageKey);
 
   // Evita duplicar o array inteiro quando a categoria está na ordem padrão.
   // Em listas com centenas de milhares de itens isso reduz um pico de memória
@@ -1030,17 +1107,14 @@ function renderItemsList() {
       fragment.appendChild(li);
     }
 
-    if (currentGroupedSeries.length > limit) {
+    if (currentGroupedSeries.length > limit || indexedMoreAvailable) {
       const moreLi = document.createElement('li');
       const moreBtn = document.createElement('button');
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
       moreBtn.textContent = `➕ Carregar Mais Séries (+150 de ${currentGroupedSeries.length - limit} restantes)...`;
-      moreBtn.onclick = () => {
-        itemsDisplayLimit += 60;
-        renderItemsList();
-      };
+      moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
     }
@@ -1081,17 +1155,14 @@ function renderItemsList() {
       fragment.appendChild(li);
     }
 
-    if (currentFilteredItems.length > limit) {
+    if (currentFilteredItems.length > limit || indexedMoreAvailable) {
       const moreLi = document.createElement('li');
       const moreBtn = document.createElement('button');
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
       moreBtn.textContent = `➕ Carregar Mais Itens (+150 de ${currentFilteredItems.length - limit} restantes)...`;
-      moreBtn.onclick = () => {
-        itemsDisplayLimit += 60;
-        renderItemsList();
-      };
+      moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
     }
@@ -2600,7 +2671,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.8.1';
+const BASE_PACKAGE_VERSION = '3.8.2';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2652,15 +2723,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.1
-    if (!data || compareSemver(data.version, '3.8.1') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.2
+    if (!data || compareSemver(data.version, '3.8.2') < 0) {
       data = {
-        version: '3.8.1',
+        version: '3.8.2',
         versionCode: 360,
-        title: 'MK21 Play v3.8.1',
+        title: 'MK21 Play v3.8.2',
         releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.1_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.8.1') < 0)
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.2_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.8.2') < 0)
       };
     }
     latestRemoteUpdateData = data;

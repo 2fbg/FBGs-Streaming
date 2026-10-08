@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://mk21.streaming/tizen"
-        version="3.8.1"
+        version="3.8.2"
         viewmodes="maximized">
     <tizen:application id="Mk21Stream.App"
                        package="Mk21Stream"
