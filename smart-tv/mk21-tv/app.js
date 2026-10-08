@@ -1,4 +1,4 @@
-// MK21 PLAY v3.8.2 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.8.3 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -248,6 +248,47 @@ async function queryCatalogIndexPage(serverId, type, offset, limit, group) {
   });
 }
 
+async function searchCatalogIndex(serverId, type, query, group, limit = 240) {
+  const db = await openCatalogIndexDb();
+  if (!db || !query) return [];
+  return new Promise(resolve => {
+    const result = [];
+    const needle = query.toLocaleLowerCase('pt-BR');
+    try {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
+      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
+      const range = IDBKeyRange.bound([serverId, type], [serverId, type + '\uffff']);
+      const req = index.openCursor(range);
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (!cursor || result.length >= limit) return;
+        const item = cursor.value;
+        if ((!group || item.group === group) && String(item.normalizedName || '').includes(needle)) result.push(item);
+        cursor.continue();
+      };
+      tx.oncomplete = () => { try { db.close(); } catch (e) {} resolve(result); };
+      tx.onerror = () => { try { db.close(); } catch (e) {} resolve(result); };
+    } catch (e) { try { db.close(); } catch (e) {} resolve([]); }
+  });
+}
+
+let searchIndexGeneration = 0;
+async function searchFromIndexedCatalog(query) {
+  const type = currentContentType;
+  if (!['LIVE', 'MOVIE', 'SERIES'].includes(type) || !query) return;
+  const generation = ++searchIndexGeneration;
+  const srv = SERVERS[currentServerIndex];
+  if (!srv) return;
+  const group = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
+  const found = await searchCatalogIndex(srv.id, type, query, group, 240);
+  if (generation !== searchIndexGeneration || $('inputSearch').value.toLowerCase().trim() !== query) return;
+  allCatalog[type] = found;
+  itemsDisplayLimit = 240;
+  buildCurrentCategories();
+  renderCategoriesList();
+  renderItemsList();
+}
+
 let indexedPageLoading = false;
 let indexedOffsets = {};
 async function loadMoreIndexedItems() {
@@ -386,7 +427,9 @@ let searchDebounceTimer = null;
 function scheduleSearchRender() {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(function () {
+    const query = $('inputSearch').value.toLowerCase().trim();
     renderItemsList();
+    if (query) searchFromIndexedCatalog(query);
   }, 180);
 }
 
@@ -2671,7 +2714,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.8.2';
+const BASE_PACKAGE_VERSION = '3.8.3';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2723,15 +2766,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.2
-    if (!data || compareSemver(data.version, '3.8.2') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.3
+    if (!data || compareSemver(data.version, '3.8.3') < 0) {
       data = {
-        version: '3.8.2',
+        version: '3.8.3',
         versionCode: 360,
-        title: 'MK21 Play v3.8.2',
+        title: 'MK21 Play v3.8.3',
         releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.2_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.8.2') < 0)
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.3_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.8.3') < 0)
       };
     }
     latestRemoteUpdateData = data;

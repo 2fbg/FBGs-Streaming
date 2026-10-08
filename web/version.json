@@ -1,10 +1,10 @@
 {
-  "version": "3.8.2",
-  "versionCode": 382,
-  "title": "MK21 Play v3.8.2",
-  "releaseNotes": "• Paginação completa via IndexedDB\n• Janela fixa de memória ao avançar no catálogo\n• Navegação além dos limites operacionais sem crescimento do heap\n• Próxima página por categoria e tipo de conteúdo",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.2_all.ipk",
+  "version": "3.8.3",
+  "versionCode": 383,
+  "title": "MK21 Play v3.8.3",
+  "releaseNotes": "• Busca paginada diretamente no IndexedDB\n• Resultado limitado e sem travar o heap\n• Proteção contra respostas de busca atrasadas\n• Paginação completa por tipo e categoria",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.3_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
   "updatedAt": "2026-10-08",
-  "sha256": "b62e75a7cf9002065f63e56b8df59cffd1ced11a8fd7f73a8cb83fa012ce77b6"
+  "sha256": "ffd5e2013b3c59715cc07f6fa01c8f8f08128ab7e171d2fbc7873c93b34b4c00"
 }

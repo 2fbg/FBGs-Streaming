@@ -1,10 +1,10 @@
 {
   "id": "org.mk21.tv",
-  "version": "3.8.2",
+  "version": "3.8.3",
   "vendor": "MK21",
   "type": "web",
   "main": "index.html",
-  "title": "MK21 Play v3.8.2",
+  "title": "MK21 Play v3.8.3",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
   "resolution": "1920x1080",
