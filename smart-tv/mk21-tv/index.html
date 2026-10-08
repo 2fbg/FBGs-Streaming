@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=3.6.3">
+  <link rel="stylesheet" href="styles.css?v=3.7.3">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -39,12 +39,7 @@
       <button id="btnRefreshList" class="action-btn header-focusable" title="Atualizar lista agora" tabindex="0">
         🔄 Atualizar
       </button>
-
-      <button id="btnHeaderAdult" class="action-btn lock-pill header-focusable" tabindex="0">
-        <span id="txtLockIcon">🔒</span> <span id="txtLockText">Adulto (Bloqueado)</span>
-      </button>
-
-      <div id="liveClock" class="clock-display">00:00:00</div>
+<div id="liveClock" class="clock-display">00:00:00</div>
     </div>
   </header>
 
@@ -71,8 +66,8 @@
         </div>
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
-          <button id="btnClearSearch" class="voice-btn" tabindex="0" title="Limpar busca">✕</button>
-          <button id="btnSortOrder" class="voice-btn" tabindex="0" title="Ordem dos Canais" style="width: auto; padding: 0 12px; font-size: 14px;">↕️ A-Z</button>
+          <button id="btnClearSearch" class="util-btn" tabindex="0" title="Limpar busca">×</button>
+          <button id="btnSortOrder" class="util-btn sort-order-btn" tabindex="0" title="Padrão / Recente / A-Z / Z-A / Ano" style="width: auto; min-width: 110px; padding: 0 14px; font-size: 14px;">↕️ Padrão</button>
         </div>
         <ul id="listItems" class="pane-scroll"></ul>
       </div>
@@ -82,60 +77,15 @@
         <div id="videoContainer" class="video-box" tabindex="0">
           <video id="tvPlayer" playsinline></video>
           <div id="channelOverlay" class="channel-overlay hidden">Animal Planet FHD</div>
-
-          <!-- ================= HUD COMPLETO DO PLAYER PRINCIPAL (TELA CHEIA) ================= -->
-          <div id="playerMainHud" class="player-main-hud hidden">
-            <!-- TOPO DO PLAYER: Nome do canal/filme, metadados e relógio -->
-            <div class="hud-top-bar">
-              <div class="hud-top-left">
-                <span id="hudChannelLogo" class="hud-channel-logo">📺</span>
-                <div class="hud-title-col">
-                  <h2 id="hudChannelTitle" class="hud-channel-title">Carregando...</h2>
-                  <div class="hud-channel-meta">
-                    <span id="hudChannelCategory" class="hud-meta-pill">Geral</span>
-                    <span id="hudLiveBadge" class="hud-meta-pill badge-live">🔴 AO VIVO</span>
-                    <span id="hudResolutionBadge" class="hud-meta-pill">1080p FHD</span>
-                    <span id="hudCurrentSpeedBadge" class="hud-meta-pill badge-speed">⚡ 1x</span>
-                  </div>
-                </div>
-              </div>
-              <div class="hud-top-right">
-                <div class="hud-clock" id="hudClockDisplay">00:00:00</div>
-              </div>
-            </div>
-
-            <!-- MEIO: BARRA DE TEMPO / TIMELINE (PARA FILMES E SÉRIES VOD) -->
-            <div id="hudTimelineWrapper" class="hud-timeline-wrapper hidden">
-              <div class="hud-timeline-track" id="hudTimelineTrack">
-                <div id="hudTimelineProgress" class="hud-timeline-progress" style="width: 0%;"></div>
-              </div>
-              <div class="hud-time-row">
-                <span id="hudTimeCurrent">00:00:00</span>
-                <span id="hudTimeDuration">00:00:00</span>
-              </div>
-            </div>
-
-            <!-- BARRA INFERIOR DE CONTROLES DO PLAYER PRINCIPAL (VELOCIDADE ATÉ 4X, ÁUDIO, LEGENDA) -->
-            <div class="hud-controls-bar">
-              <button id="btnHudBack" class="hud-ctrl-btn" tabindex="0" title="Voltar (Sair da Tela Cheia)">⮌ Sair Tela Cheia</button>
-              <button id="btnHudPrev" class="hud-ctrl-btn" tabindex="0" title="Canal Anterior ou -10s">⏮ Anterior</button>
-              <button id="btnHudPlayPause" class="hud-ctrl-btn primary" tabindex="0" title="Reproduzir / Pausar">⏯ Pausar</button>
-              <button id="btnHudNext" class="hud-ctrl-btn" tabindex="0" title="Próximo Canal ou +10s">⏭ Próximo</button>
-              
-              <!-- Ajustes Solicitados: Velocidade até 4x no Player Principal -->
-              <button id="btnHudSpeed" class="hud-ctrl-btn hud-speed-btn" tabindex="0" title="Velocidade de Reprodução até 4x">⚡ 1x</button>
-              
-              <!-- Ajustes Solicitados: Faixa de Áudio no Player Principal -->
-              <button id="btnHudAudio" class="hud-ctrl-btn" tabindex="0" title="Selecionar Faixa de Áudio">🔊 Áudio</button>
-              
-              <!-- Ajustes Solicitados: Legendas no Player Principal -->
-              <button id="btnHudSubs" class="hud-ctrl-btn" tabindex="0" title="Selecionar Legendas">💬 Legenda</button>
-              
-              <!-- Proporção de Tela / Aspect Ratio -->
-              <button id="btnHudAspect" class="hud-ctrl-btn" tabindex="0" title="Proporção de Tela">📐 16:9</button>
-              
-              <!-- Favoritar -->
-              <button id="btnHudFav" class="hud-ctrl-btn" tabindex="0" title="Adicionar aos Favoritos">⭐ Favorito</button>
+          <!-- Controles em tela cheia (velocidade até 4x com áudio estável) -->
+          <div id="fsHudBar" class="fs-hud-bar hidden">
+            <div class="fs-hud-title" id="fsHudTitle">Canal</div>
+            <div class="fs-hud-actions">
+              <button type="button" id="fsBtnBack" class="ctrl-btn" tabindex="0">↩️ Sair</button>
+              <button type="button" id="fsBtnPlay" class="ctrl-btn" tabindex="0">⏯ Pausar</button>
+              <button type="button" id="fsBtnSpeed" class="ctrl-btn primary" tabindex="0">⚡ 1x</button>
+              <button type="button" id="fsBtnFav" class="ctrl-btn" tabindex="0">⭐ Favoritar</button>
+              <button type="button" id="fsBtnAudio" class="ctrl-btn" tabindex="0">🔊 Áudio</button>
             </div>
           </div>
         </div>
@@ -171,6 +121,7 @@
         <button id="cfgBtnSpeedTest" class="cfg-menu-item" tabindex="0">🚀 Teste de velocidade</button>
         <button id="cfgBtnLimpar" class="cfg-menu-item" tabindex="0">🗑️ Limpar armazenamento</button>
         <button id="cfgBtnTempo" class="cfg-menu-item" tabindex="0">⏱️ Configurações de tempo</button>
+        <button id="cfgBtnCategorias" class="cfg-menu-item" tabindex="0">📁 Gerenciar categorias</button>
         <button id="cfgBtnFluxo" class="cfg-menu-item" tabindex="0">📺 Alterar formato de fluxo</button>
         <button id="cfgBtnPin" class="cfg-menu-item" tabindex="0">🔒 Alterar código pin</button>
         <div class="cfg-tmdb-toggle">
@@ -190,7 +141,7 @@
     <div class="remote-key"><span class="color-dot green"></span> <span>Atualizar Lista</span></div>
     <div class="remote-key"><span class="color-dot yellow"></span> <span>Favoritar</span></div>
     <div class="remote-key"><span class="color-dot blue"></span> <span>Bloqueio 18+</span></div>
-    <div class="remote-key"><span>⮌ <strong>Voltar:</strong> Anterior / Sair</span></div>
+    <div class="remote-key"><span>↩️ <strong>Voltar:</strong> Anterior / Sair</span></div>
   </footer>
 
   <!-- ================= MODAIS ================= -->
@@ -227,37 +178,18 @@
         <!-- Lista de Servidores com Conectar, Editar e Excluir -->
         <div id="serverItemsGrid" class="servers-manager-list"></div>
 
-        <!-- Formulário de Inclusão e Edição Manual com Nome, URL, Usuário e Senha -->
-        <div class="add-server-card" style="background:#161b2a; border:1px solid #334155; border-radius:12px; padding:18px; margin-top:16px;">
-          <h4 id="txtAddServerTitle" style="margin: 0 0 12px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar / Alterar Servidor</h4>
+        <!-- Formulário de Inclusão e Edição Manual -->
+        <div class="add-server-card">
+          <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
           <input type="hidden" id="inputEditServerIndex" value="-1">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Nome da Lista / Servidor:</label>
-              <input id="inputNewServerName" type="text" placeholder="Ex: TANNIX ou Minha Lista" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
-            </div>
-            <div>
-              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Servidor / Host (URL M3U ou Xtream):</label>
-              <input id="inputNewServerUrl" type="url" placeholder="http://servidor.com:8080" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
-            </div>
-            <div>
-              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Usuário (Login Xtream / M3U):</label>
-              <input id="inputNewServerUser" type="text" placeholder="Usuário (ex: demo)" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
-            </div>
-            <div>
-              <label style="display:block; font-size:13px; color:#94a3b8; margin-bottom:4px;">Senha (Password Xtream / M3U):</label>
-              <input id="inputNewServerPass" type="text" placeholder="Senha do servidor" style="width:100%; box-sizing:border-box; padding: 10px 14px; background: #0f121d; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #ffd54f; font-weight:bold; font-size: 16px;" tabindex="0">
-            </div>
+          <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+            <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+            <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
           </div>
-          <div style="font-size:13px; color:#38bdf8; margin-top:-4px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
-            <span>🔑</span> <span><strong>Nota de Manutenção:</strong> O usuário e senha configurados aqui valem para todos os servidores.</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
-            <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 12px 24px; font-size:16px;" tabindex="0">💾 Salvar Alterações e Conectar</button>
-            <div style="display: flex; gap: 10px;">
-              <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 18px; font-size: 14px;" tabindex="0">Cancelar</button>
-              <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 18px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar Servidores Padrão</button>
-            </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 10px 22px;" tabindex="0">💾 Salvar e Conectar</button>
+            <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">Cancelar Edição</button>
+            <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar 7 Padrões</button>
           </div>
         </div>
       </div>
@@ -335,22 +267,25 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div>
             <div style="color: #888; font-size: 13px;">Versão Instalada</div>
-            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.6.1</div>
+            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v3.6.0</div>
           </div>
           <div style="text-align: right;">
             <div style="color: #888; font-size: 13px;">Versão Mais Recente</div>
-            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v3.6.1 ✓ (Versão Mais Recente)</div>
+            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v3.6.0 ✓ (Versão Mais Recente)</div>
           </div>
         </div>
 
         <div id="boxUpdateNotes" style="background: #141724; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 20px; max-height: 180px; overflow-y: auto;">
-          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão 3.6.1:</h4>
-          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Manutenção do Servidor completa com campos de Usuário e Senha
-• Carregamento de listas M3U / Xtream 100% completas em passe único
-• Novo layout de Limpeza de Armazenamento com botões e foco D-pad precisos
-• Navegação pelo controle remoto em todas as abas de Configurações
-• Gerenciador de Categorias exibindo todas as categorias com contagem de canais
-• Teclado numérico do controle remoto (0-9) para inserção de PIN</pre>
+          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão 3.6.0:</h4>
+          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)
+• Novo painel de Teste de Velocidade com Download e Upload em tempo real
+• Ajuste e salvamento de Formato de Fluxo (MPEG-TS, HLS, Automático)
+• Alteração e validação de Senha PIN de Adultos direto na TV
+• Configuração e sincronização de tempo e fuso horário
+• Gerenciador de categorias com ocultação/exibição seletiva
+• Gerenciador de servidores com opção de Alterar/Editar e indicador de progresso %
+• Áudio e Legendas unificados sem cortes na tela com fontes grandes
+• Inicialização ultra rápida e fluida sem travamentos</pre>
         </div>
 
         <div id="updateProgressBox" class="hidden" style="margin-bottom: 20px;">
@@ -365,7 +300,7 @@
 
         <div id="updateActionsRow" style="display: flex; gap: 12px; flex-wrap: wrap;">
           <button id="btnStartDirectUpdate" class="ctrl-btn primary" style="flex: 2; min-width: 200px; padding: 14px;" tabindex="0">
-            🔄 Reinstalar / Sincronizar Arquivos v3.6.1
+            🔄 Reinstalar / Sincronizar Arquivos v3.6.0
           </button>
           <button id="btnCheckAgainUpdate" class="ctrl-btn" style="flex: 1; min-width: 120px; padding: 14px;" tabindex="0">
             🔄 Verificar
@@ -383,30 +318,6 @@
     </div>
   </div>
 
-  <!-- Modal Pop-up de Aviso de Nova Atualização na TV (ao clicar já atualiza direto) -->
-  <div id="modalUpdateNotice" class="app-modal hidden" style="z-index: 10000;">
-    <div class="modal-content" style="width: 580px; background: #0d111e; border: 2px solid #e50914; border-radius: 20px; padding: 24px; text-align: center; box-shadow: 0 0 45px rgba(229,9,20,0.6);">
-      <div style="font-size: 46px; margin-bottom: 12px; animation: bounce 1.5s infinite;">🚀</div>
-      <h2 style="margin: 0 0 10px 0; font-size: 26px; color: #ffd54f;">Nova Atualização Disponível!</h2>
-      <p id="txtUpdateNoticeDesc" style="color: #cbd5e1; font-size: 16px; line-height: 1.5; margin: 0 0 18px 0;">
-        Uma nova versão do MK21 Play foi publicada no GitHub com melhorias críticas de desempenho e correções para a Smart TV.
-      </p>
-      <div id="boxUpdateNoticeVersion" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; margin-bottom: 22px; font-size: 15px;">
-        <span style="color: #888;">Versão Instalada:</span> <strong id="lblNoticeCurrentVer" style="color: #fff;">v3.6.3</strong>
-        <span style="margin: 0 10px; color: #ffd54f;">➔</span>
-        <span style="color: #888;">Nova Versão:</span> <strong id="lblNoticeNewVer" style="color: #4ade80;">v3.6.3</strong>
-      </div>
-      <div style="display: flex; gap: 14px; justify-content: center;">
-        <button id="btnNoticeUpdateNow" class="ctrl-btn primary" style="flex: 2; padding: 16px; font-size: 17px; font-weight: bold; border-radius: 10px; box-shadow: 0 0 20px rgba(229,9,20,0.5);" tabindex="0">
-          ⚡ Atualizar Agora na TV
-        </button>
-        <button id="btnNoticeUpdateLater" class="ctrl-btn" style="flex: 1; padding: 16px; font-size: 15px; border-radius: 10px; background: rgba(255,255,255,0.1);" tabindex="0">
-          Mais Tarde
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- HUD de Carregamento em Tempo Real com Porcentagem -->
   <div id="hudLoadingOverlay" class="hud-loading-overlay hidden">
     <div class="hud-loading-card">
@@ -420,47 +331,25 @@
     </div>
   </div>
 
-  <!-- Carregador Inteligente OTA para Smart TV (executa versão atualizada do GitHub sem reinstalar) -->
+  <!-- BOOTLOADER OTA INTELIGENTE MK21 PLAY (LG webOS & Samsung Tizen) -->
+    <!-- Boot estático v3.7.3: app.js do pacote (setas DPAD estáveis). OTA JS antigo é ignorado. -->
   <script>
-    (function() {
-      var BASE_VER = '3.6.3';
+    (function () {
       try {
-        var otaVer = localStorage.getItem('mk21_ota_app_version');
-        var otaJs = localStorage.getItem('mk21_ota_app_js');
+        localStorage.removeItem('mk21_ota_app_js');
+        localStorage.setItem('mk21_ota_app_version', '3.7.3');
+      } catch (e) {}
+      try {
         var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        
-        function semverGt(a, b) {
-          if (!a || !b) return false;
-          var pa = a.split('.').map(Number);
-          var pb = b.split('.').map(Number);
-          for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
-            var na = pa[i] || 0;
-            var nb = pb[i] || 0;
-            if (na > nb) return true;
-            if (na < nb) return false;
-          }
-          return false;
+        if (otaCss && otaCss.length > 100) {
+          var el = document.getElementById('mk21-ota-override-css') || document.createElement('style');
+          el.id = 'mk21-ota-override-css';
+          el.textContent = otaCss;
+          document.head.appendChild(el);
         }
-
-        if (otaCss && otaVer && semverGt(otaVer, BASE_VER)) {
-          var el = document.getElementById('mk21-ota-override-css');
-          if (el) el.textContent = otaCss;
-        }
-
-        if (otaJs && otaVer && semverGt(otaVer, BASE_VER) && otaJs.length > 5000 && otaJs.indexOf('playStream') !== -1) {
-          console.log('[MK21 OTA] Executando versão atualizada v' + otaVer + ' da Smart TV');
-          var s = document.createElement('script');
-          s.textContent = otaJs;
-          document.body.appendChild(s);
-          return;
-        }
-      } catch(e) {
-        console.warn('[MK21 OTA] Erro ao carregar cache OTA, usando pacote base:', e);
-      }
-      var s = document.createElement('script');
-      s.src = 'app.js?v=' + BASE_VER;
-      document.body.appendChild(s);
+      } catch (e) {}
     })();
   </script>
+  <script src="app.js?v=3.7.3"></script>
 </body>
 </html>

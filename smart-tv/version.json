@@ -1,9 +1,9 @@
 {
-  "version": "3.6.3",
-  "versionCode": 363,
-  "title": "MK21 Play v3.6.3",
-  "releaseNotes": "• Suporte a listas gigantescas (>280k canais/VODs) com streaming parser zero-copy (elimina reinício por memória na TV)\n• Filmes VOD e Séries priorizados e categorizados exatamente de acordo com o group-title da lista\n• Atualização dos Canais Ao Vivo executada em segundo plano com categorização fiel à lista\n• Persistência garantida no IndexedDB da TV: nunca apaga o que já foi baixado\n• Indicador de status do servidor ON/OFF em tempo real com medição de latência no seletor de servidores\n• Credenciais de usuário e senha na manutenção compartilhadas para todos os servidores\n• Atualização direta na TV (OTA) totalmente funcional com carregamento inteligente",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.6.3_all.ipk",
+  "version": "3.7.3",
+  "versionCode": 373,
+  "title": "MK21 Play v3.7.3",
+  "releaseNotes": "• Retoma o último canal ao vivo ao abrir (cache)\n• Feedback imediato ao trocar canal/aba (Sintonizando...)\n• Busca com debounce (mais fluida na TV)\n• Ordenação lembrada entre sessões\n• HUD de tela cheia auto-oculta e reaparece com as setas\n• Canal ativo destacado e rolado na lista\n• Buffer HLS mais enxuto na troca de canais",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.7.3_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
-  "updatedAt": "2026-10-06"
+  "updatedAt": "2026-10-07"
 }

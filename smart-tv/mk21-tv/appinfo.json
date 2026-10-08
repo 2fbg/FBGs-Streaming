@@ -1,6 +1,6 @@
 {
   "id": "org.mk21.tv",
-  "version": "3.6.3",
+  "version": "3.7.3",
   "vendor": "MK21",
   "type": "web",
   "main": "index.html",
@@ -9,6 +9,6 @@
   "largeIcon": "largeIcon.png",
   "resolution": "1920x1080",
   "handlesRelaunch": true,
-  "requiredMemory": 384,
+  "requiredMemory": 256,
   "disableBackHistoryAPI": true
 }

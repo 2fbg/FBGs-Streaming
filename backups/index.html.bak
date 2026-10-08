@@ -266,10 +266,6 @@
                         <i class="fa-solid fa-circle-half-stroke text-[#E50914]"></i>
                         <span class="hidden md:inline">Alto Contraste</span>
                     </button>
-                    <button id="account-settings-btn" onclick="window.openAccountModal();" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-bold rounded-xl outline-none transition-all duration-200 flex items-center gap-1.5" title="Configurações e Detalhes da Conta">
-                        <i class="fa-solid fa-gear text-amber-400"></i>
-                        <span class="hidden md:inline">Conta</span>
-                    </button>
                     <button id="refresh-playlist-btn" onclick="forceRefreshPlaylist();" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-bold rounded-xl outline-none transition-all duration-200 flex items-center gap-1.5" title="Sincronizar e Atualizar Lista com Servidor">
                         <i class="fa-solid fa-arrows-rotate text-[#E50914]" id="refresh-playlist-icon"></i>
                         <span class="hidden md:inline">Atualizar Lista</span>
@@ -308,11 +304,6 @@
                             <input id="search-input" type="text" placeholder="Buscar canal, filme ou série..." class="w-full pl-10 pr-4 py-2.5 bg-black border border-slate-800 text-slate-100 placeholder-slate-500 rounded-xl outline-none focus:ring-2 focus:ring-[#E50914] text-sm transition-all duration-200">
                         </div>
 
-                        <!-- TopIbo Style Horizontal Quick Chips for Categories (Scroll suave horizontal) -->
-                        <div id="quick-category-chips-bar" class="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none touch-pan-x">
-                            <!-- Populated dynamically via JS -->
-                        </div>
-
                         <!-- Mobile Category Button Trigger -->
                         <div class="block md:hidden">
                             <button id="mobile-category-trigger" class="w-full px-4 py-2.5 bg-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl flex items-center justify-between">
@@ -324,54 +315,6 @@
 
                     <!-- Items Grid / List -->
                     <div id="media-items-scroller" class="flex-grow overflow-y-auto p-4">
-                        <!-- TopIbo Style Hero Banner / Carousel de Destaques (Tendências Hoje) -->
-                        <div id="hero-banner-section" class="hidden mb-6 relative rounded-3xl overflow-hidden border border-slate-800/80 bg-slate-950 shadow-2xl group select-none">
-                            <div class="relative w-full aspect-[16/9] sm:aspect-[21/9] max-h-[320px] overflow-hidden">
-                                <img id="hero-banner-image" class="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform duration-700 opacity-80" src="" alt="Destaque">
-                                <div class="absolute inset-0 bg-gradient-to-t from-[#0e0f12] via-[#0e0f12]/50 to-transparent"></div>
-                                <div class="absolute inset-0 bg-gradient-to-r from-[#0e0f12]/90 via-transparent to-transparent"></div>
-                                
-                                <div class="absolute top-3 left-3 flex items-center gap-2">
-                                    <span class="text-[9px] font-black uppercase tracking-wider text-amber-400 bg-black/70 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1 backdrop-blur-md">
-                                        <i class="fa-solid fa-arrow-trend-up"></i> TENDÊNCIAS — HOJE
-                                    </span>
-                                </div>
-
-                                <div class="absolute bottom-3 left-3 right-3 sm:bottom-5 sm:left-5 sm:right-5 flex flex-col gap-2">
-                                    <div class="flex items-center gap-2">
-                                        <span id="hero-banner-type-badge" class="px-2 py-0.5 bg-[#E50914] text-white font-black text-[9px] uppercase tracking-wider rounded-md">FILME</span>
-                                        <span id="hero-banner-rating" class="text-amber-400 text-xs font-extrabold flex items-center gap-1">⭐ 8.5</span>
-                                    </div>
-                                    <h3 id="hero-banner-title" class="text-lg sm:text-2xl font-black text-white line-clamp-1 drop-shadow-lg">Título do Destaque</h3>
-                                    
-                                    <div class="flex items-center gap-2.5 mt-1">
-                                        <button id="hero-banner-play-btn" class="px-4 py-2 bg-white hover:bg-slate-200 text-black font-black text-xs rounded-xl flex items-center gap-2 transition-all shadow-lg active:scale-95">
-                                            <i class="fa-solid fa-play text-xs text-[#E50914]"></i>
-                                            <span>Assistir</span>
-                                        </button>
-                                        <button id="hero-banner-detail-btn" class="px-4 py-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all backdrop-blur-md">
-                                            <i class="fa-solid fa-circle-info text-slate-300"></i>
-                                            <span>Detalhes</span>
-                                        </button>
-                                        <button id="hero-banner-fav-btn" class="w-9 h-9 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-white flex items-center justify-center transition-all backdrop-blur-md">
-                                            <i id="hero-banner-fav-icon" class="fa-regular fa-heart"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Controles do Carrossel (Setas e Paginação) -->
-                                <button onclick="window.prevHeroSlide()" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 border border-slate-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <i class="fa-solid fa-chevron-left text-xs"></i>
-                                </button>
-                                <button onclick="window.nextHeroSlide()" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 border border-slate-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <i class="fa-solid fa-chevron-right text-xs"></i>
-                                </button>
-
-                                <div id="hero-banner-dots" class="absolute bottom-2 right-4 flex items-center gap-1.5">
-                                    <!-- Dots generated in JS -->
-                                </div>
-                            </div>
-                        </div>
                         <!-- Continue Watching Row (Netflix Style) -->
                         <div id="continue-watching-section" class="hidden mb-6">
                             <h3 class="text-[11px] font-black uppercase tracking-[0.1em] text-red-500 mb-2.5 flex items-center gap-1.5">
@@ -1060,269 +1003,13 @@
         </div>
     </div>
 
-    <!-- FULL SCREEN MODERN MULTI-BAR LOADER (Estilo TopIbo / Netflix) -->
-    <div id="app-loader" class="fixed inset-0 bg-[#07080a] z-50 flex flex-col items-center justify-center p-6 backdrop-blur-xl hidden select-none">
-        <div class="w-full max-w-sm flex flex-col items-center text-center">
-            <!-- Brand Badge -->
-            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#E50914] via-red-700 to-black p-0.5 shadow-2xl shadow-red-950/60 mb-4 flex items-center justify-center">
-                <div class="w-full h-full bg-[#0a0a0d] rounded-2xl flex items-center justify-center">
-                    <span class="text-2xl font-black text-white tracking-wider">MK<span class="text-[#E50914]">21</span></span>
-                </div>
-            </div>
-            
-            <h3 class="text-xs font-black tracking-[0.2em] text-slate-400 uppercase mb-6 flex items-center gap-2">
-                <i class="fa-solid fa-satellite-dish text-[#E50914] animate-pulse"></i>
-                <span id="loader-message">CARREGANDO CATÁLOGO</span>
-            </h3>
-
-            <!-- TopIbo Style Multi-Bars -->
-            <div class="w-full space-y-3.5 bg-slate-900/50 border border-slate-800/80 rounded-2xl p-4 shadow-xl">
-                <!-- Barra 1: Ao Vivo -->
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-[11px] font-bold">
-                        <span class="flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-satellite text-amber-400 w-4"></i> Ao Vivo
-                        </span>
-                        <span id="loader-bar-live-pct" class="font-mono text-amber-400">0%</span>
-                    </div>
-                    <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div id="loader-bar-live" class="h-full bg-gradient-to-r from-amber-500 to-amber-400 w-0 transition-all duration-300 rounded-full"></div>
-                    </div>
-                </div>
-
-                <!-- Barra 2: Séries -->
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-[11px] font-bold">
-                        <span class="flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-layer-group text-amber-400 w-4"></i> Séries
-                        </span>
-                        <span id="loader-bar-series-pct" class="font-mono text-amber-400">0%</span>
-                    </div>
-                    <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div id="loader-bar-series" class="h-full bg-gradient-to-r from-amber-500 to-amber-400 w-0 transition-all duration-300 rounded-full"></div>
-                    </div>
-                </div>
-
-                <!-- Barra 3: Filmes -->
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-[11px] font-bold">
-                        <span class="flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-film text-amber-400 w-4"></i> Filmes
-                        </span>
-                        <span id="loader-bar-movies-pct" class="font-mono text-amber-400">0%</span>
-                    </div>
-                    <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div id="loader-bar-movies" class="h-full bg-gradient-to-r from-amber-500 to-amber-400 w-0 transition-all duration-300 rounded-full"></div>
-                    </div>
-                </div>
-
-                <!-- Linha Divisória -->
-                <div class="h-[1px] bg-slate-800 my-1"></div>
-
-                <!-- Barra Geral: Progresso -->
-                <div class="space-y-1">
-                    <div class="flex items-center justify-between text-[11px] font-extrabold">
-                        <span class="text-slate-400 tracking-wider uppercase text-[10px]">PROGRESSO</span>
-                        <span id="loader-progress" class="font-mono text-white text-xs">0%</span>
-                    </div>
-                    <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div id="loader-bar-total" class="h-full bg-gradient-to-r from-white via-slate-200 to-white w-0 transition-all duration-300 rounded-full shadow-sm"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <p id="loader-substatus" class="text-[10px] text-slate-500 mt-4 tracking-wide font-medium">Sincronizando canais e metadados...</p>
+    <!-- FULL SCREEN SPINNER / LOADER OVERLAY -->
+    <div id="app-loader" class="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center gap-3 backdrop-blur-md hidden">
+        <div class="relative w-16 h-16">
+            <div class="absolute inset-0 rounded-full border-4 border-red-950/40 border-t-[#E50914] animate-spin"></div>
         </div>
-    </div>
-
-    <!-- MODAL: CONFIGURAÇÕES E CONTA DO USUÁRIO (Estilo TopIbo / Netflix) -->
-    <div id="account-settings-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4 select-none">
-        <div class="glass-card bg-[#0e0e12]/98 border border-slate-800 rounded-3xl max-w-md w-full p-6 text-white shadow-2xl relative">
-            <button onclick="window.closeAccountModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-            
-            <h3 class="font-black text-lg text-white mb-4">Configurações</h3>
-
-            <!-- Tabs: Conta / Preferências / Notificações -->
-            <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-2xl border border-slate-850 mb-5">
-                <button onclick="window.switchSettingsTab('account')" id="tab-btn-account" class="settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl bg-slate-900 border border-amber-500/40 text-amber-400 flex items-center justify-center gap-1.5 transition-all">
-                    <i class="fa-solid fa-user"></i>
-                    <span>Conta</span>
-                </button>
-                <button onclick="window.switchSettingsTab('preferences')" id="tab-btn-preferences" class="settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
-                    <i class="fa-solid fa-sliders"></i>
-                    <span>Preferências</span>
-                </button>
-                <button onclick="window.switchSettingsTab('notifications')" id="tab-btn-notifications" class="settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
-                    <i class="fa-solid fa-bell"></i>
-                    <span>Notificações</span>
-                </button>
-            </div>
-
-            <!-- Tab Content 1: CONTA -->
-            <div id="tab-content-account" class="space-y-4">
-                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">INFORMAÇÕES DA CONTA</div>
-                
-                <!-- Card Principal com Avatar e Status -->
-                <div class="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center gap-3.5">
-                    <div id="settings-avatar-badge" class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 text-slate-950 font-black text-xl flex items-center justify-center shrink-0 shadow-md">
-                        6
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div id="settings-username-display" class="font-extrabold text-sm text-white truncate">601334065</div>
-                        <div class="text-[11px] text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>Plano ativo</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Detalhes do Plano -->
-                <div class="bg-slate-950/90 border border-slate-850 rounded-2xl divide-y divide-slate-850 text-xs">
-                    <div class="p-3 flex items-center justify-between">
-                        <span class="text-slate-400 flex items-center gap-2"><i class="fa-solid fa-user text-amber-400 w-4"></i> Usuário</span>
-                        <span id="settings-info-user" class="font-bold text-white font-mono">601334065</span>
-                    </div>
-                    <div class="p-3 flex items-center justify-between">
-                        <span class="text-slate-400 flex items-center gap-2"><i class="fa-solid fa-calendar-days text-amber-400 w-4"></i> Vencimento</span>
-                        <span id="settings-info-exp" class="font-bold text-slate-200">15/03/2027</span>
-                    </div>
-                    <div class="p-3 flex items-center justify-between">
-                        <span class="text-slate-400 flex items-center gap-2"><i class="fa-solid fa-display text-amber-400 w-4"></i> Conexões máximas</span>
-                        <span class="font-bold text-slate-200">2 simultâneas</span>
-                    </div>
-                </div>
-
-                <!-- Quem está assistindo -->
-                <div class="space-y-2 pt-1">
-                    <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">QUEM ESTÁ ASSISTINDO?</div>
-                    <div class="flex items-center gap-3">
-                        <div class="flex flex-col items-center">
-                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center text-white text-2xl shadow-lg border-2 border-sky-400/40">
-                                <i class="fa-solid fa-face-smile"></i>
-                            </div>
-                            <span id="settings-profile-label" class="text-[10px] font-bold text-slate-300 mt-1 truncate max-w-[80px]">601334065</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="pt-2 text-center">
-                    <button onclick="window.closeAccountModal(); performLogout();" class="text-xs text-red-500 hover:text-red-400 font-bold transition-colors">
-                        Encerrar sessão
-                    </button>
-                </div>
-            </div>
-
-            <!-- Tab Content 2: PREFERÊNCIAS -->
-            <div id="tab-content-preferences" class="space-y-4 hidden text-xs">
-                <div class="text-[10px] font-black uppercase tracking-wider text-slate-400">INTERFACE & CATÁLOGO</div>
-                
-                <div class="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center justify-between">
-                    <div>
-                        <div class="font-bold text-white">Cache Inteligente</div>
-                        <div class="text-[10px] text-slate-400 mt-0.5">Guarda categorias e listas no aparelho para abrir instantâneo.</div>
-                    </div>
-                    <input type="checkbox" id="pref-cache-toggle" checked class="w-5 h-5 accent-[#E50914] cursor-pointer">
-                </div>
-
-                <div class="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center justify-between">
-                    <div>
-                        <div class="font-bold text-white">Hero Banner de Destaques</div>
-                        <div class="text-[10px] text-slate-400 mt-0.5">Exibe carrossel de filmes e séries em alta na tela inicial.</div>
-                    </div>
-                    <input type="checkbox" id="pref-hero-toggle" checked onchange="toggleHeroBannerVisibility(this.checked)" class="w-5 h-5 accent-[#E50914] cursor-pointer">
-                </div>
-
-                <div class="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center justify-between">
-                    <div>
-                        <div class="font-bold text-white">Chips Rápidos de Categorias</div>
-                        <div class="text-[10px] text-slate-400 mt-0.5">Barra horizontal de rolagem no topo para troca rápida.</div>
-                    </div>
-                    <input type="checkbox" id="pref-chips-toggle" checked class="w-5 h-5 accent-[#E50914] cursor-pointer">
-                </div>
-
-                <div class="pt-2 flex justify-end">
-                    <button onclick="window.closeAccountModal(); showNotification('Preferências salvas!', 'success');" class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition-all">
-                        Salvar
-                    </button>
-                </div>
-            </div>
-
-            <!-- Tab Content 3: NOTIFICAÇÕES -->
-            <div id="tab-content-notifications" class="py-8 text-center text-slate-500 space-y-2 hidden">
-                <i class="fa-solid fa-bell text-3xl text-slate-600"></i>
-                <div class="text-xs font-bold text-slate-400">Em breve — alertas de novos episódios e novidades.</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: SÉRIE COMPLETA (Estilo TopIbo / Netflix - Print 11) -->
-    <div id="series-detail-modal" class="fixed inset-0 bg-black/90 z-50 backdrop-blur-xl items-center justify-center hidden p-2 sm:p-4 select-none overflow-y-auto">
-        <div class="glass-card bg-[#0b0c0f]/98 border border-slate-800 rounded-3xl max-w-2xl w-full text-white shadow-2xl relative overflow-hidden my-auto">
-            <!-- Botão Voltar -->
-            <button onclick="window.closeSeriesDetailModal()" class="absolute top-4 left-4 z-20 px-3 py-1.5 rounded-xl bg-black/70 border border-slate-700/60 text-slate-200 hover:text-white text-xs font-bold flex items-center gap-2 backdrop-blur-md transition-all">
-                <i class="fa-solid fa-chevron-left text-xs"></i>
-                <span>Voltar</span>
-            </button>
-
-            <!-- Botão Favoritar -->
-            <button id="series-modal-fav-btn" onclick="toggleSeriesModalFavorite()" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/70 border border-slate-700/60 text-slate-300 hover:text-red-500 flex items-center justify-center backdrop-blur-md transition-all">
-                <i id="series-modal-fav-icon" class="fa-regular fa-heart"></i>
-            </button>
-
-            <!-- Banner Hero Superior com Fade Escuro -->
-            <div class="relative w-full h-64 sm:h-80 overflow-hidden bg-slate-950">
-                <img id="series-modal-backdrop" class="w-full h-full object-cover object-top opacity-70" src="" alt="Banner da Série">
-                <div class="absolute inset-0 bg-gradient-to-t from-[#0b0c0f] via-[#0b0c0f]/60 to-transparent"></div>
-                <div class="absolute bottom-4 left-5 right-5 z-10">
-                    <h2 id="series-modal-title" class="font-black text-2xl sm:text-3xl text-white tracking-tight drop-shadow-md">Nome da Série</h2>
-                    <div class="flex items-center gap-2.5 mt-2 flex-wrap">
-                        <span class="flex items-center gap-1 text-amber-400 font-black text-xs bg-black/60 px-2 py-0.5 rounded-md border border-amber-500/30">
-                            ⭐ <span id="series-modal-rating">8.5</span>
-                        </span>
-                        <span id="series-modal-genres" class="text-[11px] text-slate-300 font-semibold bg-slate-900/80 px-2 py-0.5 rounded-md border border-slate-800">
-                            Comédia, Drama, Mistério
-                        </span>
-                        <span id="series-modal-counts" class="text-[10px] text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded-md">
-                            1 temp • 10 eps
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Corpo da Série: Sinopse & Seletor de Temporadas -->
-            <div class="p-5 sm:p-6 space-y-4">
-                <!-- Sinopse -->
-                <div>
-                    <p id="series-modal-plot" class="text-xs text-slate-300 leading-relaxed font-normal text-justify">
-                        Carregando sinopse detalhada da série...
-                    </p>
-                </div>
-
-                <!-- Seletor de Temporada e Lista de Episódios -->
-                <div class="space-y-3 pt-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">EPISÓDIOS</span>
-                        
-                        <!-- Dropdown de Temporada -->
-                        <div class="relative w-44">
-                            <select id="series-modal-season-select" onchange="renderSeriesModalEpisodes(this.value)" class="w-full px-3 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-100 text-xs font-bold rounded-xl appearance-none outline-none cursor-pointer pr-8 focus:ring-1 focus:ring-amber-400">
-                                <!-- Populated dynamically -->
-                            </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 text-xs">
-                                <i class="fa-solid fa-chevron-down text-amber-400"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Lista Vertical de Episódios -->
-                    <div id="series-modal-episodes-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        <!-- Populated dynamically in JS -->
-                    </div>
-                </div>
-            </div>
-        </div>
+        <p class="font-extrabold text-sm tracking-wide text-white select-none uppercase mt-3" id="loader-message">Buscando playlists...</p>
+        <span class="text-xs text-[#E50914] font-black jetbrains" id="loader-progress">0%</span>
     </div>
 
     <!-- MAIN CONFIG & APPLICATION CONTROLLER -->
@@ -2676,62 +2363,20 @@
             }
         }
 
-        // TopIbo Style Multi-Bar Loader helpers
+        // Loader helper
         function showLoader(message) {
-            const loaderMsgEl = document.getElementById('loader-message');
-            const loaderProgEl = document.getElementById('loader-progress');
-            if (loaderMsgEl) loaderMsgEl.textContent = message || "CARREGANDO CATÁLOGO";
-            if (loaderProgEl) loaderProgEl.textContent = "0%";
-            
-            // Reset individual category bars
-            updateCategoryLoaderProgress('live', 0);
-            updateCategoryLoaderProgress('series', 0);
-            updateCategoryLoaderProgress('movies', 0);
-            updateCategoryLoaderProgress('total', 0);
-            
-            if (loader) loader.classList.remove('hidden');
-        }
-
-        function updateCategoryLoaderProgress(category, pct) {
-            const p = Math.min(100, Math.max(0, Math.round(pct)));
-            const barMap = {
-                'live': { bar: 'loader-bar-live', text: 'loader-bar-live-pct' },
-                'series': { bar: 'loader-bar-series', text: 'loader-bar-series-pct' },
-                'movies': { bar: 'loader-bar-movies', text: 'loader-bar-movies-pct' },
-                'total': { bar: 'loader-bar-total', text: 'loader-progress' }
-            };
-            const target = barMap[category];
-            if (!target) return;
-            const barEl = document.getElementById(target.bar);
-            const textEl = document.getElementById(target.text);
-            if (barEl) barEl.style.width = `${p}%`;
-            if (textEl) textEl.textContent = `${p}%`;
+            loaderMessage.textContent = message;
+            loaderProgress.textContent = "0%";
+            loader.classList.remove('hidden');
         }
 
         function updateLoaderProgress(pct, message = null) {
-            const p = Math.min(100, Math.max(0, Math.round(pct)));
-            updateCategoryLoaderProgress('total', p);
-            
-            // Estima o carregamento progressivo das 3 categorias
-            if (p <= 40) {
-                updateCategoryLoaderProgress('live', Math.round((p / 40) * 100));
-            } else if (p <= 70) {
-                updateCategoryLoaderProgress('live', 100);
-                updateCategoryLoaderProgress('series', Math.round(((p - 40) / 30) * 100));
-            } else {
-                updateCategoryLoaderProgress('live', 100);
-                updateCategoryLoaderProgress('series', 100);
-                updateCategoryLoaderProgress('movies', Math.round(((p - 70) / 30) * 100));
-            }
-
-            if (message) {
-                const substatus = document.getElementById('loader-substatus');
-                if (substatus) substatus.textContent = message;
-            }
+            loaderProgress.textContent = `${pct}%`;
+            if (message) loaderMessage.textContent = message;
         }
 
         function hideLoader() {
-            if (loader) loader.classList.add('hidden');
+            loader.classList.add('hidden');
         }
 
         // ==========================================
