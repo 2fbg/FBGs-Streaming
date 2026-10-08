@@ -23,4 +23,4 @@ jobs:
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
-          test "$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")" = "3.8.0"
+          test "$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")" = "3.8.1"

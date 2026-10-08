@@ -1,4 +1,4 @@
-// MK21 PLAY v3.8.0 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.8.1 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -129,9 +129,9 @@ async function saveStoredData(id, payload) {
     if (!db) return;
     // Limita tamanho em memória/disco para não reiniciar a TV (webOS)
     const slim = {
-      LIVE: (payload.LIVE || []).slice(0, 12000).map(slimItem),
-      MOVIE: (payload.MOVIE || []).slice(0, 15000).map(slimItem),
-      SERIES: (payload.SERIES || []).slice(0, 12000).map(slimItem)
+      LIVE: (payload.LIVE || []).slice(0, 6000).map(slimItem),
+      MOVIE: (payload.MOVIE || []).slice(0, 18000).map(slimItem),
+      SERIES: (payload.SERIES || []).slice(0, 15000).map(slimItem)
     };
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put({ id, payload: slim, updatedAt: Date.now() });
@@ -145,7 +145,9 @@ const CATALOG_INDEX_DB = 'mk21_catalog_index_v1';
 const CATALOG_INDEX_VERSION = 1;
 const CATALOG_INDEX_STORE = 'items';
 const CATALOG_META_STORE = 'meta';
-const CATALOG_MEMORY_LIMITS = { LIVE: 12000, MOVIE: 15000, SERIES: 12000 };
+// Orçamento de memória equilibrado: ~6k LIVE e mais espaço para VOD/Séries.
+// O catálogo completo permanece no IndexedDB.
+const CATALOG_MEMORY_LIMITS = { LIVE: 6000, MOVIE: 18000, SERIES: 15000 };
 
 function openCatalogIndexDb() {
   return new Promise(resolve => {
@@ -2598,7 +2600,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.8.0';
+const BASE_PACKAGE_VERSION = '3.8.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2650,15 +2652,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.0
-    if (!data || compareSemver(data.version, '3.8.0') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.1
+    if (!data || compareSemver(data.version, '3.8.1') < 0) {
       data = {
-        version: '3.8.0',
+        version: '3.8.1',
         versionCode: 360,
-        title: 'MK21 Play v3.8.0',
+        title: 'MK21 Play v3.8.1',
         releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.0_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.8.0') < 0)
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.1_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.8.1') < 0)
       };
     }
     latestRemoteUpdateData = data;
