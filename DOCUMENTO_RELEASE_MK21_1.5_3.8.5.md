@@ -8,7 +8,7 @@ Esta release corrige o fluxo de atualização do Android e reduz a pressão de m
 
 A versão Android foi atualizada para `versionCode 6` e `versionName 1.5`. O atualizador consulta o manifesto Vercel, usa o GitHub Raw como fallback e só depois consulta a API de releases correta. A comparação de versões passou a ser numérica por componentes, evitando erros como comparar `1.10` e `1.9` como texto.
 
-Os testes `testDebugUnitTest` e a compilação `assembleRelease` foram concluídos com sucesso. O APK foi validado pelo APK Signature Scheme v2. SHA-256 do APK: `b724a1075d64687e5c22ea68a5b77d6a663ec20e42896dbb3729b0e61e2c2d90`. SHA-256 do certificado: `04f59f3b091230dc7f31bd9dae94b70f678f6245b4d8f4a460e72c344580a593`.
+Os testes `testDebugUnitTest` e a compilação `assembleRelease` foram concluídos com sucesso. O APK foi validado pelo APK Signature Scheme v2. SHA-256 do APK: `03a19c6c168da267db212e6e6ca249c188a4fd847a341a399d1a891e9f7601e9`. SHA-256 do certificado: `04f59f3b091230dc7f31bd9dae94b70f678f6245b4d8f4a460e72c344580a593`.
 
 A chave privada que assinou o APK Android v1.4 anterior não foi encontrada no repositório. Por isso, o Android pode exigir desinstalar o v1.4 antes de instalar o v1.5. Para as próximas releases, a chave de produção deve ser guardada em um keystore seguro e reutilizada.
 
@@ -27,3 +27,8 @@ O JavaScript da Smart TV passou em `node --check`. O IPK foi gerado e extraído 
 ## Procedimento recomendado na TV
 
 Instale o IPK 3.8.5. Como o banco de dados mudou para a versão v6, o cache antigo não será reutilizado; a primeira abertura após a instalação poderá fazer uma carga inicial. Depois disso, a abertura deve usar o cache resumido ou a primeira página do IndexedDB. Se a TV ainda reiniciar, use **Configurações → Limpar armazenamento → Limpar tudo** uma única vez e aguarde a reconstrução do índice.
+
+
+## Ajuste final do atualizador Android
+
+O atualizador passou a consultar todos os manifestos disponíveis e escolher a maior versão numérica, em vez de parar no primeiro endpoint que responde. Isso evita que um manifesto Vercel temporariamente desatualizado impeça a descoberta do v1.5 no GitHub Raw.

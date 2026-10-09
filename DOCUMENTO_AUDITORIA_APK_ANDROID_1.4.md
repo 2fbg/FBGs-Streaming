@@ -76,7 +76,7 @@ A versão Android v1.5 foi compilada com `versionCode 6`. Os testes unitários `
 
 O APK v1.5 foi validado pelo APK Signature Scheme v2 e possui:
 
-- SHA-256 do APK: `b724a1075d64687e5c22ea68a5b77d6a663ec20e42896dbb3729b0e61e2c2d90`
+- SHA-256 do APK: `03a19c6c168da267db212e6e6ca249c188a4fd847a341a399d1a891e9f7601e9`
 - SHA-256 do certificado: `04f59f3b091230dc7f31bd9dae94b70f678f6245b4d8f4a460e72c344580a593`
 - `applicationId`: `com.aistudio.multiservidor.iptvmk`
 - `versionName`: `1.5`

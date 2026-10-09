@@ -1709,7 +1709,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json",
                 "https://api.github.com/repos/2fbg/FBGs-Streaming/releases/latest"
             )
-            var responseText: String? = null
+            val responses = mutableListOf<String>()
             var lastError: String? = null
             for (endpoint in endpoints) {
                 var conn: HttpURLConnection? = null
@@ -1723,8 +1723,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         instanceFollowRedirects = true
                     }
                     if (conn.responseCode == HttpURLConnection.HTTP_OK) {
-                        responseText = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (!responseText.isNullOrBlank()) break
+                        val body = conn.inputStream.bufferedReader().use { it.readText() }
+                        if (body.isNotBlank()) responses.add(body)
                     } else {
                         lastError = "HTTP ${conn.responseCode}"
                     }
@@ -1735,7 +1735,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             try {
-                val response = responseText ?: throw IllegalStateException(lastError ?: "nenhum manifesto disponível")
+                fun versionParts(value: String): List<Int> = value
+                    .replace("[^0-9.]".toRegex(), "")
+                    .split('.')
+                    .filter { it.isNotBlank() }
+                    .map { it.toIntOrNull() ?: 0 }
+                    .let { it + List((4 - it.size).coerceAtLeast(0)) { 0 } }
+                fun versionRank(value: String): Long = versionParts(value).take(4).fold(0L) { acc, n -> acc * 1000L + n }
+                val response = responses.maxByOrNull { raw ->
+                    try {
+                        val candidate = JSONObject(raw)
+                        versionRank(candidate.optString("version", candidate.optString("tag_name", "0")))
+                    } catch (e: Exception) { 0L }
+                } ?: throw IllegalStateException(lastError ?: "nenhum manifesto disponível")
                 val json = JSONObject(response)
                 val tagName = json.optString("version", json.optString("tag_name", ""))
                 if (tagName.isBlank()) throw IllegalStateException("manifesto sem versão")
@@ -1754,12 +1766,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 val currentVersion = BuildConfig.VERSION_NAME
-                fun versionParts(value: String): List<Int> = value
-                    .replace("[^0-9.]".toRegex(), "")
-                    .split('.')
-                    .filter { it.isNotBlank() }
-                    .map { it.toIntOrNull() ?: 0 }
-                    .let { it + List((4 - it.size).coerceAtLeast(0)) { 0 } }
                 val remoteParts = versionParts(tagName)
                 val localParts = versionParts(currentVersion)
                 val isNewer = remoteParts.zip(localParts).firstOrNull { it.first != it.second }?.let { it.first > it.second } ?: false
