@@ -392,6 +392,13 @@ video {
   background: var(--primary-red);
   border-color: var(--primary-red);
 }
+.storage-action-btn {
+  flex: 0 0 auto;
+  width: 112px;
+  min-width: 112px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
 
 /* ================= 4. SEÇÃO CONFIGURAÇÕES ================= */
 #sectionSettings {

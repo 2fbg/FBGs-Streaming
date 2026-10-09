@@ -34,9 +34,9 @@ Também existem testes unitários para o parser M3U e para o parser de servidore
 
 ## Problemas encontrados
 
-A validação de build não pôde ser concluída neste sandbox porque o Android SDK não está instalado nem configurado. O Gradle Wrapper estava corrompido; ele foi restaurado para a versão oficial 9.3.1, mas o build parou depois com `SDK location not found`. Assim, não foi gerado um APK novo nesta auditoria.
+Na auditoria inicial o build não pôde ser concluído porque o Android SDK não estava instalado. Depois disso, o SDK/JDK foram configurados e a versão v1.5 foi compilada com sucesso.
 
-As ferramentas `apksigner`, `aapt` e `jarsigner` não estão disponíveis neste ambiente. Foi possível validar a estrutura ZIP, mas a assinatura criptográfica do APK não foi confirmada.
+As ferramentas `apksigner` e `aapt2` foram instaladas e utilizadas para validar assinatura, certificado e metadados do APK v1.5.
 
 O manifesto permite cleartext HTTP globalmente e declara `REQUEST_INSTALL_PACKAGES`. Isso pode ser necessário para provedores IPTV HTTP e atualização direta, mas aumenta a superfície de segurança. O arquivo `network_security_config.xml` também contém uma lista ampla de domínios e hosts legados.
 
@@ -69,3 +69,17 @@ Foi corrigido o atualizador em `app/src/main/java/com/example/viewmodel/AppViewM
 Também foi corrigida a URL antiga do arquivo `servers.json`, removida a comparação lexicográfica de versões e adicionada comparação numérica por componentes. O manifesto Android foi alinhado para a versão instalada 1.4.
 
 A correção exige uma nova compilação/instalação do APK. O APK 1.4 já instalado não pode receber alterações de código remotamente.
+
+## APK Android v1.5 compilado
+
+A versão Android v1.5 foi compilada com `versionCode 6`. Os testes unitários `testDebugUnitTest` e a tarefa `assembleRelease` foram concluídos com sucesso.
+
+O APK v1.5 foi validado pelo APK Signature Scheme v2 e possui:
+
+- SHA-256 do APK: `b724a1075d64687e5c22ea68a5b77d6a663ec20e42896dbb3729b0e61e2c2d90`
+- SHA-256 do certificado: `04f59f3b091230dc7f31bd9dae94b70f678f6245b4d8f4a460e72c344580a593`
+- `applicationId`: `com.aistudio.multiservidor.iptvmk`
+- `versionName`: `1.5`
+- `versionCode`: `6`
+
+A comparação com o APK v1.4 anterior mostrou certificados diferentes. Como a chave privada original do v1.4 não está disponível no repositório, o Android pode rejeitar a instalação por cima com erro de assinatura. Nesse caso, é necessário exportar dados/backup, desinstalar o v1.4 e instalar o v1.5 manualmente. Para atualizações futuras sem desinstalação, a mesma chave de produção deve ser mantida em um armazenamento seguro.

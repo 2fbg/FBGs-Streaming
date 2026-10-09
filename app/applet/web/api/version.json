@@ -1,7 +1,9 @@
 {
-  "version": "1.4",
-  "tagName": "v1.4",
-  "name": "MK21 MultiServidor v1.4",
+  "version": "1.5",
+  "tagName": "v1.5",
+  "name": "MK21 MultiServidor v1.5",
   "downloadUrl": "https://bgstreaming.vercel.app/mk21.apk",
-  "body": "Atualizador com manifesto Vercel e fallback GitHub; Room e importação em lotes para listas grandes."
+  "body": "Atualizador resiliente com fallback Vercel/GitHub; comparação numérica de versões; correção do botão de reinstalação; carregamento de servidores com URL corrigida.",
+  "apkSha256": "b724a1075d64687e5c22ea68a5b77d6a663ec20e42896dbb3729b0e61e2c2d90",
+  "certificateSha256": "04f59f3b091230dc7f31bd9dae94b70f678f6245b4d8f4a460e72c344580a593"
 }

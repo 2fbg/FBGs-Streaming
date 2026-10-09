@@ -91,9 +91,9 @@ const ADULT_KEYWORDS = [
 ];
 
 // BANCO DE DADOS INDEXEDDB (v5 para expurgar categorização antiga corrompida)
-const DB_NAME = 'mk21_play_db_v5';
+const DB_NAME = 'mk21_play_db_v6';
 const DB_VERSION = 1;
-const STORE_NAME = 'catalog_cache_v5';
+const STORE_NAME = 'catalog_cache_v6';
 
 function openDB() {
   return new Promise(resolve => {
@@ -129,9 +129,9 @@ async function saveStoredData(id, payload) {
     if (!db) return;
     // Limita tamanho em memória/disco para não reiniciar a TV (webOS)
     const slim = {
-      LIVE: (payload.LIVE || []).slice(0, 6000).map(slimItem),
-      MOVIE: (payload.MOVIE || []).slice(0, 18000).map(slimItem),
-      SERIES: (payload.SERIES || []).slice(0, 15000).map(slimItem)
+      LIVE: (payload.LIVE || []).slice(0, 2000).map(slimItem),
+      MOVIE: (payload.MOVIE || []).slice(0, 3000).map(slimItem),
+      SERIES: (payload.SERIES || []).slice(0, 3000).map(slimItem)
     };
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put({ id, payload: slim, updatedAt: Date.now() });
@@ -147,7 +147,7 @@ const CATALOG_INDEX_STORE = 'items';
 const CATALOG_META_STORE = 'meta';
 // Orçamento de memória equilibrado: ~6k LIVE e mais espaço para VOD/Séries.
 // O catálogo completo permanece no IndexedDB.
-const CATALOG_MEMORY_LIMITS = { LIVE: 6000, MOVIE: 18000, SERIES: 15000 };
+const CATALOG_MEMORY_LIMITS = { LIVE: 2000, MOVIE: 3000, SERIES: 3000 };
 
 function openCatalogIndexDb() {
   return new Promise(resolve => {
@@ -861,18 +861,16 @@ async function loadServer(forceRefresh = false) {
   }
   activeItem = null;
 
-  // Cache prioritário: não baixa de novo se já tiver lista no IndexedDB
+  // Cache prioritário: carrega uma janela pequena e não desserializa o catálogo inteiro.
+  // O índice persistente continua contendo todos os itens para paginação sob demanda.
+  let seededFromIndex = false;
   if (!forceRefresh) {
     const cached = await getStoredData(srv.id);
     if (loadId !== serverLoadGeneration) return;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     if (cached && (liveN > 0 || movN > 0)) {
-      allCatalog = {
-        LIVE: cached.LIVE || [],
-        MOVIE: cached.MOVIE || [],
-        SERIES: cached.SERIES || []
-      };
+      allCatalog = { LIVE: cached.LIVE || [], MOVIE: cached.MOVIE || [], SERIES: cached.SERIES || [] };
       updateSplash(90, 'Lista em cache (' + liveN + ' canais)...');
       if (hud) {
         if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando cache local — sem novo download';
@@ -880,20 +878,20 @@ async function loadServer(forceRefresh = false) {
         if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
         setTimeout(() => hud.classList.add('hidden'), 250);
       }
-      buildCurrentCategories();
-      renderCategoriesList();
-      selectCategory('ALL');
-      hideSplash();
-      if ($('txtCurrentCategoryTitle')) {
-        $('txtCurrentCategoryTitle').textContent = '📺 Cache: ' + liveN + ' canais';
-      }
-      // Retoma último canal ao vivo (fluidez) após um tick
-      setTimeout(function () {
-        if (!resumeLastChannelIfPossible() && liveN > 0) {
-          // opcional: não força auto-play do primeiro
-        }
-      }, 350);
+      buildCurrentCategories(); renderCategoriesList(); selectCategory('ALL'); hideSplash();
+      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Cache: ' + liveN + ' canais';
+      setTimeout(() => { if (!resumeLastChannelIfPossible() && liveN > 0) {} }, 350);
       return;
+    }
+    // Cache serializado vazio/ausente: mostrar imediatamente a primeira página do índice.
+    const indexedLive = await queryCatalogIndexPage(srv.id, 'LIVE', 0, CATALOG_MEMORY_LIMITS.LIVE, '');
+    if (loadId !== serverLoadGeneration) return;
+    if (indexedLive.length) {
+      allCatalog = { LIVE: indexedLive, MOVIE: [], SERIES: [] };
+      seededFromIndex = true;
+      buildCurrentCategories(); renderCategoriesList(); selectCategory('ALL'); renderItemsList();
+      updateSplash(75, 'Canais do cache indexado disponíveis (' + indexedLive.length + ')');
+      hideSplash();
     }
   }
 
@@ -905,7 +903,7 @@ async function loadServer(forceRefresh = false) {
   }
 
   try {
-    allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    allCatalog = { LIVE: seededFromIndex ? (allCatalog.LIVE || []) : [], MOVIE: [], SERIES: [] };
     indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
     const overflow = { LIVE: 0, MOVIE: 0, SERIES: 0 };
@@ -2328,32 +2326,32 @@ function renderClearStoragePanel() {
       
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
         <span style="font-size:18px;">Canais favoritos (${favChannelsCount})</span>
-        <button id="btnClearFavChannels" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+        <button id="btnClearFavChannels" class="ctrl-btn storage-action-btn" tabindex="0">Limpar</button>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
         <span style="font-size:18px;">Filmes favoritos (${favMoviesCount})</span>
-        <button id="btnClearFavMovies" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+        <button id="btnClearFavMovies" class="ctrl-btn storage-action-btn" tabindex="0">Limpar</button>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
         <span style="font-size:18px;">Séries favoritas (${favSeriesCount})</span>
-        <button id="btnClearFavSeries" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+        <button id="btnClearFavSeries" class="ctrl-btn storage-action-btn" tabindex="0">Limpar</button>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
         <span style="font-size:18px;">Filmes assistidos (Histórico)</span>
-        <button id="btnClearWatchedMovies" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+        <button id="btnClearWatchedMovies" class="ctrl-btn storage-action-btn" tabindex="0">Limpar</button>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:14px 20px; border-radius:10px;">
         <span style="font-size:18px;">Séries assistidas (Histórico)</span>
-        <button id="btnClearWatchedSeries" class="ctrl-btn" style="padding:10px 22px;" tabindex="0">Limpar</button>
+        <button id="btnClearWatchedSeries" class="ctrl-btn storage-action-btn" tabindex="0">Limpar</button>
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; background:#291114; border:1px solid #e50914; padding:14px 20px; border-radius:10px; margin-top:8px;">
         <span style="font-size:18px; font-weight:bold; color:#ffd54f;">Limpar tudo</span>
-        <button id="btnClearAllStorage" class="ctrl-btn primary" style="padding:10px 26px;" tabindex="0">Limpar</button>
+        <button id="btnClearAllStorage" class="ctrl-btn primary storage-action-btn" tabindex="0">Limpar</button>
       </div>
 
     </div>
@@ -2421,10 +2419,15 @@ function renderClearStoragePanel() {
       localStorage.removeItem('mk21_ota_styles_css');
       await new Promise(function (resolve) {
         try {
-          const req = indexedDB.deleteDatabase(DB_NAME);
-          req.onsuccess = function () { resolve(); };
-          req.onerror = function () { resolve(); };
-          req.onblocked = function () { resolve(); };
+          const names = [DB_NAME, CATALOG_INDEX_DB];
+          let left = names.length;
+          const done = function () { left--; if (left <= 0) resolve(); };
+          names.forEach(function (name) {
+            try {
+              const req = indexedDB.deleteDatabase(name);
+              req.onsuccess = done; req.onerror = done; req.onblocked = done;
+            } catch (e) { done(); }
+          });
         } catch (e) { resolve(); }
       });
       allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
@@ -3216,7 +3219,11 @@ function startNativeVoiceSearch() {
     if (input) {
       input.value = text;
       try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {
-        if (typeof renderItemsList === 'function') renderItemsList();
+        currentCategoriesMap = { ALL: [] };
+      currentFilteredItems = [];
+      currentGroupedSeries = [];
+      if (typeof buildCurrentCategories === 'function') buildCurrentCategories();
+      if (typeof renderItemsList === 'function') renderItemsList();
       }
     }
     if (typeof showChannelBanner === 'function') showChannelBanner('Busca: ' + text);
@@ -3343,8 +3350,8 @@ if (typeof document !== 'undefined') {
       if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {} }
       itemsDisplayLimit = 40;
       if (allCatalog) {
-        if (allCatalog.MOVIE && allCatalog.MOVIE.length > 5000) allCatalog.MOVIE = allCatalog.MOVIE.slice(0, 5000);
-        if (allCatalog.SERIES && allCatalog.SERIES.length > 4000) allCatalog.SERIES = allCatalog.SERIES.slice(0, 4000);
+        if (allCatalog.MOVIE && allCatalog.MOVIE.length > CATALOG_MEMORY_LIMITS.MOVIE) allCatalog.MOVIE = allCatalog.MOVIE.slice(0, CATALOG_MEMORY_LIMITS.MOVIE);
+        if (allCatalog.SERIES && allCatalog.SERIES.length > CATALOG_MEMORY_LIMITS.SERIES) allCatalog.SERIES = allCatalog.SERIES.slice(0, CATALOG_MEMORY_LIMITS.SERIES);
       }
       if (typeof renderItemsList === 'function') renderItemsList();
     } catch (e) {}
