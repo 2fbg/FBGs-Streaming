@@ -4,6 +4,6 @@
   "title": "MK21 Play v1.0.0",
   "releaseNotes": "• Versão unificada 1.0.0 para Web, Android, Smart TV e Tizen\n• Nova tela de login moderna com campos protegidos contra autofill branco\n• Navegação DPAD e foco de modal revisados\n• Catálogo incremental, cache e carregamento em segundo plano\n• Integração com múltiplos servidores e OTA com fallback",
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.0_all.ipk",
-  "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
+  "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "updatedAt": "2026-10-10"
 }
