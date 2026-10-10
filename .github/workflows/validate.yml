@@ -27,13 +27,15 @@ jobs:
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
-          test "$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")" = "3.8.6"
-          test "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")" = "3.8.6"
+          TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
+          test "$TV_VER" = "3.8.7"
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")"
 
-          if [ -f "smart-tv/mk21play_3.8.6_all.ipk" ]; then
-            test "$(dpkg-deb --field smart-tv/mk21play_3.8.6_all.ipk Version)" = "3.8.6"
-            echo "Smart TV IPK 3.8.6 validado com sucesso."
+          IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
+          if [ -f "$IPK_FILE" ]; then
+            test "$(dpkg-deb --field "$IPK_FILE" Version)" = "$TV_VER"
+            echo "Smart TV IPK $TV_VER validado com sucesso."
           else
-            echo "Arquivo .ipk não encontrado: smart-tv/mk21play_3.8.6_all.ipk"
+            echo "Arquivo .ipk não encontrado: $IPK_FILE"
             exit 1
           fi

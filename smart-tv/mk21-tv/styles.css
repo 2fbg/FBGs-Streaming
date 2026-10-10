@@ -127,6 +127,33 @@ body {
   border-color: rgba(2, 136, 209, 0.4);
 }
 
+.server-sync-badge {
+  display: inline-block;
+  background: rgba(255, 152, 0, 0.25);
+  border: 1px solid #ff9800;
+  color: #ffb74d;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: pulseSyncBadge 1.4s infinite ease-in-out;
+}
+
+.server-sync-badge.done {
+  background: rgba(76, 175, 80, 0.25);
+  border-color: #4caf50;
+  color: #81c784;
+  animation: none;
+}
+
+@keyframes pulseSyncBadge {
+  0% { opacity: 0.65; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 0.65; transform: scale(0.97); }
+}
+
 .lock-pill.unlocked {
   background: #2e7d32;
   border-color: #4caf50;

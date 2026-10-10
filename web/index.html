@@ -25,6 +25,13 @@
         body { background-color: #07080a; color: #ffffff; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
         .glass-card { background: rgba(14, 15, 18, 0.95); border: 1px solid rgba(229, 9, 20, 0.2); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); }
         input, select, button { font-family: inherit; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+        .fast-server-chip:active { transform: scale(0.97); }
     </style>
 
     <!-- FontAwesome for Premium Icons -->
@@ -42,155 +49,229 @@
     <!-- MAIN APP CONTAINER -->
     <main class="flex-grow flex flex-col justify-center items-center p-4">
 
-        <!-- 1. LOGIN / GATEWAY SCREEN -->
-        <div id="login-screen" class="w-full max-w-lg transition-all duration-300 transform scale-100 block">
-            <div class="glass-card rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden">
-                <!-- Branding: Reconstrução fiel do Logo Oficial MK21 -->
-                <div class="text-center mb-8 flex flex-col items-center select-none">
-                    <div class="inline-flex items-center justify-center gap-1 hover:scale-105 transition-transform duration-300 cursor-pointer mb-2">
-                        <!-- "MK" em Degradê Prata Metálico Cromado -->
-                        <span class="text-5xl font-black italic tracking-tighter bg-gradient-to-b from-white via-slate-300 to-slate-500 bg-clip-text text-transparent drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">MK</span>
-                        <!-- "21" em Degradê Vermelho Laser Brilhante -->
-                        <span class="text-6xl font-black italic tracking-tighter bg-gradient-to-b from-red-500 to-red-700 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(239,68,68,0.6)] -ml-1">21</span>
-                    </div>
-                    <!-- Slogan Oficial do Logo -->
-                    <p class="text-[9px] uppercase tracking-[0.25em] font-extrabold text-slate-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] leading-none mb-4">
-                        MAIS QUE UM NÚMERO É RESULTADO
-                    </p>
-                    <p class="text-[11px] text-slate-400 font-medium pb-1 border-b border-slate-800/40 w-4/5 mx-auto">Versão Web IPTV de Alto Desempenho</p>
-                </div>
-
-                <!-- Quick Profile Picker (Estilo TopIbo / Netflix) -->
-                <div id="quick-profiles-section" class="mb-5 hidden">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-widest">
-                            <i class="fa-solid fa-users text-[#E50914] mr-1.5"></i>Perfis Salvos
+        <!-- 1. LOGIN / GATEWAY SCREEN (Inspirado no APK Nativo MK21) -->
+        <div id="login-screen" class="w-full max-w-lg transition-all duration-300 transform scale-100 block px-2 sm:px-0">
+            <!-- Branding: Emblema Oficial MK21 com Gradiente Ruby & Slogan Fiel ao APK -->
+            <div class="text-center mb-6 flex flex-col items-center select-none">
+                <!-- Emblema Quadrado Arredondado 3D (Inspirado no Ícone do APK) -->
+                <div class="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl p-[3px] bg-gradient-to-br from-red-500 via-[#E50914] to-red-950 shadow-[0_10px_35px_rgba(229,9,20,0.45)] flex items-center justify-center mb-3 transition-transform hover:scale-105 duration-300">
+                    <div class="w-full h-full rounded-[22px] bg-[#0c0d12] flex items-center justify-center border border-white/10 shadow-inner">
+                        <span class="text-3xl sm:text-4xl font-black italic tracking-tighter text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                            MK<span class="text-[#E50914] drop-shadow-[0_0_20px_rgba(229,9,20,0.9)]">21</span>
                         </span>
-                        <span class="text-[10px] text-slate-500 font-medium">Toque para entrar direto</span>
-                    </div>
-                    <div id="quick-profiles-list" class="grid grid-cols-2 gap-2.5">
-                        <!-- Populated dynamically via JS -->
-                    </div>
-                    <div class="relative flex py-3 items-center">
-                        <div class="flex-grow border-t border-slate-800"></div>
-                        <span class="flex-shrink mx-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">ou entre com seus dados</span>
-                        <div class="flex-grow border-t border-slate-800"></div>
                     </div>
                 </div>
 
-                <!-- Form -->
-                <div class="space-y-4">
-                    <!-- Código do Servidor / Atalho Rápido -->
-                    <div>
-                        <div class="flex items-center justify-between mb-1.5">
-                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest" for="server-code-input">
-                                Código do Servidor
-                            </label>
-                            <span class="text-[10px] font-semibold text-slate-500" title="Digite o código (ex: CB6000, 5, VLOG) ou escolha na lista abaixo">
-                                <i class="fa-solid fa-bolt text-[#E50914]"></i> Autodetectar
-                            </span>
-                        </div>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#E50914]">
-                                <i class="fa-solid fa-hashtag"></i>
-                            </span>
-                            <input id="server-code-input" type="text" placeholder="Ex: CB6000, 5, VLOG, LUB TV" class="w-full pl-11 pr-20 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold uppercase text-xs">
-                            <div id="server-code-badge" class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <span class="text-[10px] font-bold text-slate-500 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md">Opcional</span>
-                            </div>
-                        </div>
-                    </div>
+                <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">MK21 Player</h1>
+                <div class="flex items-center gap-2 text-center w-full max-w-xs mt-1 mb-2">
+                    <div class="h-[1px] flex-grow bg-gradient-to-r from-transparent to-[#E50914]"></div>
+                    <span class="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.25em] text-red-500 whitespace-nowrap">
+                        LOGIN ÚNICO MULTI-SERVIDOR
+                    </span>
+                    <div class="h-[1px] flex-grow bg-gradient-to-l from-transparent to-[#E50914]"></div>
+                </div>
 
-                    <!-- Server Profile Picker -->
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="server-selector">
-                            Selecionar Servidor na Lista
-                        </label>
-                        <div class="relative">
-                            <select id="server-selector" class="w-full px-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent transition-all duration-200 appearance-none outline-none font-semibold text-sm">
+                <!-- Badge Multi-Servidor Inspirado no APK -->
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold shadow-sm">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="active-servers-badge-text">10 Servidores Conectados • Sincronização Automática</span>
+                </div>
+            </div>
+
+            <!-- Segmented Control (Abas Elegantes estilo iOS/Netflix) -->
+            <div class="bg-[#0a0a0d] border border-slate-800 p-1.5 rounded-2xl flex items-center mb-5 w-full select-none shadow-md">
+                <button id="tab-login-predefined" type="button" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 bg-[#E50914] text-white shadow-lg shadow-red-950/40">
+                    <i class="fa-solid fa-server text-xs"></i>
+                    <span>Servidores MK21</span>
+                </button>
+                <button id="tab-login-manual" type="button" class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-link text-xs"></i>
+                    <span>Lista M3U / Custom</span>
+                </button>
+            </div>
+
+            <!-- Card Principal de Autenticação -->
+            <div class="bg-[#0e0f14]/95 backdrop-blur-2xl border border-slate-800/90 rounded-3xl p-6 sm:p-7 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] relative overflow-hidden">
+                <!-- Top Accent Glow Line -->
+                <div class="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-[#E50914] to-transparent"></div>
+
+                <!-- Banner de Erro Inline Dinâmico (Sem alerts feios!) -->
+                <div id="login-error-banner" class="hidden mb-4 p-3.5 rounded-2xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs font-semibold flex items-start justify-between gap-3 shadow-lg animate-shake">
+                    <div class="flex items-start gap-2.5">
+                        <i class="fa-solid fa-circle-exclamation text-red-400 text-sm mt-0.5 shrink-0"></i>
+                        <span id="login-error-message">Erro na autenticação.</span>
+                    </div>
+                    <button type="button" id="btn-close-error-banner" class="text-red-400 hover:text-white text-sm shrink-0">✕</button>
+                </div>
+
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#E50914]"></span>
+                        <h2 class="text-sm font-black text-white tracking-wide uppercase">Acesso Universal</h2>
+                    </div>
+                    <!-- Botão de Perfis Salvos -->
+                    <button id="btn-toggle-saved-profiles" type="button" class="hidden text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-950/40 border border-amber-900/50 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1.5 hover:scale-105">
+                        <i class="fa-solid fa-users text-xs"></i>
+                        <span id="saved-profiles-count-badge">Perfis Salvos</span>
+                    </button>
+                </div>
+
+                <!-- Gaveta de Perfis Salvos (Expandível) -->
+                <div id="quick-profiles-section" class="mb-4 hidden p-3.5 bg-[#070709] border border-slate-800/90 rounded-2xl shadow-inner">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-clock-rotate-left text-amber-500"></i> Perfis Recentes (Clique para entrar):
+                        </span>
+                        <button type="button" id="btn-close-profiles" class="text-slate-500 hover:text-white text-xs">✕</button>
+                    </div>
+                    <div id="quick-profiles-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Seção: Seleção de Servidor (Predefinidos) -->
+                    <div id="predefined-server-box" class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                Servidor IPTV
+                            </label>
+                            <span class="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 10 Disponíveis
+                            </span>
+                        </div>
+
+                        <!-- Chips de Servidores Rápidos (Inspirado no APK) -->
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5" id="fast-server-chips">
+                            <!-- Injetado dinamicamente via JS com status online -->
+                        </div>
+
+                        <!-- Seletor Detalhado com Select Nativo Invisível -->
+                        <div class="relative mt-2">
+                            <div class="bg-[#070709] border border-slate-800/90 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition-colors">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-8 h-8 rounded-xl bg-red-950/40 border border-red-900/50 flex items-center justify-center text-[#E50914] shrink-0">
+                                        <i class="fa-solid fa-server text-xs"></i>
+                                    </div>
+                                    <div class="truncate">
+                                        <span class="text-[9px] uppercase tracking-wider font-black text-amber-500/90 block leading-tight">SERVIÇO ATIVO</span>
+                                        <span id="selected-server-name-label" class="text-sm font-black text-white block truncate leading-tight">CB6000</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-[10px] font-bold text-slate-500 hidden sm:inline">Alterar</span>
+                                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs pr-1"></i>
+                                </div>
+                            </div>
+                            <select id="server-selector" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-sm">
                                 <!-- Loaded dynamically via JS -->
                             </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                                <i class="fa-solid fa-chevron-down text-[#E50914]"></i>
+                        </div>
+                    </div>
+
+                    <!-- Seção: Lista Manual (ativada pela aba Listas Manuais) -->
+                    <div id="manual-list-section" class="hidden space-y-3 pt-1">
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400" for="manual-m3u-input">
+                            URL da Lista M3U / M3U8 Personalizada
+                        </label>
+                        <div class="relative flex items-center bg-[#070709] border border-slate-800/90 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/20 transition-all">
+                            <span class="pl-3.5 pr-2 text-slate-400 text-sm"><i class="fa-solid fa-link"></i></span>
+                            <input id="manual-m3u-input" type="url" placeholder="http://servidor:porta/get.php?username=...&password=..." class="w-full py-3.5 bg-transparent text-slate-100 font-semibold text-xs outline-none">
+                            <button type="button" id="btn-paste-m3u" class="px-3 text-slate-400 hover:text-white transition-colors" title="Colar Link">
+                                <i class="fa-regular fa-paste"></i>
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-slate-500">Insira sua URL completa de lista M3U Xtream Codes ou Stalker Portal.</p>
+                    </div>
+
+                    <!-- Campo Usuário -->
+                    <div id="user-credentials-group" class="space-y-3">
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1" for="user-input">Usuário</label>
+                            <div class="relative flex items-center bg-[#070709] border border-slate-800/90 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/20 transition-all">
+                                <span class="pl-3.5 pr-2 text-red-500 text-sm">
+                                    <i class="fa-solid fa-user"></i>
+                                </span>
+                                <input id="user-input" type="text" autocomplete="username" placeholder="Digite seu usuário IPTV" class="w-full py-3.5 bg-transparent text-slate-100 font-semibold text-sm outline-none">
+                                <button type="button" id="btn-paste-user" class="px-3 text-slate-400 hover:text-white transition-colors" title="Colar usuário">
+                                    <i class="fa-regular fa-paste"></i>
+                                </button>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Username -->
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="user-input">
-                            Usuário
-                        </label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#E50914]">
-                                <i class="fa-solid fa-user"></i>
-                            </span>
-                            <input id="user-input" type="text" autocomplete="username" placeholder="Digite seu usuário" class="w-full pl-11 pr-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold text-sm">
+                        <!-- Campo Senha -->
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1" for="pass-input">Senha</label>
+                            <div class="relative flex items-center bg-[#070709] border border-slate-800/90 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/20 transition-all">
+                                <span class="pl-3.5 pr-2 text-red-500 text-sm">
+                                    <i class="fa-solid fa-lock"></i>
+                                </span>
+                                <input id="pass-input" type="password" autocomplete="current-password" placeholder="Digite sua senha IPTV" class="w-full py-3.5 bg-transparent text-slate-100 font-semibold text-sm outline-none">
+                                <button type="button" id="btn-paste-pass" class="px-2 text-slate-400 hover:text-white transition-colors" title="Colar senha">
+                                    <i class="fa-regular fa-paste"></i>
+                                </button>
+                                <button id="toggle-password" type="button" class="pr-3.5 pl-2 text-slate-400 hover:text-white transition-colors" title="Ver senha">
+                                    <i class="fa-regular fa-eye-slash" id="password-eye-icon"></i>
+                                </button>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Password -->
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="pass-input">
-                            Senha
-                        </label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#E50914]">
-                                <i class="fa-solid fa-lock"></i>
-                            </span>
-                            <input id="pass-input" type="password" autocomplete="current-password" placeholder="Digite sua senha" class="w-full pl-11 pr-12 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent outline-none transition-all duration-200 font-semibold text-sm">
-                            <button id="toggle-password" type="button" class="absolute inset-y-0 right-0 flex items-center px-4 text-slate-400 hover:text-[#E50914] transition-colors">
-                                <i class="fa-solid fa-eye-slash" id="password-eye-icon"></i>
+                        <!-- Lembrar Credenciais Checkbox -->
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" id="remember-credentials-checkbox" checked class="w-4 h-4 rounded bg-[#070709] border-slate-700 text-[#E50914] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#E50914]">
+                                <span class="text-xs font-semibold text-slate-300">Lembrar credenciais</span>
+                            </label>
+                            <button type="button" id="btn-clear-fields" class="text-[11px] font-bold text-slate-500 hover:text-slate-300 transition-colors">
+                                Limpar
                             </button>
                         </div>
                     </div>
 
-                    <!-- Access CORS Settings / Info -->
-                    <div class="bg-red-950/15 border border-red-900/35 rounded-2xl p-3 text-xs font-medium text-red-100 leading-relaxed shadow-sm">
-                        <div class="flex items-start gap-2.5">
-                            <i class="fa-solid fa-circle-exclamation text-base mt-0.5 text-[#E50914] shrink-0"></i>
-                            <div class="text-[11px] text-slate-300">
-                                <span class="font-bold text-white block mb-0.5">Informação sobre Navegadores (CORS):</span>
-                                Se sua lista não carregar por limitação do navegador, use a opção de Proxy recomendada ou ative uma extensão CORS.
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- CORS Proxy Method Selector -->
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1.5" for="cors-selector">
-                            Método de Conexão (Proxy)
-                        </label>
-                        <div class="relative">
-                            <select id="cors-selector" class="w-full px-4 py-3 bg-black border border-slate-800 text-slate-100 rounded-xl focus:ring-2 focus:ring-[#E50914] focus:border-transparent transition-all duration-200 appearance-none outline-none font-semibold text-xs">
-                                <option value="auto">⚡ Conexão Automática (Fallback Inteligente c/ Vercel)</option>
-                                <option value="vercel">🛡️ Proxy Vercel Dedicado (Recomendado - 100% Funcional)</option>
-                                <option value="direct">Sem Proxy (Conexão Direta - Necessita Extensão CORS)</option>
-                                <option value="corsproxy">Proxy 1 (CorsProxy.io - Rápido e Eficiente)</option>
-                                <option value="allorigins">Proxy 2 (AllOrigins - Raw)</option>
-                                <option value="codetabs">Proxy 3 (CodeTabs - Conexão Alternativa)</option>
-                                <option value="thingproxy">Proxy 4 (ThingProxy - Standard API)</option>
-                            </select>
-                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                                <i class="fa-solid fa-chevron-down text-[#E50914]"></i>
-                            </div>
-                        </div>
-                        <div id="latency-status-indicator" class="mt-1.5 text-xs text-slate-400 hidden"></div>
-                    </div>
-
-                    <!-- Action Button -->
-                    <button id="login-button" class="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-red-650 outline-none text-white font-semibold rounded-2xl shadow-lg shadow-red-950/40 hover:shadow-red-500/10 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-center justify-center gap-2 mt-2">
-                        <span>Acessar Portal IPTV</span>
-                        <i class="fa-solid fa-arrow-right"></i>
+                    <!-- Botão Primário: ENTRAR NO MK21 -->
+                    <button id="login-button" class="w-full py-4 mt-3 bg-gradient-to-r from-red-600 via-red-650 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.99] text-white font-black text-sm rounded-2xl shadow-xl shadow-red-950/60 flex items-center justify-center gap-2.5 tracking-wider transition-all duration-200">
+                        <i class="fa-solid fa-play text-xs" id="login-btn-icon"></i>
+                        <span id="login-btn-text">ENTRAR NO MK21</span>
                     </button>
 
-                    <!-- Accessibility / High Contrast & PWA Buttons for Login Screen -->
-                    <div class="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
-                        <button id="pwa-install-btn-login" class="pwa-install-btn inline-flex text-white text-[11px] font-bold items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-red-650 to-red-800 hover:from-red-600 hover:to-red-700 shadow-md shadow-red-950/40 transition-all duration-200">
-                            <i class="fa-solid fa-download"></i>
-                            <span>Instalar App Web / TV</span>
+                    <!-- Link Secundário: Modo Offline / Cache -->
+                    <button id="btn-offline-mode" type="button" class="w-full text-center text-xs font-bold text-amber-400 hover:text-amber-300 py-2.5 px-3 rounded-xl bg-amber-950/20 hover:bg-amber-950/40 border border-amber-900/30 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-bolt text-xs"></i>
+                        <span>Entrar com Cache Offline (Modo Sem Internet)</span>
+                    </button>
+
+                    <!-- Opções Avançadas Recolhíveis -->
+                    <div class="pt-2 border-t border-slate-800/70">
+                        <button type="button" id="toggle-advanced-login-options" class="w-full flex items-center justify-between text-[11px] font-bold text-slate-400 hover:text-white py-1.5 transition-colors">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-sliders text-xs text-red-500"></i> Opções Avançadas (Proxy CORS / Código)</span>
+                            <div class="flex items-center gap-1.5">
+                                <span id="server-code-badge" class="text-[10px] font-bold text-slate-500"></span>
+                                <i class="fa-solid fa-chevron-down text-[10px] transition-transform duration-200" id="icon-advanced-toggle"></i>
+                            </div>
                         </button>
-                        <button onclick="toggleHighContrast();" class="text-slate-400 hover:text-white text-[11px] font-semibold flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all duration-200">
+                        <div id="advanced-login-options-box" class="hidden mt-3 space-y-3 p-3.5 bg-[#070709] border border-slate-800/80 rounded-2xl shadow-inner">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1" for="server-code-input">Código do Servidor (Autodetecção Rápida)</label>
+                                <input id="server-code-input" type="text" placeholder="Ex: CB6000, 5, VLOG, LUB TV" class="w-full px-3.5 py-2.5 bg-black border border-slate-800 text-slate-100 rounded-xl text-xs outline-none uppercase font-semibold focus:border-red-600 transition-colors">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1" for="cors-selector">Método de Conexão (Proxy CORS)</label>
+                                <select id="cors-selector" class="w-full px-3.5 py-2.5 bg-black border border-slate-800 text-slate-100 rounded-xl text-xs outline-none font-semibold focus:border-red-600 transition-colors">
+                                    <option value="auto">⚡ Conexão Automática (Fallback Inteligente)</option>
+                                    <option value="vercel" selected>🛡️ Proxy Vercel Dedicado (Recomendado)</option>
+                                    <option value="direct">Sem Proxy (Conexão Direta)</option>
+                                    <option value="corsproxy">Proxy CorsProxy.io</option>
+                                    <option value="allorigins">Proxy AllOrigins</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botões de Acessibilidade / PWA -->
+                    <div class="flex items-center justify-center gap-3 pt-2 border-t border-slate-800/70">
+                        <button id="pwa-install-btn-login" class="pwa-install-btn inline-flex text-white text-[11px] font-bold items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors">
+                            <i class="fa-solid fa-download text-[#E50914]"></i>
+                            <span>Instalar App</span>
+                        </button>
+                        <button onclick="toggleHighContrast();" class="text-slate-400 hover:text-white text-[11px] font-semibold flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 transition-colors">
                             <i class="fa-solid fa-circle-half-stroke text-[#E50914]"></i>
                             <span>Alto Contraste</span>
                         </button>
@@ -198,9 +279,9 @@
                 </div>
             </div>
 
-            <!-- Predefined Server Credits -->
-            <p class="text-center text-xs text-slate-500 mt-6 font-medium">
-                Desenvolvido para MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">by FBG2</span>
+            <!-- Rodapé com Versão MK21 Sincronizada -->
+            <p class="text-center text-xs text-slate-500 mt-5 font-medium">
+                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v3.8.7 by FBG2</span>
             </p>
         </div>
 
@@ -2189,6 +2270,69 @@
                 opt.textContent = srv.name;
                 serverSelector.appendChild(opt);
             });
+            renderFastServerChips();
+            const label = document.getElementById('selected-server-name-label');
+            if (label && serverSelector.selectedIndex >= 0) {
+                label.textContent = serverSelector.options[serverSelector.selectedIndex].text;
+            }
+        }
+
+        function renderFastServerChips() {
+            const container = document.getElementById('fast-server-chips');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const topServers = PREDEFINED_SERVERS.slice(0, 6);
+            let currentBase = (serverSelector && serverSelector.value) ? serverSelector.value : '';
+            currentBase = currentBase.replace(/\/$/, '');
+
+            topServers.forEach(srv => {
+                let srvBase = (srv.baseUrl || '').replace(/\/$/, '');
+                const isSelected = (srvBase === currentBase);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = isSelected
+                    ? 'fast-server-chip px-2.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-between gap-1.5 bg-red-950/60 border-red-500 text-white shadow-sm ring-1 ring-red-500'
+                    : 'fast-server-chip px-2.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-between gap-1.5 bg-[#070709] border-slate-800 text-slate-400 hover:text-white hover:border-slate-700';
+
+                btn.innerHTML = `
+                    <span class="truncate">${srv.name}</span>
+                    <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-400 ring-2 ring-emerald-500/50' : 'bg-emerald-500'} shrink-0"></span>
+                `;
+
+                btn.addEventListener('click', () => {
+                    if (serverSelector) {
+                        serverSelector.value = srv.baseUrl;
+                        const label = document.getElementById('selected-server-name-label');
+                        if (label) label.textContent = srv.name;
+                        if (serverCodeInput) serverCodeInput.value = srv.name;
+                        serverSelector.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    renderFastServerChips();
+                });
+
+                container.appendChild(btn);
+            });
+        }
+
+        function showLoginError(msg) {
+            const banner = document.getElementById('login-error-banner');
+            const msgEl = document.getElementById('login-error-message');
+            if (banner && msgEl) {
+                msgEl.textContent = msg;
+                banner.classList.remove('hidden');
+                banner.classList.remove('animate-shake');
+                void banner.offsetWidth;
+                banner.classList.add('animate-shake');
+            }
+            if (typeof showNotification === 'function') {
+                showNotification(msg, 'error');
+            }
+        }
+
+        function hideLoginError() {
+            const banner = document.getElementById('login-error-banner');
+            if (banner) banner.classList.add('hidden');
         }
 
         function populateHeaderServers() {
@@ -2418,6 +2562,144 @@
         }
 
         function setupEventListeners() {
+            // Abas de Login (Predefinidos vs Listas Manuais)
+            const tabPredefined = document.getElementById('tab-login-predefined');
+            const tabManual = document.getElementById('tab-login-manual');
+            const predefinedBox = document.getElementById('predefined-server-box');
+            const manualBox = document.getElementById('manual-list-section');
+
+            if (tabPredefined && tabManual) {
+                tabPredefined.addEventListener('click', () => {
+                    tabPredefined.className = 'flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 bg-[#E50914] text-white shadow-lg shadow-red-950/40';
+                    tabManual.className = 'flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-white bg-transparent';
+                    if (predefinedBox) predefinedBox.classList.remove('hidden');
+                    if (manualBox) manualBox.classList.add('hidden');
+                });
+
+                tabManual.addEventListener('click', () => {
+                    tabManual.className = 'flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 bg-[#E50914] text-white shadow-lg shadow-red-950/40';
+                    tabPredefined.className = 'flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-white bg-transparent';
+                    if (predefinedBox) predefinedBox.classList.add('hidden');
+                    if (manualBox) manualBox.classList.remove('hidden');
+                });
+            }
+
+            // Clipboard Paste Helpers
+            const pasteUserBtn = document.getElementById('btn-paste-user');
+            const pastePassBtn = document.getElementById('btn-paste-pass');
+            const pasteM3uBtn = document.getElementById('btn-paste-m3u');
+
+            async function handlePaste(targetInput) {
+                if (!targetInput) return;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.readText) {
+                        const text = await navigator.clipboard.readText();
+                        if (text) {
+                            targetInput.value = text.trim();
+                            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+                            showNotification('Copiado da área de transferência!', 'success');
+                        }
+                    } else {
+                        targetInput.focus();
+                        showNotification('Pressione Ctrl+V para colar', 'info');
+                    }
+                } catch (e) {
+                    targetInput.focus();
+                    showNotification('Pressione Ctrl+V para colar', 'info');
+                }
+            }
+
+            if (pasteUserBtn && userInput) pasteUserBtn.addEventListener('click', () => handlePaste(userInput));
+            if (pastePassBtn && passInput) pastePassBtn.addEventListener('click', () => handlePaste(passInput));
+            if (pasteM3uBtn) {
+                const manualM3u = document.getElementById('manual-m3u-input');
+                if (manualM3u) pasteM3uBtn.addEventListener('click', () => handlePaste(manualM3u));
+            }
+
+            // Toggle Opções Avançadas
+            const toggleAdvBtn = document.getElementById('toggle-advanced-login-options');
+            const advBox = document.getElementById('advanced-login-options-box');
+            const advIcon = document.getElementById('icon-advanced-toggle');
+            if (toggleAdvBtn && advBox) {
+                toggleAdvBtn.addEventListener('click', () => {
+                    const isHidden = advBox.classList.toggle('hidden');
+                    if (advIcon) {
+                        advIcon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+                    }
+                });
+            }
+
+            // Toggle Perfis Salvos
+            const toggleProfilesBtn = document.getElementById('btn-toggle-saved-profiles');
+            const closeProfilesBtn = document.getElementById('btn-close-profiles');
+            const profilesSec = document.getElementById('quick-profiles-section');
+            if (toggleProfilesBtn && profilesSec) {
+                toggleProfilesBtn.addEventListener('click', () => {
+                    profilesSec.classList.toggle('hidden');
+                });
+            }
+            if (closeProfilesBtn && profilesSec) {
+                closeProfilesBtn.addEventListener('click', () => {
+                    profilesSec.classList.add('hidden');
+                });
+            }
+
+            // Botão Limpar Campos
+            const clearFieldsBtn = document.getElementById('btn-clear-fields');
+            if (clearFieldsBtn) {
+                clearFieldsBtn.addEventListener('click', () => {
+                    if (userInput) userInput.value = '';
+                    if (passInput) passInput.value = '';
+                    hideLoginError();
+                    showNotification('Campos limpos', 'info');
+                });
+            }
+
+            // Fechar banner de erro
+            const closeErrBtn = document.getElementById('btn-close-error-banner');
+            if (closeErrBtn) {
+                closeErrBtn.addEventListener('click', hideLoginError);
+            }
+
+            // Botão Modo Offline (Cache)
+            const offlineBtn = document.getElementById('btn-offline-mode');
+            if (offlineBtn) {
+                offlineBtn.addEventListener('click', async () => {
+                    const cachedUrl = localStorage.getItem('mk21_baseUrl') || (PREDEFINED_SERVERS[4] ? PREDEFINED_SERVERS[4].baseUrl : '');
+                    const cachedUser = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
+                    const cacheKey = `playlist_${encodeURIComponent(cachedUrl)}_${encodeURIComponent(cachedUser)}`;
+
+                    try {
+                        showLoader('Verificando catálogo salvo offline...');
+                        const cached = await getCachedPlaylist(cacheKey);
+                        if (cached && cached.lives && (cached.lives.length > 0 || (cached.movies && cached.movies.length > 0))) {
+                            playlistItems = cached.lives.length > 0 ? cached.lives : [...(cached.movies || []), ...(cached.series || [])];
+                            loginScreen.classList.add('hidden');
+                            playerScreen.classList.remove('hidden');
+                            playerScreen.classList.add('flex');
+                            setTimeout(() => {
+                                playerScreen.classList.remove('scale-95', 'opacity-0');
+                                playerScreen.classList.add('scale-100', 'opacity-100');
+                            }, 50);
+                            activeType = 'LIVE';
+                            activeCategory = 'ALL';
+                            renderCategories();
+                            renderMediaItems();
+                            renderContinueWatching();
+                            startBackgroundLoading(cached.movies || [], cached.series || []);
+                            hideLoader();
+                            showNotification('Entrou em modo Offline com catálogo do cache! ⚡', 'success');
+                        } else {
+                            hideLoader();
+                            showLoginError('Nenhum catálogo em cache offline encontrado. Faça o primeiro login conectado à internet.');
+                        }
+                    } catch (e) {
+                        hideLoader();
+                        showLoginError('Erro ao abrir cache offline: ' + e.message);
+                    }
+                });
+            }
+
             // Live Autodetection quando o usuário digita o Código do Servidor
             if (serverCodeInput) {
                 const handleServerCodeChange = () => {
@@ -2431,9 +2713,12 @@
                     const matched = resolveServerByCode(code);
                     if (matched) {
                         serverSelector.value = matched.baseUrl;
+                        const label = document.getElementById('selected-server-name-label');
+                        if (label) label.textContent = matched.name;
                         if (serverCodeBadge) {
                             serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${matched.name}</span>`;
                         }
+                        renderFastServerChips();
                     } else {
                         if (serverCodeBadge) {
                             serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-md">Manual</span>`;
@@ -2447,12 +2732,15 @@
             // Atualiza o input de código se o usuário mudar o select manualmente
             if (serverSelector) {
                 serverSelector.addEventListener('change', () => {
-                    if (serverCodeInput && serverSelector.selectedIndex >= 0) {
+                    if (serverSelector.selectedIndex >= 0) {
                         const selName = serverSelector.options[serverSelector.selectedIndex].text;
-                        serverCodeInput.value = selName;
+                        if (serverCodeInput) serverCodeInput.value = selName;
+                        const label = document.getElementById('selected-server-name-label');
+                        if (label) label.textContent = selName;
                         if (serverCodeBadge) {
                             serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${selName}</span>`;
                         }
+                        renderFastServerChips();
                     }
                 });
             }
@@ -2945,15 +3233,40 @@
             const pass = (passInput && passInput.value.trim()) || localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || '';
             const corsMethod = (corsSelector && corsSelector.value) || localStorage.getItem('mk21_cors') || 'auto';
 
+            hideLoginError();
+            if (loginButton) {
+                loginButton.disabled = true;
+                const btnIcon = document.getElementById('login-btn-icon');
+                const btnText = document.getElementById('login-btn-text');
+                if (btnIcon) btnIcon.className = 'fa-solid fa-spinner fa-spin text-xs';
+                if (btnText) btnText.textContent = 'Sincronizando com Servidor...';
+            }
+
             if (!user || !pass) {
-                alert('Por favor, insira o usuário e a senha para conectar.');
+                hideLoader();
+                if (loginButton) {
+                    loginButton.disabled = false;
+                    const btnIcon = document.getElementById('login-btn-icon');
+                    const btnText = document.getElementById('login-btn-text');
+                    if (btnIcon) btnIcon.className = 'fa-solid fa-play text-xs';
+                    if (btnText) btnText.textContent = 'ENTRAR NO MK21';
+                }
+                showLoginError('Por favor, informe seu usuário e senha IPTV para conectar.');
                 return;
             }
 
             // Persistence
             localStorage.setItem('mk21_baseUrl', baseUrl);
-            localStorage.setItem('mk21_username', user);
-            localStorage.setItem('mk21_password', pass);
+            const rememberCheckbox = document.getElementById('remember-credentials-checkbox');
+            if (rememberCheckbox && !rememberCheckbox.checked) {
+                localStorage.removeItem('mk21_username');
+                localStorage.removeItem('mk21_password');
+                localStorage.setItem('mk21_remember', 'false');
+            } else {
+                localStorage.setItem('mk21_username', user);
+                localStorage.setItem('mk21_password', pass);
+                localStorage.setItem('mk21_remember', 'true');
+            }
             localStorage.setItem('mk21_cors', corsMethod);
             if (serverCodeInput && serverCodeInput.value.trim()) {
                 localStorage.setItem('mk21_server_code', serverCodeInput.value.trim());
@@ -3091,7 +3404,7 @@
             } catch (err) {
                 if (err.message && err.message.includes('Usuário ou senha')) {
                     hideLoader();
-                    alert(`Erro de Credenciais: Usuário ou senha incorretos no servidor ${profileName}.`);
+                    showLoginError(`Erro de Credenciais: Usuário ou senha incorretos no servidor ${profileName}.`);
                     return;
                 }
                 // Fallback sequencial (percorre todos os métodos garantindo que o Proxy Dedicado Vercel seja tentado caso a corrida paralela tenha falhado)
@@ -3107,7 +3420,7 @@
                     } catch (e) {
                         if (e.message && e.message.includes('Usuário ou senha')) {
                             hideLoader();
-                            alert(`Erro de Credenciais: Usuário ou senha incorretos no servidor ${profileName}.`);
+                            showLoginError(`Erro de Credenciais: Usuário ou senha incorretos no servidor ${profileName}.`);
                             return;
                         }
                     }
@@ -3169,9 +3482,16 @@
 
             } catch (err) {
                 console.error(err);
-                alert(`Erro de Conectividade: ${err.message}\n\nDICA: Tente usar outro servidor ou verifique seu usuário/senha. Se persistir, tente habilitar um plugin CORS no seu navegador.`);
+                showLoginError(`Erro de Conectividade: ${err.message}. Tente usar outro servidor predefinido ou selecione outro método de conexão nas Opções Avançadas.`);
             } finally {
                 hideLoader();
+                if (loginButton) {
+                    loginButton.disabled = false;
+                    const btnIcon = document.getElementById('login-btn-icon');
+                    const btnText = document.getElementById('login-btn-text');
+                    if (btnIcon) btnIcon.className = 'fa-solid fa-play text-xs';
+                    if (btnText) btnText.textContent = 'ENTRAR NO MK21';
+                }
             }
         }
 

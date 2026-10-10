@@ -145,9 +145,10 @@ const CATALOG_INDEX_DB = 'mk21_catalog_index_v1';
 const CATALOG_INDEX_VERSION = 1;
 const CATALOG_INDEX_STORE = 'items';
 const CATALOG_META_STORE = 'meta';
-// Orçamento de memória equilibrado: ~6k LIVE e mais espaço para VOD/Séries.
-// O catálogo completo permanece no IndexedDB.
-const CATALOG_MEMORY_LIMITS = { LIVE: 2000, MOVIE: 3000, SERIES: 3000 };
+// Orçamento de memória equilibrado: 1000 itens por tipo/categoria para manter Smart TVs leves e responsivas.
+// O catálogo completo permanece indexado no IndexedDB para paginação sob demanda.
+const CATALOG_MEMORY_LIMITS = { LIVE: 1000, MOVIE: 1000, SERIES: 1000 };
+const CATEGORY_ITEMS_MEMORY_LIMIT = 1000;
 
 function openCatalogIndexDb() {
   return new Promise(resolve => {
@@ -829,6 +830,38 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   }
 }
 
+// ATUALIZAÇÃO DA PORCENTAGEM DE SINCRONIZAÇÃO AO LADO DO SERVIDOR
+function updateServerSyncBadge(pct, isFinished = false) {
+  const badge = $('txtServerSyncBadge');
+  const txt = $('txtActiveServer');
+  const srv = SERVERS[currentServerIndex];
+  const srvName = srv ? srv.name : 'Servidor';
+
+  if (isFinished) {
+    if (badge) {
+      badge.textContent = '✓ 100%';
+      badge.classList.remove('hidden');
+      badge.classList.add('done');
+      setTimeout(() => {
+        if (badge) badge.classList.add('hidden');
+      }, 4000);
+    }
+    if (txt) {
+      txt.textContent = '🔵 ' + srvName;
+    }
+  } else {
+    const label = `${pct}%`;
+    if (badge) {
+      badge.textContent = label;
+      badge.classList.remove('hidden');
+      badge.classList.remove('done');
+    }
+    if (txt) {
+      txt.textContent = `🔵 ${srvName} (${label})`;
+    }
+  }
+}
+
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
   const loadId = ++serverLoadGeneration;
@@ -838,7 +871,8 @@ async function loadServer(forceRefresh = false) {
   if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
 
   const srv = SERVERS[currentServerIndex];
-  if ($('txtActiveServer')) $('txtActiveServer').textContent = srv.name;
+  if ($('txtActiveServer')) $('txtActiveServer').textContent = '🔵 ' + srv.name;
+  updateServerSyncBadge(15, false);
 
   updateSplash(25, 'Conectando ao ' + srv.name + '...');
 
@@ -870,15 +904,16 @@ async function loadServer(forceRefresh = false) {
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     if (cached && (liveN > 0 || movN > 0)) {
-      allCatalog = { LIVE: cached.LIVE || [], MOVIE: cached.MOVIE || [], SERIES: cached.SERIES || [] };
+      allCatalog = { LIVE: (cached.LIVE || []).slice(0, CATALOG_MEMORY_LIMITS.LIVE), MOVIE: (cached.MOVIE || []).slice(0, CATALOG_MEMORY_LIMITS.MOVIE), SERIES: (cached.SERIES || []).slice(0, CATALOG_MEMORY_LIMITS.SERIES) };
       updateSplash(90, 'Lista em cache (' + liveN + ' canais)...');
       if (hud) {
         if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando cache local — sem novo download';
         if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
         if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
-        setTimeout(() => hud.classList.add('hidden'), 250);
+        setTimeout(() => hud.classList.add('hidden'), 200);
       }
       buildCurrentCategories(); renderCategoriesList(); selectCategory('ALL'); hideSplash();
+      updateServerSyncBadge(100, true);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Cache: ' + liveN + ' canais';
       setTimeout(() => { if (!resumeLastChannelIfPossible() && liveN > 0) {} }, 350);
       return;
@@ -892,14 +927,15 @@ async function loadServer(forceRefresh = false) {
       buildCurrentCategories(); renderCategoriesList(); selectCategory('ALL'); renderItemsList();
       updateSplash(75, 'Canais do cache indexado disponíveis (' + indexedLive.length + ')');
       hideSplash();
+      if (hud) hud.classList.add('hidden');
     }
   }
 
   $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
-  updateSplash(40, 'Baixando grade de programação...');
+  updateSplash(35, 'Baixando grade de canais ao vivo...');
   if (hud) {
-    if ($('hudProgressBar')) $('hudProgressBar').style.width = '55%';
-    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '55%';
+    if ($('hudProgressBar')) $('hudProgressBar').style.width = '35%';
+    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '35%';
   }
 
   try {
@@ -909,42 +945,82 @@ async function loadServer(forceRefresh = false) {
     const overflow = { LIVE: 0, MOVIE: 0, SERIES: 0 };
     let liveVisible = false;
     let lastProgressUi = 0;
+
     const revealLive = () => {
       if (liveVisible || loadId !== serverLoadGeneration || allCatalog.LIVE.length === 0) return;
       liveVisible = true;
-      updateSplash(75, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
+      updateSplash(80, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
       renderItemsList();
-      if (!activeItem) playStream(allCatalog.LIVE[0]);
+      if (!activeItem && allCatalog.LIVE.length > 0) {
+        playStream(allCatalog.LIVE[0]);
+      }
       hideSplash();
+
+      // LIBERAÇÃO IMEDIATA DA TELA DO APLICATIVO
+      if (hud) {
+        hud.classList.add('hidden');
+      }
+      showChannelBanner('📺 Ao Vivo liberado! Baixando filmes e séries em segundo plano...');
     };
+
     await streamPlaylistContent(
       srv.url,
       activePlaylistController && activePlaylistController.signal,
       (item) => {
         if (loadId !== serverLoadGeneration) return;
-        indexWriter.add(item);
-        const type = item.contentType;
+        const slim = slimItem(item);
+        indexWriter.add(slim);
+        const type = slim.contentType;
         if (allCatalog[type] && allCatalog[type].length < CATALOG_MEMORY_LIMITS[type]) {
-          allCatalog[type].push(item);
+          allCatalog[type].push(slim);
         } else if (overflow[type] !== undefined) {
           overflow[type]++;
         }
-        if (type === 'LIVE' && (allCatalog.LIVE.length === 1 || allCatalog.LIVE.length === 40)) revealLive();
+
+        // Assim que os canais ao vivo chegam (ou quando começa a chegar Filme/Série), libera a tela imediatamente!
+        if (type !== 'LIVE' && allCatalog.LIVE.length > 0 && !liveVisible) {
+          revealLive();
+        } else if (type === 'LIVE' && (allCatalog.LIVE.length === 20 || allCatalog.LIVE.length === 50)) {
+          revealLive();
+        }
       },
       (received, total) => {
         if (loadId !== serverLoadGeneration) return;
         const now = Date.now();
-        if (now - lastProgressUi < 250) return;
+        if (now - lastProgressUi < 200) return;
         lastProgressUi = now;
-        const pct = total ? Math.min(78, 40 + Math.round(received / total * 38)) : 55;
-        updateSplash(pct, 'Lendo lista — ' + allCatalog.LIVE.length + ' canais ao vivo');
-        if ($('hudProgressBar')) $('hudProgressBar').style.width = pct + '%';
-        if ($('hudProgressPercent')) $('hudProgressPercent').textContent = pct + '%';
+
+        const itemsCount = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length + overflow.LIVE + overflow.MOVIE + overflow.SERIES;
+        let pct = 50;
+        if (total && total > 0) {
+          pct = Math.min(99, Math.max(10, Math.round((received / total) * 100)));
+        } else {
+          // Sem Content-Length (streaming chunked): avanço dinâmico e contínuo sem travar em 55%
+          if (!liveVisible) {
+            pct = Math.min(48, 15 + Math.round((allCatalog.LIVE.length / 25) * 30));
+          } else {
+            const mb = received / (1024 * 1024);
+            const est = 50 + Math.round(Math.min(48, (mb / 4.5) * 26 + (itemsCount / 6000) * 22));
+            pct = Math.min(98, Math.max(50, est));
+          }
+        }
+
+        // Mostra a porcentagem ao lado do servidor no cabeçalho
+        updateServerSyncBadge(pct, false);
+
+        if (!liveVisible) {
+          updateSplash(pct, 'Lendo lista — ' + allCatalog.LIVE.length + ' canais ao vivo');
+          if (hud) {
+            if ($('hudProgressBar')) $('hudProgressBar').style.width = pct + '%';
+            if ($('hudProgressPercent')) $('hudProgressPercent').textContent = pct + '%';
+          }
+        }
       }
     );
+
     if (loadId !== serverLoadGeneration) return;
     revealLive();
     buildCurrentCategories();
@@ -954,11 +1030,14 @@ async function loadServer(forceRefresh = false) {
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
       if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
-      setTimeout(() => hud.classList.add('hidden'), 250);
+      hud.classList.add('hidden');
     }
+    updateServerSyncBadge(100, true);
     await indexWriter.finish();
     saveStoredData(srv.id, allCatalog);
-    if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') renderItemsList();
+    if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') {
+      renderItemsList();
+    }
     const totalIndexed = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length + overflow.LIVE + overflow.MOVIE + overflow.SERIES;
     if ($('txtCurrentCategoryTitle') && totalIndexed > allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) {
       $('txtCurrentCategoryTitle').textContent = 'Catálogo indexado: ' + totalIndexed.toLocaleString('pt-BR') + ' itens';
@@ -967,6 +1046,7 @@ async function loadServer(forceRefresh = false) {
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
     if (hud) hud.classList.add('hidden');
+    updateServerSyncBadge(100, true);
     hideSplash();
 
     // Fallback instantâneo: canais abertos e públicos para a TV nunca ficar vazia
@@ -1031,12 +1111,16 @@ function buildCurrentCategories() {
     const grp = item.group || 'Geral';
     if (hiddenCats.includes(grp)) continue;
 
-    currentCategoriesMap['ALL'].push(item);
+    if (currentCategoriesMap['ALL'].length < CATEGORY_ITEMS_MEMORY_LIMIT) {
+      currentCategoriesMap['ALL'].push(item);
+    }
     if (!currentCategoriesMap[grp]) {
       currentCategoriesMap[grp] = [];
       currentCategoryKeys.push(grp);
     }
-    currentCategoriesMap[grp].push(item);
+    if (currentCategoriesMap[grp].length < CATEGORY_ITEMS_MEMORY_LIMIT) {
+      currentCategoriesMap[grp].push(item);
+    }
   }
 }
 
