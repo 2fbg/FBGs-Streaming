@@ -18,6 +18,36 @@
     box-sizing: border-box;
 }
 
+/* ========================================================
+   CRITICAL AUTOFILL & MODERN INPUT STYLING (DARK / OTT THEME)
+   Impede que o navegador (Brave, Chrome, Edge) deixe fundo
+   branco nos campos de usuário e senha salvos no dispositivo.
+   ======================================================== */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #13151f inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff !important;
+    background-color: #13151f !important;
+    color: #ffffff !important;
+    border-radius: 16px !important;
+    transition: background-color 5000000s ease-in-out 0s !important;
+}
+
+input, select, textarea {
+    color-scheme: dark !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+input::placeholder {
+    color: #64748b !important;
+    -webkit-text-fill-color: #64748b !important;
+    opacity: 1 !important;
+}
+
 .hidden {
     display: none !important;
 }

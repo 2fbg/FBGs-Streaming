@@ -1,10 +1,10 @@
 {
   "id": "com.fbg2.mk21streaming",
-  "version": "3.8.7",
+  "version": "1.0.0",
   "vendor": "FBG2",
   "type": "web",
   "main": "index.html",
-  "title": "MK21 Play v3.8.7",
+  "title": "MK21 Play v1.0.0",
   "requiredACG": [],
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",

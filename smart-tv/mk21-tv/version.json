@@ -1,9 +1,9 @@
 {
-  "version": "3.8.7",
-  "versionCode": 387,
-  "title": "MK21 Play v3.8.7",
-  "releaseNotes": "• Nova tela de login Web moderna inspirada no APK Nativo MK21\n• Seleção rápida de servidores por chips com status online em tempo real\n• Feedback de login inline com animação e tratamento de erros sem alerts bloqueantes\n• Liberação instantânea de canais ao vivo e sincronização em segundo plano\n• Limite inteligente de 1.000 itens por categoria com paginação fluida\n• Versão 3.8.7 empacotada e sincronizada para todas as plataformas (Web, Android, LG webOS)",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.7_all.ipk",
+  "version": "1.0.0",
+  "versionCode": 100,
+  "title": "MK21 Play v1.0.0",
+  "releaseNotes": "• Versão unificada 1.0.0 para todas as plataformas (Web, Android, Smart TV)\n• Nova tela de login moderna com design cinematográfico e campos de senha/usuário protegidos contra autofill branco\n• Navegação fluida e integração total com múltiplos servidores",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.0_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
   "updatedAt": "2026-10-10"
 }

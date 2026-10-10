@@ -1,11 +1,11 @@
 {
-  "version": "1.5",
-  "versionCode": 6,
-  "tagName": "v1.5",
-  "name": "MK21 MultiServidor v1.5",
+  "version": "1.0.0",
+  "versionCode": 7,
+  "tagName": "v1.0.0",
+  "name": "MK21 MultiServidor v1.0.0",
   "downloadUrl": "https://bgstreaming.vercel.app/mk21.apk",
-  "body": "• Nova tela de login moderna com suporte multi-servidor instantâneo\n• Correção da sobreposição da tela de login durante o carregamento da lista com barra de status\n• Fallback de instalação de APK direto via navegador e provedor oficial\n• Nota sobre atualização recusada: se o instalador recusar, desinstale a versão anterior do aparelho uma única vez para sincronizar a chave de assinatura.",
-  "apkSha256": "43cfe305b920752296c350ead85ce91bbc0830e03f0f17e4a656d436330ed02a",
-  "sizeBytes": 25531147,
+  "body": "• Versão unificada v1.0.0 para todas as plataformas (Web, Android, Smart TV)\n• Nova tela de login moderna com design cinematográfico e campos de senha/usuário protegidos contra autofill branco\n• Navegação fluida, layout responsivo e integração total com múltiplos servidores",
+  "apkSha256": "3c00df55bfe1b55e54ab3ce660811941882eedcb267f33a65b8b82fbab7cb7c5",
+  "sizeBytes": 24872987,
   "updatedAt": "2026-10-10"
 }
