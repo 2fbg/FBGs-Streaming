@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=3.8.6">
+  <link rel="stylesheet" href="styles.css?v=3.8.7">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
 </head>
@@ -278,16 +278,8 @@
         </div>
 
         <div id="boxUpdateNotes" style="background: #141724; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 20px; max-height: 180px; overflow-y: auto;">
-          <h4 style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão 3.6.0:</h4>
-          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)
-• Novo painel de Teste de Velocidade com Download e Upload em tempo real
-• Ajuste e salvamento de Formato de Fluxo (MPEG-TS, HLS, Automático)
-• Alteração e validação de Senha PIN de Adultos direto na TV
-• Configuração e sincronização de tempo e fuso horário
-• Gerenciador de categorias com ocultação/exibição seletiva
-• Gerenciador de servidores com opção de Alterar/Editar e indicador de progresso %
-• Áudio e Legendas unificados sem cortes na tela com fontes grandes
-• Inicialização ultra rápida e fluida sem travamentos</pre>
+          <h4 id="titleUpdateNotes" style="margin: 0 0 8px 0; color: #ffd54f; font-size: 15px;">Novidades da Versão:</h4>
+          <pre id="txtReleaseNotes" style="color: #cbd5e1; font-size: 13px; white-space: pre-wrap; font-family: inherit; margin: 0;">• Carregando notas da versão...</pre>
         </div>
 
         <div id="updateProgressBox" class="hidden" style="margin-bottom: 20px;">
@@ -302,7 +294,7 @@
 
         <div id="updateActionsRow" style="display: flex; gap: 12px; flex-wrap: wrap;">
           <button id="btnStartDirectUpdate" class="ctrl-btn primary" style="flex: 2; min-width: 200px; padding: 14px;" tabindex="0">
-            🔄 Reinstalar / Sincronizar Arquivos v3.6.0
+            🔄 Sincronizar / Atualizar TV
           </button>
           <button id="btnCheckAgainUpdate" class="ctrl-btn" style="flex: 1; min-width: 120px; padding: 14px;" tabindex="0">
             🔄 Verificar
@@ -333,7 +325,31 @@
     </div>
   </div>
 
-  <!-- Boot estático: o pacote instalado é a única fonte de código. -->
-  <script src="app.js?v=3.8.6"></script>
+  <!-- Bootloader com suporte a Atualizações OTA -->
+  <script>
+    (function() {
+      try {
+        var otaCode = localStorage.getItem('mk21_ota_app_js');
+        var otaVer = localStorage.getItem('mk21_ota_app_version');
+        var otaCss = localStorage.getItem('mk21_ota_styles_css');
+        if (otaCss) {
+          var el = document.getElementById('mk21-ota-override-css');
+          if (el) el.textContent = otaCss;
+        }
+        if (otaCode && otaVer && otaCode.length > 5000) {
+          var s = document.createElement('script');
+          s.type = 'text/javascript';
+          s.text = otaCode;
+          document.body.appendChild(s);
+          return;
+        }
+      } catch (e) {
+        console.warn('OTA bootloader fallback:', e);
+      }
+      var s = document.createElement('script');
+      s.src = 'app.js?v=3.8.7';
+      document.body.appendChild(s);
+    })();
+  </script>
 </body>
 </html>

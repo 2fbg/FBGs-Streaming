@@ -1808,7 +1808,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val totalLength = connection.contentLength.toLong()
-                val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+                val updatesDir = File(context.getExternalFilesDir(null) ?: context.cacheDir, "updates").apply { mkdirs() }
                 val apkFile = File(updatesDir, "MK21-Update.apk")
                 if (apkFile.exists()) {
                     apkFile.delete()
@@ -1832,6 +1832,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                // Ensure file is readable by system package installer
+                try {
+                    apkFile.setReadable(true, false)
+                } catch (e: Exception) {
+                    // ignore
+                }
+
                 _updateCheckState.value = UpdateCheckState.ReadyToInstall(apkFile)
 
                 withContext(Dispatchers.Main) {
@@ -1845,6 +1852,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun installApk(context: Context, apkFile: File) {
         try {
+            if (!apkFile.exists() || apkFile.length() == 0L) {
+                Toast.makeText(context, "Arquivo da atualização corrompido ou incompleto.", Toast.LENGTH_LONG).show()
+                return
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!context.packageManager.canRequestPackageInstalls()) {
                     val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
@@ -1852,7 +1864,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     context.startActivity(settingsIntent)
-                    Toast.makeText(context, "Permita a instalação para atualizar o app", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Ative a permissão 'Instalar apps desconhecidos' e toque em Instalar novamente.", Toast.LENGTH_LONG).show()
                     return
                 }
             }
@@ -1863,6 +1875,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             context.startActivity(installIntent)
         } catch (e: Exception) {

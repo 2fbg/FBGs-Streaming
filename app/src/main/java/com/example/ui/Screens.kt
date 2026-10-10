@@ -8581,6 +8581,12 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     ) {
                                         Text("INSTALAR ATUALIZAÇÃO AGORA", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                     }
+                                    Text(
+                                        text = "💡 Dica: Se o Android exibir 'Atualização recusada' ou conflito de pacote, certifique-se de permitir 'Instalar fontes desconhecidas' nas configurações.",
+                                        color = Color.LightGray,
+                                        fontSize = 10.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
                                 }
                             }
                             is com.example.viewmodel.AppViewModel.UpdateCheckState.UpToDate -> {
