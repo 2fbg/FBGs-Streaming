@@ -3,6 +3,7 @@ package com.example.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -1877,9 +1878,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
+
+            // Concede permissões explícitas a qualquer handler do instalador de pacotes
+            try {
+                val resolveList = context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                for (resolveInfo in resolveList) {
+                    val targetPkg = resolveInfo.activityInfo.packageName
+                    context.grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                listOf("com.google.android.packageinstaller", "com.android.packageinstaller").forEach { pkg ->
+                    try {
+                        context.grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (_: Exception) {}
+                }
+            } catch (_: Exception) {}
+
             context.startActivity(installIntent)
         } catch (e: Exception) {
             Toast.makeText(context, "Erro ao iniciar instalação: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun openBrowserDownload(context: Context, downloadUrl: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Não foi possível abrir o navegador: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }

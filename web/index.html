@@ -104,18 +104,6 @@
                     <button type="button" id="btn-close-error-banner" class="text-red-400 hover:text-white text-sm shrink-0">✕</button>
                 </div>
 
-                <div class="flex items-center justify-between mb-4">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#E50914]"></span>
-                        <h2 class="text-sm font-black text-white tracking-wide uppercase">Acesso Universal</h2>
-                    </div>
-                    <!-- Botão de Perfis Salvos -->
-                    <button id="btn-toggle-saved-profiles" type="button" class="hidden text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-950/40 border border-amber-900/50 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1.5 hover:scale-105">
-                        <i class="fa-solid fa-users text-xs"></i>
-                        <span id="saved-profiles-count-badge">Perfis Salvos</span>
-                    </button>
-                </div>
-
                 <!-- Gaveta de Perfis Salvos (Expandível) -->
                 <div id="quick-profiles-section" class="mb-4 hidden p-3.5 bg-[#070709] border border-slate-800/90 rounded-2xl shadow-inner">
                     <div class="flex items-center justify-between mb-2.5">
@@ -130,22 +118,8 @@
                 <div class="space-y-4">
                     <!-- Seção: Seleção de Servidor (Predefinidos) -->
                     <div id="predefined-server-box" class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                Servidor IPTV
-                            </label>
-                            <span class="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 10 Disponíveis
-                            </span>
-                        </div>
-
-                        <!-- Chips de Servidores Rápidos (Inspirado no APK) -->
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5" id="fast-server-chips">
-                            <!-- Injetado dinamicamente via JS com status online -->
-                        </div>
-
                         <!-- Seletor Detalhado com Select Nativo Invisível -->
-                        <div class="relative mt-2">
+                        <div class="relative">
                             <div class="bg-[#070709] border border-slate-800/90 rounded-2xl p-3 flex items-center justify-between cursor-pointer hover:border-slate-700 transition-colors">
                                 <div class="flex items-center gap-3 min-w-0">
                                     <div class="w-8 h-8 rounded-xl bg-red-950/40 border border-red-900/50 flex items-center justify-center text-[#E50914] shrink-0">
@@ -1142,7 +1116,7 @@
     </div>
 
     <!-- FULL SCREEN MODERN MULTI-BAR LOADER (Estilo TopIbo / Netflix) -->
-    <div id="app-loader" class="fixed inset-0 bg-[#07080a] z-50 flex flex-col items-center justify-center p-6 backdrop-blur-xl hidden select-none">
+    <div id="app-loader" class="fixed inset-0 bg-[#07080a] flex flex-col items-center justify-center p-6 backdrop-blur-2xl hidden select-none" style="z-index: 999999; position: fixed; inset: 0;">
         <div class="w-full max-w-sm flex flex-col items-center text-center">
             <!-- Brand Badge -->
             <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#E50914] via-red-700 to-black p-0.5 shadow-2xl shadow-red-950/60 mb-4 flex items-center justify-center">
@@ -2316,6 +2290,12 @@
         }
 
         function showLoginError(msg) {
+            hideLoader();
+            if (loginScreen) {
+                loginScreen.classList.remove('hidden');
+                loginScreen.classList.add('block');
+                loginScreen.style.display = '';
+            }
             const banner = document.getElementById('login-error-banner');
             const msgEl = document.getElementById('login-error-message');
             if (banner && msgEl) {
@@ -2966,6 +2946,12 @@
 
         // TopIbo Style Multi-Bar Loader helpers
         function showLoader(message) {
+            if (loginScreen) {
+                loginScreen.classList.add('hidden');
+                loginScreen.classList.remove('block');
+                loginScreen.style.display = 'none';
+            }
+
             const loaderMsgEl = document.getElementById('loader-message');
             const loaderProgEl = document.getElementById('loader-progress');
             if (loaderMsgEl) loaderMsgEl.textContent = message || "CARREGANDO CATÁLOGO";
@@ -2977,7 +2963,10 @@
             updateCategoryLoaderProgress('movies', 0);
             updateCategoryLoaderProgress('total', 0);
 
-            if (loader) loader.classList.remove('hidden');
+            if (loader) {
+                loader.classList.remove('hidden');
+                loader.style.display = 'flex';
+            }
         }
 
         function updateCategoryLoaderProgress(category, pct) {
@@ -3019,7 +3008,10 @@
         }
 
         function hideLoader() {
-            if (loader) loader.classList.add('hidden');
+            if (loader) {
+                loader.classList.add('hidden');
+                loader.style.display = 'none';
+            }
         }
 
         // ==========================================
@@ -3292,8 +3284,10 @@
 
                         // Show player screen right away
                         loginScreen.classList.add('hidden');
+                        loginScreen.style.display = 'none';
                         playerScreen.classList.remove('hidden');
                         playerScreen.classList.add('flex');
+                        playerScreen.style.display = 'flex';
                         setTimeout(() => {
                             playerScreen.classList.remove('scale-95', 'opacity-0');
                             playerScreen.classList.add('scale-100', 'opacity-100');
@@ -3454,8 +3448,10 @@
 
                 // Show player screen right away
                 loginScreen.classList.add('hidden');
+                loginScreen.style.display = 'none';
                 playerScreen.classList.remove('hidden');
                 playerScreen.classList.add('flex');
+                playerScreen.style.display = 'flex';
                 setTimeout(() => {
                     playerScreen.classList.remove('scale-95', 'opacity-0');
                     playerScreen.classList.add('scale-100', 'opacity-100');
@@ -3517,7 +3513,10 @@
                 setTimeout(() => {
                     playerScreen.classList.add('hidden');
                     playerScreen.classList.remove('flex');
+                    playerScreen.style.display = 'none';
                     loginScreen.classList.remove('hidden');
+                    loginScreen.classList.add('block');
+                    loginScreen.style.display = '';
                 }, 300);
             }
         }

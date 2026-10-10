@@ -8581,12 +8581,37 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     ) {
                                         Text("INSTALAR ATUALIZAÇÃO AGORA", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                     }
-                                    Text(
-                                        text = "💡 Dica: Se o Android exibir 'Atualização recusada' ou conflito de pacote, certifique-se de permitir 'Instalar fontes desconhecidas' nas configurações.",
-                                        color = Color.LightGray,
-                                        fontSize = 10.sp,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.openBrowserDownload(context, "https://bgstreaming.vercel.app/mk21.apk")
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                                    ) {
+                                        Text("BAIXAR DIRETO NO NAVEGADOR", color = Color.White, fontSize = 10.sp)
+                                    }
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF221111)),
+                                        border = BorderStroke(1.dp, Color(0xFFE50914).copy(alpha = 0.6f)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                text = "⚠️ ATUALIZAÇÃO RECUSADA PELO ANDROID?",
+                                                color = Color(0xFFFF5252),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp
+                                            )
+                                            Text(
+                                                text = "Se o instalador recusar ou disser 'App não instalado', isso ocorre pelo Android detectar uma chave de assinatura diferente da versão instalada anteriormente no aparelho.\n\n👉 Solução: Desinstale o aplicativo antigo do seu aparelho uma única vez e instale esta nova v1.5. A partir desta versão, todas as atualizações serão aceitas automaticamente!",
+                                                color = Color.LightGray,
+                                                fontSize = 10.sp,
+                                                lineHeight = 14.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             is com.example.viewmodel.AppViewModel.UpdateCheckState.UpToDate -> {
