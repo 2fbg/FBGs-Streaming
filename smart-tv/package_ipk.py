@@ -109,7 +109,7 @@ if __name__ == "__main__":
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(script_dir, "mk21-tv")
     
     # Obter versão do appinfo.json dinamicamente
-    app_version = "3.6.0"
+    app_version = "1.0.0"
     appinfo_file = os.path.join(src, "appinfo.json")
     if os.path.exists(appinfo_file):
         try:

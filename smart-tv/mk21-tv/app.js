@@ -1,4 +1,4 @@
-// MK21 PLAY v1.0.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v1.0.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -2884,14 +2884,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.7
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.0
     if (!data || compareSemver(data.version, '1.0.0') < 0) {
       data = {
         version: '1.0.0',
         versionCode: 100,
         title: 'MK21 Play v1.0.0',
-        releaseNotes: '• Nova tela de login Web moderna inspirada no APK Nativo MK21\n• Seleção rápida de servidores por chips com status online em tempo real\n• Feedback de login inline com animação e tratamento de erros sem alerts bloqueantes\n• Liberação instantânea de canais ao vivo e sincronização em segundo plano\n• Limite inteligente de 1.000 itens por categoria com paginação fluida\n• Versão 3.8.7 empacotada e sincronizada para todas as plataformas (Web, Android, LG webOS)',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.7_all.ipk',
+        releaseNotes: '• Nova tela de login Web moderna inspirada no APK Nativo MK21\n• Seleção rápida de servidores por chips com status online em tempo real\n• Feedback de login inline com animação e tratamento de erros sem alerts bloqueantes\n• Liberação instantânea de canais ao vivo e sincronização em segundo plano\n• Limite inteligente de 1.000 itens por categoria com paginação fluida\n• Versão 1.0.0 empacotada e sincronizada para todas as plataformas (Web, Android, LG webOS e Tizen)',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.0_all.ipk',
         isPendingPush: (!data || compareSemver(data.version, '1.0.0') < 0)
       };
     }
@@ -2941,7 +2941,7 @@ async function openAppUpdateModal(manualCheck = true) {
 
 async function startDirectUpdate() {
   const meta = latestRemoteUpdateData || {};
-  const targetVer = meta.version || '3.8.7';
+  const targetVer = meta.version || BASE_PACKAGE_VERSION;
   const pBox = $('updateProgressBox');
   const btn = $('btnStartDirectUpdate');
 

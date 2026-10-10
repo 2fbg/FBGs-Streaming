@@ -21,21 +21,19 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest assembleDebug --no-daemon
-      - name: Debug - List smart-tv files
-        run: ls -la smart-tv/
       - name: Smart TV validation
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
           TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
-          test "$TV_VER" = "3.8.7"
           test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")"
-
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/appinfo.json'))['version'])")"
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/webos/appinfo.json'))['version'])")"
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('web/version.json'))['version'])")"
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")"
+          TIZEN_VER=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse('smart-tv/tizen/config.xml').getroot().attrib['version'])")
+          test "$TV_VER" = "$TIZEN_VER"
           IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
-          if [ -f "$IPK_FILE" ]; then
-            test "$(dpkg-deb --field "$IPK_FILE" Version)" = "$TV_VER"
-            echo "Smart TV IPK $TV_VER validado com sucesso."
-          else
-            echo "Arquivo .ipk não encontrado: $IPK_FILE"
-            exit 1
-          fi
+          test -f "$IPK_FILE"
+          test "$(dpkg-deb --field "$IPK_FILE" Version)" = "$TV_VER"
+          echo "Smart TV IPK $TV_VER validado com sucesso."
