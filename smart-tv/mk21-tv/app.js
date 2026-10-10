@@ -2942,6 +2942,8 @@ function mk21GetOpenModal() {
   return null;
 }
 function mk21GetFocusables() {
+  const activeModal = mk21GetOpenModal();
+  const root = activeModal || document;
   const sel = [
     'button:not([disabled])',
     'input:not([disabled])',
@@ -2960,7 +2962,7 @@ function mk21GetFocusables() {
     '.btn-server-edit',
     '.btn-server-delete'
   ].join(',');
-  return Array.from(document.querySelectorAll(sel)).filter(mk21IsVisible);
+  return Array.from(root.querySelectorAll(sel)).filter(mk21IsVisible);
 }
 
 function mk21RectCenter(el) {
