@@ -32,6 +32,7 @@ import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import com.example.BuildConfig
 
@@ -1686,6 +1687,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val name: String,
         val body: String,
         val downloadUrl: String,
+        val expectedSha256: String,
+        val expectedSizeBytes: Long,
         val isNewer: Boolean
     )
 
@@ -1706,8 +1709,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             _updateCheckState.value = UpdateCheckState.Checking
             val endpoints = listOf(
-                "https://bgstreaming.vercel.app/app/applet/api/version.json",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json",
+                "https://bgstreaming.vercel.app/app/applet/api/version.json",
                 "https://api.github.com/repos/2fbg/FBGs-Streaming/releases/latest"
             )
             val responses = mutableListOf<String>()
@@ -1755,6 +1758,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val name = json.optString("name", "MK21 MultiServidor v$tagName")
                 val body = json.optString("body", json.optString("releaseNotes", "Melhorias de desempenho e correções."))
                 var downloadUrl = json.optString("downloadUrl", "")
+                val expectedSha256 = json.optString("apkSha256", "").lowercase()
+                val expectedSizeBytes = json.optLong("sizeBytes", 0L)
                 if (downloadUrl.isBlank()) downloadUrl = json.optString("html_url", "https://github.com/2fbg/FBGs-Streaming/releases")
                 val assets = json.optJSONArray("assets")
                 if (downloadUrl.contains("/releases") && assets != null) {
@@ -1774,7 +1779,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val isNewer = (remoteCode > currentCode) || (remoteParts.zip(localParts).firstOrNull { it.first != it.second }?.let { it.first > it.second } ?: false)
                 if (isNewer && downloadUrl.isNotBlank()) {
                     _updateCheckState.value = UpdateCheckState.Available(
-                        GithubReleaseInfo(tagName, name, body, downloadUrl, true)
+                        GithubReleaseInfo(tagName, name, body, downloadUrl, expectedSha256, expectedSizeBytes, true)
                     )
                 } else {
                     _updateCheckState.value = UpdateCheckState.UpToDate("Seu app está na versão mais recente (v$currentVersion)")
@@ -1785,7 +1790,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startInAppDownloadAndInstall(context: Context, downloadUrl: String) {
+    fun startInAppDownloadAndInstall(context: Context, downloadUrl: String, expectedSha256: String = "", expectedSizeBytes: Long = 0L) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 _updateCheckState.value = UpdateCheckState.Downloading(0, 0L, 0L)
@@ -1809,8 +1814,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     break
                 }
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    throw IllegalStateException("servidor respondeu HTTP ${connection.responseCode}")
+                }
 
                 val totalLength = connection.contentLength.toLong()
+                if (expectedSizeBytes > 0L && totalLength > 0L && totalLength != expectedSizeBytes) {
+                    throw IllegalStateException("tamanho do APK divergente (${totalLength} bytes)")
+                }
                 val updatesDir = File(context.getExternalFilesDir(null) ?: context.cacheDir, "updates").apply { mkdirs() }
                 val apkFile = File(updatesDir, "MK21-Update.apk")
                 if (apkFile.exists()) {
@@ -1840,6 +1851,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     apkFile.setReadable(true, false)
                 } catch (e: Exception) {
                     // ignore
+                }
+
+                if (expectedSizeBytes > 0L && apkFile.length() != expectedSizeBytes) {
+                    apkFile.delete()
+                    throw IllegalStateException("download incompleto ou desatualizado")
+                }
+                if (expectedSha256.isNotBlank()) {
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val actualSha256 = apkFile.inputStream().use { input ->
+                        val buffer = ByteArray(8192)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            digest.update(buffer, 0, read)
+                        }
+                        digest.digest().joinToString("") { "%02x".format(it) }
+                    }
+                    if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
+                        apkFile.delete()
+                        throw IllegalStateException("hash SHA-256 do APK não confere")
+                    }
                 }
 
                 _updateCheckState.value = UpdateCheckState.ReadyToInstall(apkFile)

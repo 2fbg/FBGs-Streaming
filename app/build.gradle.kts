@@ -67,7 +67,7 @@ android {
     applicationId = "com.aistudio.multiservidor.iptvmk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 8
+    versionCode = 9
     versionName = "1.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -251,4 +251,3 @@ tasks.register("generateReleaseKeystore") {
     println("Base64 representation written to ${base64File.absolutePath}!")
   }
 }
-

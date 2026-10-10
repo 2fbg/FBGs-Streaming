@@ -8507,7 +8507,12 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     // Direct In-App OTA Update Button
                                     Button(
                                         onClick = {
-                                            viewModel.startInAppDownloadAndInstall(context, state.info.downloadUrl)
+                                            viewModel.startInAppDownloadAndInstall(
+                                                context,
+                                                state.info.downloadUrl,
+                                                state.info.expectedSha256,
+                                                state.info.expectedSizeBytes
+                                            )
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
                                         modifier = Modifier.fillMaxWidth(),
@@ -8597,7 +8602,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            viewModel.openBrowserDownload(context, "https://bgstreaming.vercel.app/mk21.apk")
+                                            viewModel.openBrowserDownload(context, "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk")
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(8.dp),
