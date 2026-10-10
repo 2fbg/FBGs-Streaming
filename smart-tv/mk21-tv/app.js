@@ -1,4 +1,4 @@
-// MK21 PLAY v3.8.4 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
+// MK21 PLAY v3.8.6 — Navegação espacial DPAD + base 3.6.0 — Motor Otimizado para Smart TV LG webOS
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -2754,7 +2754,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.8.4';
+const BASE_PACKAGE_VERSION = '3.8.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2806,15 +2806,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.4
-    if (!data || compareSemver(data.version, '3.8.4') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v3.8.6
+    if (!data || compareSemver(data.version, '3.8.6') < 0) {
       data = {
-        version: '3.8.4',
-        versionCode: 360,
-        title: 'MK21 Play v3.8.4',
-        releaseNotes: '• Guia EPG com dados reais XMLTV do servidor e API Xtream Codes (Short EPG)\n• Novo carregador e sincronizador OTA inteligente para Smart TV (LG webOS / Tizen)\n• Correção definitiva no gerenciador de atualização de versão na TV\n• Seleção de faixas de áudio e legendas (TextTrack) com modal interativo\n• Player com velocidade ajustável até 4x e áudio sem distorção (preservesPitch)\n• Teclas universais Play/Pause para controles remotos LG webOS e Samsung Tizen\n• Teste de velocidade em tempo real com gauge, ping e taxa de download\n• Separação estrita de categorias sem misturar canais, filmes e séries\n• Nova tela de inicialização (Splash) premium com animação e status',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.4_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '3.8.4') < 0)
+        version: '3.8.6',
+        versionCode: 386,
+        title: 'MK21 Play v3.8.6',
+        releaseNotes: '• Foco DPAD exclusivo dentro de qualquer modal\n• Correção do botão Voltar sem navegação para a tela de trás\n• Remoção completa do microfone visual da pesquisa\n• Cache v6 e janela RAM fixa para listas gigantes\n• Novidades e versão alinhadas para 3.8.6',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.6_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '3.8.6') < 0)
       };
     }
     latestRemoteUpdateData = data;
@@ -2933,6 +2933,14 @@ function mk21IsVisible(el) {
   return el.offsetParent !== null || el === document.activeElement;
 }
 
+function mk21GetOpenModal() {
+  const modalIds = ['modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  for (let i = 0; i < modalIds.length; i++) {
+    const modal = $(modalIds[i]);
+    if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
+  }
+  return null;
+}
 function mk21GetFocusables() {
   const sel = [
     'button:not([disabled])',
@@ -3104,9 +3112,9 @@ document.addEventListener('keydown', function (e) {
       focusActiveElement();
       return;
     }
-    if ($('modalSeries') && !$('modalSeries').classList.contains('hidden')) {
+    if ($('modalSeriesEpisodes') && !$('modalSeriesEpisodes').classList.contains('hidden')) {
       e.preventDefault();
-      $('modalSeries').classList.add('hidden');
+      $('modalSeriesEpisodes').classList.add('hidden');
       activeZone = 'channels';
       focusActiveElement();
       return;
@@ -3114,6 +3122,17 @@ document.addEventListener('keydown', function (e) {
     if ($('modalExitConfirm') && !$('modalExitConfirm').classList.contains('hidden')) {
       e.preventDefault();
       $('modalExitConfirm').classList.add('hidden');
+      activeZone = 'settings';
+      focusActiveElement();
+      return;
+    }
+    // Qualquer modal restante (áudio, atualização etc.) captura o Back sem atingir a tela atrás.
+    const openModal = mk21GetOpenModal();
+    if (openModal) {
+      e.preventDefault();
+      openModal.classList.add('hidden');
+      activeZone = 'settings';
+      focusActiveElement();
       return;
     }
     if (document.fullscreenElement || document.webkitFullscreenElement) {

@@ -1,10 +1,10 @@
 {
-  "version": "3.8.5",
-  "versionCode": 385,
-  "title": "MK21 Play v3.8.5",
-  "releaseNotes": "• Interface web unificada com a cópia publicada no Vercel\n• Cache IndexedDB e carregamento em segundo plano preservados\n• Proxy Vercel com encerramento de streams desconectados\n• Proteção nosniff e validação anti-SSRF mantidas",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.5_all.ipk",
+  "version": "3.8.6",
+  "versionCode": 386,
+  "title": "MK21 Play v3.8.6",
+  "releaseNotes": "• Foco DPAD exclusivo dentro de qualquer modal\n• Correção do botão Voltar sem navegação para a tela de trás\n• Remoção completa do microfone visual da pesquisa\n• Cache v6 e janela RAM fixa para listas gigantes\n• Novidades e versão alinhadas para 3.8.6",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.6_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
   "updatedAt": "2026-10-09",
-  "sha256": "34b6d4ff697aeec50ed10318e0ea27c57966302c2c4a015c1beb74ce70a1eded"
+  "sha256": "fe9d2bff4b84842fb2e17bf931c4091780ab1a24437d5d91de09b62de3f2c8f5"
 }

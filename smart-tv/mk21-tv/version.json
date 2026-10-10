@@ -1,9 +1,9 @@
 {
-  "version": "3.8.5",
-  "versionCode": 385,
-  "title": "MK21 Play v3.8.5",
-  "releaseNotes": "• Memória RAM reduzida para janela fixa: 2.000 ao vivo, 3.000 filmes e 3.000 séries\\n• Cache v6 e primeira página do IndexedDB exibida imediatamente\\n• Limpeza completa do cache serializado e índice persistente\\n• Botões de limpeza com tamanho padrão\\n• Proteção adicional contra reinício por falta de memória",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.4_all.ipk",
+  "version": "3.8.6",
+  "versionCode": 386,
+  "title": "MK21 Play v3.8.6",
+  "releaseNotes": "• Foco DPAD exclusivo dentro de qualquer modal\n• Correção do botão Voltar sem navegação para a tela de trás\n• Remoção completa do microfone visual da pesquisa\n• Cache v6 e janela RAM fixa para listas gigantes\n• Novidades e versão alinhadas para 3.8.6",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_3.8.6_all.ipk",
   "apkUrl": "https://github.com/2fbg/FBGs-Streaming/raw/main/web/mk21.apk",
   "updatedAt": "2026-10-09"
 }

@@ -213,15 +213,6 @@ body {
   outline: none;
 }
 
-.voice-btn {
-  padding: 10px 16px;
-  background: #252a3b;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-}
 
 .pane-scroll {
   list-style: none;
@@ -838,9 +829,6 @@ body[class*="font-"] .settings-detail-panel h3 {
 }
 
 body[class*="font-"] #inputSearch,
-body[class*="font-"] .voice-btn {
-  font-size: calc(16px * var(--font-scale, 1)) !important;
-}
 
 /* ================= 11. TELA DE INICIALIZAÇÃO PREMIUM (SPLASH SCREEN) ================= */
 .startup-splash-overlay {
