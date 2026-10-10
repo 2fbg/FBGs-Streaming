@@ -23,14 +23,26 @@
    Impede que o navegador (Brave, Chrome, Edge) deixe fundo
    branco nos campos de usuário e senha salvos no dispositivo.
    ======================================================== */
+input[type="text"],
+input[type="password"],
+input[type="url"],
+input {
+    background-color: #121522 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #E50914 !important;
+    color-scheme: dark !important;
+}
+
 input:-webkit-autofill,
 input:-webkit-autofill:hover, 
 input:-webkit-autofill:focus, 
 input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 1000px #13151f inset !important;
+    -webkit-box-shadow: 0 0 0 1000px #121522 inset !important;
+    box-shadow: 0 0 0 1000px #121522 inset !important;
     -webkit-text-fill-color: #ffffff !important;
     caret-color: #ffffff !important;
-    background-color: #13151f !important;
+    background-color: #121522 !important;
     color: #ffffff !important;
     border-radius: 16px !important;
     transition: background-color 5000000s ease-in-out 0s !important;
@@ -40,11 +52,12 @@ input, select, textarea {
     color-scheme: dark !important;
     color: #ffffff !important;
     -webkit-text-fill-color: #ffffff !important;
+    background-color: #121522 !important;
 }
 
 input::placeholder {
-    color: #64748b !important;
-    -webkit-text-fill-color: #64748b !important;
+    color: #718096 !important;
+    -webkit-text-fill-color: #718096 !important;
     opacity: 1 !important;
 }
 

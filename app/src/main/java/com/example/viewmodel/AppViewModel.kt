@@ -1769,7 +1769,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val currentVersion = BuildConfig.VERSION_NAME
                 val remoteParts = versionParts(tagName)
                 val localParts = versionParts(currentVersion)
-                val isNewer = remoteParts.zip(localParts).firstOrNull { it.first != it.second }?.let { it.first > it.second } ?: false
+                val remoteCode = json.optInt("versionCode", 0)
+                val currentCode = BuildConfig.VERSION_CODE
+                val isNewer = (remoteCode > currentCode) || (remoteParts.zip(localParts).firstOrNull { it.first != it.second }?.let { it.first > it.second } ?: false)
                 if (isNewer && downloadUrl.isNotBlank()) {
                     _updateCheckState.value = UpdateCheckState.Available(
                         GithubReleaseInfo(tagName, name, body, downloadUrl, true)

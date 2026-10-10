@@ -632,10 +632,10 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(horizontal = 16.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             
             // Integrated Sophisticated Brand Logo Header
             Box(
@@ -653,7 +653,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                 SophisticatedBrandHeader()
             }
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Tab Bar
             TabRow(
@@ -680,42 +680,42 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             if (selectedTab == 0) {
                 // Predefined Server setupcard
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161515)),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF10121C)),
+                    shape = RoundedCornerShape(22.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column(modifier = Modifier.padding(22.dp)) {
                         Text(
                             text = "Acesso Oficial MK21",
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Black,
                             color = Color.White,
-                            fontSize = 16.sp
+                            fontSize = 17.sp
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // USERNAME & PASSWORD IN A SINGLE CONTIGUOUS MODERN ROW
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             OutlinedTextField(
                                 value = username,
                                 onValueChange = { viewModel.setCredentials(it, password) },
-                                label = { Text("Usuário", fontSize = 11.sp, color = Color.Gray) },
+                                label = { Text("Usuário", fontSize = 12.sp, color = Color.LightGray) },
                                 maxLines = 1,
                                 singleLine = true,
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Person,
                                         contentDescription = null,
-                                        tint = Color.Gray.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(16.dp)
+                                        tint = com.example.ui.theme.NetflixRed,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 },
                                 trailingIcon = {
@@ -725,13 +725,13 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                                 viewModel.setCredentials(clipboardText.trim(), password)
                                             }
                                         },
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentPaste,
                                             contentDescription = "Colar usuário",
-                                            tint = Color.Gray.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(16.dp)
+                                            tint = Color.LightGray,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 },
@@ -740,30 +740,37 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("username_input"),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = com.example.ui.theme.SophisticatedRedStart,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                                    focusedLabelColor = com.example.ui.theme.SophisticatedRedStart,
-                                    focusedContainerColor = Color(0xFF09090C),
-                                    unfocusedContainerColor = Color(0xFF09090C),
+                                    focusedBorderColor = com.example.ui.theme.NetflixRed,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                    focusedLabelColor = com.example.ui.theme.NetflixRed,
+                                    unfocusedLabelColor = Color.LightGray,
+                                    focusedContainerColor = Color(0xFF141724),
+                                    unfocusedContainerColor = Color(0xFF141724),
+                                    disabledContainerColor = Color(0xFF141724),
                                     focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = com.example.ui.theme.NetflixRed,
+                                    selectionColors = androidx.compose.foundation.text.selection.TextSelectionColors(
+                                        handleColor = com.example.ui.theme.NetflixRed,
+                                        backgroundColor = com.example.ui.theme.NetflixRed.copy(alpha = 0.4f)
+                                    )
                                 )
                             )
 
                             OutlinedTextField(
                                 value = password,
                                 onValueChange = { viewModel.setCredentials(username, it) },
-                                label = { Text("Senha", fontSize = 11.sp, color = Color.Gray) },
+                                label = { Text("Senha", fontSize = 12.sp, color = Color.LightGray) },
                                 maxLines = 1,
                                 singleLine = true,
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Lock,
                                         contentDescription = null,
-                                        tint = Color.Gray.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(16.dp)
+                                        tint = com.example.ui.theme.NetflixRed,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 },
                                 trailingIcon = {
@@ -777,25 +784,25 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                                     viewModel.setCredentials(username, clipboardText.trim())
                                                 }
                                             },
-                                            modifier = Modifier.size(28.dp)
+                                            modifier = Modifier.size(32.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.ContentPaste,
                                                 contentDescription = "Colar senha",
-                                                tint = Color.Gray.copy(alpha = 0.7f),
-                                                modifier = Modifier.size(16.dp)
+                                                tint = Color.LightGray,
+                                                modifier = Modifier.size(18.dp)
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(4.dp))
                                         IconButton(
                                             onClick = { passwordVisible = !passwordVisible },
-                                            modifier = Modifier.size(28.dp)
+                                            modifier = Modifier.size(32.dp)
                                         ) {
                                             Icon(
                                                 imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                                 contentDescription = if (passwordVisible) "Ocultar senha" else "Mostrar senha",
-                                                tint = Color.Gray.copy(alpha = 0.7f),
-                                                modifier = Modifier.size(16.dp)
+                                                tint = Color.LightGray,
+                                                modifier = Modifier.size(18.dp)
                                             )
                                         }
                                     }
@@ -806,15 +813,22 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("password_input"),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = com.example.ui.theme.SophisticatedRedStart,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                                    focusedLabelColor = com.example.ui.theme.SophisticatedRedStart,
-                                    focusedContainerColor = Color(0xFF09090C),
-                                    unfocusedContainerColor = Color(0xFF09090C),
+                                    focusedBorderColor = com.example.ui.theme.NetflixRed,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                    focusedLabelColor = com.example.ui.theme.NetflixRed,
+                                    unfocusedLabelColor = Color.LightGray,
+                                    focusedContainerColor = Color(0xFF141724),
+                                    unfocusedContainerColor = Color(0xFF141724),
+                                    disabledContainerColor = Color(0xFF141724),
                                     focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = com.example.ui.theme.NetflixRed,
+                                    selectionColors = androidx.compose.foundation.text.selection.TextSelectionColors(
+                                        handleColor = com.example.ui.theme.NetflixRed,
+                                        backgroundColor = com.example.ui.theme.NetflixRed.copy(alpha = 0.4f)
+                                    )
                                 )
                             )
                         }
@@ -8605,7 +8619,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                                 fontSize = 11.sp
                                             )
                                             Text(
-                                                text = "Se o instalador recusar ou disser 'App não instalado', isso ocorre pelo Android detectar uma chave de assinatura diferente da versão instalada anteriormente no aparelho.\n\n👉 Solução: Desinstale o aplicativo antigo do seu aparelho uma única vez e instale esta nova v1.5. A partir desta versão, todas as atualizações serão aceitas automaticamente!",
+                                                text = "Se o instalador recusar ou disser 'App não instalado', isso ocorre pelo Android detectar uma chave de assinatura diferente da versão instalada anteriormente no aparelho.\n\n👉 Solução: Desinstale o aplicativo antigo do seu aparelho uma única vez e instale esta nova v1.0.0. A partir desta versão, todas as atualizações serão aceitas automaticamente!",
                                                 color = Color.LightGray,
                                                 fontSize = 10.sp,
                                                 lineHeight = 14.sp

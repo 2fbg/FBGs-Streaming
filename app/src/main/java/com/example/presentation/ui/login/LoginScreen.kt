@@ -142,9 +142,9 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
-                        label = { Text("Usuário IPTV") },
+                        label = { Text("Usuário IPTV", color = Color.LightGray) },
                         leadingIcon = {
-                            Icon(Icons.Outlined.Person, contentDescription = null)
+                            Icon(Icons.Outlined.Person, contentDescription = null, tint = com.example.ui.theme.NetflixRed)
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
@@ -154,7 +154,19 @@ fun LoginScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("username_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = com.example.ui.theme.NetflixRed,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            focusedLabelColor = com.example.ui.theme.NetflixRed,
+                            unfocusedLabelColor = Color.LightGray,
+                            focusedContainerColor = Color(0xFF141724),
+                            unfocusedContainerColor = Color(0xFF141724),
+                            disabledContainerColor = Color(0xFF141724),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = com.example.ui.theme.NetflixRed
+                        )
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -163,15 +175,16 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Senha IPTV") },
+                        label = { Text("Senha IPTV", color = Color.LightGray) },
                         leadingIcon = {
-                            Icon(Icons.Outlined.Lock, contentDescription = null)
+                            Icon(Icons.Outlined.Lock, contentDescription = null, tint = com.example.ui.theme.NetflixRed)
                         },
                         trailingIcon = {
                             IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                                 Icon(
                                     imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = if (isPasswordVisible) "Ocultar senha" else "Mostrar senha"
+                                    contentDescription = if (isPasswordVisible) "Ocultar senha" else "Mostrar senha",
+                                    tint = Color.LightGray
                                 )
                             }
                         },
@@ -191,7 +204,19 @@ fun LoginScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("password_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = com.example.ui.theme.NetflixRed,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            focusedLabelColor = com.example.ui.theme.NetflixRed,
+                            unfocusedLabelColor = Color.LightGray,
+                            focusedContainerColor = Color(0xFF141724),
+                            unfocusedContainerColor = Color(0xFF141724),
+                            disabledContainerColor = Color(0xFF141724),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = com.example.ui.theme.NetflixRed
+                        )
                     )
 
                     // Mensagem de Erro
