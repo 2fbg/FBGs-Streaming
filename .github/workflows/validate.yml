@@ -18,11 +18,22 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - name: Android tests and build
-        run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug --no-daemon
+      - name: Debug - List smart-tv files
+        run: ls -la smart-tv/
       - name: Smart TV validation
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
           test "$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")" = "3.8.6"
           test "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")" = "3.8.6"
-          test "$(dpkg-deb --field smart-tv/mk21play_3.8.6_all.ipk Version)" = "3.8.6"
+
+          if [ -f "smart-tv/mk21play_3.8.6_all.ipk" ]; then
+            test "$(dpkg-deb --field smart-tv/mk21play_3.8.6_all.ipk Version)" = "3.8.6"
+            echo "Smart TV IPK 3.8.6 validado com sucesso."
+          else
+            echo "Arquivo .ipk não encontrado: smart-tv/mk21play_3.8.6_all.ipk"
+            exit 1
+          fi
