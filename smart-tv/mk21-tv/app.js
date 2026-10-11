@@ -274,6 +274,7 @@ async function searchCatalogIndex(serverId, type, query, group, limit = 240) {
 }
 
 let searchIndexGeneration = 0;
+let currentSearchQuery = '';
 async function searchFromIndexedCatalog(query) {
   const type = currentContentType;
   if (!['LIVE', 'MOVIE', 'SERIES'].includes(type) || !query) return;
@@ -282,11 +283,12 @@ async function searchFromIndexedCatalog(query) {
   if (!srv) return;
   const group = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
   const found = await searchCatalogIndex(srv.id, type, query, group, 240);
-  if (generation !== searchIndexGeneration || $('inputSearch').value.toLowerCase().trim() !== query) return;
-  allCatalog[type] = found;
+  if (generation !== searchIndexGeneration) return;
+  const inputVal = ($('inputSearch') && $('inputSearch').value || '').toLowerCase().trim();
+  if (inputVal !== query) return;
+  currentFilteredItems = found;
   itemsDisplayLimit = 240;
-  buildCurrentCategories();
-  renderCategoriesList();
+  $('badgeItemsCount').textContent = currentFilteredItems.length;
   renderItemsList();
 }
 
@@ -464,9 +466,17 @@ let searchDebounceTimer = null;
 function scheduleSearchRender() {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(function () {
-    const query = $('inputSearch').value.toLowerCase().trim();
+    const input = $('inputSearch');
+    const query = input ? input.value.toLowerCase().trim() : '';
+    currentSearchQuery = query;
     renderItemsList();
-    if (query) searchFromIndexedCatalog(query);
+    if (query) {
+      searchFromIndexedCatalog(query);
+    } else {
+      buildCurrentCategories();
+      renderCategoriesList();
+      renderItemsList();
+    }
   }, 180);
 }
 
@@ -1190,7 +1200,7 @@ let itemsDisplayLimit = 80;
 
 // 8. RENDERIZAÇÃO DA LISTA DE ITENS COM SÉRIES AGRUPADAS E ORDENAÇÃO
 function renderItemsList() {
-  const query = $('inputSearch').value.toLowerCase().trim();
+  const query = $('inputSearch') ? $('inputSearch').value.toLowerCase().trim() : '';
   const base = currentCategoriesMap[activeCategoryKey] || [];
   const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
   const indexedMoreAvailable = Object.prototype.hasOwnProperty.call(indexedOffsets, indexedPageKey);
@@ -1198,7 +1208,7 @@ function renderItemsList() {
   // Evita duplicar o array inteiro quando a categoria está na ordem padrão.
   // Em listas com centenas de milhares de itens isso reduz um pico de memória
   // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
-  let items = query ? base.filter(c => c.name.toLowerCase().includes(query)) : base;
+  let items = query ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query))) : base;
 
   // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
   function mk21ExtractYear(name) {
@@ -1331,7 +1341,8 @@ function renderItemsList() {
 
   ul.appendChild(fragment);
 
-  if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0) {
+  // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
+  if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
     playStream(currentFilteredItems[0]);
   }
 }
@@ -1368,9 +1379,12 @@ if ($('inputSearch')) $('inputSearch').addEventListener('input', scheduleSearchR
 const clearBtn = $('btnClearSearch');
 if (clearBtn) {
   clearBtn.onclick = () => {
-    $('inputSearch').value = '';
+    if ($('inputSearch')) $('inputSearch').value = '';
+    currentSearchQuery = '';
+    buildCurrentCategories();
+    renderCategoriesList();
     renderItemsList();
-    $('inputSearch').focus();
+    if ($('inputSearch')) $('inputSearch').focus();
   };
 }
 
@@ -3232,7 +3246,7 @@ document.addEventListener('keydown', function (e) {
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
   const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-  if (isTextInput && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)) return;
+  if (isTextInput && ['ArrowLeft','ArrowRight'].includes(key)) return;
 
   // Voz nativa
   if (key === 'Voice' || key === 'VoiceCommand' || k === 1022 || k === 1016 || k === 166) {
@@ -3254,6 +3268,31 @@ document.addEventListener('keydown', function (e) {
 
   // Back / Return (webOS 461, Tizen 10009)
   if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+    // Se o cursor estiver na busca ou houver texto digitado, limpa e retorna à navegação
+    if (ae && ae.id === 'inputSearch') {
+      e.preventDefault();
+      ae.value = '';
+      currentSearchQuery = '';
+      buildCurrentCategories();
+      renderCategoriesList();
+      renderItemsList();
+      ae.blur();
+      activeZone = 'channels';
+      focusActiveElement();
+      return;
+    }
+    if ($('inputSearch') && $('inputSearch').value.trim().length > 0) {
+      e.preventDefault();
+      $('inputSearch').value = '';
+      currentSearchQuery = '';
+      buildCurrentCategories();
+      renderCategoriesList();
+      renderItemsList();
+      activeZone = 'channels';
+      focusActiveElement();
+      return;
+    }
+
     // deixa handlers legados de modal se existirem
     if ($('modalPin') && !$('modalPin').classList.contains('hidden')) {
       e.preventDefault();
@@ -3352,6 +3391,19 @@ document.addEventListener('keydown', function (e) {
   // OK / Enter / Space
   if (k === 13 || k === 32 || key === 'Enter' || key === ' ') {
     if (ae && ae.tagName === 'INPUT' && (k === 32 || key === ' ')) return;
+    if (ae && ae.id === 'inputSearch') {
+      // Ao teclar Enter na busca na Smart TV, desce foco para o primeiro canal filtrado
+      e.preventDefault();
+      ae.blur();
+      const firstChannel = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
+      if (firstChannel) {
+        firstChannel.focus();
+        activeZone = 'channels';
+      } else {
+        focusActiveElement();
+      }
+      return;
+    }
     e.preventDefault();
     if (ae && ae !== document.body && typeof ae.click === 'function') {
       ae.click();
