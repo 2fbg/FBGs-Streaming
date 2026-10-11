@@ -2838,7 +2838,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.0.0';
+const BASE_PACKAGE_VERSION = '1.0.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2884,15 +2884,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.0
-    if (!data || compareSemver(data.version, '1.0.0') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.1
+    if (!data || compareSemver(data.version, '1.0.1') < 0) {
       data = {
-        version: '1.0.0',
-        versionCode: 100,
-        title: 'MK21 Play v1.0.0',
-        releaseNotes: '• Nova tela de login Web moderna inspirada no APK Nativo MK21\n• Seleção rápida de servidores por chips com status online em tempo real\n• Feedback de login inline com animação e tratamento de erros sem alerts bloqueantes\n• Liberação instantânea de canais ao vivo e sincronização em segundo plano\n• Limite inteligente de 1.000 itens por categoria com paginação fluida\n• Versão 1.0.0 empacotada e sincronizada para todas as plataformas (Web, Android, LG webOS e Tizen)',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.0_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '1.0.0') < 0)
+        version: '1.0.1',
+        versionCode: 101,
+        title: 'MK21 Play v1.0.1',
+        releaseNotes: '• Timeout real e recuperação para servidores VLOG lentos\n• Interface liberada após 12s enquanto o catálogo continua indexando\n• Janela de memória reduzida para 360 itens por tipo, com páginas IndexedDB de 240\n• Cache local menor e navegação mais fluida em Smart TVs LG',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.1_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '1.0.1') < 0)
       };
     }
     latestRemoteUpdateData = data;
