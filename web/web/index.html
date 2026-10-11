@@ -31,21 +31,23 @@
         input[type="password"],
         input[type="url"],
         input {
-            background-color: #121522 !important;
+            background-color: #0f111d !important;
             color: #ffffff !important;
             -webkit-text-fill-color: #ffffff !important;
             caret-color: #E50914 !important;
             color-scheme: dark !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
         }
         input:-webkit-autofill,
         input:-webkit-autofill:hover, 
         input:-webkit-autofill:focus, 
         input:-webkit-autofill:active {
-            -webkit-box-shadow: 0 0 0 1000px #121522 inset !important;
-            box-shadow: 0 0 0 1000px #121522 inset !important;
+            -webkit-box-shadow: 0 0 0 1000px #0f111d inset !important;
+            box-shadow: 0 0 0 1000px #0f111d inset !important;
             -webkit-text-fill-color: #ffffff !important;
             caret-color: #ffffff !important;
-            background-color: #121522 !important;
+            background-color: #0f111d !important;
             color: #ffffff !important;
             border-radius: 16px !important;
             transition: background-color 5000000s ease-in-out 0s !important;
@@ -54,11 +56,11 @@
             color-scheme: dark !important;
             color: #ffffff !important;
             -webkit-text-fill-color: #ffffff !important;
-            background-color: #121522 !important;
+            background-color: #0f111d !important;
         }
         input::placeholder {
-            color: #718096 !important;
-            -webkit-text-fill-color: #718096 !important;
+            color: #94a3b8 !important;
+            -webkit-text-fill-color: #94a3b8 !important;
             opacity: 1 !important;
         }
 
@@ -84,18 +86,18 @@
     <div class="h-1 bg-gradient-to-r from-red-650 via-red-600 to-black w-full"></div>
 
     <!-- MAIN APP CONTAINER -->
-    <main class="flex-grow flex flex-col justify-center items-center w-full px-3 py-6 sm:px-6 sm:py-10">
+    <main class="flex-grow flex flex-col justify-center items-center w-full px-4 py-8 sm:px-8 sm:py-12 min-h-[90vh]">
 
         <!-- 1. LOGIN / GATEWAY SCREEN (Design OTT Moderno, Fluido & Responsivo) -->
-        <div id="login-screen" class="w-full max-w-xl sm:max-w-2xl px-2 sm:px-4 transition-all duration-300 block">
+        <div id="login-screen" class="w-full max-w-3xl sm:max-w-4xl px-2 sm:px-6 transition-all duration-300 block">
             <!-- Branding: Emblema Oficial MK21 com Aura Ruby & Slogan Fiel ao APK -->
             <div class="relative text-center mb-6 flex flex-col items-center select-none">
                 <!-- Aura de Luz Difusa de Fundo (Cinema Glow) -->
-                <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-72 h-72 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-80 h-80 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
-                <!-- Emblema Quadrado Arredondado 3D -->
-                <div class="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl p-[2.5px] bg-gradient-to-br from-red-500 via-[#E50914] to-red-950 shadow-[0_16px_45px_rgba(229,9,20,0.55)] flex items-center justify-center mb-3 transition-transform hover:scale-105 duration-300">
-                    <div class="w-full h-full rounded-[22px] bg-[#0c0d14] flex items-center justify-center border border-white/10 shadow-inner">
+                <!-- Emblema Circular Oficial MK21 (Idêntico ao APK, moderno e sem caixa quadrada) -->
+                <div class="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full p-[2.5px] bg-gradient-to-tr from-amber-400 via-[#E50914] to-red-600 shadow-[0_16px_45px_rgba(229,9,20,0.55)] flex items-center justify-center mb-3 transition-transform hover:scale-105 duration-300">
+                    <div class="w-full h-full rounded-full bg-gradient-to-b from-[#1b1922] to-[#0c0d14] flex items-center justify-center border border-white/10 shadow-inner">
                         <span class="text-4xl sm:text-5xl font-black italic tracking-tighter text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
                             MK<span class="text-[#E50914] drop-shadow-[0_0_22px_rgba(229,9,20,0.95)]">21</span>
                         </span>
@@ -112,14 +114,14 @@
                 </div>
 
                 <!-- Badge Multi-Servidor Inspirado no APK -->
-                <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold shadow-sm">
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-sm">
                     <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span id="active-servers-badge-text">10 Servidores Conectados • Sincronização Automática</span>
                 </div>
             </div>
 
             <!-- Segmented Control (Abas Elegantes estilo iOS/Netflix) -->
-            <div class="bg-[#0e1017] border border-white/10 p-1.5 rounded-2xl flex items-center mb-5 w-full select-none shadow-md">
+            <div class="bg-[#0e1017] border border-white/10 p-1.5 rounded-2xl flex items-center mb-6 w-full select-none shadow-md">
                 <button id="tab-login-predefined" type="button" class="flex-1 py-3 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 bg-[#E50914] text-white shadow-lg shadow-red-950/40">
                     <i class="fa-solid fa-server text-xs"></i>
                     <span>Servidores MK21</span>
@@ -130,8 +132,8 @@
                 </button>
             </div>
 
-            <!-- Card Principal de Autenticação (Moderno, Curvo e Amplo) -->
-            <div class="w-full bg-[#0b0d15]/95 backdrop-blur-2xl border border-white/10 rounded-[32px] p-6 sm:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.9),0_0_40px_rgba(229,9,20,0.2)] relative overflow-hidden">
+            <!-- Card Principal de Autenticação (Moderno, Curvo, Fluido e Amplo) -->
+            <div class="w-full bg-[#0a0c16]/90 backdrop-blur-3xl border border-white/10 rounded-[36px] sm:rounded-[44px] p-6 sm:p-12 shadow-[0_30px_100px_rgba(0,0,0,0.95),0_0_60px_rgba(229,9,20,0.18)] relative overflow-hidden">
                 <!-- Top Accent Glow Line -->
                 <div class="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-[#E50914] to-transparent"></div>
 
@@ -155,29 +157,13 @@
                     <div id="quick-profiles-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
                 </div>
 
-                <div class="space-y-4">
-                    <!-- Seção: Seleção de Servidor (Predefinidos) -->
-                    <div id="predefined-server-box" class="space-y-2">
-                        <div class="relative">
-                            <div class="bg-[#141726] border border-white/10 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-red-600/40 transition-colors">
-                                <div class="flex items-center gap-3.5 min-w-0">
-                                    <div class="w-10 h-10 rounded-xl bg-red-950/60 border border-red-900/60 flex items-center justify-center text-[#E50914] shrink-0">
-                                        <i class="fa-solid fa-server text-base"></i>
-                                    </div>
-                                    <div class="truncate">
-                                        <span class="text-[9px] uppercase tracking-wider font-black text-amber-500/90 block leading-tight">SERVIÇO ATIVO</span>
-                                        <span id="selected-server-name-label" class="text-base font-black text-white block truncate leading-tight">CB6000</span>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2 shrink-0">
-                                    <span class="text-xs font-bold text-slate-400 hidden sm:inline">Alterar</span>
-                                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs pr-1"></i>
-                                </div>
-                            </div>
-                            <select id="server-selector" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-sm">
-                                <!-- Loaded dynamically via JS -->
-                            </select>
-                        </div>
+                <div class="space-y-5">
+                    <!-- Seção Servidor (Oculto visualmente para evitar caixa demarcada poluindo a tela) -->
+                    <div id="predefined-server-box" class="hidden">
+                        <span id="selected-server-name-label">CB6000</span>
+                        <select id="server-selector">
+                            <!-- Loaded dynamically via JS -->
+                        </select>
                     </div>
 
                     <!-- Seção: Lista Manual (ativada pela aba Listas Manuais) -->
@@ -185,41 +171,41 @@
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-300" for="manual-m3u-input">
                             URL da Lista M3U / M3U8 Personalizada
                         </label>
-                        <div class="relative flex items-center bg-[#141726] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
-                            <span class="pl-4 pr-2 text-slate-400 text-sm"><i class="fa-solid fa-link"></i></span>
-                            <input id="manual-m3u-input" type="url" placeholder="http://servidor:porta/get.php?username=...&password=..." class="w-full py-4 bg-[#141726] text-white font-semibold text-xs sm:text-sm outline-none placeholder:text-slate-500">
+                        <div class="relative flex items-center bg-[#0f111d] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
+                            <span class="pl-4 pr-2 text-slate-400 text-base"><i class="fa-solid fa-link"></i></span>
+                            <input id="manual-m3u-input" type="url" placeholder="http://servidor:porta/get.php?username=...&password=..." class="w-full py-4.5 bg-transparent text-white font-semibold text-sm sm:text-base outline-none placeholder:text-slate-500" style="background-color: #0f111d !important; color: #ffffff !important;">
                             <button type="button" id="btn-paste-m3u" class="px-4 text-slate-400 hover:text-white transition-colors" title="Colar Link">
-                                <i class="fa-regular fa-paste"></i>
+                                <i class="fa-regular fa-paste text-base"></i>
                             </button>
                         </div>
                         <p class="text-[10px] text-slate-500">Insira sua URL completa de lista M3U Xtream Codes ou Stalker Portal.</p>
                     </div>
 
-                    <!-- Campo Usuário -->
-                    <div id="user-credentials-group" class="space-y-4">
+                    <!-- Campo Usuário e Senha -->
+                    <div id="user-credentials-group" class="space-y-5">
                         <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5" for="user-input">Usuário</label>
-                            <div class="relative flex items-center bg-[#141726] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
-                                <span class="pl-4 pr-2 text-red-500 text-base">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2" for="user-input">Usuário</label>
+                            <div class="relative flex items-center bg-[#0f111d] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
+                                <span class="pl-4 pr-2 text-red-500 text-lg">
                                     <i class="fa-solid fa-user"></i>
                                 </span>
-                                <input id="user-input" type="text" autocomplete="username" placeholder="Digite seu usuário IPTV" class="w-full py-4 bg-[#141726] text-white font-semibold text-sm sm:text-base outline-none placeholder:text-slate-500">
+                                <input id="user-input" type="text" autocomplete="username" placeholder="Digite seu usuário IPTV" class="w-full py-4.5 bg-transparent text-white font-bold text-base sm:text-lg outline-none placeholder:text-slate-400 selection:bg-red-600 selection:text-white" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;">
                                 <button type="button" id="btn-paste-user" class="px-4 text-slate-400 hover:text-white transition-colors" title="Colar usuário">
-                                    <i class="fa-regular fa-paste"></i>
+                                    <i class="fa-regular fa-paste text-base"></i>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Campo Senha (Protegido contra fundo branco e com fonte de alto contraste) -->
+                        <!-- Campo Senha (Totalmente protegido contra fundo branco e com fonte de alto contraste) -->
                         <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5" for="pass-input">Senha</label>
-                            <div class="relative flex items-center bg-[#141726] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
-                                <span class="pl-4 pr-2 text-red-500 text-base">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2" for="pass-input">Senha</label>
+                            <div class="relative flex items-center bg-[#0f111d] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
+                                <span class="pl-4 pr-2 text-red-500 text-lg">
                                     <i class="fa-solid fa-lock"></i>
                                 </span>
-                                <input id="pass-input" type="password" autocomplete="current-password" placeholder="Digite sua senha IPTV" class="w-full py-4 bg-[#141726] text-white font-semibold text-sm sm:text-base outline-none placeholder:text-slate-500">
+                                <input id="pass-input" type="password" autocomplete="current-password" placeholder="Digite sua senha IPTV" class="w-full py-4.5 bg-transparent text-white font-bold text-base sm:text-lg outline-none placeholder:text-slate-400 selection:bg-red-600 selection:text-white" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;">
                                 <button type="button" id="btn-paste-pass" class="px-3 text-slate-400 hover:text-white transition-colors" title="Colar senha">
-                                    <i class="fa-regular fa-paste"></i>
+                                    <i class="fa-regular fa-paste text-base"></i>
                                 </button>
                                 <button id="toggle-password" type="button" class="pr-4 pl-2 text-slate-400 hover:text-white transition-colors cursor-pointer w-10 h-10 flex items-center justify-center" title="Ver senha">
                                     <i class="fa-regular fa-eye-slash text-base" id="password-eye-icon"></i>
@@ -230,7 +216,7 @@
                         <!-- Lembrar Credenciais Checkbox -->
                         <div class="flex items-center justify-between pt-1">
                             <label class="flex items-center gap-2.5 cursor-pointer select-none">
-                                <input type="checkbox" id="remember-credentials-checkbox" checked class="w-4 h-4 rounded bg-[#141726] border-slate-700 text-[#E50914] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#E50914]">
+                                <input type="checkbox" id="remember-credentials-checkbox" checked class="w-4 h-4 rounded bg-[#0f111d] border-slate-700 text-[#E50914] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#E50914]">
                                 <span class="text-xs font-semibold text-slate-300">Lembrar credenciais</span>
                             </label>
                             <button type="button" id="btn-clear-fields" class="text-xs font-bold text-slate-400 hover:text-slate-200 transition-colors">
@@ -245,8 +231,8 @@
                     <input type="hidden" id="cors-selector" value="vercel">
 
                     <!-- Botão Primário: ENTRAR NO MK21 -->
-                    <button id="login-button" class="w-full py-4.5 mt-4 bg-gradient-to-r from-[#E50914] via-red-600 to-red-700 hover:brightness-110 active:scale-[0.99] text-white font-black text-sm sm:text-base rounded-2xl shadow-[0_12px_40px_rgba(229,9,20,0.6)] flex items-center justify-center gap-3 tracking-wider transition-all duration-200 cursor-pointer">
-                        <i class="fa-solid fa-play text-sm" id="login-btn-icon"></i>
+                    <button id="login-button" class="w-full py-5 mt-4 bg-gradient-to-r from-[#E50914] via-red-600 to-red-700 hover:brightness-110 active:scale-[0.99] text-white font-black text-base sm:text-lg rounded-2xl shadow-[0_12px_45px_rgba(229,9,20,0.65)] flex items-center justify-center gap-3 tracking-wider transition-all duration-200 cursor-pointer">
+                        <i class="fa-solid fa-play text-base" id="login-btn-icon"></i>
                         <span id="login-btn-text">ENTRAR NO MK21</span>
                     </button>
                 </div>

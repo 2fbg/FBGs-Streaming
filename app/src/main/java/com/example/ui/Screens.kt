@@ -702,20 +702,25 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                         // USERNAME & PASSWORD IN A SINGLE CONTIGUOUS MODERN ROW
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             OutlinedTextField(
                                 value = username,
                                 onValueChange = { viewModel.setCredentials(it, password) },
-                                label = { Text("Usuário", fontSize = 12.sp, color = Color.LightGray) },
+                                label = { Text("Usuário", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB0B7C3)) },
                                 maxLines = 1,
                                 singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Person,
                                         contentDescription = null,
                                         tint = com.example.ui.theme.NetflixRed,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 },
                                 trailingIcon = {
@@ -725,13 +730,13 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                                 viewModel.setCredentials(clipboardText.trim(), password)
                                             }
                                         },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentPaste,
                                             contentDescription = "Colar usuário",
                                             tint = Color.LightGray,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 },
@@ -740,15 +745,15 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("username_input"),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(20.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = com.example.ui.theme.NetflixRed,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
                                     focusedLabelColor = com.example.ui.theme.NetflixRed,
-                                    unfocusedLabelColor = Color.LightGray,
-                                    focusedContainerColor = Color(0xFF141724),
-                                    unfocusedContainerColor = Color(0xFF141724),
-                                    disabledContainerColor = Color(0xFF141724),
+                                    unfocusedLabelColor = Color(0xFFB0B7C3),
+                                    focusedContainerColor = Color(0xFF0F111D),
+                                    unfocusedContainerColor = Color(0xFF0F111D),
+                                    disabledContainerColor = Color(0xFF0F111D),
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
                                     cursorColor = com.example.ui.theme.NetflixRed,
@@ -762,15 +767,20 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                             OutlinedTextField(
                                 value = password,
                                 onValueChange = { viewModel.setCredentials(username, it) },
-                                label = { Text("Senha", fontSize = 12.sp, color = Color.LightGray) },
+                                label = { Text("Senha", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB0B7C3)) },
                                 maxLines = 1,
                                 singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Lock,
                                         contentDescription = null,
                                         tint = com.example.ui.theme.NetflixRed,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 },
                                 trailingIcon = {
@@ -784,25 +794,25 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                                     viewModel.setCredentials(username, clipboardText.trim())
                                                 }
                                             },
-                                            modifier = Modifier.size(32.dp)
+                                            modifier = Modifier.size(36.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.ContentPaste,
                                                 contentDescription = "Colar senha",
                                                 tint = Color.LightGray,
-                                                modifier = Modifier.size(18.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                         Spacer(modifier = Modifier.width(4.dp))
                                         IconButton(
                                             onClick = { passwordVisible = !passwordVisible },
-                                            modifier = Modifier.size(32.dp)
+                                            modifier = Modifier.size(36.dp)
                                         ) {
                                             Icon(
                                                 imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                                 contentDescription = if (passwordVisible) "Ocultar senha" else "Mostrar senha",
                                                 tint = Color.LightGray,
-                                                modifier = Modifier.size(18.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
@@ -813,15 +823,15 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("password_input"),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(20.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = com.example.ui.theme.NetflixRed,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
                                     focusedLabelColor = com.example.ui.theme.NetflixRed,
-                                    unfocusedLabelColor = Color.LightGray,
-                                    focusedContainerColor = Color(0xFF141724),
-                                    unfocusedContainerColor = Color(0xFF141724),
-                                    disabledContainerColor = Color(0xFF141724),
+                                    unfocusedLabelColor = Color(0xFFB0B7C3),
+                                    focusedContainerColor = Color(0xFF0F111D),
+                                    unfocusedContainerColor = Color(0xFF0F111D),
+                                    disabledContainerColor = Color(0xFF0F111D),
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
                                     cursorColor = com.example.ui.theme.NetflixRed,
