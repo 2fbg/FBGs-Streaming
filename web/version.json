@@ -1,9 +1,9 @@
 {
-  "version": "1.0.0",
-  "versionCode": 100,
-  "title": "MK21 Play v1.0.0",
-  "releaseNotes": "• Versão unificada 1.0.0 para Web, Android, Smart TV e Tizen\n• Nova tela de login moderna com campos protegidos contra autofill branco\n• Navegação DPAD e foco de modal revisados\n• Catálogo incremental, cache e carregamento em segundo plano\n• Integração com múltiplos servidores e OTA com fallback",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.0_all.ipk",
+  "version": "1.0.1",
+  "versionCode": 101,
+  "title": "MK21 Play v1.0.1",
+  "releaseNotes": "• Timeout real e recuperação para servidores VLOG lentos\n• Interface liberada após 12s enquanto o catálogo continua indexando\n• Janela de memória reduzida para 360 itens por tipo, com páginas IndexedDB de 240\n• Cache local menor e navegação mais fluida em Smart TVs LG",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.1_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "updatedAt": "2026-10-11"
 }
