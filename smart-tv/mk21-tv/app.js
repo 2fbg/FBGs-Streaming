@@ -872,6 +872,45 @@ function updateServerSyncBadge(pct, isFinished = false) {
   }
 }
 
+function resetLoadingHud() {
+  const hud = $('hudLoadingOverlay');
+  const card = hud && hud.querySelector('.hud-loading-card');
+  const error = $('hudLoadingError');
+  const retry = $('btnRetryLoading');
+  if (card) card.classList.remove('is-error');
+  if (error) { error.textContent = ''; error.classList.add('hidden'); }
+  if (retry) {
+    retry.classList.add('hidden');
+    retry.onclick = () => loadServer(true);
+  }
+  const spinner = hud && hud.querySelector('.spinner-ring');
+  if (spinner) spinner.style.display = '';
+}
+
+function showLoadingFailure(error, serverName) {
+  const hud = $('hudLoadingOverlay');
+  const card = hud && hud.querySelector('.hud-loading-card');
+  const errorBox = $('hudLoadingError');
+  const retry = $('btnRetryLoading');
+  if (!hud) return;
+  if (card) card.classList.add('is-error');
+  if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Não foi possível carregar a lista';
+  if ($('hudLoadingSub')) $('hudLoadingSub').textContent = `Servidor: ${serverName || 'atual'}`;
+  if ($('hudProgressBar')) $('hudProgressBar').style.width = '0%';
+  if ($('hudProgressPercent')) $('hudProgressPercent').textContent = 'Falha';
+  if (errorBox) {
+    const detail = error && error.message ? error.message : 'A conexão foi interrompida antes da lista terminar.';
+    errorBox.textContent = `${detail} Seus dados não foram apagados.`;
+    errorBox.classList.remove('hidden');
+  }
+  if (retry) {
+    retry.classList.remove('hidden');
+    retry.onclick = () => loadServer(true);
+    setTimeout(() => retry.focus(), 0);
+  }
+  hud.classList.remove('hidden');
+}
+
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
   const loadId = ++serverLoadGeneration;
@@ -887,6 +926,7 @@ async function loadServer(forceRefresh = false) {
   updateSplash(25, 'Conectando ao ' + srv.name + '...');
 
   const hud = $('hudLoadingOverlay');
+  resetLoadingHud();
   if (hud) {
     if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Conectando ao ' + srv.name;
     if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Conectando e baixando grade de programação...';
@@ -1055,31 +1095,24 @@ async function loadServer(forceRefresh = false) {
   } catch (err) {
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
-    if (hud) hud.classList.add('hidden');
-    updateServerSyncBadge(100, true);
-    hideSplash();
-
-    // Fallback instantâneo: canais abertos e públicos para a TV nunca ficar vazia
-    if (!allCatalog || !allCatalog.LIVE || allCatalog.LIVE.length === 0) {
-      allCatalog = {
-        LIVE: [
-          { name: 'Record News HD', group: 'Notícias', logo: 'https://i.imgur.com/G34Z6d7.png', url: 'https://recordnews.newsline.com.br/live/smil:live.smil/playlist.m3u8', contentType: 'LIVE' },
-          { name: 'TV Brasil HD', group: 'Abertos', logo: 'https://i.imgur.com/d5mK70w.png', url: 'https://ebc-live.ebc.com.br/tvbrasil/tvbrasil.m3u8', contentType: 'LIVE' },
-          { name: 'CNN Brasil', group: 'Notícias', logo: 'https://i.imgur.com/4qJd2R6.png', url: 'https://d2e9h20wvvj09u.cloudfront.net/out/v1/25687a74070a4a82b9b26574fbcda4ff/index.m3u8', contentType: 'LIVE' },
-          { name: 'Pluto TV Filmes', group: 'Filmes', logo: 'https://i.imgur.com/6UaR8Gq.png', url: 'https://service-stitcher.clusters.pluto.tv/stitch/hls/channel/5d63f736c28f08a46cf7f8a7/master.m3u8?advertisingId=&appName=web&appVersion=unknown&appStoreUrl=&architecture=&buildVersion=&clientTime=0&deviceDNT=0&deviceId=1&deviceMake=Chrome&deviceModel=Chrome&deviceType=web&deviceVersion=unknown&includeExtendedEvents=false&sid=1&userId=', contentType: 'LIVE' }
-        ],
-        MOVIE: [],
-        SERIES: []
-      };
+    const partialLive = allCatalog && Array.isArray(allCatalog.LIVE) ? allCatalog.LIVE.length : 0;
+    if (partialLive > 0) {
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
-      if (allCatalog.LIVE.length > 0) {
-        playStream(allCatalog.LIVE[0]);
+      renderItemsList();
+      hideSplash();
+      if (!activeItem) playStream(allCatalog.LIVE[0]);
+      showChannelBanner(`⚠️ Lista parcial: ${partialLive} canais carregados. Tente atualizar novamente.`);
+      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = `📺 ${partialLive} canais disponíveis (parcial)`;
+      if (hud) hud.classList.add('hidden');
+    } else {
+      showLoadingFailure(err, srv.name);
+      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = 'Aguardando conexão com o servidor';
+      if ($('txtServerSyncBadge')) {
+        $('txtServerSyncBadge').textContent = 'erro';
+        $('txtServerSyncBadge').classList.remove('hidden', 'done');
       }
-    }
-    if ($('txtCurrentCategoryTitle')) {
-      $('txtCurrentCategoryTitle').textContent = 'Pressione o botão Vermelho para trocar de Servidor';
     }
   }
 }
