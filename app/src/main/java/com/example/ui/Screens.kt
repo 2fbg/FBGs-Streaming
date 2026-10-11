@@ -8602,7 +8602,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            viewModel.openBrowserDownload(context, "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk")
+                                            viewModel.openBrowserDownload(context, "https://github.com/2fbg/FBGs-Streaming/releases/download/v1.0.0/mk21.apk")
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(8.dp),
