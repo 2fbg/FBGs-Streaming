@@ -463,6 +463,45 @@ function restoreSortOrder() {
 }
 
 let searchDebounceTimer = null;
+let searchWasPlaying = false;
+let searchPreviousFocus = null;
+
+function openSearchMode() {
+  const input = $('inputSearch');
+  if (!input) return;
+  if (document.activeElement && document.activeElement !== input) searchPreviousFocus = document.activeElement;
+  activeZone = 'search';
+  const video = $('tvPlayer');
+  searchWasPlaying = !!(video && !video.paused && !video.ended);
+  if (video && searchWasPlaying) { try { video.pause(); } catch (e) {} }
+}
+
+function closeSearchMode(clearText = false) {
+  const input = $('inputSearch');
+  if (clearText && input) input.value = '';
+  if (clearText) {
+    currentSearchQuery = '';
+    buildCurrentCategories();
+    renderCategoriesList();
+    renderItemsList();
+  }
+  if (input) { try { input.blur(); } catch (e) {} }
+  activeZone = 'channels';
+  const target = searchPreviousFocus && mk21IsVisible(searchPreviousFocus)
+    ? searchPreviousFocus
+    : ($('listItems') && $('listItems').querySelector('.list-item-btn'));
+  searchPreviousFocus = null;
+  if (target) {
+    try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  } else {
+    focusActiveElement();
+  }
+  const video = $('tvPlayer');
+  if (video && searchWasPlaying) {
+    searchWasPlaying = false;
+    try { video.play().catch(() => {}); } catch (e) {}
+  }
+}
 function scheduleSearchRender() {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(function () {
@@ -1406,7 +1445,11 @@ if ($('btnSortOrder')) {
   updateSortOrderButtonLabel();
 }
 
-if ($('inputSearch')) $('inputSearch').addEventListener('input', scheduleSearchRender);
+if ($('inputSearch')) {
+  $('inputSearch').addEventListener('focus', openSearchMode);
+  $('inputSearch').addEventListener('click', openSearchMode);
+  $('inputSearch').addEventListener('input', scheduleSearchRender);
+}
 
 // BOTÃO LIMPAR BUSCA
 const clearBtn = $('btnClearSearch');
@@ -1417,7 +1460,7 @@ if (clearBtn) {
     buildCurrentCategories();
     renderCategoriesList();
     renderItemsList();
-    if ($('inputSearch')) $('inputSearch').focus();
+    openSearchMode();
   };
 }
 
@@ -3279,7 +3322,7 @@ document.addEventListener('keydown', function (e) {
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
   const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-  if (isTextInput && ['ArrowLeft','ArrowRight'].includes(key)) return;
+  if (isTextInput && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
 
   // Voz nativa
   if (key === 'Voice' || key === 'VoiceCommand' || k === 1022 || k === 1016 || k === 166) {
@@ -3301,28 +3344,17 @@ document.addEventListener('keydown', function (e) {
 
   // Back / Return (webOS 461, Tizen 10009)
   if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
-    // Se o cursor estiver na busca ou houver texto digitado, limpa e retorna à navegação
-    if (ae && ae.id === 'inputSearch') {
+    // A pesquisa funciona como uma área modal: Voltar nunca alcança o player/tela atrás.
+    if ((ae && ae.id === 'inputSearch') || activeZone === 'search') {
       e.preventDefault();
-      ae.value = '';
-      currentSearchQuery = '';
-      buildCurrentCategories();
-      renderCategoriesList();
-      renderItemsList();
-      ae.blur();
-      activeZone = 'channels';
-      focusActiveElement();
+      e.stopPropagation();
+      closeSearchMode(true);
       return;
     }
     if ($('inputSearch') && $('inputSearch').value.trim().length > 0) {
       e.preventDefault();
-      $('inputSearch').value = '';
-      currentSearchQuery = '';
-      buildCurrentCategories();
-      renderCategoriesList();
-      renderItemsList();
-      activeZone = 'channels';
-      focusActiveElement();
+      e.stopPropagation();
+      closeSearchMode(true);
       return;
     }
 
@@ -3425,16 +3457,12 @@ document.addEventListener('keydown', function (e) {
   if (k === 13 || k === 32 || key === 'Enter' || key === ' ') {
     if (ae && ae.tagName === 'INPUT' && (k === 32 || key === ' ')) return;
     if (ae && ae.id === 'inputSearch') {
-      // Ao teclar Enter na busca na Smart TV, desce foco para o primeiro canal filtrado
+      // Enter confirma a busca, fecha o teclado nativo e devolve o foco ao resultado.
       e.preventDefault();
-      ae.blur();
+      e.stopPropagation();
+      closeSearchMode(false);
       const firstChannel = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
-      if (firstChannel) {
-        firstChannel.focus();
-        activeZone = 'channels';
-      } else {
-        focusActiveElement();
-      }
+      if (firstChannel) { firstChannel.focus(); activeZone = 'channels'; }
       return;
     }
     e.preventDefault();
