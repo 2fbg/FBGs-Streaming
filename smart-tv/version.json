@@ -1,9 +1,9 @@
 {
-  "version": "1.0.1",
-  "versionCode": 101,
-  "title": "MK21 Play v1.0.1",
-  "releaseNotes": "• Timeout real e recuperação para servidores VLOG lentos\n• Interface liberada após 12s enquanto o catálogo continua indexando\n• Janela de memória reduzida para 360 itens por tipo, com páginas IndexedDB de 240\n• Cache local menor e navegação mais fluida em Smart TVs LG",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.1_all.ipk",
+  "version": "1.0.3",
+  "versionCode": 103,
+  "title": "MK21 Play v1.0.3",
+  "releaseNotes": "• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.3_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "updatedAt": "2026-10-11"
+  "updatedAt": "2026-10-12"
 }

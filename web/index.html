@@ -1065,13 +1065,19 @@
                 </div>
 
                 <!-- Opção 3: Smart TV LG webOS & Samsung Tizen -->
-                <div class="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl space-y-1.5">
-                    <div class="flex items-center gap-2 font-bold text-slate-300 text-xs">
-                        <i class="fa-solid fa-tv text-amber-400"></i>
-                        <span>Smart TV LG (webOS) e Samsung (Tizen)</span>
+                <div class="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-2xl space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2 font-bold text-slate-300 text-xs">
+                            <i class="fa-solid fa-tv text-amber-400"></i>
+                            <span>Smart TV LG (webOS) e Samsung (Tizen)</span>
+                        </div>
+                        <a href="/mk21.ipk" download="mk21play_1.0.3_all.ipk" class="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] rounded-lg border border-amber-500/40 flex items-center gap-1.5 transition-colors">
+                            <i class="fa-solid fa-download"></i>
+                            <span>Baixar .IPK</span>
+                        </a>
                     </div>
                     <p class="text-[11px] text-slate-400 leading-relaxed">
-                        No navegador da TV, clique no ícone de <strong>Estrela (⭐)</strong> ou menu <strong>⋮</strong> e selecione <strong>"Adicionar aos Favoritos"</strong> ou <strong>"Fixar na Barra de Apps"</strong>.
+                        Para <strong>LG webOS</strong>: baixe o pacote <strong>.ipk</strong> para instalar via Dev Manager / Homebrew Channel. No navegador nativo da TV (LG ou Samsung), adicione aos favoritos ou fixe na barra de apps.
                     </p>
                 </div>
             </div>
@@ -3298,13 +3304,6 @@
                             showNotification('Canais carregados instantaneamente do cache! ⚡', 'success');
                         }
 
-                        // Se o cache tiver mais de 3 horas, atualiza silenciosamente em background
-                        if (Date.now() - (cached.timestamp || 0) > 3 * 3600 * 1000) {
-                            setTimeout(() => {
-                                console.log('[MK21] Atualizando cache de lista em segundo plano...');
-                                performLogin(true);
-                            }, 4000);
-                        }
                         return;
                     }
                 } catch (e) {

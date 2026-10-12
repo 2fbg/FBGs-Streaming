@@ -127,14 +127,14 @@ async function saveStoredData(id, payload) {
   try {
     const db = await openDB();
     if (!db) return;
-    // Limita tamanho em memória/disco para não reiniciar a TV (webOS)
-    const slim = {
-      LIVE: (payload.LIVE || []).slice(0, 2000).map(slimItem),
-      MOVIE: (payload.MOVIE || []).slice(0, 3000).map(slimItem),
-      SERIES: (payload.SERIES || []).slice(0, 3000).map(slimItem)
+    // Salva o catálogo COMPLETO em disco (IndexedDB) para restauração instantânea sem rede
+    const full = {
+      LIVE: (payload.LIVE || []).map(slimItem),
+      MOVIE: (payload.MOVIE || []).map(slimItem),
+      SERIES: (payload.SERIES || []).map(slimItem)
     };
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put({ id, payload: slim, updatedAt: Date.now() });
+    tx.objectStore(STORE_NAME).put({ id, payload: full, updatedAt: Date.now() });
   } catch (e) {
     console.warn('[MK21] save cache falhou', e);
   }
@@ -145,10 +145,6 @@ const CATALOG_INDEX_DB = 'mk21_catalog_index_v1';
 const CATALOG_INDEX_VERSION = 1;
 const CATALOG_INDEX_STORE = 'items';
 const CATALOG_META_STORE = 'meta';
-// Orçamento de memória equilibrado: 1000 itens por tipo/categoria para manter Smart TVs leves e responsivas.
-// O catálogo completo permanece indexado no IndexedDB para paginação sob demanda.
-const CATALOG_MEMORY_LIMITS = { LIVE: 1000, MOVIE: 1000, SERIES: 1000 };
-const CATEGORY_ITEMS_MEMORY_LIMIT = 1000;
 
 function openCatalogIndexDb() {
   return new Promise(resolve => {
@@ -356,16 +352,9 @@ async function loadMoreIndexedItems() {
     const page = await queryCatalogIndexPage(srv.id, type, offset, 240, group);
     indexedOffsets[key] = offset + page.length;
     if (page.length) {
-      // Mantém somente uma janela: a navegação avança por páginas sem acumular
-      // centenas de milhares de objetos no heap JavaScript.
-      if (arr.length >= CATALOG_MEMORY_LIMITS[type]) {
-        allCatalog[type] = page;
-        itemsDisplayLimit = page.length;
-      } else {
-        const known = new Set(arr.map(it => it.url));
-        page.forEach(item => { if (!known.has(item.url) && arr.length < CATALOG_MEMORY_LIMITS[type]) arr.push(item); });
-        itemsDisplayLimit += 60;
-      }
+      const known = new Set(arr.map(it => it.url));
+      page.forEach(item => { if (!known.has(item.url)) arr.push(item); });
+      itemsDisplayLimit += 60;
       buildCurrentCategories();
       renderCategoriesList();
       renderItemsList();
@@ -984,39 +973,36 @@ async function loadServer(forceRefresh = false) {
   }
   activeItem = null;
 
-  // Cache prioritário: carrega uma janela pequena e não desserializa o catálogo inteiro.
-  // O índice persistente continua contendo todos os itens para paginação sob demanda.
+  // Cache prioritário em memória/IndexedDB: restauração instantânea sem novo download
   let seededFromIndex = false;
   if (!forceRefresh) {
     const cached = await getStoredData(srv.id);
     if (loadId !== serverLoadGeneration) return;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
-    if (cached && (liveN > 0 || movN > 0)) {
-      allCatalog = { LIVE: (cached.LIVE || []).slice(0, CATALOG_MEMORY_LIMITS.LIVE), MOVIE: (cached.MOVIE || []).slice(0, CATALOG_MEMORY_LIMITS.MOVIE), SERIES: (cached.SERIES || []).slice(0, CATALOG_MEMORY_LIMITS.SERIES) };
-      updateSplash(90, 'Lista em cache (' + liveN + ' canais)...');
+    const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
+    const totalCached = liveN + movN + serN;
+    if (cached && totalCached > 0) {
+      allCatalog = {
+        LIVE: cached.LIVE || [],
+        MOVIE: cached.MOVIE || [],
+        SERIES: cached.SERIES || []
+      };
+      updateSplash(90, 'Restaurando lista em memória (' + totalCached.toLocaleString('pt-BR') + ' itens)...');
       if (hud) {
-        if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando cache local — sem novo download';
+        if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando lista em memória local — sem novo download';
         if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
         if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
         setTimeout(() => hud.classList.add('hidden'), 200);
       }
-      buildCurrentCategories(); renderCategoriesList(); selectCategory('ALL'); hideSplash();
-      updateServerSyncBadge(100, true);
-      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Cache: ' + liveN + ' canais';
-      setTimeout(() => { if (!resumeLastChannelIfPossible() && liveN > 0) {} }, 350);
-      return;
-    }
-    // Cache serializado vazio/ausente: mostrar imediatamente a primeira página do índice.
-    const indexedLive = await queryCatalogIndexPage(srv.id, 'LIVE', 0, CATALOG_MEMORY_LIMITS.LIVE, '');
-    if (loadId !== serverLoadGeneration) return;
-    if (indexedLive.length) {
-      allCatalog = { LIVE: indexedLive, MOVIE: [], SERIES: [] };
-      seededFromIndex = true;
-      buildCurrentCategories(); renderCategoriesList(); selectCategory('ALL'); renderItemsList();
-      updateSplash(75, 'Canais do cache indexado disponíveis (' + indexedLive.length + ')');
+      buildCurrentCategories();
+      renderCategoriesList();
+      selectCategory('ALL');
       hideSplash();
-      if (hud) hud.classList.add('hidden');
+      updateServerSyncBadge(100, true);
+      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
+      setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+      return;
     }
   }
 
@@ -1028,10 +1014,9 @@ async function loadServer(forceRefresh = false) {
   }
 
   try {
-    allCatalog = { LIVE: seededFromIndex ? (allCatalog.LIVE || []) : [], MOVIE: [], SERIES: [] };
+    allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
-    const overflow = { LIVE: 0, MOVIE: 0, SERIES: 0 };
     let liveVisible = false;
     let lastProgressUi = 0;
 
@@ -1052,7 +1037,7 @@ async function loadServer(forceRefresh = false) {
       if (hud) {
         hud.classList.add('hidden');
       }
-      showChannelBanner('📺 Ao Vivo liberado! Baixando filmes e séries em segundo plano...');
+      showChannelBanner('📺 Ao Vivo liberado! Baixando catálogo completo em segundo plano...');
     };
 
     await streamPlaylistContent(
@@ -1063,10 +1048,8 @@ async function loadServer(forceRefresh = false) {
         const slim = slimItem(item);
         indexWriter.add(slim);
         const type = slim.contentType;
-        if (allCatalog[type] && allCatalog[type].length < CATALOG_MEMORY_LIMITS[type]) {
+        if (allCatalog[type]) {
           allCatalog[type].push(slim);
-        } else if (overflow[type] !== undefined) {
-          overflow[type]++;
         }
 
         // Assim que os canais ao vivo chegam (ou quando começa a chegar Filme/Série), libera a tela imediatamente!
@@ -1082,7 +1065,7 @@ async function loadServer(forceRefresh = false) {
         if (now - lastProgressUi < 200) return;
         lastProgressUi = now;
 
-        const itemsCount = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length + overflow.LIVE + overflow.MOVIE + overflow.SERIES;
+        const itemsCount = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
         let pct = 50;
         if (total && total > 0) {
           pct = Math.min(99, Math.max(10, Math.round((received / total) * 100)));
@@ -1115,7 +1098,8 @@ async function loadServer(forceRefresh = false) {
     buildCurrentCategories();
     renderCategoriesList();
     if (!liveVisible) selectCategory('ALL');
-    updateSplash(100, 'Lista carregada — ' + allCatalog.LIVE.length + ' canais ao vivo');
+    const totalLoaded = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
+    updateSplash(100, 'Lista completa carregada (' + totalLoaded.toLocaleString('pt-BR') + ' itens)');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
       if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
@@ -1123,13 +1107,13 @@ async function loadServer(forceRefresh = false) {
     }
     updateServerSyncBadge(100, true);
     await indexWriter.finish();
+    // Salva o catálogo 100% completo no IndexedDB para não precisar baixar novamente ao reabrir o app
     saveStoredData(srv.id, allCatalog);
     if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') {
       renderItemsList();
     }
-    const totalIndexed = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length + overflow.LIVE + overflow.MOVIE + overflow.SERIES;
-    if ($('txtCurrentCategoryTitle') && totalIndexed > allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) {
-      $('txtCurrentCategoryTitle').textContent = 'Catálogo indexado: ' + totalIndexed.toLocaleString('pt-BR') + ' itens';
+    if ($('txtCurrentCategoryTitle')) {
+      $('txtCurrentCategoryTitle').textContent = '📺 Catálogo Completo: ' + totalLoaded.toLocaleString('pt-BR') + ' itens';
     }
   } catch (err) {
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
@@ -1193,16 +1177,12 @@ function buildCurrentCategories() {
     const grp = item.group || 'Geral';
     if (hiddenCats.includes(grp)) continue;
 
-    if (currentCategoriesMap['ALL'].length < CATEGORY_ITEMS_MEMORY_LIMIT) {
-      currentCategoriesMap['ALL'].push(item);
-    }
+    currentCategoriesMap['ALL'].push(item);
     if (!currentCategoriesMap[grp]) {
       currentCategoriesMap[grp] = [];
       currentCategoryKeys.push(grp);
     }
-    if (currentCategoriesMap[grp].length < CATEGORY_ITEMS_MEMORY_LIMIT) {
-      currentCategoriesMap[grp].push(item);
-    }
+    currentCategoriesMap[grp].push(item);
   }
 }
 
@@ -2928,7 +2908,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.0.1';
+const BASE_PACKAGE_VERSION = '1.0.3';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2974,15 +2954,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.1
-    if (!data || compareSemver(data.version, '1.0.1') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.3
+    if (!data || compareSemver(data.version, '1.0.3') < 0) {
       data = {
-        version: '1.0.1',
-        versionCode: 101,
-        title: 'MK21 Play v1.0.1',
-        releaseNotes: '• Timeout real e recuperação para servidores VLOG lentos\n• Interface liberada após 12s enquanto o catálogo continua indexando\n• Janela de memória reduzida para 360 itens por tipo, com páginas IndexedDB de 240\n• Cache local menor e navegação mais fluida em Smart TVs LG',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.1_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '1.0.1') < 0)
+        version: '1.0.3',
+        versionCode: 103,
+        title: 'MK21 Play v1.0.3',
+        releaseNotes: '• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.3_all.ipk',
+        isPendingPush: (!data || compareSemver(data.version, '1.0.3') < 0)
       };
     }
     latestRemoteUpdateData = data;
@@ -3638,10 +3618,6 @@ if (typeof document !== 'undefined') {
       const v = document.getElementById('tvPlayer');
       if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {} }
       itemsDisplayLimit = 40;
-      if (allCatalog) {
-        if (allCatalog.MOVIE && allCatalog.MOVIE.length > CATALOG_MEMORY_LIMITS.MOVIE) allCatalog.MOVIE = allCatalog.MOVIE.slice(0, CATALOG_MEMORY_LIMITS.MOVIE);
-        if (allCatalog.SERIES && allCatalog.SERIES.length > CATALOG_MEMORY_LIMITS.SERIES) allCatalog.SERIES = allCatalog.SERIES.slice(0, CATALOG_MEMORY_LIMITS.SERIES);
-      }
       if (typeof renderItemsList === 'function') renderItemsList();
     } catch (e) {}
   }, false);
