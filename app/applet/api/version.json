@@ -1,11 +1,13 @@
 {
-  "version": "1.0.0",
-  "versionCode": 9,
-  "tagName": "v1.0.0",
-  "name": "MK21 MultiServidor v1.0.0",
+  "version": "1.0.4",
+  "versionCode": 11,
+  "tagName": "v1.0.4",
+  "name": "MK21 MultiServidor v1.0.4",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "body": "• Versão unificada v1.0.0 para todas as plataformas (Web, Android, Smart TV)\n• Nova tela de login moderna com campos de senha e usuário protegidos contra autofill branco\n• Navegação fluida, layout responsivo e integração total com múltiplos servidores",
-  "apkSha256": "546bb05fa9537404853ba99699208c1e763bb1952543ee5450746ab01250de2c",
-  "sizeBytes": 24917630,
-  "updatedAt": "2026-10-11"
+  "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.4_all.ipk",
+  "body": "• Atualizador direto (OTA) corrigido e unificado para TV e Android APK\n• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB/Room para inicialização imediata\n• Sem recarregamento forçado desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para controle remoto na TV",
+  "apkSha256": "665766909ebf3426b552db03e3b15a072baa2eb2aa8609373ac3b2e6339836ab",
+  "sizeBytes": 25548081,
+  "updatedAt": "2026-10-12"
 }

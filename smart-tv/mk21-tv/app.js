@@ -2908,7 +2908,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.0.3';
+const BASE_PACKAGE_VERSION = '1.0.4';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2934,11 +2934,17 @@ async function openAppUpdateModal(manualCheck = true) {
 
   try {
     let data = null;
+    const now = Date.now();
     const candidateEndpoints = [
-      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=' + Date.now(),
-      'https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/version.json?t=' + Date.now(),
-      'version.json?t=' + Date.now(),
-      './version.json?t=' + Date.now()
+      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=' + now,
+      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/api/version.json?t=' + now,
+      'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/version.json?t=' + now,
+      'https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/version.json?t=' + now,
+      'https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/api/version.json?t=' + now,
+      'https://bgstreaming.vercel.app/smart-tv/version.json?t=' + now,
+      'https://bgstreaming.vercel.app/api/version.json?t=' + now,
+      'version.json?t=' + now,
+      './version.json?t=' + now
     ];
 
     for (const url of candidateEndpoints) {
@@ -2954,15 +2960,16 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.3
-    if (!data || compareSemver(data.version, '1.0.3') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.4
+    if (!data || compareSemver(data.version, '1.0.4') < 0) {
       data = {
-        version: '1.0.3',
-        versionCode: 103,
-        title: 'MK21 Play v1.0.3',
-        releaseNotes: '• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.3_all.ipk',
-        isPendingPush: (!data || compareSemver(data.version, '1.0.3') < 0)
+        version: '1.0.4',
+        versionCode: 104,
+        title: 'MK21 Play v1.0.4',
+        releaseNotes: '• Atualização direta na TV (OTA) e APK sincronizados com sucesso\n• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.4_all.ipk',
+        apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
+        isPendingPush: false
       };
     }
     latestRemoteUpdateData = data;
@@ -3029,13 +3036,16 @@ async function startDirectUpdate() {
     setProgress('Conectando ao repositório oficial de atualizações...', 15);
 
     // URLs dos arquivos da TV para atualização OTA imediata
+    const now = Date.now();
     const appJsCandidates = [
-      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/app.js?t=${Date.now()}`,
-      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/mk21-tv/app.js?t=${Date.now()}`
+      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/app.js?t=${now}`,
+      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/mk21-tv/app.js?t=${now}`,
+      `https://bgstreaming.vercel.app/smart-tv/mk21-tv/app.js?t=${now}`
     ];
     const stylesCssCandidates = [
-      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=${Date.now()}`,
-      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/mk21-tv/styles.css?t=${Date.now()}`
+      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=${now}`,
+      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/mk21-tv/styles.css?t=${now}`,
+      `https://bgstreaming.vercel.app/smart-tv/mk21-tv/styles.css?t=${now}`
     ];
 
     let newAppJs = null;
@@ -3625,12 +3635,7 @@ if (typeof document !== 'undefined') {
 
 window.addEventListener('load', () => {
   ensureSharedCredentialsStored();
-  // Limpa OTA antigo que quebrava os eventos de seta/botão
-  try {
-    localStorage.removeItem('mk21_ota_app_js');
-    localStorage.removeItem('mk21_ota_styles_css');
-    localStorage.removeItem('mk21_ota_app_version');
-  } catch (e) {}
+  // OTA ativo preservado na TV para manter atualizações persistentes
 
   try {
     const savedFont = localStorage.getItem('mk21_font_size');

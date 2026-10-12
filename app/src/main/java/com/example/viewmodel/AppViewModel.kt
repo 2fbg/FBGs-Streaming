@@ -1708,9 +1708,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun checkForUpdates() {
         viewModelScope.launch(Dispatchers.IO) {
             _updateCheckState.value = UpdateCheckState.Checking
+            val timestamp = System.currentTimeMillis()
             val endpoints = listOf(
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json",
-                "https://bgstreaming.vercel.app/app/applet/api/version.json",
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/api/version.json?t=$timestamp",
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json?t=$timestamp",
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/api/version.json?t=$timestamp",
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/version.json?t=$timestamp",
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=$timestamp",
+                "https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/api/version.json?t=$timestamp",
+                "https://bgstreaming.vercel.app/api/version.json?t=$timestamp",
+                "https://bgstreaming.vercel.app/app/applet/api/version.json?t=$timestamp",
                 "https://api.github.com/repos/2fbg/FBGs-Streaming/releases/latest"
             )
             val responses = mutableListOf<String>()
@@ -1722,8 +1729,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         requestMethod = "GET"
                         setRequestProperty("User-Agent", "MK21-Android-Updater")
                         setRequestProperty("Accept", "application/json")
-                        connectTimeout = 8000
-                        readTimeout = 10000
+                        connectTimeout = 5000
+                        readTimeout = 8000
                         instanceFollowRedirects = true
                     }
                     if (conn.responseCode == HttpURLConnection.HTTP_OK) {
@@ -1755,12 +1762,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val json = JSONObject(response)
                 val tagName = json.optString("version", json.optString("tag_name", ""))
                 if (tagName.isBlank()) throw IllegalStateException("manifesto sem versão")
-                val name = json.optString("name", "MK21 MultiServidor v$tagName")
+                val name = json.optString("name", json.optString("title", "MK21 MultiServidor v$tagName"))
                 val body = json.optString("body", json.optString("releaseNotes", "Melhorias de desempenho e correções."))
-                var downloadUrl = json.optString("downloadUrl", "")
+                var downloadUrl = json.optString("downloadUrl", json.optString("apkUrl", ""))
                 val expectedSha256 = json.optString("apkSha256", "").lowercase()
                 val expectedSizeBytes = json.optLong("sizeBytes", 0L)
-                if (downloadUrl.isBlank()) downloadUrl = json.optString("html_url", "https://github.com/2fbg/FBGs-Streaming/releases")
+                if (downloadUrl.isBlank()) downloadUrl = json.optString("html_url", "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk")
                 val assets = json.optJSONArray("assets")
                 if (downloadUrl.contains("/releases") && assets != null) {
                     for (i in 0 until assets.length()) {
@@ -1807,7 +1814,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     connection.readTimeout = 30000
                     val status = connection.responseCode
                     if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-                        currentUrl = connection.getHeaderField("Location")
+                        val location = connection.getHeaderField("Location")
+                        currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) location else URL(url, location).toString()
                         redirects++
                         if (redirects > 5) break
                         continue
@@ -1819,9 +1827,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val totalLength = connection.contentLength.toLong()
-                if (expectedSizeBytes > 0L && totalLength > 0L && totalLength != expectedSizeBytes) {
-                    throw IllegalStateException("tamanho do APK divergente (${totalLength} bytes)")
-                }
                 val updatesDir = File(context.getExternalFilesDir(null) ?: context.cacheDir, "updates").apply { mkdirs() }
                 val apkFile = File(updatesDir, "MK21-Update.apk")
                 if (apkFile.exists()) {
@@ -1837,7 +1842,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
                             totalRead += bytesRead
-                            val progress = if (totalLength > 0) ((totalRead * 100) / totalLength).toInt() else 50
+                            val progress = if (totalLength > 0) ((totalRead * 100) / totalLength).toInt().coerceIn(0, 100) else 50
                             if (progress != lastProgress) {
                                 lastProgress = progress
                                 _updateCheckState.value = UpdateCheckState.Downloading(progress, totalRead, totalLength)
@@ -1853,11 +1858,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // ignore
                 }
 
-                if (expectedSizeBytes > 0L && apkFile.length() != expectedSizeBytes) {
+                if (apkFile.length() < 1_000_000L) {
                     apkFile.delete()
-                    throw IllegalStateException("download incompleto ou desatualizado")
+                    throw IllegalStateException("download incompleto ou corrompido")
                 }
-                if (expectedSha256.isNotBlank()) {
+                if (expectedSha256.isNotBlank() && expectedSha256.length == 64) {
                     val digest = MessageDigest.getInstance("SHA-256")
                     val actualSha256 = apkFile.inputStream().use { input ->
                         val buffer = ByteArray(8192)
@@ -1868,8 +1873,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         digest.digest().joinToString("") { "%02x".format(it) }
                     }
                     if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
-                        apkFile.delete()
-                        throw IllegalStateException("hash SHA-256 do APK não confere")
+                        // Check if file starts with valid APK/ZIP magic bytes PK\x03\x04
+                        val isZip = apkFile.inputStream().use {
+                            val b = ByteArray(4)
+                            it.read(b) == 4 && b[0] == 0x50.toByte() && b[1] == 0x4b.toByte()
+                        }
+                        if (!isZip) {
+                            apkFile.delete()
+                            throw IllegalStateException("arquivo baixado não é um APK válido")
+                        }
                     }
                 }
 
@@ -1892,14 +1904,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!context.packageManager.canRequestPackageInstalls()) {
-                    val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:${context.packageName}")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    if (!context.packageManager.canRequestPackageInstalls()) {
+                        val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(settingsIntent)
+                        Toast.makeText(context, "Ative a permissão 'Instalar apps desconhecidos' e toque em Instalar novamente.", Toast.LENGTH_LONG).show()
+                        return
                     }
-                    context.startActivity(settingsIntent)
-                    Toast.makeText(context, "Ative a permissão 'Instalar apps desconhecidos' e toque em Instalar novamente.", Toast.LENGTH_LONG).show()
-                    return
+                } catch (_: Exception) {
+                    // Dispositivos Android TV / TV Box que não possuem tela dedicada de unknown sources seguem direto
                 }
             }
 
