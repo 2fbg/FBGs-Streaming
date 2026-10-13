@@ -840,11 +840,18 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
         if (xm && xm[1]) window.serverXmltvUrl = xm[1].trim();
       } else if (line.startsWith('#EXTINF:')) {
         const comma = line.lastIndexOf(',');
-        const gm = line.match(/group-title="([^"]*)"/i);
-        const lm = line.match(/tvg-logo="([^"]*)"/i);
-        const im = line.match(/tvg-id="([^"]*)"/i);
-        const nm = line.match(/tvg-name="([^"]*)"/i);
-        meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
+        const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
+        const gm = line.indexOf('group-title="') !== -1 ? line.match(/group-title="([^"]*)"/i) : null;
+        const lm = line.indexOf('tvg-logo="') !== -1 ? line.match(/tvg-logo="([^"]*)"/i) : null;
+        const im = line.indexOf('tvg-id="') !== -1 ? line.match(/tvg-id="([^"]*)"/i) : null;
+        const nm = line.indexOf('tvg-name="') !== -1 ? line.match(/tvg-name="([^"]*)"/i) : null;
+        meta = {
+          name: name,
+          group: gm && gm[1] ? gm[1].trim() : 'Geral',
+          logo: lm && lm[1] ? lm[1].trim() : '',
+          tvgId: im && im[1] ? im[1].trim() : '',
+          tvgName: nm && nm[1] ? nm[1].trim() : ''
+        };
       } else if (meta && /^https?:\/\//i.test(line)) {
         const type = determineType(meta.name, meta.group, line);
         onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
@@ -1052,10 +1059,10 @@ async function loadServer(forceRefresh = false) {
           allCatalog[type].push(slim);
         }
 
-        // Assim que os canais ao vivo chegam (ou quando começa a chegar Filme/Série), libera a tela imediatamente!
+        // Assim que os primeiros canais ao vivo chegam (>= 15), libera a tela imediatamente!
         if (type !== 'LIVE' && allCatalog.LIVE.length > 0 && !liveVisible) {
           revealLive();
-        } else if (type === 'LIVE' && (allCatalog.LIVE.length === 20 || allCatalog.LIVE.length === 50)) {
+        } else if (type === 'LIVE' && allCatalog.LIVE.length >= 15 && !liveVisible) {
           revealLive();
         }
       },
@@ -1826,11 +1833,16 @@ function playStream(item) {
     hlsInstance = new Hls({
       enableWorker: true,
       lowLatencyMode: true,
+      startFragPrefetch: true,
+      backBufferLength: 0,
       maxBufferLength: 3,
       maxMaxBufferLength: 6,
       liveSyncDurationCount: 2,
       maxBufferSize: 12 * 1000 * 1000,
-      startLevel: -1
+      startLevel: -1,
+      fragLoadingTimeOut: 10000,
+      manifestLoadingTimeOut: 10000,
+      levelLoadingTimeOut: 10000
     });
     hlsInstance.loadSource(item.url);
     hlsInstance.attachMedia(video);
@@ -2155,7 +2167,16 @@ function switchContentType(type) {
     $('sectionSettings').classList.remove('hidden');
     renderSettings('info');
     activeZone = 'settings';
+    setTimeout(() => {
+      const firstCfg = document.querySelector('.cfg-menu-item.active') || $('cfgBtnInfo');
+      if (firstCfg) { try { firstCfg.focus(); } catch (e) {} }
+    }, 40);
     return;
+  }
+
+  // Ao voltar para o Ao Vivo / Filmes / Séries, encerra categoricamente qualquer modo de busca
+  if (typeof closeSearchMode === 'function') {
+    try { closeSearchMode(true); } catch (e) {}
   }
 
   $('sectionSettings').classList.add('hidden');
@@ -2166,6 +2187,16 @@ function switchContentType(type) {
   selectCategory('ALL');
   activeZone = 'channels';
   if (type === 'FAVORITES') hydrateIndexedFavorites();
+
+  // Restaura foco imediato na lista de canais ou categoria
+  setTimeout(() => {
+    const firstItem = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
+    const activeCat = $('listCategories') ? $('listCategories').querySelector('.cat-item-btn.active') : null;
+    const target = firstItem || activeCat || $(activeTabId);
+    if (target) {
+      try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    }
+  }, 40);
 }
 
 // 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
@@ -2463,6 +2494,11 @@ function applyFontSize(size) {
   if (size === 'ultra') document.body.classList.add('font-ultra');
   localStorage.setItem('mk21_font_size', size);
   renderFontSizePanel();
+  const idMap = { normal: 'btnFontNormal', large: 'btnFontLarge', xlarge: 'btnFontXLarge', xxlarge: 'btnFontXXLarge', huge: 'btnFontHuge', ultra: 'btnFontUltra' };
+  const targetBtn = $(idMap[size] || 'btnFontNormal');
+  if (targetBtn) {
+    try { targetBtn.focus(); } catch (e) {}
+  }
 }
 
 // LIMPAR ARMAZENAMENTO — CLONE IDÊNTICO À FOTO DO USUÁRIO (VIZZION PLAY)
@@ -3311,6 +3347,30 @@ document.addEventListener('keydown', function (e) {
   const keyCodes = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27, Backspace: 8, GoBack: 461 };
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
+  if (ae && ae.id === 'inputSearch') {
+    if (k === 40 || key === 'ArrowDown') {
+      e.preventDefault();
+      closeSearchMode(false);
+      const firstChannel = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
+      if (firstChannel) { firstChannel.focus(); activeZone = 'channels'; }
+      return;
+    }
+    if (k === 38 || key === 'ArrowUp') {
+      e.preventDefault();
+      closeSearchMode(false);
+      const activeTab = document.querySelector('.main-tabs .tab-btn.active') || $('tabLive');
+      if (activeTab) { activeTab.focus(); activeZone = 'header'; }
+      return;
+    }
+    if ((k === 37 || key === 'ArrowLeft') && (!ae.value || ae.selectionStart === 0)) {
+      e.preventDefault();
+      closeSearchMode(false);
+      const activeCat = $('listCategories') ? ($('listCategories').querySelector('.cat-item-btn.active') || $('listCategories').querySelector('.cat-item-btn')) : null;
+      if (activeCat) { activeCat.focus(); activeZone = 'categories'; }
+      return;
+    }
+    if (['ArrowLeft','ArrowRight'].includes(key)) return;
+  }
   const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
   if (isTextInput && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
 

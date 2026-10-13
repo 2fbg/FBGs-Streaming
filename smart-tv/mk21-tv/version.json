@@ -5,9 +5,9 @@
   "releaseNotes": "• Atualizador direto (OTA) corrigido e unificado para TV e Android APK\n• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto",
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.4_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "apkSha256": "665766909ebf3426b552db03e3b15a072baa2eb2aa8609373ac3b2e6339836ab",
-  "ipkSha256": "4d267cf7affabf396a056d3c65d938088fa00d0dead3c6026ebab488e3f78b73",
-  "sizeBytes": 25548081,
-  "ipkSizeBytes": 132240,
+  "apkSha256": "a215463d2bea8de499e615b0ad6437f33c1352a0c2cc3682865534ba80136539",
+  "ipkSha256": "b1919d1245655579d29581f3f265de6c12130f7cc35fcbf8e9e892fd7ae2d92f",
+  "sizeBytes": 24889371,
+  "ipkSizeBytes": 131434,
   "updatedAt": "2026-10-12"
 }

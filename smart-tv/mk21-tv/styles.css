@@ -895,6 +895,9 @@ body[class*="font-"] .settings-detail-panel h3 {
 }
 
 body[class*="font-"] #inputSearch,
+body[class*="font-"] .search-box input {
+  font-size: calc(18px * var(--font-scale, 1)) !important;
+}
 
 /* ================= 11. TELA DE INICIALIZAÇÃO PREMIUM (SPLASH SCREEN) ================= */
 .startup-splash-overlay {
