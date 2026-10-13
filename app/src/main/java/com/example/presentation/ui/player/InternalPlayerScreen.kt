@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -35,12 +36,14 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.data.model.PlaylistItem
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Player Interno baseado em Media3 ExoPlayer com controles otimizados para IPTV.
@@ -53,6 +56,7 @@ fun InternalPlayerScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     BackHandler {
         onNavigateBack()
@@ -60,6 +64,8 @@ fun InternalPlayerScreen(
 
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
+    var retryCount by remember { mutableIntStateOf(0) }
+    var reconnectingMessage by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var showControls by remember { mutableStateOf(true) }
@@ -77,22 +83,28 @@ fun InternalPlayerScreen(
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
-            .setUserAgent("MK21Player/1.0 (Linux; Android)")
+            .setUserAgent("MK21Player/1.1 (Linux; Android)")
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
+        // Fast Start LoadControl: buffer inicial ultrarrápido (500ms inicial, 5s minBuffer)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                15000, // minBufferMs: 15s prevents drops on network jitter
-                50000, // maxBufferMs: 50s generous buffer ceiling
-                1500,  // bufferForPlaybackMs: 1.5s ultra-responsive start
-                3000   // bufferForPlaybackAfterRebufferMs: 3s fast rebuffering recovery
+                5000,  // minBufferMs: reduz latência de inicialização
+                30000, // maxBufferMs
+                500,   // bufferForPlaybackMs: 500ms inicial
+                1500   // bufferForPlaybackAfterRebufferMs: 1.5s
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
-        ExoPlayer.Builder(context)
+        // Hardware Accelerated decoders com fallback defensivo
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
+
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
@@ -107,6 +119,10 @@ fun InternalPlayerScreen(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_READY) {
+                    retryCount = 0
+                    reconnectingMessage = null
+                }
             }
 
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -115,7 +131,26 @@ fun InternalPlayerScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
-                errorMessage = "Falha na reprodução do stream: ${error.errorCodeName}"
+                if (retryCount < 5) {
+                    retryCount++
+                    val backoff = (1000L * (1L shl (retryCount - 1))).coerceAtMost(6000L)
+                    reconnectingMessage = "Reconectando canal (Tentativa $retryCount/5)..."
+                    coroutineScope.launch {
+                        delay(backoff)
+                        try {
+                            exoPlayer.stop()
+                            exoPlayer.clearMediaItems()
+                            exoPlayer.setMediaItem(MediaItem.fromUri(item.url))
+                            exoPlayer.prepare()
+                            exoPlayer.play()
+                        } catch (e: Exception) {
+                            // Ignora erro transitório
+                        }
+                    }
+                } else {
+                    reconnectingMessage = null
+                    errorMessage = "Erro de reprodução: ${error.errorCodeName}. Transmissão instável ou fora do ar."
+                }
             }
         }
         exoPlayer.addListener(listener)
@@ -158,16 +193,41 @@ fun InternalPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Indicador de Carregamento / Buffering
-        if (isBuffering && errorMessage == null) {
+        // Indicador de Carregamento / Buffering / Reconexão
+        if ((isBuffering || reconnectingMessage != null) && errorMessage == null) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp
-                )
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Black.copy(alpha = 0.8f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = reconnectingMessage ?: if (isBuffering) "Carregando canal..." else "Conectando ao servidor...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Buffer Fast-Start Otimizado",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.LightGray.copy(alpha = 0.8f)
+                        )
+                    }
+                }
             }
         }
 

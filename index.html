@@ -240,7 +240,7 @@
 
             <!-- Rodapé com Versão MK21 Sincronizada -->
             <p class="text-center text-xs text-slate-500 mt-6 font-medium">
-                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v1.0.5 by FBG2</span>
+                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v1.1.0 by FBG2</span>
             </p>
         </div>
 
@@ -500,9 +500,15 @@
                             </div>
                         </div>
 
-                        <!-- Buffering spinner overlay -->
-                        <div id="yt-buffer-spinner" class="absolute inset-0 hidden items-center justify-center pointer-events-none bg-black/20 z-10">
-                            <div class="w-10 h-10 rounded-full border-4 border-[#E50914]/25 border-t-[#E50914] animate-spin"></div>
+                        <!-- Buffering / Connecting / Status HUD overlay -->
+                        <div id="yt-buffer-spinner" class="absolute inset-0 hidden items-center justify-center pointer-events-none bg-black/40 backdrop-blur-[2px] z-25 transition-all">
+                            <div class="flex flex-col items-center gap-2.5 px-6 py-4 bg-slate-950/90 border border-white/10 rounded-2xl shadow-2xl">
+                                <div class="w-9 h-9 rounded-full border-[3px] border-[#E50914]/25 border-t-[#E50914] animate-spin"></div>
+                                <div class="flex flex-col items-center text-center">
+                                    <span id="player-hud-status" class="text-xs font-bold text-white tracking-wide">Carregando canal...</span>
+                                    <span id="player-hud-substatus" class="text-[10px] text-slate-400 mt-0.5">Conectando ao servidor...</span>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- YouTube-style Custom Bottom Control Bar overlay -->
@@ -2036,10 +2042,45 @@
             }
         }
 
+        function showPlayerHud(status, substatus) {
+            const spinner = document.getElementById('yt-buffer-spinner');
+            const statusEl = document.getElementById('player-hud-status');
+            const substatusEl = document.getElementById('player-hud-substatus');
+            if (statusEl && status) statusEl.textContent = status;
+            if (substatusEl && substatus) substatusEl.textContent = substatus;
+            if (spinner) {
+                spinner.classList.remove('hidden');
+                spinner.classList.add('flex');
+            }
+        }
+
+        function hidePlayerHud() {
+            const spinner = document.getElementById('yt-buffer-spinner');
+            if (spinner) {
+                spinner.classList.add('hidden');
+                spinner.classList.remove('flex');
+            }
+        }
+
         const hlsPlayer = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            startFragPrefetch: true,
+            backBufferLength: 15,
+            maxBufferLength: 15,
+            maxMaxBufferLength: 30,
+            liveSyncDurationCount: 3,
             maxBufferSize: 30 * 1024 * 1024,
-            maxBufferLength: 20,
-            autoStartLoad: true
+            startLevel: -1,
+            autoStartLoad: true,
+            fragLoadingTimeOut: 15000,
+            manifestLoadingTimeOut: 15000,
+            levelLoadingTimeOut: 15000,
+            fragLoadingMaxRetry: 4,
+            manifestLoadingMaxRetry: 4,
+            levelLoadingMaxRetry: 4,
+            fragLoadingRetryDelay: 1000,
+            manifestLoadingRetryDelay: 1000
         });
         window.hlsPlayer = hlsPlayer;
 
@@ -4277,7 +4318,42 @@
             });
         }
 
-        // Media Item lists Populator
+        // Shimmer Skeleton UI Generator for channels and VODs
+        function renderShimmerSkeleton(count = 9) {
+            mediaGrid.innerHTML = '';
+            if (activeType === 'LIVE') {
+                mediaGrid.className = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3";
+                for (let i = 0; i < count; i++) {
+                    const sk = document.createElement('div');
+                    sk.className = "p-3 bg-slate-900/60 border border-slate-800/60 rounded-xl flex gap-3.5 items-center animate-pulse";
+                    sk.innerHTML = `
+                        <div class="w-12 h-12 rounded-xl bg-slate-800/80 shrink-0"></div>
+                        <div class="flex-grow space-y-2">
+                            <div class="h-3.5 bg-slate-800/80 rounded w-3/4"></div>
+                            <div class="h-2.5 bg-slate-800/60 rounded w-1/2"></div>
+                            <div class="h-2 bg-slate-800/40 rounded w-1/4"></div>
+                        </div>
+                    `;
+                    mediaGrid.appendChild(sk);
+                }
+            } else {
+                mediaGrid.className = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-4";
+                for (let i = 0; i < count; i++) {
+                    const sk = document.createElement('div');
+                    sk.className = "bg-slate-900/80 border border-slate-800/60 rounded-2xl overflow-hidden flex flex-col animate-pulse";
+                    sk.innerHTML = `
+                        <div class="w-full aspect-[2/3] bg-slate-800/80"></div>
+                        <div class="p-3 space-y-2">
+                            <div class="h-3.5 bg-slate-800/80 rounded w-4/5"></div>
+                            <div class="h-2.5 bg-slate-800/60 rounded w-1/2"></div>
+                        </div>
+                    `;
+                    mediaGrid.appendChild(sk);
+                }
+            }
+        }
+
+        // Media Item lists Populator (Virtualized Chunk Rendering)
         function renderMediaItems() {
             const query = searchInput.value.toLowerCase().trim();
 
@@ -4442,7 +4518,7 @@
                 mediaGrid.appendChild(colCard);
             });
 
-            // Helpful loading more indicator
+            // Helpful loading more indicator with virtual scroll IntersectionObserver
             if (items.length > itemsLimit) {
                 const loadMoreBtn = document.createElement('button');
                 loadMoreBtn.className = "col-span-full py-3.5 px-6 my-4 bg-gradient-to-r from-red-950/25 to-slate-900 border border-slate-800 hover:border-[#E50914]/40 hover:bg-[#E50914]/10 rounded-2xl text-slate-200 text-xs font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 outline-none shadow-md shadow-black/40";
@@ -4450,9 +4526,19 @@
                 loadMoreBtn.innerHTML = `<i class="fa-solid fa-circle-chevron-down text-[#E50914] text-sm animate-bounce"></i> Mostrar mais ${itemTypeName} (Exibindo ${itemsLimit} de ${items.length})`;
                 loadMoreBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    itemsLimit += 30;
+                    itemsLimit += 40;
                     renderMediaItems();
                 });
+                if (window.IntersectionObserver) {
+                    const scrollObserver = new IntersectionObserver((entries) => {
+                        if (entries[0] && entries[0].isIntersecting) {
+                            scrollObserver.disconnect();
+                            itemsLimit += 40;
+                            renderMediaItems();
+                        }
+                    }, { rootMargin: '300px' });
+                    scrollObserver.observe(loadMoreBtn);
+                }
                 mediaGrid.appendChild(loadMoreBtn);
             }
         }

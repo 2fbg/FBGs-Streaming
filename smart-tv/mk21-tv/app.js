@@ -1,4 +1,4 @@
-// MK21 PLAY v1.0.5 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v1.1.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -1875,18 +1875,24 @@ function playStream(item) {
       enableWorker: true,
       lowLatencyMode: true,
       startFragPrefetch: true,
-      backBufferLength: 0,
-      maxBufferLength: 3,
-      maxMaxBufferLength: 6,
-      liveSyncDurationCount: 2,
-      maxBufferSize: 12 * 1000 * 1000,
+      backBufferLength: 10,
+      maxBufferLength: 15,
+      maxMaxBufferLength: 30,
+      liveSyncDurationCount: 3,
+      maxBufferSize: 25 * 1000 * 1000,
       startLevel: -1,
-      fragLoadingTimeOut: 10000,
-      manifestLoadingTimeOut: 10000,
-      levelLoadingTimeOut: 10000
+      fragLoadingTimeOut: 15000,
+      manifestLoadingTimeOut: 15000,
+      levelLoadingTimeOut: 15000,
+      fragLoadingMaxRetry: 4,
+      manifestLoadingMaxRetry: 4,
+      levelLoadingMaxRetry: 4,
+      fragLoadingRetryDelay: 1000,
+      manifestLoadingRetryDelay: 1000
     });
     hlsInstance.loadSource(item.url);
     hlsInstance.attachMedia(video);
+    if ($('epgStatus')) $('epgStatus').textContent = '⏳ CARREGANDO...';
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       video.play().catch(() => {});
@@ -1896,11 +1902,31 @@ function playStream(item) {
       updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
+      console.warn('[HLS SmartTV Error]', data.type, data.details, data.fatal);
       if (data.fatal) {
-        video.src = item.url;
-        try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-        video.play().catch(() => {});
-        updateRealResolution(item);
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            console.log('[HLS SmartTV] Tentando recuperar de erro de rede (startLoad)...');
+            if ($('epgStatus')) $('epgStatus').textContent = '🔄 RECONECTANDO...';
+            hlsInstance.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            console.log('[HLS SmartTV] Tentando recuperar de erro de mídia (recoverMediaError)...');
+            if ($('epgStatus')) $('epgStatus').textContent = '🔄 RECUPERANDO MÍDIA...';
+            hlsInstance.recoverMediaError();
+            break;
+          default:
+            console.log('[HLS SmartTV] Erro irrecuperável, tentando fallback nativo...');
+            video.src = item.url;
+            try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (err) {}
+            video.play().then(() => {
+              if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+            }).catch(() => {
+              if ($('epgStatus')) $('epgStatus').textContent = '⚠️ ERRO DE REPRODUÇÃO';
+            });
+            updateRealResolution(item);
+            break;
+        }
       }
     });
   } else {
@@ -3165,7 +3191,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.0.5';
+const BASE_PACKAGE_VERSION = '1.1.0';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -3217,14 +3243,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.5
-    if (!data || compareSemver(data.version, '1.0.5') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.1.0
+    if (!data || compareSemver(data.version, '1.1.0') < 0) {
       data = {
-        version: '1.0.5',
-        versionCode: 105,
-        title: 'MK21 Play v1.0.5',
-        releaseNotes: '• Controles modernos no HUD em tela cheia com avanço e retrocesso de canais pelas setas do controle\n• Timeline interativa e barra de progresso para filmes e séries (VOD)\n• Detecção e exibição real da resolução do fluxo (HD 720p / FHD 1080p / 4K)\n• Modal com opções completas de classificação e ordenação\n• Novo filtro de conteúdo ao carregar em configurações para ultra velocidade e economia de RAM\n• Ocultação total e rigorosa de canais e categorias no bloqueio 18+\n• Nomes de servidores limpos sem emojis e ícones padronizados (🍿 Séries, ⚙️ Configurações, ⏯️ Pausa)',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.5_all.ipk',
+        version: '1.1.0',
+        versionCode: 110,
+        title: 'MK21 Play v1.1.0',
+        releaseNotes: '• Otimização de Buffer inicial para abertura rápida de canais (Fast Start)\n• Implementação de Retry automático com reconexão para streams instáveis\n• Melhorias de performance e virtualização na rolagem de listas de canais\n• Feedback visual aprimorado com status de conexão e reconexão',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.1.0_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };

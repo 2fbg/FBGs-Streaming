@@ -62,6 +62,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -2378,7 +2379,7 @@ fun HomeScreen(
                     }
                 } else if (contentType == ContentType.SERIES) {
                     // Smart Netflix-style Series Grouping layout using optimized remembered chunks!
-                    items(processedSeriesChunks) { rowSeries ->
+                    items(processedSeriesChunks, key = { chunk -> chunk.firstOrNull()?.title ?: chunk.hashCode() }) { rowSeries ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2402,7 +2403,7 @@ fun HomeScreen(
                     }
                 } else {
                     // Optimized Grid Layout using custom grouping chunk loops and remembered list processing!
-                    items(processedNormalChunks) { rowItems ->
+                    items(processedNormalChunks, key = { chunk -> chunk.firstOrNull()?.id ?: chunk.hashCode() }) { rowItems ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -3662,8 +3663,18 @@ fun ChannelEpgPreviewDialog(
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
-        ExoPlayer.Builder(context)
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(3000, 15000, 500, 1000)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
+
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .build().apply {
                 val mediaItem = MediaItem.Builder().setUri(item.url)
                 val lower = item.url.lowercase()
@@ -4352,16 +4363,23 @@ fun VideoPlayerUI(
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
+        // Fast Start LoadControl otimizado para abertura imediata de canais e HLS
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                15000, // minBufferMs
-                50000, // maxBufferMs
-                1500,  // bufferForPlaybackMs
-                3000   // bufferForPlaybackAfterRebufferMs
+                5000,  // minBufferMs: 5s para Fast Start (início ágil)
+                30000, // maxBufferMs
+                500,   // bufferForPlaybackMs: 500ms para início ultrarrápido
+                1500   // bufferForPlaybackAfterRebufferMs: 1.5s
             )
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
-        ExoPlayer.Builder(context)
+        // Decodificação por Hardware com fallback defensivo
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
+
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
@@ -4612,6 +4630,41 @@ fun VideoPlayerUI(
                 }
             }
         )
+
+        // Central Buffering / Connecting / Reconnecting HUD (Visible whenever buffering or reconnecting)
+        if ((isBuffering || retryCount > 0) && errorMessage == null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.Black.copy(alpha = 0.8f))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 24.dp, vertical = 18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = NetflixRed,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Text(
+                        text = if (retryCount > 0) "Reconectando canal (Tentativa $retryCount de 5)..." else "Carregando canal...",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Buffer Fast-Start Otimizado",
+                        color = Color.White.copy(alpha = 0.65f),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
 
         // Custom Visual Sidebar Overlays
         // Brightness sidebar (Left side of screen)
