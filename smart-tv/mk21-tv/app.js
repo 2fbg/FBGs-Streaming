@@ -1,4 +1,4 @@
-// MK21 PLAY v1.0.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v1.0.5 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -37,16 +37,20 @@ if (!Element.prototype.replaceChildren) {
   };
 }
 
-// 3. CONFIGURAÇÃO DOS SERVIDORES MK21
+// 3. CONFIGURAÇÃO DOS SERVIDORES MK21 (NOMES LIMPOS SEM ÍCONES)
 const DEFAULT_SERVERS = [
-  { id: 'cb6000', name: '🔵 CB6000', url: 'http://cdn.caterlune.top' },
-  { id: 'vlog', name: '🔴 VLOG', url: 'http://myopbx.beer' },
-  { id: 'lubtv', name: '🟢 LUB TV', url: 'http://pottermax.sbs' },
-  { id: 'cinelon', name: '🟡 CINELON21', url: 'http://coliseuop.site' },
-  { id: 'tannix', name: '🟣 TANNIX', url: 'http://poptvcdn.online' },
-  { id: 'mk21pro', name: '🟠 MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
-  { id: 'cinevo', name: '⚪ CINEVO', url: 'http://antaresfusion.shop' }
+  { id: 'vlog', name: 'VLOG', url: 'http://myopbx.beer' },
+  { id: 'cb6000', name: 'CB6000', url: 'http://cdn.caterlune.top' },
+  { id: 'lubtv', name: 'LUB TV', url: 'http://pottermax.sbs' },
+  { id: 'cinelon', name: 'CINELON21', url: 'http://coliseuop.site' },
+  { id: 'tannix', name: 'TANNIX', url: 'http://poptvcdn.online' },
+  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
+  { id: 'cinevo', name: 'CINEVO', url: 'http://antaresfusion.shop' }
 ];
+
+function cleanServerName(name) {
+  return String(name || '').replace(/^[^\w\dÀ-ÿ]+/i, '').trim() || name;
+}
 
 let SERVERS = [...DEFAULT_SERVERS];
 try {
@@ -86,8 +90,9 @@ function ensureSharedCredentialsStored() {
 }
 
 const ADULT_KEYWORDS = [
-  "18+", "ADULTO", "ADULT", "XXX", "SEXY", "PLAYBOY", "PENTHOUSE", "VENUS",
-  "HOT ", "HUSTLER", "FORBIDDEN", "FORA DA LEI", "S0X"
+  "18+", "+18", "ADULTO", "ADULTOS", "ADULT", "XXX", "SEXY", "PLAYBOY", "PENTHOUSE", "VENUS",
+  "HOT ", "HUSTLER", "FORBIDDEN", "FORA DA LEI", "S0X", "PRIVE", "PRIVÉ", "RED LIGHT", "SEX",
+  "EROTIC", "ERÓTICO", "EROTICO", "BRASILEIRINHAS", "TIGRESA", "CINEMA 18", "CINE 18", "SEXTREME"
 ];
 
 // BANCO DE DADOS INDEXEDDB (v5 para expurgar categorização antiga corrompida)
@@ -460,9 +465,7 @@ function openSearchMode() {
   if (!input) return;
   if (document.activeElement && document.activeElement !== input) searchPreviousFocus = document.activeElement;
   activeZone = 'search';
-  const video = $('tvPlayer');
-  searchWasPlaying = !!(video && !video.paused && !video.ended);
-  if (video && searchWasPlaying) { try { video.pause(); } catch (e) {} }
+  // Em TV ao vivo, não interrompe a reprodução de fundo durante a pesquisa
 }
 
 function closeSearchMode(clearText = false) {
@@ -478,7 +481,9 @@ function closeSearchMode(clearText = false) {
   activeZone = 'channels';
   const target = searchPreviousFocus && mk21IsVisible(searchPreviousFocus)
     ? searchPreviousFocus
-    : ($('listItems') && $('listItems').querySelector('.list-item-btn'));
+    : (($('listItems') && $('listItems').querySelector('.list-item-btn:not([disabled])')) ||
+       ($('listCategories') && $('listCategories').querySelector('.cat-item-btn.active')) ||
+       $('tabLive'));
   searchPreviousFocus = null;
   if (target) {
     try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
@@ -832,27 +837,34 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     let meta = null;
     let received = 0;
     const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
+    const quickAttr = (str, key) => {
+      const k = key + '="';
+      const idx = str.indexOf(k);
+      if (idx === -1) return '';
+      const start = idx + k.length;
+      const end = str.indexOf('"', start);
+      return end !== -1 ? str.slice(start, end).trim() : '';
+    };
+
     const consume = (raw) => {
       const line = raw.trim();
       if (!line) return;
-      if (line.startsWith('#EXTM3U')) {
-        const xm = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
-        if (xm && xm[1]) window.serverXmltvUrl = xm[1].trim();
-      } else if (line.startsWith('#EXTINF:')) {
-        const comma = line.lastIndexOf(',');
-        const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
-        const gm = line.indexOf('group-title="') !== -1 ? line.match(/group-title="([^"]*)"/i) : null;
-        const lm = line.indexOf('tvg-logo="') !== -1 ? line.match(/tvg-logo="([^"]*)"/i) : null;
-        const im = line.indexOf('tvg-id="') !== -1 ? line.match(/tvg-id="([^"]*)"/i) : null;
-        const nm = line.indexOf('tvg-name="') !== -1 ? line.match(/tvg-name="([^"]*)"/i) : null;
-        meta = {
-          name: name,
-          group: gm && gm[1] ? gm[1].trim() : 'Geral',
-          logo: lm && lm[1] ? lm[1].trim() : '',
-          tvgId: im && im[1] ? im[1].trim() : '',
-          tvgName: nm && nm[1] ? nm[1].trim() : ''
-        };
-      } else if (meta && /^https?:\/\//i.test(line)) {
+      if (line.charCodeAt(0) === 35) {
+        if (line.startsWith('#EXTINF:')) {
+          const comma = line.lastIndexOf(',');
+          const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
+          meta = {
+            name: name,
+            group: quickAttr(line, 'group-title') || 'Geral',
+            logo: quickAttr(line, 'tvg-logo'),
+            tvgId: quickAttr(line, 'tvg-id'),
+            tvgName: quickAttr(line, 'tvg-name')
+          };
+        } else if (line.startsWith('#EXTM3U')) {
+          const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
+          if (xm) window.serverXmltvUrl = xm;
+        }
+      } else if (meta && (line.startsWith('http://') || line.startsWith('https://'))) {
         const type = determineType(meta.name, meta.group, line);
         onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
         meta = null;
@@ -892,7 +904,7 @@ function updateServerSyncBadge(pct, isFinished = false) {
       }, 4000);
     }
     if (txt) {
-      txt.textContent = '🔵 ' + srvName;
+      txt.textContent = cleanServerName(srvName);
     }
   } else {
     const label = `${pct}%`;
@@ -902,7 +914,7 @@ function updateServerSyncBadge(pct, isFinished = false) {
       badge.classList.remove('done');
     }
     if (txt) {
-      txt.textContent = `🔵 ${srvName} (${label})`;
+      txt.textContent = `${cleanServerName(srvName)} (${label})`;
     }
   }
 }
@@ -955,7 +967,7 @@ async function loadServer(forceRefresh = false) {
   if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
 
   const srv = SERVERS[currentServerIndex];
-  if ($('txtActiveServer')) $('txtActiveServer').textContent = '🔵 ' + srv.name;
+  if ($('txtActiveServer')) $('txtActiveServer').textContent = cleanServerName(srv.name);
   updateServerSyncBadge(15, false);
 
   updateSplash(25, 'Conectando ao ' + srv.name + '...');
@@ -1053,16 +1065,28 @@ async function loadServer(forceRefresh = false) {
       (item) => {
         if (loadId !== serverLoadGeneration) return;
         const slim = slimItem(item);
-        indexWriter.add(slim);
         const type = slim.contentType;
+
+        // Filtro de conteúdo configurável pelo usuário
+        const loadLive = localStorage.getItem('mk21_filter_load_live') !== 'false';
+        const loadMovies = localStorage.getItem('mk21_filter_load_movies') !== 'false';
+        const loadSeries = localStorage.getItem('mk21_filter_load_series') !== 'false';
+        if (type === 'LIVE' && !loadLive) return;
+        if (type === 'MOVIE' && !loadMovies) return;
+        if (type === 'SERIES' && !loadSeries) return;
+
+        // Bloqueio 18+ rigoroso: não armazena nem processa se estiver bloqueado
+        if (!isAdultUnlocked && (slim.isAdult || isAdult(slim.name) || isAdult(slim.group))) return;
+
+        indexWriter.add(slim);
         if (allCatalog[type]) {
           allCatalog[type].push(slim);
         }
 
-        // Assim que os primeiros canais ao vivo chegam (>= 15), libera a tela imediatamente!
+        // Assim que os primeiros canais chegam (>= 8), libera a tela imediatamente!
         if (type !== 'LIVE' && allCatalog.LIVE.length > 0 && !liveVisible) {
           revealLive();
-        } else if (type === 'LIVE' && allCatalog.LIVE.length >= 15 && !liveVisible) {
+        } else if (type === 'LIVE' && allCatalog.LIVE.length >= 8 && !liveVisible) {
           revealLive();
         }
       },
@@ -1179,9 +1203,8 @@ function buildCurrentCategories() {
 
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
-    if (!isAdultUnlocked && item.isAdult) continue;
-
     const grp = item.group || 'Geral';
+    if (!isAdultUnlocked && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
     if (hiddenCats.includes(grp)) continue;
 
     currentCategoriesMap['ALL'].push(item);
@@ -1202,10 +1225,11 @@ function renderCategoriesList() {
   $('txtCatHeaderTitle').textContent = 
     currentContentType === 'LIVE' ? '📁 Categorias TV' :
     (currentContentType === 'MOVIE' ? '📁 Gêneros Filmes' :
-    (currentContentType === 'SERIES' ? '📁 Gêneros Séries' :
+    (currentContentType === 'SERIES' ? '🍿 Gêneros Séries' :
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')));
 
   currentCategoryKeys.forEach((k, idx) => {
+    if (!isAdultUnlocked && isAdult(k)) return;
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
@@ -1268,6 +1292,9 @@ function renderItemsList() {
   // Em listas com centenas de milhares de itens isso reduz um pico de memória
   // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
   let items = query ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query))) : base;
+  if (!isAdultUnlocked) {
+    items = items.filter(c => !c.isAdult && !isAdult(c.name) && !isAdult(c.group));
+  }
 
   // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
   function mk21ExtractYear(name) {
@@ -1406,49 +1433,62 @@ function renderItemsList() {
   }
 }
 
-// BOTÃO ORDENAÇÃO: Padrão → Recente → A-Z → Z-A → Ano → Padrão
+// MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO
 function updateSortOrderButtonLabel() {
   const btn = $('btnSortOrder');
   if (!btn) return;
-  if (currentSortOrder === 'RECENT') btn.textContent = '🕒 Recente';
-  else if (currentSortOrder === 'AZ') btn.textContent = '↕️ A-Z';
-  else if (currentSortOrder === 'ZA') btn.textContent = '↕️ Z-A';
-  else if (currentSortOrder === 'YEAR') btn.textContent = '📅 Ano';
-  else btn.textContent = '↕️ Padrão';
+  const labels = {
+    DEFAULT: '↕️ Padrão',
+    RECENT: '🕒 Recentes',
+    AZ: '🔤 A - Z',
+    ZA: '🔤 Z - A',
+    YEAR: '📅 Ano'
+  };
+  btn.textContent = labels[currentSortOrder] || '↕️ Classificação';
+}
+
+function openSortPickerModal() {
+  const modal = $('modalSortPicker');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  activeZone = 'modalSortPicker';
+  const btns = modal.querySelectorAll('.sort-choice-btn');
+  btns.forEach(b => {
+    b.classList.toggle('active', b.dataset.order === currentSortOrder);
+    b.onclick = () => {
+      currentSortOrder = b.dataset.order;
+      updateSortOrderButtonLabel();
+      persistSortOrder();
+      renderItemsList();
+      closeSortPickerModal();
+      showChannelBanner('Classificação: ' + (b.textContent.trim()));
+    };
+  });
+  const activeBtn = modal.querySelector(`.sort-choice-btn[data-order="${currentSortOrder}"]`) || btns[0];
+  if (activeBtn) activeBtn.focus();
+}
+
+function closeSortPickerModal() {
+  const modal = $('modalSortPicker');
+  if (modal) modal.classList.add('hidden');
+  activeZone = 'channels';
+  if ($('btnSortOrder')) $('btnSortOrder').focus();
 }
 
 if ($('btnSortOrder')) {
-  $('btnSortOrder').onclick = function () {
-    if (currentSortOrder === 'DEFAULT') currentSortOrder = 'RECENT';
-    else if (currentSortOrder === 'RECENT') currentSortOrder = 'AZ';
-    else if (currentSortOrder === 'AZ') currentSortOrder = 'ZA';
-    else if (currentSortOrder === 'ZA') currentSortOrder = 'YEAR';
-    else currentSortOrder = 'DEFAULT';
-    updateSortOrderButtonLabel();
-    persistSortOrder();
-    renderItemsList();
-    showChannelBanner('Ordenação: ' + ($('btnSortOrder').textContent || currentSortOrder));
-  };
+  $('btnSortOrder').onclick = openSortPickerModal;
   updateSortOrderButtonLabel();
+}
+if ($('btnCloseSortPicker')) {
+  $('btnCloseSortPicker').onclick = closeSortPickerModal;
 }
 
 if ($('inputSearch')) {
-  $('inputSearch').addEventListener('focus', openSearchMode);
-  $('inputSearch').addEventListener('click', openSearchMode);
+  $('inputSearch').addEventListener('click', () => openSearchMode());
+  $('inputSearch').addEventListener('focus', () => {
+    activeZone = 'search';
+  });
   $('inputSearch').addEventListener('input', scheduleSearchRender);
-}
-
-// BOTÃO LIMPAR BUSCA
-const clearBtn = $('btnClearSearch');
-if (clearBtn) {
-  clearBtn.onclick = () => {
-    if ($('inputSearch')) $('inputSearch').value = '';
-    currentSearchQuery = '';
-    buildCurrentCategories();
-    renderCategoriesList();
-    renderItemsList();
-    openSearchMode();
-  };
 }
 
 // 9. MODAL DE SÉRIES (SUBMENU DE TEMPORADAS E EPISÓDIOS COM ORDENAÇÃO NUMÉRICA)
@@ -1812,6 +1852,7 @@ function playStream(item) {
   if ($('fsHudTitle')) $('fsHudTitle').textContent = (favoriteUrls.has(item.url) ? '⭐ ' : '') + item.name;
   $('epgGroup').textContent = 'Categoria: ' + item.group;
   updateSmartTvEpg(item);
+  updateRealResolution(item);
 
   if (favoriteUrls.has(item.url)) {
     $('btnFavorite').textContent = '★ Favoritado';
@@ -1849,14 +1890,17 @@ function playStream(item) {
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       video.play().catch(() => {});
-      $('btnPlayPause').textContent = '⏸ Pausar';
+      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
       if (data.fatal) {
         video.src = item.url;
         try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
         video.play().catch(() => {});
+        updateRealResolution(item);
       }
     });
   } else {
@@ -1865,10 +1909,104 @@ function playStream(item) {
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
     video.play().then(() => {
-      $('btnPlayPause').textContent = '⏸ Pausar';
+      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      updateRealResolution(item);
     }).catch(() => {});
   }
+}
+
+// DETECÇÃO REAL DE RESOLUÇÃO (HD / FHD / 4K / SD)
+function updateRealResolution(item) {
+  const badge = document.querySelector('.badge-quality') || $('badgeStreamResolution');
+  if (!badge) return;
+
+  const targetItem = item || activeItem;
+  const name = (targetItem && targetItem.name) ? targetItem.name.toUpperCase() : '';
+  let resText = 'HD 720p';
+
+  // 1. Tenta deduzir do nome/categoria
+  if (name.includes('4K') || name.includes('UHD') || name.includes('2160')) {
+    resText = '4K 2160p';
+  } else if (name.includes('FHD') || name.includes('1080')) {
+    resText = 'FHD 1080p';
+  } else if (name.includes('HD') || name.includes('720')) {
+    resText = 'HD 720p';
+  } else if (name.includes('SD') || name.includes('480')) {
+    resText = 'SD 480p';
+  }
+
+  // 2. Tenta obter as dimensões reais de decodificação de vídeo do player nativo
+  const v = $('tvPlayer');
+  if (v && v.videoHeight > 0) {
+    const h = v.videoHeight;
+    const w = v.videoWidth;
+    if (h >= 2160 || w >= 3800) resText = '4K 2160p';
+    else if (h >= 1080 || w >= 1900) resText = 'FHD 1080p';
+    else if (h >= 720 || w >= 1200) resText = 'HD 720p';
+    else resText = `SD ${h}p`;
+  }
+
+  badge.textContent = resText;
+}
+
+const vElement = $('tvPlayer');
+if (vElement) {
+  vElement.addEventListener('loadedmetadata', () => updateRealResolution(activeItem));
+  vElement.addEventListener('resize', () => updateRealResolution(activeItem));
+  vElement.addEventListener('timeupdate', updateVodProgressTimeline);
+}
+
+// BARRA DE PROGRESSO E LINHA DO TEMPO PARA FILMES E SÉRIES
+function formatTimeSec(sec) {
+  if (!sec || !isFinite(sec) || isNaN(sec) || sec <= 0) return '00:00:00';
+  const s = Math.floor(sec);
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  const pad = n => (n < 10 ? '0' : '') + n;
+  if (hrs > 0) {
+    return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+  }
+  return `00:${pad(mins)}:${pad(secs)}`;
+}
+
+function updateVodProgressTimeline() {
+  const v = $('tvPlayer');
+  if (!v) return;
+
+  const isVod = currentContentType === 'MOVIE' || currentContentType === 'SERIES' ||
+    (activeItem && activeItem.contentType !== 'LIVE');
+
+  const fsBox = $('fsVodProgressBox');
+  const vodTimeRow = $('vodTimeRow');
+  const epgBarBox = $('epgBarBox');
+
+  if (!isVod) {
+    if (fsBox) fsBox.classList.add('hidden');
+    if (vodTimeRow) vodTimeRow.classList.add('hidden');
+    return;
+  }
+
+  // É Filme ou Série: exibe timeline e tempo real
+  if (fsBox && !$('fsHudBar').classList.contains('hidden')) fsBox.classList.remove('hidden');
+  if (vodTimeRow) vodTimeRow.classList.remove('hidden');
+
+  const cur = v.currentTime || 0;
+  const dur = v.duration || 0;
+  const pct = dur > 0 ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0;
+
+  // Atualiza barra HUD
+  if ($('fsProgressFill')) $('fsProgressFill').style.width = pct + '%';
+  if ($('fsTimeCurrent')) $('fsTimeCurrent').textContent = formatTimeSec(cur);
+  if ($('fsTimeDuration')) $('fsTimeDuration').textContent = formatTimeSec(dur);
+
+  // Atualiza barra mini-card
+  const pBar = $('epgProgressBar') || document.querySelector('.epg-progress');
+  if (pBar) pBar.style.width = pct + '%';
+  if ($('vodTimeCurrent')) $('vodTimeCurrent').textContent = formatTimeSec(cur);
+  if ($('vodTimeDuration')) $('vodTimeDuration').textContent = formatTimeSec(dur);
 }
 
 function showChannelBanner(text) {
@@ -1914,6 +2052,13 @@ function showFsHud(show) {
     if ($('fsBtnFav') && activeItem) {
       $('fsBtnFav').textContent = favoriteUrls.has(activeItem.url) ? '★ Favoritado' : '⭐ Favoritar';
     }
+    const isVod = currentContentType === 'MOVIE' || currentContentType === 'SERIES' ||
+      (activeItem && activeItem.contentType !== 'LIVE');
+    if ($('fsVodProgressBox')) {
+      if (isVod) $('fsVodProgressBox').classList.remove('hidden');
+      else $('fsVodProgressBox').classList.add('hidden');
+    }
+    updateVodProgressTimeline();
   } else {
     hud.classList.add('hidden');
   }
@@ -1937,7 +2082,7 @@ function toggleFullscreen(force = false) {
       else if (v && v.webkitRequestFullscreen) v.webkitRequestFullscreen();
     } catch (e) {}
     setTimeout(function () {
-      if ($('fsBtnSpeed')) $('fsBtnSpeed').focus();
+      if ($('fsBtnPlay')) $('fsBtnPlay').focus();
     }, 200);
   } else {
     box.classList.remove('is-fullscreen');
@@ -1952,14 +2097,33 @@ function toggleFullscreen(force = false) {
 }
 
 function bindFsHudButtons() {
-  if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
-  if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); };
-  if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); };
-  if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); };
+  if ($('fsBtnPrev')) $('fsBtnPrev').onclick = function () {
+    if (currentContentType === 'LIVE') {
+      playPreviousChannel();
+    } else {
+      const v = $('tvPlayer');
+      if (v) v.currentTime = Math.max(0, (v.currentTime || 0) - 10);
+      showChannelBanner('⏪ -10s');
+    }
+    pokeFsHud();
+  };
+  if ($('fsBtnNext')) $('fsBtnNext').onclick = function () {
+    if (currentContentType === 'LIVE') {
+      playNextChannel();
+    } else {
+      const v = $('tvPlayer');
+      if (v && v.duration) v.currentTime = Math.min(v.duration, (v.currentTime || 0) + 10);
+      showChannelBanner('⏩ +10s');
+    }
+    pokeFsHud();
+  };
+  if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); pokeFsHud(); };
+  if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); pokeFsHud(); };
+  if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); pokeFsHud(); };
   if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function () { if (typeof openAudioSubsModal === 'function') openAudioSubsModal(); };
+  if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
 }
 bindFsHudButtons();
-
 
 $('videoContainer').ondblclick = () => toggleFullscreen();
 $('btnFullscreen').onclick = () => toggleFullscreen();
@@ -1969,11 +2133,13 @@ function togglePlayPause() {
   if (!v) return;
   if (v.paused) {
     v.play().catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏸ Pausar';
+    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
     if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
+    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '▶ Reproduzir';
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -2179,6 +2345,12 @@ function switchContentType(type) {
     try { closeSearchMode(true); } catch (e) {}
   }
 
+  // Previne que o navegador foque automaticamente no inputSearch durante a transição
+  const safeTabTarget = $(activeTabId) || $('tabLive');
+  if (safeTabTarget) {
+    try { safeTabTarget.focus(); } catch (e) {}
+  }
+
   $('sectionSettings').classList.add('hidden');
   $('sectionUnified').classList.remove('hidden');
 
@@ -2192,15 +2364,15 @@ function switchContentType(type) {
   setTimeout(() => {
     const firstItem = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
     const activeCat = $('listCategories') ? $('listCategories').querySelector('.cat-item-btn.active') : null;
-    const target = firstItem || activeCat || $(activeTabId);
+    const target = firstItem || activeCat || safeTabTarget;
     if (target) {
       try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
     }
-  }, 40);
+  }, 30);
 }
 
 // 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
-const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin'];
+const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin'];
 
 CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
@@ -2263,6 +2435,8 @@ function renderSettings(sec) {
     runSpeedTest();
   } else if (sec === 'fonte') {
     renderFontSizePanel();
+  } else if (sec === 'filtro') {
+    renderLoadFilterPanel();
   } else if (sec === 'limpar') {
     renderClearStoragePanel();
   } else if (sec === 'tempo') {
@@ -2274,6 +2448,53 @@ function renderSettings(sec) {
   } else if (sec === 'pin') {
     renderPinSettingsPanel();
   }
+}
+
+// PAINEL DE FILTRAGEM DE CARREGAMENTO (ECONOMIA DE MEMÓRIA E ULTRA VELOCIDADE)
+function renderLoadFilterPanel() {
+  const box = $('settingsDetailBox');
+  const loadLive = localStorage.getItem('mk21_filter_load_live') !== 'false';
+  const loadMovies = localStorage.getItem('mk21_filter_load_movies') !== 'false';
+  const loadSeries = localStorage.getItem('mk21_filter_load_series') !== 'false';
+
+  box.innerHTML = `
+    <h3 style="margin:0 0 16px 0; font-size:24px;">📦 Filtrar Conteúdo ao Carregar</h3>
+    <p style="color:#aaa;">Selecione quais tipos de conteúdo serão baixados do servidor para economizar memória e acelerar o app:</p>
+    <div style="display:flex; flex-direction:column; gap:14px; max-width:560px; margin-top:20px;">
+      <button id="toggleFilterLive" class="list-item-btn ${loadLive ? 'active' : ''}" style="padding:16px 20px; display:flex; justify-content:space-between; align-items:center;" tabindex="0">
+        <span>📺 Canais de TV Ao Vivo</span>
+        <strong style="color:${loadLive ? '#4caf50' : '#888'}; font-size:16px;">${loadLive ? '✅ CARREGAR' : '❌ IGNORAR'}</strong>
+      </button>
+      <button id="toggleFilterMovies" class="list-item-btn ${loadMovies ? 'active' : ''}" style="padding:16px 20px; display:flex; justify-content:space-between; align-items:center;" tabindex="0">
+        <span>🎬 Filmes (VOD)</span>
+        <strong style="color:${loadMovies ? '#4caf50' : '#888'}; font-size:16px;">${loadMovies ? '✅ CARREGAR' : '❌ IGNORAR'}</strong>
+      </button>
+      <button id="toggleFilterSeries" class="list-item-btn ${loadSeries ? 'active' : ''}" style="padding:16px 20px; display:flex; justify-content:space-between; align-items:center;" tabindex="0">
+        <span>🍿 Séries e Novelas</span>
+        <strong style="color:${loadSeries ? '#4caf50' : '#888'}; font-size:16px;">${loadSeries ? '✅ CARREGAR' : '❌ IGNORAR'}</strong>
+      </button>
+      <button id="btnApplyLoadFilter" class="ctrl-btn primary" style="margin-top:16px; padding:16px; justify-content:center; font-size:17px; font-weight:bold;" tabindex="0">
+        💾 Salvar e Recarregar Servidor Agora
+      </button>
+    </div>
+  `;
+
+  $('toggleFilterLive').onclick = () => {
+    localStorage.setItem('mk21_filter_load_live', !loadLive);
+    renderLoadFilterPanel();
+  };
+  $('toggleFilterMovies').onclick = () => {
+    localStorage.setItem('mk21_filter_load_movies', !loadMovies);
+    renderLoadFilterPanel();
+  };
+  $('toggleFilterSeries').onclick = () => {
+    localStorage.setItem('mk21_filter_load_series', !loadSeries);
+    renderLoadFilterPanel();
+  };
+  $('btnApplyLoadFilter').onclick = () => {
+    alert('Filtros salvos! Recarregando lista...');
+    loadServer(true);
+  };
 }
 
 // FORMATO DE FLUXO COM PERSISTÊNCIA REAL
@@ -2782,7 +3003,7 @@ function renderServerPickerList() {
 
     const nameLine = document.createElement('div');
     nameLine.className = 'server-info-name';
-    nameLine.textContent = srv.name + (idx === currentServerIndex ? '  [✓ ATIVO]' : '');
+    nameLine.textContent = cleanServerName(srv.name) + (idx === currentServerIndex ? '  [✓ ATIVO]' : '');
 
     const urlLine = document.createElement('div');
     urlLine.className = 'server-info-url';
@@ -2944,7 +3165,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.0.4';
+const BASE_PACKAGE_VERSION = '1.0.5';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -2996,14 +3217,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.4
-    if (!data || compareSemver(data.version, '1.0.4') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.0.5
+    if (!data || compareSemver(data.version, '1.0.5') < 0) {
       data = {
-        version: '1.0.4',
-        versionCode: 104,
-        title: 'MK21 Play v1.0.4',
-        releaseNotes: '• Atualização direta na TV (OTA) e APK sincronizados com sucesso\n• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.4_all.ipk',
+        version: '1.0.5',
+        versionCode: 105,
+        title: 'MK21 Play v1.0.5',
+        releaseNotes: '• Controles modernos no HUD em tela cheia com avanço e retrocesso de canais pelas setas do controle\n• Timeline interativa e barra de progresso para filmes e séries (VOD)\n• Detecção e exibição real da resolução do fluxo (HD 720p / FHD 1080p / 4K)\n• Modal com opções completas de classificação e ordenação\n• Novo filtro de conteúdo ao carregar em configurações para ultra velocidade e economia de RAM\n• Ocultação total e rigorosa de canais e categorias no bloqueio 18+\n• Nomes de servidores limpos sem emojis e ícones padronizados (🍿 Séries, ⚙️ Configurações, ⏯️ Pausa)',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.5_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -3205,7 +3426,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -3352,7 +3573,13 @@ document.addEventListener('keydown', function (e) {
       e.preventDefault();
       closeSearchMode(false);
       const firstChannel = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
-      if (firstChannel) { firstChannel.focus(); activeZone = 'channels'; }
+      if (firstChannel) {
+        firstChannel.focus();
+        activeZone = 'channels';
+      } else {
+        const cat = $('listCategories') ? ($('listCategories').querySelector('.cat-item-btn.active') || $('listCategories').querySelector('.cat-item-btn')) : null;
+        if (cat) { cat.focus(); activeZone = 'categories'; }
+      }
       return;
     }
     if (k === 38 || key === 'ArrowUp') {
@@ -3369,10 +3596,17 @@ document.addEventListener('keydown', function (e) {
       if (activeCat) { activeCat.focus(); activeZone = 'categories'; }
       return;
     }
-    if (['ArrowLeft','ArrowRight'].includes(key)) return;
+    if (k === 39 || key === 'ArrowRight') {
+      if (!ae.value || ae.selectionStart === ae.value.length) {
+        e.preventDefault();
+        const nextBtn = $('btnClearSearch') || $('btnFullscreen') || $('btnPlayPause');
+        if (nextBtn) { nextBtn.focus(); }
+        return;
+      }
+    }
   }
   const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-  if (isTextInput && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
+  if (isTextInput && ae.id !== 'inputSearch' && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
 
   // Voz nativa
   if (key === 'Voice' || key === 'VoiceCommand' || k === 1022 || k === 1016 || k === 166) {
@@ -3458,47 +3692,74 @@ document.addEventListener('keydown', function (e) {
     }
   }
 
-  // Setas — navegação espacial (sempre)
+  // Setas em tela cheia (Fullscreen) com mudança de canal e navegação nos botões
+  if (isAppFullscreen()) {
+    pokeFsHud();
+    const hud = $('fsHudBar');
+    const hudVisible = hud && !hud.classList.contains('hidden');
+
+    if (k === 38 || key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentContentType === 'LIVE') {
+        playPreviousChannel();
+      }
+      return;
+    }
+    if (k === 40 || key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentContentType === 'LIVE') {
+        playNextChannel();
+      }
+      return;
+    }
+    if (k === 37 || key === 'ArrowLeft') {
+      e.preventDefault();
+      if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
+        mk21MoveFocus('left');
+      } else if (currentContentType !== 'LIVE') {
+        const v = $('tvPlayer');
+        if (v) v.currentTime = Math.max(0, (v.currentTime || 0) - 10);
+        showChannelBanner('⏪ -10s');
+        updateVodProgressTimeline();
+      } else {
+        mk21MoveFocus('left');
+      }
+      return;
+    }
+    if (k === 39 || key === 'ArrowRight') {
+      e.preventDefault();
+      if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
+        mk21MoveFocus('right');
+      } else if (currentContentType !== 'LIVE') {
+        const v = $('tvPlayer');
+        if (v && v.duration) v.currentTime = Math.min(v.duration, (v.currentTime || 0) + 10);
+        showChannelBanner('⏩ +10s');
+        updateVodProgressTimeline();
+      } else {
+        mk21MoveFocus('right');
+      }
+      return;
+    }
+  }
+
+  // Setas — navegação espacial no modo janela
   if (k === 37 || key === 'ArrowLeft') {
     e.preventDefault();
-    // seek em VOD fullscreen
-    if ((typeof currentContentType !== 'undefined') && (currentContentType === 'MOVIE' || currentContentType === 'SERIES') &&
-        (document.fullscreenElement || document.webkitFullscreenElement)) {
-      const v = $('tvPlayer');
-      if (v && v.duration && isFinite(v.duration)) {
-        v.currentTime = Math.max(0, v.currentTime - 10);
-        if (typeof showChannelBanner === 'function') showChannelBanner('⏪ -10s');
-        return;
-      }
-    }
-    if (isAppFullscreen()) { pokeFsHud(); return; }
     mk21MoveFocus('left');
     return;
   }
   if (k === 39 || key === 'ArrowRight') {
     e.preventDefault();
-    if ((typeof currentContentType !== 'undefined') && (currentContentType === 'MOVIE' || currentContentType === 'SERIES') &&
-        (document.fullscreenElement || document.webkitFullscreenElement)) {
-      const v = $('tvPlayer');
-      if (v && v.duration && isFinite(v.duration)) {
-        v.currentTime = Math.min(v.duration, v.currentTime + 10);
-        if (typeof showChannelBanner === 'function') showChannelBanner('⏩ +10s');
-        return;
-      }
-    }
-    if (isAppFullscreen()) { pokeFsHud(); return; }
     mk21MoveFocus('right');
     return;
   }
   if (k === 38 || key === 'ArrowUp') {
     e.preventDefault();
-    if (isAppFullscreen()) { pokeFsHud(); return; }
     mk21MoveFocus('up');
     return;
   }
   if (k === 40 || key === 'ArrowDown') {
     e.preventDefault();
-    if (isAppFullscreen()) { pokeFsHud(); return; }
     mk21MoveFocus('down');
     return;
   }

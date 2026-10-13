@@ -174,6 +174,7 @@ body {
   display: flex;
   overflow: hidden;
   height: calc(100vh - 128px);
+  min-height: 0;
   background: #090b12;
 }
 
@@ -182,6 +183,8 @@ body {
   display: flex;
   overflow: hidden;
   width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 /* ================= 3. SEÇÃO UNIFICADA 3 COLUNAS (TV, FILMES, SÉRIES) ================= */
@@ -191,6 +194,9 @@ body {
   gap: 16px;
   padding: 16px 25px;
   background: #090b12;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .col-pane {
@@ -200,6 +206,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
+  min-height: 0;
 }
 
 .pane-header {
@@ -859,6 +867,7 @@ body.font-huge { --font-scale: 1.9; font-size: 38px; }
 body.font-ultra { --font-scale: 2.2; font-size: 44px; }
 
 /* Aplica escala a todos os menus, botões, títulos e inputs */
+body[class*="font-"] .list-item-btn,
 body[class*="font-"] .cat-item-btn,
 body[class*="font-"] .channel-item-btn,
 body[class*="font-"] .series-card-btn,
@@ -873,8 +882,8 @@ body[class*="font-"] .btn-server-edit,
 body[class*="font-"] .btn-server-delete,
 body[class*="font-"] .remote-key {
   font-size: calc(18px * var(--font-scale, 1)) !important;
-  padding-top: calc(10px * var(--font-scale, 1)) !important;
-  padding-bottom: calc(10px * var(--font-scale, 1)) !important;
+  padding-top: calc(8px * var(--font-scale, 1)) !important;
+  padding-bottom: calc(8px * var(--font-scale, 1)) !important;
 }
 
 body[class*="font-"] .epg-name {
@@ -1203,19 +1212,98 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   outline: 3px solid #ffd54f !important;
 }
 
-/* HUD tela cheia */
+/* HUD tela cheia moderno (Glassmorphism OTT) */
 .video-box { position: relative; }
 .fs-hud-bar {
   position: absolute; left: 0; right: 0; bottom: 0;
-  padding: 16px 20px 20px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.92));
+  padding: 24px 30px 28px;
+  background: linear-gradient(180deg, transparent 0%, rgba(9, 11, 18, 0.75) 30%, rgba(5, 6, 10, 0.96) 100%);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 40;
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex; flex-direction: column; gap: 14px;
 }
 .fs-hud-bar.hidden { display: none !important; }
-.fs-hud-title { font-size: 22px; font-weight: 700; color: #fff; text-shadow: 0 2px 8px #000; }
-.fs-hud-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.fs-hud-actions .ctrl-btn { min-height: 48px; font-size: 16px; }
+.fs-hud-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+  letter-spacing: 0.5px;
+}
+.fs-vod-progress-box {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+.fs-time-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #cbd5e1;
+  min-width: 65px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+.fs-progress-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+}
+.fs-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e50914 0%, #ff4d58 100%);
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.7);
+  transition: width 0.25s linear;
+}
+.fs-hud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.hud-ctrl-btn {
+  min-height: 48px;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hud-ctrl-btn:focus {
+  background: #e50914 !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 18px rgba(229, 9, 20, 0.95) !important;
+  transform: scale(1.06);
+  outline: none;
+}
+.hud-ctrl-btn.primary {
+  background: rgba(229, 9, 20, 0.4);
+  border-color: rgba(229, 9, 20, 0.7);
+}
+
+.vod-time-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
 .video-box.is-fullscreen {
   position: fixed !important; inset: 0 !important; z-index: 9999 !important;
   width: 100vw !important; height: 100vh !important; background: #000;
@@ -1227,9 +1315,16 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
 
 .sort-order-btn {
   white-space: nowrap;
-  font-weight: 600;
-  background: #2a3148 !important;
-  border: 1px solid rgba(255, 213, 79, 0.35) !important;
+  font-weight: 700;
+  background: #1c2236 !important;
+  border: 1px solid rgba(255, 213, 79, 0.4) !important;
+  color: #ffd54f !important;
+}
+.sort-order-btn:focus {
+  background: #ffd54f !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 14px rgba(255, 213, 79, 0.8) !important;
 }
 
 /* Fluidez visual */

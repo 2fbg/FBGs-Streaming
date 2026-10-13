@@ -68,8 +68,7 @@
         </div>
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
-          <button id="btnClearSearch" class="util-btn" tabindex="0" title="Limpar busca">×</button>
-          <button id="btnSortOrder" class="util-btn sort-order-btn" tabindex="0" title="Padrão / Recente / A-Z / Z-A / Ano" style="width: auto; min-width: 110px; padding: 0 14px; font-size: 14px;">↕️ Padrão</button>
+          <button id="btnSortOrder" class="util-btn sort-order-btn" tabindex="0" title="Classificação e Ordenação" style="width: auto; min-width: 130px; padding: 0 14px; font-size: 15px;">↕️ Classificação</button>
         </div>
         <ul id="listItems" class="pane-scroll"></ul>
       </div>
@@ -78,16 +77,26 @@
       <div class="col-pane col-player">
         <div id="videoContainer" class="video-box" tabindex="0">
           <video id="tvPlayer" playsinline></video>
-          <div id="channelOverlay" class="channel-overlay hidden">Animal Planet FHD</div>
-          <!-- Controles em tela cheia (velocidade até 4x com áudio estável) -->
+          <div id="channelOverlay" class="channel-overlay hidden">Canal</div>
+          <!-- Controles em tela cheia modernos com barra de progresso e mudança de canal -->
           <div id="fsHudBar" class="fs-hud-bar hidden">
             <div class="fs-hud-title" id="fsHudTitle">Canal</div>
+            <!-- Barra de progresso para Filmes e Séries (VOD) -->
+            <div id="fsVodProgressBox" class="fs-vod-progress-box hidden">
+              <span id="fsTimeCurrent" class="fs-time-text">00:00:00</span>
+              <div class="fs-progress-track" id="fsProgressTrack">
+                <div class="fs-progress-fill" id="fsProgressFill" style="width: 0%;"></div>
+              </div>
+              <span id="fsTimeDuration" class="fs-time-text">00:00:00</span>
+            </div>
             <div class="fs-hud-actions">
-              <button type="button" id="fsBtnBack" class="ctrl-btn" tabindex="0">↩️ Sair</button>
-              <button type="button" id="fsBtnPlay" class="ctrl-btn" tabindex="0">⏯ Pausar</button>
-              <button type="button" id="fsBtnSpeed" class="ctrl-btn primary" tabindex="0">⚡ 1x</button>
-              <button type="button" id="fsBtnFav" class="ctrl-btn" tabindex="0">⭐ Favoritar</button>
-              <button type="button" id="fsBtnAudio" class="ctrl-btn" tabindex="0">🔊 Áudio</button>
+              <button type="button" id="fsBtnPrev" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Canal anterior / Voltar 10s">⏮ Anterior</button>
+              <button type="button" id="fsBtnPlay" class="ctrl-btn hud-ctrl-btn" tabindex="0">⏯️ Pausar</button>
+              <button type="button" id="fsBtnNext" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Próximo canal / Avançar 10s">⏭ Próximo</button>
+              <button type="button" id="fsBtnSpeed" class="ctrl-btn primary hud-ctrl-btn" tabindex="0">⚡ 1x</button>
+              <button type="button" id="fsBtnFav" class="ctrl-btn hud-ctrl-btn" tabindex="0">⭐ Favoritar</button>
+              <button type="button" id="fsBtnAudio" class="ctrl-btn hud-ctrl-btn" tabindex="0">🔊 Áudio & Legendas</button>
+              <button type="button" id="fsBtnBack" class="ctrl-btn hud-ctrl-btn" tabindex="0">↩️ Sair</button>
             </div>
           </div>
         </div>
@@ -96,17 +105,23 @@
         <div class="epg-card">
           <h2 id="epgTitle" class="epg-name">Selecione um canal</h2>
           <p id="epgGroup" class="epg-sub">Categoria: Geral</p>
-          <div class="epg-bar"><div class="epg-progress"></div></div>
+          <div class="epg-bar" id="epgBarBox">
+            <div class="epg-progress" id="epgProgressBar"></div>
+          </div>
+          <div id="vodTimeRow" class="vod-time-row hidden">
+            <span id="vodTimeCurrent">00:00:00</span>
+            <span id="vodTimeDuration">00:00:00</span>
+          </div>
           <div class="epg-meta">
             <span id="epgStatus">🔴 Transmissão Ao Vivo</span>
-            <span class="badge-quality">FHD 1080p</span>
+            <span id="badgeStreamResolution" class="badge-quality">HD 720p</span>
           </div>
           <p id="epgNext" class="epg-next-text">A seguir: Programação Normal</p>
         </div>
 
         <div class="player-controls">
           <button id="btnFullscreen" class="ctrl-btn primary" tabindex="0">⛶ Tela Cheia</button>
-          <button id="btnPlayPause" class="ctrl-btn" tabindex="0">⏯ Pausar</button>
+          <button id="btnPlayPause" class="ctrl-btn" tabindex="0">⏯️ Pausar</button>
           <button id="btnFavorite" class="ctrl-btn" tabindex="0">⭐ Favoritar</button>
           <button id="btnSpeed" class="ctrl-btn" tabindex="0">⚡ 1x</button>
           <button id="btnAudioTrack" class="ctrl-btn" tabindex="0">🔊 Áudio & Legendas</button>
@@ -120,6 +135,7 @@
       <div class="settings-left-menu">
         <button id="cfgBtnInfo" class="cfg-menu-item active" tabindex="0">⚙️ Informação geral</button>
         <button id="cfgBtnFonte" class="cfg-menu-item" tabindex="0">🔤 Tamanho da fonte</button>
+        <button id="cfgBtnFiltro" class="cfg-menu-item" tabindex="0">📦 Filtrar conteúdo</button>
         <button id="cfgBtnSpeedTest" class="cfg-menu-item" tabindex="0">🚀 Teste de velocidade</button>
         <button id="cfgBtnLimpar" class="cfg-menu-item" tabindex="0">🗑️ Limpar armazenamento</button>
         <button id="cfgBtnTempo" class="cfg-menu-item" tabindex="0">⏱️ Configurações de tempo</button>
@@ -269,11 +285,11 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <div>
             <div style="color: #888; font-size: 13px;">Versão Instalada</div>
-            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v1.0.0</div>
+            <div id="txtInstalledVer" style="color: #fff; font-size: 18px; font-weight: bold;">v1.0.5</div>
           </div>
           <div style="text-align: right;">
             <div style="color: #888; font-size: 13px;">Versão Mais Recente</div>
-            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v1.0.0 ✓ (Versão Mais Recente)</div>
+            <div id="txtLatestVer" style="color: #4caf50; font-size: 18px; font-weight: bold;">v1.0.5 ✓ (Versão Mais Recente)</div>
           </div>
         </div>
 
@@ -312,6 +328,24 @@
     </div>
   </div>
 
+  <!-- MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO -->
+  <div id="modalSortPicker" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="margin:0; font-size:22px;">↕️ Opções de Classificação</h3>
+        <button id="btnCloseSortPicker" class="close-btn" tabindex="0">×</button>
+      </div>
+      <p style="color:#aaa; font-size:14px; margin: 8px 0 16px 0;">Escolha como os canais, filmes ou séries serão ordenados:</p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="list-item-btn sort-choice-btn" data-order="DEFAULT" tabindex="0" style="padding:14px 18px;">↕️ Padrão (Ordem original da lista)</button>
+        <button class="list-item-btn sort-choice-btn" data-order="RECENT" tabindex="0" style="padding:14px 18px;">🕒 Mais Recentes (Assistidos / Novos)</button>
+        <button class="list-item-btn sort-choice-btn" data-order="AZ" tabindex="0" style="padding:14px 18px;">🔤 Ordem Alfabética (A - Z)</button>
+        <button class="list-item-btn sort-choice-btn" data-order="ZA" tabindex="0" style="padding:14px 18px;">🔤 Ordem Inversa (Z - A)</button>
+        <button class="list-item-btn sort-choice-btn" data-order="YEAR" tabindex="0" style="padding:14px 18px;">📅 Ano de Lançamento (Filmes e Séries)</button>
+      </div>
+    </div>
+  </div>
+
   <!-- HUD de Carregamento em Tempo Real com Porcentagem -->
   <div id="hudLoadingOverlay" class="hud-loading-overlay hidden">
     <div class="hud-loading-card">
@@ -346,7 +380,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=1.0.4';
+              fallback.src = 'app.js?v=1.0.5';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -363,7 +397,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=1.0.4';
+      s.src = 'app.js?v=1.0.5';
       document.body.appendChild(s);
     })();
   </script>

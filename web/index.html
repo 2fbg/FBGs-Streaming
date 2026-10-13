@@ -146,24 +146,24 @@
                     <button type="button" id="btn-close-error-banner" class="text-red-400 hover:text-white text-sm shrink-0">✕</button>
                 </div>
 
-                <!-- Gaveta de Perfis Salvos (Expandível) -->
-                <div id="quick-profiles-section" class="mb-4 hidden p-4 bg-[#141726] border border-white/10 rounded-2xl shadow-inner">
-                    <div class="flex items-center justify-between mb-2.5">
-                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                            <i class="fa-solid fa-clock-rotate-left text-amber-500"></i> Perfis Recentes (Clique para entrar):
-                        </span>
-                        <button type="button" id="btn-close-profiles" class="text-slate-500 hover:text-white text-xs">✕</button>
-                    </div>
-                    <div id="quick-profiles-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
-                </div>
-
                 <div class="space-y-5">
-                    <!-- Seção Servidor (Oculto visualmente para evitar caixa demarcada poluindo a tela) -->
-                    <div id="predefined-server-box" class="hidden">
-                        <span id="selected-server-name-label">CB6000</span>
-                        <select id="server-selector">
-                            <!-- Loaded dynamically via JS -->
-                        </select>
+                    <!-- Seção Servidor (Combo Select Visível Elegante) -->
+                    <div id="predefined-server-box" class="space-y-2">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-300" for="server-selector">
+                            Servidor IPTV
+                        </label>
+                        <div class="relative flex items-center bg-[#0f111d] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
+                            <span class="pl-4 pr-2 text-red-500 text-lg">
+                                <i class="fa-solid fa-server"></i>
+                            </span>
+                            <select id="server-selector" class="w-full py-4.5 pr-10 bg-transparent text-white font-bold text-base sm:text-lg outline-none cursor-pointer appearance-none" style="background-color: #0f111d !important; color: #ffffff !important;">
+                                <!-- Carregado dinamicamente via JS -->
+                            </select>
+                            <span class="absolute right-4 pointer-events-none text-slate-400 text-sm">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </span>
+                        </div>
+                        <span id="selected-server-name-label" class="hidden">CB6000</span>
                     </div>
 
                     <!-- Seção: Lista Manual (ativada pela aba Listas Manuais) -->
@@ -240,7 +240,7 @@
 
             <!-- Rodapé com Versão MK21 Sincronizada -->
             <p class="text-center text-xs text-slate-500 mt-6 font-medium">
-                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v1.0.0 by FBG2</span>
+                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v1.0.5 by FBG2</span>
             </p>
         </div>
 

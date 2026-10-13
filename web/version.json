@@ -1,13 +1,17 @@
 {
-  "version": "1.0.4",
-  "versionCode": 104,
-  "title": "MK21 Play v1.0.4",
-  "releaseNotes": "• Atualizador direto (OTA) corrigido e unificado para TV e Android APK\n• Catálogo 100% completo carregado em memória sem limite de 1k\n• Persistência integral no IndexedDB para carregamento instantâneo\n• Sem download desnecessário de rede ao reabrir o app\n• Paginação DOM dinâmica para fluidez máxima no controle remoto",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.4_all.ipk",
+  "version": "1.0.5",
+  "versionCode": 12,
+  "tagName": "v1.0.5",
+  "name": "MK21 MultiServidor v1.0.5",
+  "title": "MK21 Play v1.0.5",
+  "releaseNotes": "• Controles modernos no HUD em tela cheia com avanço e retrocesso de canais pelas setas do controle\n• Timeline interativa e barra de progresso para filmes e séries (VOD)\n• Detecção e exibição real da resolução do fluxo (HD 720p / FHD 1080p / 4K)\n• Modal com opções completas de classificação e ordenação\n• Novo filtro de conteúdo ao carregar em configurações para ultra velocidade e economia de RAM\n• Ocultação total e rigorosa de canais e categorias no bloqueio 18+\n• Nomes de servidores limpos sem emojis e ícones padronizados (🍿 Séries, ⚙️ Configurações, ⏯️ Pausa)",
+  "body": "• Controles modernos no HUD em tela cheia com avanço e retrocesso de canais pelas setas do controle\n• Timeline interativa e barra de progresso para filmes e séries (VOD)\n• Detecção e exibição real da resolução do fluxo (HD 720p / FHD 1080p / 4K)\n• Modal com opções completas de classificação e ordenação\n• Novo filtro de conteúdo ao carregar em configurações para ultra velocidade e economia de RAM\n• Ocultação total e rigorosa de canais e categorias no bloqueio 18+\n• Nomes de servidores limpos sem emojis e ícones padronizados (🍿 Séries, ⚙️ Configurações, ⏯️ Pausa)",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.0.5_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "apkSha256": "a215463d2bea8de499e615b0ad6437f33c1352a0c2cc3682865534ba80136539",
-  "ipkSha256": "b1919d1245655579d29581f3f265de6c12130f7cc35fcbf8e9e892fd7ae2d92f",
-  "sizeBytes": 24889371,
-  "ipkSizeBytes": 131434,
-  "updatedAt": "2026-10-12"
+  "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
+  "apkSha256": "458e70c203085053e973b2de497e31eb287972ca908b5ec1886d19640815f175",
+  "ipkSha256": "72771c58299ecd001c22dbf511f7a9971e7fed16690a9644c7011998ab525965",
+  "sizeBytes": 24889375,
+  "ipkSizeBytes": 134878,
+  "updatedAt": "2026-10-13"
 }
