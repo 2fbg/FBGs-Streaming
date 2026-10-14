@@ -343,7 +343,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val okHttpClient = OkHttpClient.Builder()
-        .dns(com.example.network.Mk21DnsResolver)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
@@ -970,7 +969,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var prefetchJob: kotlinx.coroutines.Job? = null
     private val prefetchClient by lazy {
         okhttp3.OkHttpClient.Builder()
-            .dns(com.example.network.Mk21DnsResolver)
             .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .build()

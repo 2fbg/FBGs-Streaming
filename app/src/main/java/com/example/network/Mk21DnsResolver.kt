@@ -5,11 +5,7 @@ import java.net.InetAddress
 import java.net.UnknownHostException
 import java.net.URL
 
-/**
- * Mk21DnsResolver - Nome exclusivo para evitar conflito com android.net.DnsResolver
- */
 object Mk21DnsResolver : Dns {
-
     override fun lookup(hostname: String): List<InetAddress> {
         return try {
             Dns.SYSTEM.lookup(hostname)

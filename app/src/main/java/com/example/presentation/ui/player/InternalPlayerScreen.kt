@@ -1,5 +1,5 @@
 package com.example.presentation.ui.player
-import com.example.network.Mk21Mk21DnsResolver.resolveUrlWithFailover
+import com.example.network.Mk21DnsResolver.resolveUrlWithFailover
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
@@ -161,7 +161,6 @@ fun InternalPlayerScreen(
                         try {
                             val targetUrl = if (isHostOrDnsError) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    com.example.network.Mk21DnsResolver.resolveUrlWithFailover(item.url)
                                 }
                             } else {
                                 item.url
