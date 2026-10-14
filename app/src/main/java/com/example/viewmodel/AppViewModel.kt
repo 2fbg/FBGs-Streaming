@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import com.example.network.DnsResolver
+import com.example.network.DnsResolver
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
