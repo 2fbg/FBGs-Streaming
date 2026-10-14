@@ -186,6 +186,7 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.androidx.media3.exoplayer)
   implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.exoplayer.av1)
   implementation(libs.androidx.media3.ui)
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
