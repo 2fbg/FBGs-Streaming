@@ -306,7 +306,7 @@
                         <i class="fa-solid fa-circle-half-stroke text-[#E50914]"></i>
                         <span class="hidden md:inline">Alto Contraste</span>
                     </button>
-                    <button id="account-settings-btn" onclick="window.openAccountModal();" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-bold rounded-xl outline-none transition-all duration-200 flex items-center gap-1.5" title="Configurações e Detalhes da Conta">
+                    <button id="account-settings-btn" onclick="window.openAccountModal();" style="z-index: 100; pointer-events: auto; cursor: pointer;" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-bold rounded-xl outline-none transition-all duration-200 flex items-center gap-1.5" title="Configurações e Detalhes da Conta">
                         <i class="fa-solid fa-gear text-amber-400"></i>
                         <span class="hidden md:inline">Conta</span>
                     </button>
@@ -1188,7 +1188,7 @@
     </div>
 
     <!-- MODAL: CONFIGURAÇÕES E CONTA DO USUÁRIO (Estilo TopIbo / Netflix) -->
-    <div id="account-settings-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4 select-none">
+    <div id="account-settings-modal" class="fixed inset-0 bg-black/85 z-[9999] pointer-events-auto backdrop-blur-md items-center justify-center hidden p-4 select-none">
         <div class="glass-card bg-[#0e0e12]/98 border border-slate-800 rounded-3xl max-w-md w-full p-6 text-white shadow-2xl relative">
             <button onclick="window.closeAccountModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
                 <i class="fa-solid fa-xmark"></i>
@@ -2061,6 +2061,46 @@
                 spinner.classList.remove('flex');
             }
         }
+
+        window.openAccountModal = function () {
+            const modal = document.getElementById('account-settings-modal');
+            if (modal) {
+                const userDisplay = document.getElementById('settings-username-display');
+                const avatarBadge = document.getElementById('settings-avatar-badge');
+                const storedUser = localStorage.getItem('mk21_last_username') || 'Usuário MK21';
+                if (userDisplay) userDisplay.textContent = storedUser;
+                if (avatarBadge) avatarBadge.textContent = (storedUser.charAt(0) || 'M').toUpperCase();
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        };
+
+        window.closeAccountModal = function () {
+            const modal = document.getElementById('account-settings-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.switchSettingsTab = function (tab) {
+            const tabs = ['account', 'preferences', 'notifications'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                const content = document.getElementById(`tab-content-${t}`);
+                if (t === tab) {
+                    if (btn) {
+                        btn.className = "settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl bg-slate-900 border border-amber-500/40 text-amber-400 flex items-center justify-center gap-1.5 transition-all";
+                    }
+                    if (content) content.classList.remove('hidden');
+                } else {
+                    if (btn) {
+                        btn.className = "settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all";
+                    }
+                    if (content) content.classList.add('hidden');
+                }
+            });
+        };
 
         const hlsPlayer = new Hls({
             enableWorker: true,
