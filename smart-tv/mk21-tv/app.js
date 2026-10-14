@@ -1075,8 +1075,9 @@ async function loadServer(forceRefresh = false) {
         if (type === 'MOVIE' && !loadMovies) return;
         if (type === 'SERIES' && !loadSeries) return;
 
-        // Bloqueio 18+ rigoroso: não armazena nem processa se estiver bloqueado
-        if (!isAdultUnlocked && (slim.isAdult || isAdult(slim.name) || isAdult(slim.group))) return;
+        // Bloqueio 18+ reversível: preserva no catálogo e indexador, filtrando via UI
+        const adultItem = slim.isAdult || isAdult(slim.name) || isAdult(slim.group);
+        slim.isAdult = !!adultItem;
 
         indexWriter.add(slim);
         if (allCatalog[type]) {
@@ -1698,6 +1699,12 @@ async function updateSmartTvEpg(item) {
   if (pBar) pBar.style.width = `${sim.progressPercent}%`;
   if ($('epgNext')) $('epgNext').textContent = `A seguir: ${sim.nextTitle}`;
 
+  // Sincroniza EPG Overlay do Fullscreen HUD
+  if ($('fsEpgCurrentTitle')) $('fsEpgCurrentTitle').textContent = sim.title;
+  if ($('fsEpgTimeBadge')) $('fsEpgTimeBadge').textContent = sim.timeStr;
+  if ($('fsEpgFill')) $('fsEpgFill').style.width = `${sim.progressPercent}%`;
+  if ($('fsEpgNextTitle')) $('fsEpgNextTitle').textContent = sim.nextTitle;
+
   if (item.contentType !== 'LIVE') {
     if ($('epgStatus')) $('epgStatus').textContent = '▶ Reproduzindo VOD';
     const useTmdb = localStorage.getItem('mk21_use_tmdb') !== 'false';
@@ -1783,6 +1790,12 @@ function applyRealSmartTvEpg(item, listings) {
     const nextH = new Date(next.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     $('epgNext').textContent = `A seguir (${nextH}): ${next.title}`;
   }
+
+  // Sincroniza EPG Real no Fullscreen HUD
+  if ($('fsEpgCurrentTitle')) $('fsEpgCurrentTitle').textContent = current.title;
+  if ($('fsEpgTimeBadge')) $('fsEpgTimeBadge').textContent = `${startH} - ${stopH}`;
+  if ($('fsEpgFill')) $('fsEpgFill').style.width = `${pct}%`;
+  if ($('fsEpgNextTitle')) $('fsEpgNextTitle').textContent = next ? next.title : 'Programação Normal';
 }
 
 // METADADOS TMDB ENRIQUECIDOS PARA FILMES E SÉRIES
@@ -2083,6 +2096,10 @@ function showFsHud(show) {
     if ($('fsVodProgressBox')) {
       if (isVod) $('fsVodProgressBox').classList.remove('hidden');
       else $('fsVodProgressBox').classList.add('hidden');
+    }
+    if ($('fsEpgOverlayBox')) {
+      if (isVod) $('fsEpgOverlayBox').classList.add('hidden');
+      else $('fsEpgOverlayBox').classList.remove('hidden');
     }
     updateVodProgressTimeline();
   } else {
@@ -3457,6 +3474,8 @@ function mk21GetOpenModal() {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
   }
+  const dynamic = document.querySelector('.app-modal:not(.hidden), .modal-overlay:not(.hidden), [role="dialog"]:not(.hidden), .modal-container:not(.hidden)');
+  if (dynamic && mk21IsVisible(dynamic)) return dynamic;
   return null;
 }
 function mk21GetFocusables() {
@@ -3466,7 +3485,10 @@ function mk21GetFocusables() {
     'button:not([disabled])',
     'input:not([disabled])',
     'select:not([disabled])',
+    'textarea:not([disabled])',
     '[tabindex="0"]',
+    '.modal-btn',
+    '.modal-button',
     '.header-focusable',
     '.list-item-btn',
     '.cat-item-btn',
@@ -3594,6 +3616,84 @@ document.addEventListener('keydown', function (e) {
   const keyCodes = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27, Backspace: 8, GoBack: 461 };
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
+
+  // 1.1 Focus Trap & Gestão de Foco para Smart TVs (webOS, Tizen, Android TV)
+  const activeModal = mk21GetOpenModal();
+  if (activeModal) {
+    const focusableElements = Array.from(activeModal.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), .modal-btn, .modal-button, .ctrl-btn, .pin-key, .btn-server-connect, .btn-server-edit, .btn-server-delete, .hud-ctrl-btn'
+    )).filter(mk21IsVisible);
+
+    if (focusableElements.length > 0) {
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      // Se o foco atual estiver fora do modal, força imediatamente para o primeiro elemento
+      if (!activeModal.contains(document.activeElement) || focusableElements.indexOf(document.activeElement) === -1) {
+        firstElement.focus();
+      }
+
+      // Interceptação de Voltar / Back (webOS 461, Tizen 10009, Escape 27, Backspace 8)
+      if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+        e.preventDefault();
+        e.stopPropagation();
+        activeModal.classList.add('hidden');
+        activeZone = 'channels';
+        focusActiveElement();
+        return;
+      }
+
+      // Mapeamento de teclas de navegação do modal
+      const isTab = key === 'Tab' || k === 9;
+      const isDown = key === 'ArrowDown' || k === 40;
+      const isUp = key === 'ArrowUp' || k === 38;
+
+      if (isTab) {
+        if (e.shiftKey && document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+          return;
+        } else if (!e.shiftKey && document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+          return;
+        }
+      }
+
+      if (isDown && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement.focus();
+        return;
+      } else if (isUp && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement.focus();
+        return;
+      }
+
+      // Navegação D-Pad espacial restrita estritamente ao modal ativo
+      if (k === 37 || key === 'ArrowLeft') {
+        e.preventDefault();
+        mk21MoveFocus('left');
+        return;
+      }
+      if (k === 39 || key === 'ArrowRight') {
+        e.preventDefault();
+        mk21MoveFocus('right');
+        return;
+      }
+      if (k === 38 || key === 'ArrowUp') {
+        e.preventDefault();
+        mk21MoveFocus('up');
+        return;
+      }
+      if (k === 40 || key === 'ArrowDown') {
+        e.preventDefault();
+        mk21MoveFocus('down');
+        return;
+      }
+    }
+  }
+
   if (ae && ae.id === 'inputSearch') {
     if (k === 40 || key === 'ArrowDown') {
       e.preventDefault();

@@ -1,17 +1,17 @@
 {
-  "version": "1.1.0",
-  "versionCode": 13,
-  "tagName": "v1.1.0",
-  "name": "MK21 MultiServidor v1.1.0",
-  "title": "MK21 Play v1.1.0",
-  "releaseNotes": "• Otimização de Buffer inicial para abertura rápida de canais (Fast Start)\n• Implementação de Retry automático com reconexão para streams instáveis\n• Melhorias de performance e virtualização na rolagem de listas de canais\n• Feedback visual aprimorado com status de conexão e reconexão",
-  "body": "• Otimização de Buffer inicial para abertura rápida de canais (Fast Start)\n• Implementação de Retry automático com reconexão para streams instáveis\n• Melhorias de performance e virtualização na rolagem de listas de canais\n• Feedback visual aprimorado com status de conexão e reconexão",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.1.0_all.ipk",
+  "version": "1.1.1",
+  "versionCode": 111,
+  "tagName": "v1.1.1",
+  "name": "MK21 MultiServidor v1.1.1",
+  "title": "MK21 Play v1.1.1",
+  "releaseNotes": "• Focus Trap e gestão de foco sem escape no controle D-Pad para Smart TV\n• Sincronização Phased Loading com priorização de canais Ao Vivo\n• Controle Parental reversível via PIN sem exclusão de catálogo\n• EPG Overlay no Fullscreen OSD com progresso em tempo real\n• Mini player fixo sem deslocamento na navegação de canais",
+  "body": "• Focus Trap e gestão de foco sem escape no controle D-Pad para Smart TV\n• Sincronização Phased Loading com priorização de canais Ao Vivo\n• Controle Parental reversível via PIN sem exclusão de catálogo\n• EPG Overlay no Fullscreen OSD com progresso em tempo real\n• Mini player fixo sem deslocamento na navegação de canais",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.1.1_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "apkSha256": "458e70c203085053e973b2de497e31eb287972ca908b5ec1886d19640815f175",
   "ipkSha256": "72771c58299ecd001c22dbf511f7a9971e7fed16690a9644c7011998ab525965",
   "sizeBytes": 24889375,
-  "ipkSizeBytes": 134878,
-  "updatedAt": "2026-10-13"
+  "ipkSizeBytes": 136878,
+  "updatedAt": "2026-10-14"
 }

@@ -1,11 +1,11 @@
-# BGs Streaming (MK21 MultiServidor) — v1.1.0
+# BGs Streaming (MK21 MultiServidor) — v1.1.1
 
 <div align="center">
   <img src="web/icon-192.png" alt="BGs Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v1.1.0-red.svg)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v1.1.1-red.svg)](CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)

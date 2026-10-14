@@ -81,6 +81,23 @@
           <!-- Controles em tela cheia modernos com barra de progresso e mudança de canal -->
           <div id="fsHudBar" class="fs-hud-bar hidden">
             <div class="fs-hud-title" id="fsHudTitle">Canal</div>
+
+            <!-- EPG Overlay (Estilo APK / OTT) para TV ao Vivo -->
+            <div id="fsEpgOverlayBox" class="fs-epg-overlay-box">
+              <div class="fs-epg-current-row">
+                <span class="fs-epg-label">AGORA:</span>
+                <span id="fsEpgCurrentTitle" class="fs-epg-current-title">Carregando programação...</span>
+                <span id="fsEpgTimeBadge" class="fs-epg-time-badge">--:--</span>
+              </div>
+              <div class="fs-epg-track">
+                <div id="fsEpgFill" class="fs-epg-fill" style="width: 35%;"></div>
+              </div>
+              <div class="fs-epg-next-row" id="fsEpgNextRow">
+                <span class="fs-epg-next-label">A SEGUIR:</span>
+                <span id="fsEpgNextTitle" class="fs-epg-next-title">Programação Normal</span>
+              </div>
+            </div>
+
             <!-- Barra de progresso para Filmes e Séries (VOD) -->
             <div id="fsVodProgressBox" class="fs-vod-progress-box hidden">
               <span id="fsTimeCurrent" class="fs-time-text">00:00:00</span>

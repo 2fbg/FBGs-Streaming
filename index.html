@@ -306,7 +306,7 @@
                         <i class="fa-solid fa-circle-half-stroke text-[#E50914]"></i>
                         <span class="hidden md:inline">Alto Contraste</span>
                     </button>
-                    <button id="account-settings-btn" onclick="window.openAccountModal();" style="z-index: 100; pointer-events: auto; cursor: pointer;" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-bold rounded-xl outline-none transition-all duration-200 flex items-center gap-1.5" title="Configurações e Detalhes da Conta">
+                    <button id="account-settings-btn" onclick="window.handleSettingsClick(event);" style="position: relative; z-index: 100; pointer-events: auto; cursor: pointer;" class="btn-settings px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 text-xs font-bold rounded-xl outline-none transition-all duration-200 flex items-center gap-1.5" title="Configurações e Detalhes da Conta">
                         <i class="fa-solid fa-gear text-amber-400"></i>
                         <span class="hidden md:inline">Conta</span>
                     </button>
@@ -2062,7 +2062,15 @@
             }
         }
 
+        window.handleSettingsClick = function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.stopPropagation) e.stopPropagation();
+            console.log("Abrindo configurações...");
+            window.openAccountModal();
+        };
+
         window.openAccountModal = function () {
+            console.log("Abrindo configurações...");
             const modal = document.getElementById('account-settings-modal');
             if (modal) {
                 const userDisplay = document.getElementById('settings-username-display');
@@ -2072,6 +2080,10 @@
                 if (avatarBadge) avatarBadge.textContent = (storedUser.charAt(0) || 'M').toUpperCase();
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
+                try {
+                    const firstBtn = modal.querySelector('button, input, [tabindex="0"]');
+                    if (firstBtn) setTimeout(() => firstBtn.focus(), 60);
+                } catch (e) {}
             }
         };
 

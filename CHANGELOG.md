@@ -2,6 +2,30 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [v1.1.1] - 2026-10-14
+
+### 🎯 Navegação Smart TV, Phased Loading & Controle Parental Reversível
+- **[v1.1.1] - Focus Trap Rigoroso para Smart TV (D-Pad):**
+  - Interceptação de eventos `keydown` com ciclo fechado entre o primeiro e último elemento focável dentro de modais, impedindo vazamento de foco para elementos de fundo.
+  - Mapeamento completo dos keycodes de controle remoto: `37 (Left)`, `38 (Up)`, `39 (Right)`, `40 (Down)`, `13 (Enter)`, `9 (Tab)`, `461 (webOS Back)`, `10009 (Tizen Back)` e `27 (Escape)`.
+  - Redesign do modal (`.modal-container`, `.modal-content`, `.modal-btn`) com foco destacado em laranja MK21 (`#ff9800`), `transform: scale(1.05)` e rolagem restrita ao `.modal-content-scroll`.
+- **[v1.1.1] - Sincronização Phased Loading (Carregamento por Fases):**
+  - **Fase 1 (Síncrona/Prioritária):** Extração e renderização imediata dos canais Ao Vivo (Live), liberando a interface do usuário e o player instantaneamente.
+  - **Fase 2 (Assíncrona/Background):** Processamento contínuo de Filmes e Séries (VOD) em background sem congelar o Main Thread da TV ou Web.
+  - Indicador dinâmico de porcentagem de sincronização exibido ao lado do nome do servidor no Header.
+- **[v1.1.1] - Controle Parental Reversível via PIN (Sem Exclusão de Catálogo):**
+  - Canais e categorias adultas são preservados integralmente na memória e indexador (`isAdult: true`), alternando visibilidade em tempo de execução via flag de sessão desbloqueada por senha (PIN).
+- **[v1.1.1] - Player OSD & Mini Player Fixo:**
+  - EPG Overlay integrado ao Fullscreen HUD com identificador de canal, programa atual (`AGORA`), barra de progresso em tempo real e próximo programa (`A SEGUIR`).
+  - Mini Player fixo com painel estático (`col-player`) sem deslocamento de layout durante a rolagem de listas de canais.
+  - Correção de z-index, classe `.btn-settings` e handler direto no botão de configurações.
+- **[v1.1.1] - Versionamento Android & Smart TV:**
+  - `versionCode: 111` e `versionName: "1.1.1"` no `app/build.gradle.kts`.
+  - `appinfo.json`, `config.xml` e `version.json` atualizados para `v1.1.1`.
+  - Pacote `.ipk` para LG webOS gerado com sucesso: `mk21play_1.1.1_all.ipk`.
+
+---
+
 ## [v1.1.0] - 2026-10-13
 
 ### 🚀 Otimizações de Player e Usabilidade (Foco Cliente)
