@@ -99,10 +99,21 @@ fun InternalPlayerScreen(
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
-        // Hardware Accelerated decoders com fallback defensivo
+        // Hardware Accelerated decoders com fallback defensivo e suporte experimental a AV1
         val renderersFactory = DefaultRenderersFactory(context)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                val decoders = androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(
+                    mimeType,
+                    requiresSecureDecoder,
+                    requiresTunnelingDecoder
+                )
+                if (mimeType.contains("av01", ignoreCase = true) || mimeType.contains("av1", ignoreCase = true)) {
+                    android.util.Log.i("InternalPlayerScreen", "Decodificador AV1 ativo: ${decoders.map { it.name }}")
+                }
+                decoders
+            }
 
         ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -131,16 +142,32 @@ fun InternalPlayerScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
+                val isHostOrDnsError = error.errorCodeName.contains("DNS", ignoreCase = true) ||
+                        error.cause is java.net.UnknownHostException ||
+                        error.cause?.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
+                        error.message?.contains("Unable to resolve host", ignoreCase = true) == true
+
                 if (retryCount < 5) {
                     retryCount++
                     val backoff = (1000L * (1L shl (retryCount - 1))).coerceAtMost(6000L)
-                    reconnectingMessage = "Reconectando canal (Tentativa $retryCount/5)..."
+                    reconnectingMessage = if (isHostOrDnsError) {
+                        "DNS instável detectado. Conectando via DNS Failover (Tentativa $retryCount/5)..."
+                    } else {
+                        "Reconectando canal (Tentativa $retryCount/5)..."
+                    }
                     coroutineScope.launch {
                         delay(backoff)
                         try {
+                            val targetUrl = if (isHostOrDnsError) {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.example.network.DnsResolver.resolveUrlWithFailover(item.url)
+                                }
+                            } else {
+                                item.url
+                            }
                             exoPlayer.stop()
                             exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(MediaItem.fromUri(item.url))
+                            exoPlayer.setMediaItem(MediaItem.fromUri(targetUrl))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {

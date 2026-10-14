@@ -2349,6 +2349,64 @@ function openEpgGuideModal() {
       </div>
     `;
   }
+// ==========================================================================
+// v1.2.0 FASE 3: DNS FAILOVER AUTOMÁTICO (CLOUDFLARE 1.1.1.1 / GOOGLE 8.8.8.8)
+// ==========================================================================
+const dnsFailoverCache = new Map();
+
+async function attemptDnsFailover(originalUrl) {
+  try {
+    const parsed = new URL(originalUrl);
+    const host = parsed.hostname;
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) return originalUrl;
+
+    if (dnsFailoverCache.has(host)) {
+      const cachedIp = dnsFailoverCache.get(host);
+      return originalUrl.replace(host, cachedIp);
+    }
+
+    let resolvedIp = null;
+    try {
+      const res = await fetch(`https://1.1.1.1/dns-query?name=${encodeURIComponent(host)}&type=A`, {
+        headers: { 'Accept': 'application/dns-json' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.Answer && json.Answer.length > 0) {
+          const aRec = json.Answer.find(a => a.type === 1);
+          if (aRec && aRec.data) resolvedIp = aRec.data;
+        }
+      }
+    } catch (e) {
+      console.warn('[DNS Failover] Cloudflare DoH falhou:', e);
+    }
+
+    if (!resolvedIp) {
+      try {
+        const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.Answer && json.Answer.length > 0) {
+            const aRec = json.Answer.find(a => a.type === 1);
+            if (aRec && aRec.data) resolvedIp = aRec.data;
+          }
+        }
+      } catch (e) {
+        console.warn('[DNS Failover] Google DoH falhou:', e);
+      }
+    }
+
+    if (resolvedIp) {
+      console.info(`[DNS Failover] Host ${host} resolvido para ${resolvedIp}`);
+      dnsFailoverCache.set(host, resolvedIp);
+      return originalUrl.replace(host, resolvedIp);
+    }
+  } catch (err) {
+    console.debug('[DNS Failover Exception]', err);
+  }
+  return originalUrl;
 }
 
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X

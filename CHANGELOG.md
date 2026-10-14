@@ -4,24 +4,30 @@ Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
 ## [v1.2.0] - 2026-10-14
 
-### ⚡ Ultra-Responsiveness & Intelligence (Fase 1 e Fase 2)
-- **[v1.2.0] - Zapping instantâneo via pré-carregamento de manifestos:**
-  - Lógica de pre-fetch dos canais adjacentes (anterior e posterior) ao carregar qualquer canal, baixando silenciosamente o manifesto `.m3u8` e metadados com cabeçalho `Range: bytes=0-32767`.
+### 🚀 Ultra-Responsiveness & Intelligence (Release Final)
+- **[v1.2.0] - Busca Global Omnisearch (Ao Vivo, Filmes e Séries):**
+  - Barra de busca universal que filtra simultaneamente o catálogo completo (Live, VOD e Séries), agrupando os resultados por abas categorizadas e contadores em tempo real.
+  - Acesso instantâneo via tecla Vermelha ou atalho `Ctrl+F`/`Search` em controles remotos.
+- **[v1.2.0] - Zapping Instantâneo e Pré-carregamento de Canais:**
+  - Pré-carregamento inteligente dos canais adjacentes (anterior e posterior), baixando antecipadamente o manifesto `.m3u8` e metadados (`Range: bytes=0-32767`).
   - Instâncias leves paralelas de Hls.js (Web/Smart TV) com buffer enxuto (2s) e Media3/OkHttp (Android) garantindo transição sem latência ou tela preta ao alternar canais com Next/Prev.
   - Pool de manifesto em memória com política LRU e cancelamento ativo via `AbortController` / `Job` para evitar consumo desnecessário de banda.
-- **[v1.2.0] - Suporte a teclas de atalho coloridas para Smart TVs:**
-  - **Vermelho (Red / KeyCode 403):** Alternar Mute com feedback visual OSD no player.
-  - **Verde (Green / KeyCode 404):** Adicionar/Remover dos Favoritos instantaneamente com notificação na tela.
-  - **Amarelo (Yellow / KeyCode 405):** Alternar proporção de tela (Aspect Ratio: Original/Ajustar, 16:9/Esticar e Zoom/Cortar Bordas).
-  - **Azul (Blue / KeyCode 406):** Exibir painel de diagnóstico técnico do Stream (Resolução, Codec, Bitrate e Buffer ativo).
-  - **Teclas Numéricas (0-9):** Troca direta de canal por ID numérico com overlay flutuante e timer de confirmação.
-- **[v1.2.0] - Sistema de persistência "Continuar Assistindo" para VOD:**
+- **[v1.2.0] - Teclas de Atalho Coloridas e Numéricas para Smart TV:**
+  - **Vermelho (Red / KeyCode 403):** Abrir Busca Global (Omnisearch) / Alternar Mute.
+  - **Verde (Green / KeyCode 404):** Marcar/Desmarcar Favorito instantaneamente com notificação OSD.
+  - **Amarelo (Yellow / KeyCode 405):** Alternar proporção de tela (Aspect Ratio: Original, 16:9, Zoom).
+  - **Azul (Blue / KeyCode 406):** Exibir Guia de Programação (EPG) completo e diagnóstico técnico da transmissão (Resolução, Codec, Bitrate e Buffer ativo).
+  - **Teclas Numéricas (0-9):** Troca direta de canal por ID com overlay flutuante e temporizador de confirmação.
+- **[v1.2.0] - Persistência "Continuar Assistindo" e modo PiP (Android):**
   - Rotina assíncrona `saveProgress(contentId, currentTime, duration)` disparada a cada 10 segundos durante o playback de Filmes e Séries.
-  - Seção "Continuar Assistindo" na tela inicial com os últimos 5 conteúdos iniciados e barra de progresso visual baseada no tempo salvo.
-  - Retomada automática (Auto-Resume) a partir do timestamp armazenado no IndexedDB/Room.
-- **[v1.2.0] - Image Proxy, WebP Logo Cache & Memory Shield:**
-  - Cache dinâmico de logotipos em formato WebP/SVG com lazy loading e decoding assíncrono.
-  - Memory Shield que monitora o heap e libera recursos em eventos de memória baixa (`webOSLowMemory`) para Smart TVs antigas.
+  - Seção "Continuar Assistindo" na tela inicial com os últimos 5 conteúdos iniciados e barra de progresso visual baseada no tempo salvo com auto-resume.
+  - Modo Picture-in-Picture (PiP) nativo no Android com `android:supportsPictureInPicture="true"`, ativação via `onUserLeaveHint` e ações remotas (Play/Pause, Próximo, Anterior).
+- **[v1.2.0] - Resiliência de Rede via DNS Failover Automático:**
+  - Implementação de `DnsResolver` com resolução DoH (DNS-over-HTTPS) via Cloudflare (1.1.1.1) e Google (8.8.8.8) para links bloqueados ou com falhas em operadoras locais.
+  - Fallback automático e transparente em streams HLS e VOD no Android e Web/Smart TV antes de emitir erro de reprodução.
+- **[v1.2.0] - Suporte a Codec AV1 & Image Proxy WebP com Memory Shield:**
+  - Suporte experimental a decodificadores AV1 (hardware/software) configurado no `DefaultRenderersFactory` do Media3/ExoPlayer para menor consumo de dados.
+  - Cache dinâmico de logotipos em formato WebP/SVG e Memory Shield automático em eventos de memória baixa (`webOSLowMemory`) para Smart TVs antigas.
 
 ---
 
