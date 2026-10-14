@@ -8,8 +8,9 @@ import java.net.UnknownHostException
 /**
  * Resolvedor DNS customizado para forçar resolução IPv4 e melhorar 
  * a estabilidade de conexão em redes com IPv6 instável (comum em IPTV).
+ * Implementado como 'object' (Singleton) para uso direto conforme esperado pelo código.
  */
-class CustomDnsResolver : Dns {
+object DnsResolver : Dns {
     @Throws(UnknownHostException::class)
     override fun lookup(hostname: String): List<InetAddress> {
         if (hostname.isEmpty()) {

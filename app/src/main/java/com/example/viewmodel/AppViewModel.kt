@@ -1,4 +1,5 @@
 package com.example.viewmodel
+import com.example.network.DnsResolver
 
 import android.app.Application
 import android.content.Context
