@@ -1411,6 +1411,16 @@ function renderItemsList() {
         btn.appendChild(tag);
       }
 
+      if (item.progressPct && item.progressPct > 0) {
+        const pTrack = document.createElement('div');
+        pTrack.className = 'continue-progress-track';
+        const pFill = document.createElement('div');
+        pFill.className = 'continue-progress-fill';
+        pFill.style.width = Math.min(100, item.progressPct) + '%';
+        pTrack.appendChild(pFill);
+        btn.appendChild(pTrack);
+      }
+
       btn.onclick = () => playStream(item);
 
       let lastClick = 0;
@@ -1906,6 +1916,189 @@ function prefetchAdjacentChannels(item) {
   }, 400);
 }
 
+// 1.1 INSTÂNCIA LEVE HLS PARA PRE-FETCH DE BUFFER DO PRÓXIMO CANAL
+let prefetchHlsNext = null;
+
+function prefetchNextChannelStream(nextItem) {
+  if (!nextItem || !nextItem.url) return;
+  if (!nextItem.url.toLowerCase().includes('.m3u8')) return;
+  if (typeof Hls === 'undefined' || !Hls.isSupported()) return;
+
+  try {
+    if (prefetchHlsNext) {
+      try { prefetchHlsNext.destroy(); } catch (e) {}
+      prefetchHlsNext = null;
+    }
+    prefetchHlsNext = new Hls({
+      enableWorker: true,
+      lowLatencyMode: true,
+      startFragPrefetch: true,
+      maxBufferLength: 2,
+      maxMaxBufferLength: 4,
+      maxBufferSize: 2 * 1000 * 1000
+    });
+    prefetchHlsNext.loadSource(nextItem.url);
+  } catch (e) {
+    console.debug('[Prefetch Hls Next]', e);
+  }
+}
+
+// ==========================================================================
+// v1.2.0 FASE 2: PERSISTÊNCIA "CONTINUAR ASSISTINDO" (A CADA 10 SEGUNDOS)
+// ==========================================================================
+let progressSaveInterval = null;
+
+function startProgressTracker(item) {
+  clearInterval(progressSaveInterval);
+  if (!item || item.contentType === 'LIVE') return;
+
+  progressSaveInterval = setInterval(() => {
+    const video = $('tvPlayer');
+    if (!video || video.paused || !video.duration || isNaN(video.duration)) return;
+    saveProgress(item.url, video.currentTime, video.duration);
+  }, 10000);
+}
+
+function saveProgress(contentId, currentTime, duration) {
+  if (!activeItem || activeItem.contentType === 'LIVE') return;
+  if (!currentTime || currentTime < 3) return;
+
+  const progressPct = Math.min(100, Math.max(1, Math.round((currentTime / duration) * 100)));
+  const existingIdx = continueWatchingList.findIndex(it => it.url === contentId);
+  const entry = {
+    name: activeItem.name,
+    group: activeItem.group,
+    logo: activeItem.logo,
+    url: contentId,
+    contentType: activeItem.contentType,
+    currentTime: Math.round(currentTime),
+    duration: Math.round(duration),
+    progressPct,
+    timestamp: Date.now()
+  };
+
+  if (existingIdx >= 0) {
+    continueWatchingList.splice(existingIdx, 1);
+  }
+  continueWatchingList.unshift(entry);
+  if (continueWatchingList.length > 50) continueWatchingList = continueWatchingList.slice(0, 50);
+
+  try {
+    localStorage.setItem('mk21_continue_watching', JSON.stringify(continueWatchingList));
+  } catch (e) {}
+}
+
+// ==========================================================================
+// v1.2.0 FASE 2: TECLAS COLORIDAS & TECLAS NUMÉRICAS (0-9)
+// ==========================================================================
+const ASPECT_MODES = [
+  { id: 'fit', label: 'Proporção: Original (Ajustar)', objectFit: 'contain' },
+  { id: 'fill', label: 'Proporção: 16:9 (Esticar)', objectFit: 'fill' },
+  { id: 'zoom', label: 'Proporção: Zoom (Cortar Bordas)', objectFit: 'cover' }
+];
+let currentAspectIdx = 0;
+
+function cycleAspectRatio() {
+  const video = $('tvPlayer');
+  if (!video) return;
+  currentAspectIdx = (currentAspectIdx + 1) % ASPECT_MODES.length;
+  const mode = ASPECT_MODES[currentAspectIdx];
+  video.style.objectFit = mode.objectFit;
+  showChannelBanner(mode.label);
+  if ($('diagAspect')) $('diagAspect').textContent = mode.label;
+}
+
+function toggleMute() {
+  const video = $('tvPlayer');
+  if (!video) return;
+  video.muted = !video.muted;
+  showChannelBanner(video.muted ? '🔇 Áudio Mudo' : '🔊 Áudio Ativado');
+}
+
+function toggleStreamDiagnostics() {
+  const modal = $('modalStreamDiagnostics');
+  if (!modal) return;
+  if (!modal.classList.contains('hidden')) {
+    modal.classList.add('hidden');
+    activeZone = 'channels';
+    focusActiveElement();
+    return;
+  }
+  updateStreamDiagnosticsInfo();
+  modal.classList.remove('hidden');
+  activeZone = 'modalStreamDiagnostics';
+  const closeBtn = $('btnCloseDiagnostics');
+  if (closeBtn) closeBtn.focus();
+}
+
+function updateStreamDiagnosticsInfo() {
+  const video = $('tvPlayer');
+  if ($('diagTitle')) $('diagTitle').textContent = activeItem ? activeItem.name : 'Nenhum canal ativo';
+  if (video) {
+    const w = video.videoWidth || 0;
+    const h = video.videoHeight || 0;
+    if ($('diagResolution')) $('diagResolution').textContent = (w && h) ? `${w}x${h} (${w >= 1920 ? 'FHD' : (w >= 1280 ? 'HD' : 'SD')})` : 'Detectando resolução...';
+
+    let bufferedSec = 0;
+    if (video.buffered && video.buffered.length > 0) {
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (video.currentTime >= video.buffered.start(i) && video.currentTime <= video.buffered.end(i)) {
+          bufferedSec = Math.round(video.buffered.end(i) - video.currentTime);
+          break;
+        }
+      }
+    }
+    if ($('diagBuffer')) $('diagBuffer').textContent = `${bufferedSec}s de buffer`;
+
+    if (hlsInstance && hlsInstance.levels && hlsInstance.currentLevel >= 0) {
+      const lvl = hlsInstance.levels[hlsInstance.currentLevel];
+      if (lvl) {
+        const br = lvl.bitrate ? (lvl.bitrate / 1000000).toFixed(2) + ' Mbps' : 'Automático (~3.5 Mbps)';
+        if ($('diagBitrate')) $('diagBitrate').textContent = br;
+        if ($('diagCodec')) $('diagCodec').textContent = lvl.codecs || (activeItem && activeItem.url.includes('.m3u8') ? 'HLS (AVC/AAC)' : 'MPEG-TS');
+      }
+    } else {
+      if ($('diagBitrate')) $('diagBitrate').textContent = 'Stream Direto (~4.0 Mbps)';
+      if ($('diagCodec')) $('diagCodec').textContent = activeItem && activeItem.url.includes('.m3u8') ? 'HLS (H.264/AAC)' : 'MPEG-TS/MP4';
+    }
+    if ($('diagAspect')) $('diagAspect').textContent = ASPECT_MODES[currentAspectIdx].label;
+  }
+}
+
+// ZAPPING DIRETO POR TECLAS NUMÉRICAS (0-9)
+let channelNumberBuffer = '';
+let channelNumberTimer = null;
+
+function handleDigitPress(digit) {
+  channelNumberBuffer += String(digit);
+  const overlay = $('channelNumberOverlay');
+  const digits = $('channelNumberDigits');
+  if (digits) digits.textContent = channelNumberBuffer;
+  if (overlay) overlay.classList.remove('hidden');
+
+  clearTimeout(channelNumberTimer);
+  channelNumberTimer = setTimeout(() => {
+    commitChannelNumber();
+  }, 1800);
+}
+
+function commitChannelNumber() {
+  const overlay = $('channelNumberOverlay');
+  if (overlay) overlay.classList.add('hidden');
+  if (!channelNumberBuffer) return;
+  const channelNum = parseInt(channelNumberBuffer, 10);
+  channelNumberBuffer = '';
+
+  if (!currentFilteredItems || currentFilteredItems.length === 0) return;
+  const targetIdx = channelNum - 1;
+  if (targetIdx >= 0 && targetIdx < currentFilteredItems.length) {
+    playStream(currentFilteredItems[targetIdx]);
+    showChannelBanner(`Canal ${channelNum}: ${currentFilteredItems[targetIdx].name}`);
+  } else {
+    showChannelBanner(`Canal ${channelNum} não encontrado`);
+  }
+}
+
 // 2. IMAGE PROXY & WEBP LOGO CACHE
 const logoCacheMap = new Map();
 
@@ -2165,6 +2358,20 @@ function playStream(item) {
   recordWatchedItem(item);
   saveLastChannel(item);
   prefetchAdjacentChannels(item);
+  startProgressTracker(item);
+
+  const video = $('tvPlayer');
+  if (item.currentTime && item.currentTime > 5 && (item.contentType === 'MOVIE' || item.contentType === 'SERIES' || currentContentType === 'MOVIE' || currentContentType === 'SERIES')) {
+    const resumeAt = item.currentTime;
+    const onLoaded = function () {
+      video.removeEventListener('loadedmetadata', onLoaded);
+      try {
+        video.currentTime = resumeAt;
+        showChannelBanner('▶ Continuando em ' + formatTimeSec(resumeAt));
+      } catch (e) {}
+    };
+    video.addEventListener('loadedmetadata', onLoaded);
+  }
 
   // Feedback imediato na troca de canal
   if ($('epgStatus')) $('epgStatus').textContent = '⏳ Sintonizando...';
@@ -2197,7 +2404,6 @@ function playStream(item) {
 
   showChannelBanner(item.name);
 
-  const video = $('tvPlayer');
   if (hlsInstance) {
     hlsInstance.destroy();
     hlsInstance = null;
@@ -3791,7 +3997,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -4214,6 +4420,11 @@ document.addEventListener('keydown', function (e) {
 
   // OK / Enter / Space
   if (k === 13 || k === 32 || key === 'Enter' || key === ' ') {
+    if (channelNumberBuffer && channelNumberBuffer.length > 0) {
+      e.preventDefault();
+      commitChannelNumber();
+      return;
+    }
     if (ae && ae.tagName === 'INPUT' && (k === 32 || key === ' ')) return;
     if (ae && ae.id === 'inputSearch') {
       // Enter confirma a busca, fecha o teclado nativo e devolve o foco ao resultado.
@@ -4235,10 +4446,19 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // Atalhos de teclas coloridas do controle remoto (Smart TV v1.2.0)
+  // Suporte a Teclas Numéricas (0-9) para troca direta de canal por ID
+  const isDigitKey = (k >= 48 && k <= 57) || (k >= 96 && k <= 105);
+  if (isDigitKey && !isTextInput) {
+    e.preventDefault();
+    const digit = (k >= 96 && k <= 105) ? (k - 96) : (k - 48);
+    handleDigitPress(digit);
+    return;
+  }
+
+  // Atalhos de teclas coloridas do controle remoto (Smart TV v1.2.0 - Fase 2)
   if (k === 403 || key === 'Red' || key === 'ColorF0Red') {
     e.preventDefault();
-    if (typeof openOmnisearch === 'function') openOmnisearch();
+    toggleMute();
     return;
   }
   if (k === 404 || key === 'Green' || key === 'ColorF1Green') {
@@ -4254,13 +4474,12 @@ document.addEventListener('keydown', function (e) {
   }
   if (k === 405 || key === 'Yellow' || key === 'ColorF2Yellow') {
     e.preventDefault();
-    if (typeof openAudioSubsModal === 'function') openAudioSubsModal();
+    cycleAspectRatio();
     return;
   }
   if (k === 406 || key === 'Blue' || key === 'ColorF3Blue') {
     e.preventDefault();
-    if (typeof openEpgGuideModal === 'function') openEpgGuideModal();
-    else if (typeof toggleFullscreen === 'function') toggleFullscreen();
+    toggleStreamDiagnostics();
     return;
   }
 }, true);
@@ -4430,6 +4649,13 @@ if ($('inputOmnisearch')) {
 
 if ($('btnCloseEpgGuide')) $('btnCloseEpgGuide').onclick = () => {
   const modal = $('modalEpgGuide');
+  if (modal) modal.classList.add('hidden');
+  activeZone = 'channels';
+  focusActiveElement();
+};
+
+if ($('btnCloseDiagnostics')) $('btnCloseDiagnostics').onclick = () => {
+  const modal = $('modalStreamDiagnostics');
   if (modal) modal.classList.add('hidden');
   activeZone = 'channels';
   focusActiveElement();

@@ -1721,3 +1721,48 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   color: #94a3b8;
   line-height: 1.4;
 }
+
+/* Overlay de Digitação de Canal Numérico (0-9) */
+.channel-number-overlay {
+  position: fixed;
+  top: 40px;
+  right: 50px;
+  background: rgba(13, 16, 26, 0.95);
+  border: 2px solid #ffd54f;
+  box-shadow: 0 0 25px rgba(255, 213, 79, 0.6);
+  border-radius: 14px;
+  padding: 12px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10001;
+  pointer-events: none;
+}
+.channel-number-label {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #ffd54f;
+  letter-spacing: 1px;
+}
+.channel-number-digits {
+  font-size: 38px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+/* Barra de Progresso no Continuar Assistindo */
+.continue-progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.continue-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e50914, #ff5252);
+  border-radius: 3px;
+}

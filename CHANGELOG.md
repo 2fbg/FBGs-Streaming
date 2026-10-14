@@ -2,6 +2,29 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [v1.2.0] - 2026-10-14
+
+### ⚡ Ultra-Responsiveness & Intelligence (Fase 1 e Fase 2)
+- **[v1.2.0] - Zapping instantâneo via pré-carregamento de manifestos:**
+  - Lógica de pre-fetch dos canais adjacentes (anterior e posterior) ao carregar qualquer canal, baixando silenciosamente o manifesto `.m3u8` e metadados com cabeçalho `Range: bytes=0-32767`.
+  - Instâncias leves paralelas de Hls.js (Web/Smart TV) com buffer enxuto (2s) e Media3/OkHttp (Android) garantindo transição sem latência ou tela preta ao alternar canais com Next/Prev.
+  - Pool de manifesto em memória com política LRU e cancelamento ativo via `AbortController` / `Job` para evitar consumo desnecessário de banda.
+- **[v1.2.0] - Suporte a teclas de atalho coloridas para Smart TVs:**
+  - **Vermelho (Red / KeyCode 403):** Alternar Mute com feedback visual OSD no player.
+  - **Verde (Green / KeyCode 404):** Adicionar/Remover dos Favoritos instantaneamente com notificação na tela.
+  - **Amarelo (Yellow / KeyCode 405):** Alternar proporção de tela (Aspect Ratio: Original/Ajustar, 16:9/Esticar e Zoom/Cortar Bordas).
+  - **Azul (Blue / KeyCode 406):** Exibir painel de diagnóstico técnico do Stream (Resolução, Codec, Bitrate e Buffer ativo).
+  - **Teclas Numéricas (0-9):** Troca direta de canal por ID numérico com overlay flutuante e timer de confirmação.
+- **[v1.2.0] - Sistema de persistência "Continuar Assistindo" para VOD:**
+  - Rotina assíncrona `saveProgress(contentId, currentTime, duration)` disparada a cada 10 segundos durante o playback de Filmes e Séries.
+  - Seção "Continuar Assistindo" na tela inicial com os últimos 5 conteúdos iniciados e barra de progresso visual baseada no tempo salvo.
+  - Retomada automática (Auto-Resume) a partir do timestamp armazenado no IndexedDB/Room.
+- **[v1.2.0] - Image Proxy, WebP Logo Cache & Memory Shield:**
+  - Cache dinâmico de logotipos em formato WebP/SVG com lazy loading e decoding assíncrono.
+  - Memory Shield que monitora o heap e libera recursos em eventos de memória baixa (`webOSLowMemory`) para Smart TVs antigas.
+
+---
+
 ## [v1.1.1] - 2026-10-14
 
 ### 🎯 Navegação Smart TV, Phased Loading & Controle Parental Reversível

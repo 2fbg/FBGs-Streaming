@@ -1005,6 +1005,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveProgress(contentId: Long, timestampMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playlistItemDao.updateLastWatched(contentId, timestampMs)
+        }
+    }
+
     fun clearMoviesAndSeriesHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             playlistItemDao.clearMoviesAndSeriesHistory(_activePlaylistName.value)

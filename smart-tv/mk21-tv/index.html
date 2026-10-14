@@ -382,7 +382,7 @@
   <footer id="remoteColorBar" class="remote-color-bar">
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-red"></span>
-      <span>🔴 Busca Global</span>
+      <span>🔴 Mudo</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-green"></span>
@@ -390,13 +390,38 @@
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-yellow"></span>
-      <span>🟡 Áudio / Legenda</span>
+      <span>🟡 Proporção</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-blue"></span>
-      <span>🔵 Guia EPG</span>
+      <span>🔵 Diagnóstico</span>
     </div>
   </footer>
+
+  <!-- Overlay de Digitação de Canal Numérico (0-9) -->
+  <div id="channelNumberOverlay" class="channel-number-overlay hidden">
+    <span class="channel-number-label">Canal</span>
+    <span id="channelNumberDigits" class="channel-number-digits">1</span>
+  </div>
+
+  <!-- Modal Diagnóstico Técnico do Stream (Tecla Azul) -->
+  <div id="modalStreamDiagnostics" class="app-modal hidden">
+    <div class="modal-content" style="width: 540px; background: #0f121d; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 14px; padding: 22px;">
+      <div class="modal-header" style="margin-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: #60a5fa; font-weight: 800; font-size: 18px;">🔵 Diagnóstico Técnico do Stream</span>
+        <button id="btnCloseDiagnostics" class="ctrl-btn" style="padding: 4px 10px;" tabindex="0">✕</button>
+      </div>
+      <div id="diagnosticsContent" style="display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: #cbd5e1; text-align: left;">
+        <div><b>Canal / Item:</b> <span id="diagTitle" style="color: #fff;">--</span></div>
+        <div><b>Resolução:</b> <span id="diagResolution" style="color: #4caf50;">--</span></div>
+        <div><b>Codec / Formato:</b> <span id="diagCodec" style="color: #ffd54f;">--</span></div>
+        <div><b>Bitrate Estimado:</b> <span id="diagBitrate" style="color: #60a5fa;">--</span></div>
+        <div><b>Buffer Atual:</b> <span id="diagBuffer" style="color: #a78bfa;">--</span></div>
+        <div><b>Proporção (Aspect):</b> <span id="diagAspect" style="color: #f472b6;">Original (Ajustar)</span></div>
+        <div><b>Engine Player:</b> <span id="diagEngine" style="color: #38bdf8;">Hls.js Low-Latency + Instant Zapping</span></div>
+      </div>
+    </div>
+  </div>
 
   <!-- ================= 4. MODAL OMNISEARCH (BUSCA GLOBAL UNIFICADA) ================= -->
   <div id="modalOmnisearch" class="app-modal hidden">
