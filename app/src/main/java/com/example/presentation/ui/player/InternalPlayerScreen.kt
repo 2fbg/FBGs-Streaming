@@ -1,5 +1,6 @@
 package com.example.presentation.ui.player
-import com.example.network.Mk21DnsResolver.resolveUrlWithFailover
+import com.example.network.Mk21Mk21DnsResolver.resolveUrlWithFailover
+import com.example.network.Mk21DnsResolver
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
