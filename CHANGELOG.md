@@ -83,3 +83,7 @@ Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 - Modal com opções completas de classificação e ordenação.
 - Novo filtro de conteúdo ao carregar em configurações para ultra velocidade e economia de RAM.
 - Ocultação total e rigorosa de canais e categorias no bloqueio 18+.
+
+## [1.2.0] - 2026-10-14
+- Fix: Correção de erro de compilação 'Unresolved reference resolveUrlWithFailover'
+- Feat: Ultra-Responsiveness & Intelligence release

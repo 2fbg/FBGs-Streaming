@@ -1,4 +1,5 @@
 package com.example.presentation.ui.player
+import com.example.network.DnsResolver.resolveUrlWithFailover
 import com.example.network.DnsResolver
 
 import android.app.Activity
