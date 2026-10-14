@@ -378,6 +378,68 @@
     </div>
   </div>
 
+  <!-- ================= 3. BARRA DE ATALHOS COLORIDOS DO CONTROLE (SMART TV) ================= -->
+  <footer id="remoteColorBar" class="remote-color-bar">
+    <div class="color-shortcut-item">
+      <span class="color-key-dot dot-red"></span>
+      <span>🔴 Busca Global</span>
+    </div>
+    <div class="color-shortcut-item">
+      <span class="color-key-dot dot-green"></span>
+      <span>🟢 Favoritos</span>
+    </div>
+    <div class="color-shortcut-item">
+      <span class="color-key-dot dot-yellow"></span>
+      <span>🟡 Áudio / Legenda</span>
+    </div>
+    <div class="color-shortcut-item">
+      <span class="color-key-dot dot-blue"></span>
+      <span>🔵 Guia EPG</span>
+    </div>
+  </footer>
+
+  <!-- ================= 4. MODAL OMNISEARCH (BUSCA GLOBAL UNIFICADA) ================= -->
+  <div id="modalOmnisearch" class="app-modal hidden">
+    <div class="modal-content omnisearch-modal">
+      <div class="omnisearch-header">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+          <span style="font-size: 20px; font-weight: 800; color: #ffd54f;">🔴 Busca Global Omnisearch</span>
+          <button id="btnCloseOmnisearch" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕ Fechar (Voltar)</button>
+        </div>
+        <div class="omnisearch-input-wrap">
+          <span style="font-size: 20px;">🔍</span>
+          <input id="inputOmnisearch" class="omnisearch-input" type="text" placeholder="Digite o nome do canal, filme ou série..." tabindex="0">
+          <button id="btnClearOmnisearch" class="ctrl-btn" style="padding: 6px 12px; font-size: 13px;" tabindex="0">Limpar</button>
+        </div>
+        <div class="omnisearch-tabs">
+          <button id="tabOmniAll" class="omnisearch-tab-btn active" tabindex="0">Todos (<span id="countOmniAll">0</span>)</button>
+          <button id="tabOmniLive" class="omnisearch-tab-btn" tabindex="0">📺 TV Ao Vivo (<span id="countOmniLive">0</span>)</button>
+          <button id="tabOmniMovies" class="omnisearch-tab-btn" tabindex="0">🎬 Filmes (<span id="countOmniMovies">0</span>)</button>
+          <button id="tabOmniSeries" class="omnisearch-tab-btn" tabindex="0">🍿 Séries (<span id="countOmniSeries">0</span>)</button>
+        </div>
+      </div>
+      <div class="omnisearch-body">
+        <div id="omnisearchResultsGrid" class="omnisearch-results-grid"></div>
+        <div id="omnisearchEmptyState" style="text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 16px;">
+          Digite uma palavra-chave para buscar instantaneamente em todo o catálogo.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 5. MODAL GUIA EPG COMPLETO ================= -->
+  <div id="modalEpgGuide" class="app-modal hidden">
+    <div class="modal-content epg-guide-modal">
+      <div class="modal-header" style="background:#131726; padding:16px 22px;">
+        <span id="txtEpgGuideTitle" style="color:#ffd54f; font-size:20px; font-weight:800;">🔵 Programação do Canal (EPG)</span>
+        <button id="btnCloseEpgGuide" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
+      </div>
+      <div id="epgScheduleList" style="padding:20px; max-height:480px; overflow-y:auto;">
+        <div style="text-align:center; padding:30px; color:#aaa;">Carregando grade de programação...</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bootloader com suporte a Atualizações OTA -->
   <script>
     (function() {

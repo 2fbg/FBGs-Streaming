@@ -2060,6 +2060,8 @@
                 spinner.classList.add('hidden');
                 spinner.classList.remove('flex');
             }
+        }
+
         window.handleSettingsClick = function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (e && e.stopPropagation) e.stopPropagation();
@@ -2091,6 +2093,25 @@
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
             }
+        };
+
+        window.switchSettingsTab = function (tab) {
+            const tabs = ['account', 'preferences', 'notifications'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                const content = document.getElementById(`tab-content-${t}`);
+                if (t === tab) {
+                    if (btn) {
+                        btn.className = "settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl bg-slate-900 border border-amber-500/40 text-amber-400 flex items-center justify-center gap-1.5 transition-all";
+                    }
+                    if (content) content.classList.remove('hidden');
+                } else {
+                    if (btn) {
+                        btn.className = "settings-tab-btn flex-1 py-2 text-xs font-bold rounded-xl text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all";
+                    }
+                    if (content) content.classList.add('hidden');
+                }
+            });
         };
 
         const hlsPlayer = new Hls({
@@ -3376,6 +3397,13 @@
                             showNotification('Canais carregados instantaneamente do cache! ⚡', 'success');
                         }
 
+                        // Se o cache tiver mais de 3 horas, atualiza silenciosamente em background
+                        if (Date.now() - (cached.timestamp || 0) > 3 * 3600 * 1000) {
+                            setTimeout(() => {
+                                console.log('[MK21] Atualizando cache de lista em segundo plano...');
+                                performLogin(true);
+                            }, 4000);
+                        }
                         return;
                     }
                 } catch (e) {
@@ -4542,7 +4570,7 @@
                 mediaGrid.appendChild(colCard);
             });
 
-            // Helpful loading more indicator
+            // Helpful loading more indicator with virtual scroll IntersectionObserver
             if (items.length > itemsLimit) {
                 const loadMoreBtn = document.createElement('button');
                 loadMoreBtn.className = "col-span-full py-3.5 px-6 my-4 bg-gradient-to-r from-red-950/25 to-slate-900 border border-slate-800 hover:border-[#E50914]/40 hover:bg-[#E50914]/10 rounded-2xl text-slate-200 text-xs font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 outline-none shadow-md shadow-black/40";

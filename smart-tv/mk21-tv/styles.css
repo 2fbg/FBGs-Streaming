@@ -1474,3 +1474,250 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
 .epg-name {
   transition: color 0.15s ease;
 }
+
+/* ==========================================================================
+   v1.2.0 ULTRA-RESPONSIVENESS & INTELLIGENCE
+   Omnisearch, Remote Color Bar, EPG Guide Modal & Logo Optimization
+   ========================================================================== */
+
+/* Barra de Atalhos Coloridos do Controle Remoto (Footer) */
+.remote-color-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  background: rgba(10, 12, 18, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.color-shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #e2e8f0;
+}
+
+.color-key-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 8px currentColor;
+}
+.dot-red { background: #e50914; color: #e50914; }
+.dot-green { background: #10b981; color: #10b981; }
+.dot-yellow { background: #f59e0b; color: #f59e0b; }
+.dot-blue { background: #3b82f6; color: #3b82f6; }
+
+/* Omnisearch Modal */
+.omnisearch-modal {
+  width: 1100px !important;
+  max-height: 88vh !important;
+  background: #0d101a !important;
+  border: 1px solid rgba(229, 9, 20, 0.35) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9) !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.omnisearch-header {
+  padding: 20px 24px 14px 24px;
+  background: #131726;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.omnisearch-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #07090f;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 4px 16px;
+  transition: all 0.2s ease;
+}
+
+.omnisearch-input-wrap:focus-within {
+  border-color: #e50914;
+  box-shadow: 0 0 16px rgba(229, 9, 20, 0.4);
+}
+
+.omnisearch-input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 20px !important;
+  font-weight: 600;
+  padding: 10px 0;
+  outline: none;
+}
+
+.omnisearch-tabs {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.omnisearch-tab-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.omnisearch-tab-btn.active {
+  background: #e50914;
+  color: #ffffff;
+  border-color: #e50914;
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.5);
+}
+
+.omnisearch-tab-btn:focus {
+  outline: none;
+  border-color: #ffd54f;
+  transform: scale(1.05);
+}
+
+.omnisearch-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  max-height: 520px;
+}
+
+.omnisearch-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.omnisearch-item-btn {
+  background: #141828;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #fff;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.omnisearch-item-btn:focus {
+  background: #1e2642;
+  border-color: #ffd54f;
+  box-shadow: 0 0 16px rgba(255, 213, 79, 0.5);
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.omnisearch-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.omnisearch-type-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.badge-live { background: rgba(229, 9, 20, 0.25); color: #ff5252; border: 1px solid rgba(229, 9, 20, 0.4); }
+.badge-movie { background: rgba(59, 130, 246, 0.25); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+.badge-series { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+
+.omnisearch-item-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.omnisearch-item-group {
+  font-size: 12px;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Logos Otimizadas & WebP Cache */
+.channel-logo-thumb {
+  width: 32px;
+  height: 24px;
+  object-fit: contain;
+  margin-right: 8px;
+  border-radius: 3px;
+  background: rgba(0,0,0,0.3);
+  vertical-align: middle;
+}
+
+/* Modal EPG Guide Completo */
+.epg-guide-modal {
+  width: 900px !important;
+  max-height: 85vh !important;
+  background: #0f121e !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.9) !important;
+}
+
+.epg-schedule-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #141726;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 8px;
+}
+.epg-schedule-row.active-now {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+.epg-time-col {
+  min-width: 90px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffd54f;
+}
+.epg-details-col {
+  flex: 1;
+}
+.epg-sched-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.epg-sched-desc {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.4;
+}

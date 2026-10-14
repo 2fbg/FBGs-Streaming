@@ -960,6 +960,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _currentPlayingItem.value = item
             viewModelScope.launch(Dispatchers.IO) {
                 playlistItemDao.updateLastWatched(item.id, System.currentTimeMillis())
+                prefetchAdjacentChannels(item)
+            }
+        }
+    }
+
+    private var prefetchJob: kotlinx.coroutines.Job? = null
+    private val prefetchClient by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
+
+    private fun prefetchAdjacentChannels(currentItem: PlaylistItem) {
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            val list = activeItemsList.value
+            val currentIndex = list.indexOfFirst { it.id == currentItem.id }
+            if (currentIndex == -1 || list.size <= 1) return@launch
+
+            val nextIndex = (currentIndex + 1) % list.size
+            val prevIndex = (currentIndex - 1 + list.size) % list.size
+
+            val adjacent = listOf(list[nextIndex], list[prevIndex])
+            for (adj in adjacent) {
+                if (!isActive) break
+                try {
+                    val urlStr = adj.url
+                    if (urlStr.startsWith("http://", ignoreCase = true) || urlStr.startsWith("https://", ignoreCase = true)) {
+                        val req = okhttp3.Request.Builder()
+                            .url(urlStr)
+                            .header("User-Agent", "Mozilla/5.0 MK21Player/1.2.0")
+                            .header("Range", "bytes=0-32767")
+                            .build()
+                        prefetchClient.newCall(req).execute().use { res ->
+                            res.body?.byteStream()?.read(ByteArray(4096))
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Pre-fetch silencioso sem interferir na reprodução ativa
+                }
             }
         }
     }
