@@ -4,6 +4,9 @@ import okhttp3.Dns
 import java.net.InetAddress
 import java.net.URL
 
+/**
+ * Singleton de resolução DNS com suporte a failover para o player e clientes HTTP.
+ */
 object Mk21DnsResolver : Dns {
     override fun lookup(hostname: String): List<InetAddress> {
         return try {
@@ -14,8 +17,8 @@ object Mk21DnsResolver : Dns {
     }
 
     @JvmStatic
-    fun resolveUrlWithFailover(url: Any?): String {
-        val input = url?.toString() ?: ""
+    fun resolveUrlWithFailover(url: String?): String {
+        val input = url?.trim() ?: ""
         if (input.isEmpty()) return ""
         return try {
             val host = URL(input).host
@@ -25,4 +28,7 @@ object Mk21DnsResolver : Dns {
             input
         }
     }
+
+    @JvmStatic
+    fun resolveUrlWithFailover(url: Any?): String = resolveUrlWithFailover(url?.toString())
 }

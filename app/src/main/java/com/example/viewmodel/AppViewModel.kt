@@ -35,6 +35,7 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import com.example.BuildConfig
+import com.example.network.Mk21DnsResolver
 
 @kotlin.OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -342,7 +343,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val okHttpClient = OkHttpClient.Builder()
-        .dns(com.example.network.Mk21DnsResolver)
+        .dns(Mk21DnsResolver)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
@@ -968,10 +969,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var prefetchJob: kotlinx.coroutines.Job? = null
     private val prefetchClient by lazy {
-        okhttp3.OkHttpClient.Builder()
-            .dns(com.example.network.Mk21DnsResolver)
-            .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        OkHttpClient.Builder()
+            .dns(Mk21DnsResolver)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(3, TimeUnit.SECONDS)
             .build()
     }
 

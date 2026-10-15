@@ -9,9 +9,9 @@
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.3.0_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "apkSha256": "6436088a1b5d996f880657a9f95a054b9581cc17a23fe2d966a3a5c1e604f40e",
+  "apkSha256": "d1a9f7f5fbb7a3cda1670d3360994f6e4fc9b4b372edaaad5470a4d8ac12c005",
   "ipkSha256": "7d6664137b513cf85e3d9652e3b27dfd76615bff9c27a103e407fd993a6596aa",
-  "sizeBytes": 25050563,
+  "sizeBytes": 25050619,
   "ipkSizeBytes": 146606,
   "updatedAt": "2026-10-15"
 }

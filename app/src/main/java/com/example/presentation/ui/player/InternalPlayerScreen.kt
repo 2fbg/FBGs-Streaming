@@ -33,6 +33,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
+import android.util.Log
 import com.example.network.Mk21DnsResolver
 import android.net.Uri
 import androidx.media3.datasource.DefaultDataSource
@@ -106,13 +108,13 @@ fun InternalPlayerScreen(
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-                val decoders = androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(
+                val decoders = MediaCodecUtil.getDecoderInfos(
                     mimeType,
                     requiresSecureDecoder,
                     requiresTunnelingDecoder
                 )
                 if (mimeType.contains("av01", ignoreCase = true) || mimeType.contains("av1", ignoreCase = true)) {
-                    android.util.Log.i("InternalPlayerScreen", "Decodificador AV1 ativo: ${decoders.map { it.name }}")
+                    Log.i("InternalPlayerScreen", "Decodificador AV1 ativo: ${decoders.map { it.name }}")
                 }
                 decoders
             }
