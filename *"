@@ -1,0 +1,17 @@
+[33mcommit cfdef26617b2d72f3c8341aabeb146882c07b84a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: 2fbg <fabioguarniere@gmail.com>
+Date:   Wed Oct 14 23:40:43 2026 +0000
+
+    fix: total cleanup of DnsResolver logic and stable v1.2.0 build
+
+[33mcommit c604825550e3686a75db0bc23c494fdf991aedbb[m
+Author: 2fbg <fabioguarniere@gmail.com>
+Date:   Wed Oct 14 23:35:18 2026 +0000
+
+    fix: correct duplicate class name Mk21DnsResolver and stabilize build
+
+[33mcommit 00d4b78b4949a0e34c4af60b38bd4f9916f0b884[m
+Author: 2fbg <fabioguarniere@gmail.com>
+Date:   Wed Oct 14 23:30:30 2026 +0000
+
+    fix: rename DnsResolver to Mk21DnsResolver to avoid Android SDK conflicts
