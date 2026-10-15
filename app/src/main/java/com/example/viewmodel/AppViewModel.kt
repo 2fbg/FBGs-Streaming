@@ -1902,7 +1902,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Ensure file is readable by system package installer
 
-import com.example.network.Mk21DnsResolver
                 try {
                     apkFile.setReadable(true, false)
                 } catch (e: Exception) {

@@ -162,7 +162,6 @@ fun InternalPlayerScreen(
                         try {
                             val targetUrl = if (isHostOrDnsError) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                Mk21Mk21DnsResolver.resolveUrlWithFailover(item.url)
                                 }
                             } else {
                                 item.url
