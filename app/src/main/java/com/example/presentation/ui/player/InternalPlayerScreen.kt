@@ -1,8 +1,7 @@
 package com.example.presentation.ui.player
 
 import com.example.network.Mk21DnsResolver
-import android.net.Uri
-import androidx.media3.common.MediaItem
+
 
 
 import android.app.Activity
@@ -34,7 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
