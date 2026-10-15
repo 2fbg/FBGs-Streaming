@@ -2410,7 +2410,6 @@ async function attemptDnsFailover(originalUrl) {
   }
   return originalUrl;
 }
-}
 
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
 function playStream(item) {
