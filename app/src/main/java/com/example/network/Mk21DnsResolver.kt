@@ -14,14 +14,15 @@ object Mk21DnsResolver : Dns {
     }
 
     @JvmStatic
-    fun resolveUrlWithFailover(url: String?): String {
-        if (url.isNullOrEmpty()) return ""
+    fun resolveUrlWithFailover(url: Any?): String {
+        val inputUrl = url?.toString() ?: ""
+        if (inputUrl.isEmpty()) return ""
         return try {
-            val host = URL(url).host
-            lookup(host)
-            url
+            val host = URL(inputUrl).host
+            Dns.SYSTEM.lookup(host)
+            inputUrl
         } catch (e: Exception) {
-            url
+            inputUrl
         }
     }
 }
