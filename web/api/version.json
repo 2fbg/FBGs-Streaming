@@ -6,12 +6,12 @@
   "title": "MK21 Play v1.3.0",
   "releaseNotes": "• Reset Arquitetural e Estabilização de Memória\n• Reconstrução da camada de rede com Mk21DnsResolver e failover resiliente\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes\n• Busca Global Omnisearch em Ao Vivo, Filmes e Séries\n• Modo Picture-in-Picture (PiP) nativo e decodificação AV1 no Android",
   "body": "• Reset Arquitetural e Estabilização de Memória\n• Reconstrução da camada de rede com Mk21DnsResolver e failover resiliente\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes\n• Busca Global Omnisearch em Ao Vivo, Filmes e Séries\n• Modo Picture-in-Picture (PiP) nativo e decodificação AV1 no Android",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.2.0_all.ipk",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.3.0_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "apkSha256": "6436088a1b5d996f880657a9f95a054b9581cc17a23fe2d966a3a5c1e604f40e",
-  "ipkSha256": "c63e4301945e88edddcdead4e9c5c0af5b0d60c00fc8ca22579ec6ee0a4b2a07",
+  "ipkSha256": "7d6664137b513cf85e3d9652e3b27dfd76615bff9c27a103e407fd993a6596aa",
   "sizeBytes": 25050563,
-  "ipkSizeBytes": 144444,
+  "ipkSizeBytes": 146606,
   "updatedAt": "2026-10-15"
 }

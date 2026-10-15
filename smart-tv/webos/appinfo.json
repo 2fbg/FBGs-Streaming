@@ -1,10 +1,10 @@
 {
   "id": "com.fbg2.mk21streaming",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "vendor": "FBG2",
   "type": "web",
   "main": "index.html",
-  "title": "MK21 Play v1.2.0",
+  "title": "MK21 Play v1.3.0",
   "requiredACG": [],
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
@@ -17,5 +17,5 @@
   "accessibility": {
     "supportsAudioGuidance": true
   },
-  "updatedAt": "2026-10-12"
+  "updatedAt": "2026-10-15"
 }

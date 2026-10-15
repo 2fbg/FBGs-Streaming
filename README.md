@@ -1,11 +1,11 @@
-# BGs Streaming (MK21 MultiServidor) — v1.2.0
+# BGs Streaming (MK21 MultiServidor) — v1.3.0
 
 <div align="center">
   <img src="web/icon-192.png" alt="BGs Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v1.2.0-red.svg)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v1.3.0-red.svg)](CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -17,11 +17,23 @@
 
 ## 📌 Visão Geral & Foco do Cliente (Player para Listas de Terceiros)
 
-O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco exclusivo no **Cliente (Player)** para reprodução de listas IPTV de terceiros (M3U, M3U8 e APIs Xtream Codes). Projetado para máxima velocidade de inicialização de vídeo (**Fast Start**), resiliência contra oscilações de rede (**Auto-Retry Policy** e **DNS Failover DoH**) e experiência fluida com catálogos de milhares de canais em **Android**, **Web PWA** e **Smart TVs (LG webOS e Samsung Tizen)**.
+O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco exclusivo no **Cliente (Player)** para reprodução de listas IPTV de terceiros (M3U, M3U8 e APIs Xtream Codes). Projetado para máxima velocidade de inicialização de vídeo (**Fast Start**), resiliência contra oscilações de rede (**Auto-Retry Policy**, **Mk21DnsResolver** e **DNS Failover DoH**) e experiência fluida com catálogos de milhares de canais em **Android**, **Web PWA** e **Smart TVs (LG webOS e Samsung Tizen)**.
 
 ---
 
-## 🚀 Novidades da Versão v1.2.0 (Ultra-Responsiveness & Intelligence)
+## 🚀 Novidades da Versão v1.3.0 (Architectural Reset & Network Stabilization)
+
+- ⚡ **Network Layer Fonte da Verdade (`Mk21DnsResolver`)**:
+  - Implementação unificada do `Mk21DnsResolver` em OkHttp e Media3 com failover automático para links bloqueados ou instáveis.
+  - Normalização segura de URLs forçando `Uri.parse()` em `MediaItem.fromUri()` para eliminar qualquer ambiguidade de compilação.
+- ⚡ **Zapping de Canal Zero-Delay & Fast Start**:
+  - Pré-carregamento dinâmico em segundo plano do canal anterior e posterior durante a reprodução.
+- 🔍 **Busca Global Omnisearch**:
+  - Busca unificada categorizada com contadores em tempo real para Ao Vivo, Filmes e Séries.
+- 📺 **Picture-in-Picture (PiP) Nativo & AV1**:
+  - Suporte completo a PiP no Android via `onUserLeaveHint` e decodificação acelerada por hardware de AV1/HEVC/H.264.
+- 🧼 **Limpeza e Otimização Multiplataforma**:
+  - Repositório enxuto e padronizado: Web, Android APK (`mk21.apk`) e Smart TV webOS (`mk21play_1.3.0_all.ipk`) sincronizados em v1.3.0.
 
 - ⚡ **Fast Start Buffer (Início Instantâneo)**:
   - **Android (Media3 ExoPlayer)**: `minBufferMs` reduzido para 5.000ms e `bufferForPlaybackMs` ajustado para 500ms via `DefaultLoadControl`.
