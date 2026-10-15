@@ -1,7 +1,6 @@
 package com.example.viewmodel
 import com.example.network.Mk21DnsResolver
 
-import androidx.media3.common.MediaItem
 
 
 import android.app.Application
@@ -1958,7 +1957,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     if (!context.packageManager.canRequestPackageInstalls()) {
                         val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                            data = Uri.parse("package:${context.packageName}")
+                            data = android.net.Uri.parse("package:${context.packageName}")
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(settingsIntent)
@@ -2001,7 +2000,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openBrowserDownload(context: Context, downloadUrl: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(downloadUrl)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
