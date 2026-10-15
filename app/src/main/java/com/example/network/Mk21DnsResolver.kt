@@ -4,6 +4,9 @@ import okhttp3.Dns
 import java.net.InetAddress
 import java.net.URL
 
+/**
+ * Mk21DnsResolver v1.2.0 - Implementação Sênior Estável
+ */
 object Mk21DnsResolver : Dns {
     override fun lookup(hostname: String): List<InetAddress> {
         return try {
@@ -16,11 +19,10 @@ object Mk21DnsResolver : Dns {
     @JvmStatic
     fun resolveUrlWithFailover(url: Any?): String {
         val input = url?.toString() ?: ""
+        if (input.isEmpty()) return ""
         return try {
-            if (input.isNotEmpty()) {
-                val host = URL(input).host
-                Dns.SYSTEM.lookup(host)
-            }
+            val host = URL(input).host
+            Dns.SYSTEM.lookup(host)
             input
         } catch (e: Exception) {
             input
