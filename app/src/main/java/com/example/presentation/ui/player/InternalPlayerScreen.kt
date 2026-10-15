@@ -1,8 +1,5 @@
 package com.example.presentation.ui.player
 
-import com.example.network.Mk21DnsResolver
-import android.net.Uri
-import androidx.media3.common.MediaItem
 
 
 

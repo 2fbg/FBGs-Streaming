@@ -5,7 +5,7 @@ import java.net.InetAddress
 import java.net.URL
 
 /**
- * Mk21DnsResolver v1.2.0 - Implementação Sênior Estável
+ * Mk21DnsResolver v1.2.0 - Implementação Final e Estável
  */
 object Mk21DnsResolver : Dns {
     override fun lookup(hostname: String): List<InetAddress> {
