@@ -1,15 +1,4 @@
 package com.example.presentation.ui.player
-import android.net.Uri
-import androidx.media3.common.MediaItem
-import com.example.network.Mk21DnsResolver
-
-
-
-
-
-
-
-
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
@@ -40,9 +29,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import com.example.network.Mk21DnsResolver
+import android.net.Uri
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -129,7 +121,7 @@ fun InternalPlayerScreen(
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
-                val mediaItem = androidx.media3.common.MediaItem.fromUri(item.url.toString())
+                val mediaItem = MediaItem.fromUri(Uri.parse(Mk21DnsResolver.resolveUrlWithFailover(item.url)))
                 setMediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
@@ -170,13 +162,14 @@ fun InternalPlayerScreen(
                         try {
                             val targetUrl = if (isHostOrDnsError) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    Mk21DnsResolver.resolveUrlWithFailover(item.url)
                                 }
                             } else {
                                 item.url
                             }
                             exoPlayer.stop()
                             exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl?.toString(.toString()) ?: ""))
+                            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(targetUrl)))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {

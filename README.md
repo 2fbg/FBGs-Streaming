@@ -1,11 +1,11 @@
-# BGs Streaming (MK21 MultiServidor) — v1.1.1
+# BGs Streaming (MK21 MultiServidor) — v1.2.0
 
 <div align="center">
   <img src="web/icon-192.png" alt="BGs Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v1.1.1-red.svg)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v1.2.0-red.svg)](CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -17,11 +17,11 @@
 
 ## 📌 Visão Geral & Foco do Cliente (Player para Listas de Terceiros)
 
-O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco exclusivo no **Cliente (Player)** para reprodução de listas IPTV de terceiros (M3U, M3U8 e APIs Xtream Codes). Projetado para máxima velocidade de inicialização de vídeo (**Fast Start**), resiliência contra oscilações de rede (**Auto-Retry Policy**) e experiência fluida com catálogos de milhares de canais em **Android**, **Web PWA** e **Smart TVs (LG webOS e Samsung Tizen)**.
+O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco exclusivo no **Cliente (Player)** para reprodução de listas IPTV de terceiros (M3U, M3U8 e APIs Xtream Codes). Projetado para máxima velocidade de inicialização de vídeo (**Fast Start**), resiliência contra oscilações de rede (**Auto-Retry Policy** e **DNS Failover DoH**) e experiência fluida com catálogos de milhares de canais em **Android**, **Web PWA** e **Smart TVs (LG webOS e Samsung Tizen)**.
 
 ---
 
-## 🚀 Novidades da Versão v1.1.0
+## 🚀 Novidades da Versão v1.2.0 (Ultra-Responsiveness & Intelligence)
 
 - ⚡ **Fast Start Buffer (Início Instantâneo)**:
   - **Android (Media3 ExoPlayer)**: `minBufferMs` reduzido para 5.000ms e `bufferForPlaybackMs` ajustado para 500ms via `DefaultLoadControl`.

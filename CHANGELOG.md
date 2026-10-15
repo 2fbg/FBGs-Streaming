@@ -2,6 +2,17 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [v1.3.0] - 2026-10-15
+
+### ⚡ Architectural Reset & Network Stabilization
+- **[v1.3.0] - Network Layer Source of Truth (`Mk21DnsResolver`):**
+  - Implementação padronizada do `Mk21DnsResolver` com interface `okhttp3.Dns` e método utilitário `@JvmStatic resolveUrlWithFailover(url: Any?)`.
+  - Normalização completa de imports e referências no `InternalPlayerScreen` e `AppViewModel`.
+  - Resolução segura de URLs forçando `Uri.parse()` em `MediaItem.fromUri()` para eliminar qualquer ambiguidade de candidatos no compilador Kotlin.
+- **[v1.3.0] - Estabilização de Memória e Build:**
+  - Otimização das propriedades da JVM do Gradle no `gradle.properties` (`-Xmx2048m -XX:MaxMetaspaceSize=512m`, `org.gradle.daemon=false`).
+  - Atualização do `versionCode = 130` e `versionName = "1.3.0"`.
+
 ## [v1.2.0] - 2026-10-14
 
 ### 🚀 Ultra-Responsiveness & Intelligence (Release Final)

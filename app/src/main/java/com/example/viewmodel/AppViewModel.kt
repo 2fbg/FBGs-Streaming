@@ -1,18 +1,10 @@
 package com.example.viewmodel
-import android.net.Uri
-import androidx.media3.common.MediaItem
-import com.example.network.Mk21DnsResolver
-
-
-
-
-
-
 
 import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -350,6 +342,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val okHttpClient = OkHttpClient.Builder()
+        .dns(com.example.network.Mk21DnsResolver)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
@@ -976,6 +969,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var prefetchJob: kotlinx.coroutines.Job? = null
     private val prefetchClient by lazy {
         okhttp3.OkHttpClient.Builder()
+            .dns(com.example.network.Mk21DnsResolver)
             .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .build()
@@ -1907,8 +1901,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 // Ensure file is readable by system package installer
-
-
                 try {
                     apkFile.setReadable(true, false)
                 } catch (e: Exception) {
@@ -1964,7 +1956,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     if (!context.packageManager.canRequestPackageInstalls()) {
                         val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                            data = android.net.Uri.parse("package:${context.packageName}")
+                            data = Uri.parse("package:${context.packageName}")
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(settingsIntent)
@@ -2007,7 +1999,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openBrowserDownload(context: Context, downloadUrl: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(downloadUrl)).apply {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
