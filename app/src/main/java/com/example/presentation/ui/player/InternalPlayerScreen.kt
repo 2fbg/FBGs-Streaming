@@ -129,7 +129,7 @@ fun InternalPlayerScreen(
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
-                val mediaItem = androidx.media3.common.MediaItem.fromUri(item.url)
+                val mediaItem = androidx.media3.common.MediaItem.fromUri(item.url.toString())
                 setMediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
@@ -176,7 +176,7 @@ fun InternalPlayerScreen(
                             }
                             exoPlayer.stop()
                             exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl))
+                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl?.toString(.toString()) ?: ""))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {
