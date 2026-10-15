@@ -1,6 +1,7 @@
 package com.example.presentation.ui.player
 
-import com.example.network.Mk21Mk21DnsResolver
+import com.example.network.Mk21DnsResolver
+
 
 
 
@@ -127,7 +128,7 @@ fun InternalPlayerScreen(
             .setLoadControl(loadControl)
             .build().apply {
                 val mediaItem = androidx.media3.common.MediaItem.fromUri(item.url)
-                setMediaItem(mediaItem)
+                setandroidx.media3.common.MediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
             }
@@ -172,8 +173,8 @@ fun InternalPlayerScreen(
                                 item.url
                             }
                             exoPlayer.stop()
-                            exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl))
+                            exoPlayer.clearandroidx.media3.common.MediaItems()
+                            exoPlayer.setandroidx.media3.common.MediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {

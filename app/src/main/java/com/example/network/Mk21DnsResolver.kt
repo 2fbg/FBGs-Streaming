@@ -16,10 +16,11 @@ object Mk21DnsResolver : Dns {
     @JvmStatic
     fun resolveUrlWithFailover(url: Any?): String {
         val input = url?.toString() ?: ""
-        if (input.isEmpty()) return ""
         return try {
-            val host = URL(input).host
-            Dns.SYSTEM.lookup(host)
+            if (input.isNotEmpty()) {
+                val host = URL(input).host
+                Dns.SYSTEM.lookup(host)
+            }
             input
         } catch (e: Exception) {
             input
