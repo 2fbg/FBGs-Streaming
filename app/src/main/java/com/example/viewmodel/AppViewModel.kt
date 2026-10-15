@@ -1759,6 +1759,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _updateCheckState.value = UpdateCheckState.Checking
             val timestamp = System.currentTimeMillis()
             val endpoints = listOf(
+                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/api/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/api/version.json?t=$timestamp",
