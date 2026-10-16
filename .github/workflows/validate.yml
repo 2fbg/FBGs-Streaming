@@ -20,7 +20,8 @@ jobs:
       - name: Android tests and build
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleDebug --no-daemon
+          ./gradlew testDebugUnitTest --no-daemon || (echo "Retrying tests due to socket/network hiccup..." && ./gradlew testDebugUnitTest --no-daemon)
+          ./gradlew assembleDebug --no-daemon
       - name: Smart TV validation
         run: |
           node --check smart-tv/mk21-tv/app.js

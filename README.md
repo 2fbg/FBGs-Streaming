@@ -1,11 +1,11 @@
-# BGs Streaming (MK21 MultiServidor) — v1.3.0
+# BGs Streaming (MK21 MultiServidor) — v1.4.0
 
 <div align="center">
   <img src="web/icon-192.png" alt="BGs Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v1.3.0-red.svg)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v1.4.0-red.svg)](CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -21,13 +21,14 @@ O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco
 
 ---
 
-## 🚀 Novidades da Versão v1.3.0 (Architectural Reset & Network Stabilization)
+## 🚀 Novidades da Versão v1.4.0 (Multitask & Observability)
 
+- 📺 **Picture-in-Picture (PiP) Nativo com Auto-Enter**:
+  - Habilitação de `setAutoEnterEnabled(true)` no Android 12+ e suporte a `onUserLeaveHint`, permitindo transição contínua para janela flutuante ao sair do app durante a reprodução.
+- 📡 **Telemetria Silenciosa de Stream (`logStreamError`)**:
+  - Módulo de observabilidade integrado no `Mk21DnsResolver` e no `AppViewModel` capturando silenciosamente erros 4xx/5xx de listas e falhas de reprodução no ExoPlayer sem interferir na UI.
 - ⚡ **Network Layer Fonte da Verdade (`Mk21DnsResolver`)**:
-  - Implementação unificada do `Mk21DnsResolver` em OkHttp e Media3 com failover automático para links bloqueados ou instáveis.
-  - Normalização segura de URLs forçando `Uri.parse()` em `MediaItem.fromUri()` para eliminar qualquer ambiguidade de compilação.
-- ⚡ **Zapping de Canal Zero-Delay & Fast Start**:
-  - Pré-carregamento dinâmico em segundo plano do canal anterior e posterior durante a reprodução.
+  - Resolução robusta de URLs e failover automático integrado no OkHttp e Media3.
 - 🔍 **Busca Global Omnisearch**:
   - Busca unificada categorizada com contadores em tempo real para Ao Vivo, Filmes e Séries.
 - 📺 **Picture-in-Picture (PiP) Nativo & AV1**:

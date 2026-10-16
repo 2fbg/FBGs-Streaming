@@ -355,9 +355,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (original.header("Accept") == null) {
                 requestBuilder.header("Accept", "*/*")
             }
-            chain.proceed(requestBuilder.build())
+            try {
+                val response = chain.proceed(requestBuilder.build())
+                if (!response.isSuccessful && response.code >= 400) {
+                    Mk21DnsResolver.logStreamError(original.url.toString(), response.code, response.message)
+                }
+                response
+            } catch (e: Exception) {
+                Mk21DnsResolver.logStreamError(original.url.toString(), -1, e.message)
+                throw e
+            }
         }
         .build()
+
+    fun logStreamError(url: String?, errorCode: Int, message: String? = null) {
+        Mk21DnsResolver.logStreamError(url, errorCode, message)
+    }
 
     fun mergeWithDefaults(incoming: List<ServerProfile>): List<ServerProfile> {
         val merged = mutableListOf<ServerProfile>()

@@ -136,10 +136,13 @@ class MainActivity : ComponentActivity() {
             actions.add(nextAction)
 
             val aspectRational = android.util.Rational(16, 9)
-            return android.app.PictureInPictureParams.Builder()
+            val builder = android.app.PictureInPictureParams.Builder()
                 .setAspectRatio(aspectRational)
                 .setActions(actions)
-                .build()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(true)
+            }
+            return builder.build()
         }
         return null
     }

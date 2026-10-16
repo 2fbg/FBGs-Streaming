@@ -146,6 +146,7 @@ fun InternalPlayerScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
+                Mk21DnsResolver.logStreamError(item.url, error.errorCode, error.errorCodeName)
                 val isHostOrDnsError = error.errorCodeName.contains("DNS", ignoreCase = true) ||
                         error.cause is java.net.UnknownHostException ||
                         error.cause?.message?.contains("Unable to resolve host", ignoreCase = true) == true ||

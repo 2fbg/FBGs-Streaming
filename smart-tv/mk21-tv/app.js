@@ -3796,7 +3796,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.3.0';
+const BASE_PACKAGE_VERSION = '1.4.0';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -3848,14 +3848,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.3.0
-    if (!data || compareSemver(data.version, '1.3.0') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.0
+    if (!data || compareSemver(data.version, '1.4.0') < 0) {
       data = {
-        version: '1.3.0',
-        versionCode: 130,
-        title: 'MK21 Play v1.3.0',
-        releaseNotes: '• Reset Arquitetural e Estabilização de Memória\n• Reconstrução da camada de rede com Mk21DnsResolver e failover resiliente\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes\n• Busca Global Omnisearch em Ao Vivo, Filmes e Séries\n• Modo Picture-in-Picture (PiP) nativo e decodificação AV1 no Android',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.3.0_all.ipk',
+        version: '1.4.0',
+        versionCode: 140,
+        title: 'MK21 Play v1.4.0',
+        releaseNotes: '• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes\n• Busca Global Omnisearch em Ao Vivo, Filmes e Séries',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.0_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };

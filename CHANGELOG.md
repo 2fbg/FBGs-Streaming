@@ -2,6 +2,22 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [v1.4.0] - 2026-10-15
+
+### 🚀 Multitask & Observability (Staff Milestone)
+- **[v1.4.0] - Picture-in-Picture (PiP) Nativo com Auto-Enter:**
+  - Habilitado `setAutoEnterEnabled(true)` em `PictureInPictureParams` para Android 12+ (API 31+).
+  - Transição imediata e fluida ao pressionar o botão Home ou alternar aplicativos durante a reprodução, com controles remotos nativos (Play/Pause, Próximo, Anterior).
+- **[v1.4.0] - Telemetria Silenciosa de Stream (`logStreamError`):**
+  - Implementado `Mk21DnsResolver.logStreamError(url, errorCode, message)` com buffer circular in-memory (últimos 50 eventos) e log de auditoria.
+  - Interceptador HTTP integrado no `okHttpClient` do `AppViewModel` capturando respostas 4xx/5xx e exceções de conexão sem interferir na UX.
+  - Telemetria integrada no listener `onPlayerError` do `ExoPlayer` no `InternalPlayerScreen`.
+- **[v1.4.0] - Resiliência do Pipeline de CI:**
+  - Ajuste de retry automático na suíte de testes unitários para mitigar instabilidades transitórias de socket em downloads do Maven no GitHub Actions.
+- **[v1.4.0] - Versionamento e Binários Multiplataforma:**
+  - `versionCode = 140` e `versionName = "1.4.0"` no Android.
+  - Sincronização de manifestos Web, webOS (`mk21play_1.4.0_all.ipk`) e Tizen.
+
 ## [v1.3.0] - 2026-10-15
 
 ### ⚡ Architectural Reset & Network Stabilization
