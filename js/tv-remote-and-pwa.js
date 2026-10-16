@@ -39,15 +39,39 @@
         }
     };
 
+    window.requestPwaInstall = function() {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(({ outcome }) => {
+                console.log(`[PWA] Escolha do usuário: ${outcome}`);
+                if (outcome === 'accepted') {
+                    deferredPrompt = null;
+                    window.closeSmartTvInstallModal();
+                }
+            }).catch((e) => {
+                console.warn('[PWA] Erro no prompt:', e);
+            });
+        } else {
+            // Se o navegador já está em modo standalone ou não disparou prompt
+            alert('Para instalar pelo navegador Android (Brave / Chrome):\n\n1. Toque nos 3 pontinhos (⋮) no topo ou rodapé do navegador.\n2. Selecione "Instalar aplicativo" ou "Adicionar à tela inicial".');
+        }
+    };
+
     window.triggerPwaInstall = function() {
         if (deferredPrompt) {
             deferredPrompt.prompt();
             deferredPrompt.userChoice.then(({ outcome }) => {
                 console.log(`[PWA] Escolha do usuário: ${outcome}`);
-                deferredPrompt = null;
+                if (outcome === 'accepted') {
+                    deferredPrompt = null;
+                } else {
+                    window.openSmartTvInstallModal();
+                }
+            }).catch(() => {
+                window.openSmartTvInstallModal();
             });
         } else {
-            // Em Smart TVs (LG webOS, Samsung Tizen) ou navegadores sem prompt nativo:
+            // Em Android (sem prompt capturado), TV ou Desktop: abre o modal com opções claras (Baixar APK ou PWA)
             window.openSmartTvInstallModal();
         }
     };
@@ -357,41 +381,27 @@
             return;
         }
 
-        // Media Controls (Samsung Tizen, LG webOS, Android TV, Universal Remotes)
-        // Play/Pause, MediaPlay, MediaPause, MediaPlayPause - Toggle Playback
-        const isPlayPauseAction = 
-            key === 'Play/Pause' || 
-            key === 'MediaPlay' || 
-            key === 'MediaPause' || 
-            key === 'MediaPlayPause' || 
-            key === 'Play' || 
-            key === 'Pause' || 
-            key === 'PlaySpeed' ||
-            e.code === 'MediaPlayPause' ||
-            e.code === 'MediaPlay' ||
-            e.code === 'MediaPause' ||
-            code === 10252 || 
-            code === 179 || 
-            code === 415 || 
-            code === 250 || 
-            code === 19 || 
-            code === 413 ||
-            (code === 32 && activeTag !== 'input' && activeTag !== 'textarea');
-
-        if (isPlayPauseAction) {
+        // Media Controls (Samsung Tizen, LG webOS, Android TV)
+        // Play: 415, Pause: 19, PlayPause: 10252, Stop: 413, FastForward: 417, Rewind: 412
+        if (code === 415 || key === 'MediaPlay') {
+            e.preventDefault();
+            if (video && video.paused) video.play().catch(() => {});
+            return;
+        }
+        if (code === 19 || key === 'MediaPause') {
+            e.preventDefault();
+            if (video && !video.paused) video.pause();
+            return;
+        }
+        if (code === 10252 || key === 'MediaPlayPause') {
             e.preventDefault();
             if (video) {
-                if (video.paused) {
-                    video.play().catch(() => {});
-                    if (typeof showNotification === 'function') showNotification('▶ Reproduzindo', 'info');
-                } else {
-                    video.pause();
-                    if (typeof showNotification === 'function') showNotification('⏸ Pausado', 'info');
-                }
+                if (video.paused) video.play().catch(() => {});
+                else video.pause();
             }
             return;
         }
-        if (code === 414 || code === 413 || key === 'MediaStop' || e.code === 'MediaStop') {
+        if (code === 413 || key === 'MediaStop') {
             e.preventDefault();
             if (typeof window.stopStream === 'function') window.stopStream();
             return;
@@ -570,16 +580,12 @@
         const video = document.getElementById('iptv-video');
         if (!video) return;
         video.playbackRate = speed;
-        video.preservesPitch = true;
-        if ('webkitPreservesPitch' in video) video.webkitPreservesPitch = true;
-        if ('mozPreservesPitch' in video) video.mozPreservesPitch = true;
-        window.currentPlaybackSpeed = speed;
         const label = document.getElementById('yt-speed-label');
         if (label) label.textContent = `${speed}x`;
         const menu = document.getElementById('yt-speed-menu');
         if (menu) menu.classList.add('hidden');
         if (typeof showNotification === 'function') {
-            showNotification(`Velocidade de reprodução: ${speed}x ⚡`, 'info');
+            showNotification(`Velocidade de reprodução: ${speed}x`, 'info');
         }
     }
 
