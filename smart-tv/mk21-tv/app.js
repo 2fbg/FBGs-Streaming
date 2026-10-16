@@ -1,4 +1,22 @@
-// MK21 PLAY v1.1.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+/** Mk21DnsResolver v1.4.1 - TV Failover **/
+const Mk21DnsResolver = {
+    async fetchWithFailover(url, options = {}) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(timeout);
+            if (!response.ok) throw new Error('Net Error');
+            return response;
+        } catch (e) {
+            console.warn("Acionando Rota de Escape DNS para:", url);
+            const retryUrl = url.includes('?') ? url + '&retry=1' : url + '?retry=1';
+            return fetch(retryUrl, options);
+        }
+    }
+};
+
+// MK21 PLAY v1.4.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -3796,7 +3814,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.4.0';
+const BASE_PACKAGE_VERSION = '1.4.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -3848,14 +3866,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.0
-    if (!data || compareSemver(data.version, '1.4.0') < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.1
+    if (!data || compareSemver(data.version, '1.4.1') < 0) {
       data = {
-        version: '1.4.0',
-        versionCode: 140,
-        title: 'MK21 Play v1.4.0',
-        releaseNotes: '• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes\n• Busca Global Omnisearch em Ao Vivo, Filmes e Séries',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.0_all.ipk',
+        version: '1.4.1',
+        versionCode: 141,
+        title: 'MK21 Play v1.4.1',
+        releaseNotes: '• Sinergia APK-to-IPK: Phased loading, DNS failover e Omnisearch na Smart TV\n• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.1_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -4774,3 +4792,91 @@ window.addEventListener('load', () => {
     else focusActiveElement();
   });
 });
+
+/** v1.4.1 - Phased Loading & Omnisearch Synergy **/
+function showSyncStatus(percent, isSyncing) {
+  const badge = document.getElementById('sync-progress-badge');
+  if (badge) {
+    badge.style.display = isSyncing ? 'block' : 'none';
+    badge.textContent = 'Sincronizando: ' + percent + '%';
+  }
+  if (typeof updateServerSyncBadge === 'function') {
+    updateServerSyncBadge(percent, !isSyncing);
+  }
+}
+
+function processBatch(batch) {
+  if (!batch || !batch.length) return;
+  const lines = Array.isArray(batch) ? batch : [batch];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('#EXTINF:')) {
+      const nameMatch = line.match(/,(.+)$/);
+      const name = nameMatch ? nameMatch[1].trim() : 'Canal';
+      const groupMatch = line.match(/group-title="([^"]+)"/i);
+      const group = groupMatch ? groupMatch[1].trim() : 'Geral';
+      let nextUrl = '';
+      if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
+        nextUrl = lines[i + 1].trim();
+      }
+      const item = {
+        id: 'ch_' + Math.random().toString(36).substring(2, 9),
+        name: name,
+        group: group,
+        url: nextUrl,
+        contentType: 'LIVE'
+      };
+      if (typeof allCatalog !== 'undefined' && allCatalog.LIVE) {
+        allCatalog.LIVE.push(item);
+      }
+    }
+  }
+}
+
+async function parseM3U(data) {
+  if (!data) return;
+  const lines = data.split('\n');
+  const total = lines.length;
+
+  // Fase 1: Canais Ao Vivo (Primeiros 300) - Liberação Imediata
+  const liveBatch = lines.slice(0, 300);
+  processBatch(liveBatch);
+  if (typeof renderChannels === 'function') {
+    renderChannels();
+  } else if (typeof renderItemsList === 'function') {
+    renderItemsList();
+  }
+
+  // Fase 2: Background Sync para Filmes e Séries (Chunks de 500)
+  let index = 300;
+  const processNext = () => {
+    if (index >= total) {
+      showSyncStatus(100, false);
+      return;
+    }
+    const chunk = lines.slice(index, index + 500);
+    processBatch(chunk);
+    index += 500;
+    showSyncStatus(Math.round((index / total) * 100), true);
+    const raf = window.requestAnimationFrame || function (cb) { setTimeout(cb, 16); };
+    raf(processNext);
+  };
+  setTimeout(processNext, 500);
+}
+
+function globalSearch(query) {
+  const q = (query || '').toLowerCase().trim();
+  const liveItems = (typeof allCatalog !== 'undefined' && allCatalog.LIVE) ? allCatalog.LIVE : (typeof allChannels !== 'undefined' ? allChannels : []);
+  const movieItems = (typeof allCatalog !== 'undefined' && allCatalog.MOVIE) ? allCatalog.MOVIE : (typeof allMovies !== 'undefined' ? allMovies : []);
+  const seriesItems = (typeof allCatalog !== 'undefined' && allCatalog.SERIES) ? allCatalog.SERIES : (typeof allSeries !== 'undefined' ? allSeries : []);
+  const results = {
+    live: liveItems.filter(c => (c.name || '').toLowerCase().includes(q)),
+    vod: movieItems.filter(m => ((m.title || m.name) || '').toLowerCase().includes(q)),
+    series: seriesItems.filter(s => (s.name || '').toLowerCase().includes(q))
+  };
+  if (typeof renderSearchResults === 'function') {
+    renderSearchResults(results);
+  }
+  return results;
+}
+

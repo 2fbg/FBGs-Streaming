@@ -1766,3 +1766,22 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   background: linear-gradient(90deg, #e50914, #ff5252);
   border-radius: 3px;
 }
+
+/* v1.4.1 - UI Parity */
+#sync-progress-badge {
+    position: absolute;
+    top: 10px;
+    right: 150px;
+    background: rgba(255, 152, 0, 0.8);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    display: none;
+    z-index: 9999;
+}
+.player-osd-epg {
+    border-left: 4px solid #ff9800;
+    padding-left: 15px;
+    margin: 10px 0;
+}

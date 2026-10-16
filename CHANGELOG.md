@@ -2,6 +2,22 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [v1.4.1] - 2026-10-16
+
+### 📺 APK-to-IPK Synergy & Smart TV Engine Modernization
+- **[v1.4.1] - DNS Failover Interceptor na Smart TV (`Mk21DnsResolver`):**
+  - Implementado `Mk21DnsResolver.fetchWithFailover` no `app.js` da Smart TV, alinhando a resiliência de rede do webOS/Tizen ao motor do APK Android com timeout resiliente de 8s e rota de escape `?retry=1`.
+- **[v1.4.1] - Phased Loading Não-Bloqueante:**
+  - Desacoplamento do processamento M3U na Smart TV: liberação imediata dos primeiros canais com background sync contínuo de filmes e séries em chunks via `requestAnimationFrame`.
+  - Indicador visual `#sync-progress-badge` no OSD com status de progresso dinâmico.
+- **[v1.4.1] - Omnisearch Multi-Categorias:**
+  - Motor `globalSearch` unificado na Smart TV permitindo busca cruzada simultânea entre Canais Ao Vivo, Filmes e Séries.
+- **[v1.4.1] - Polimento Visual do OSD e Badges:**
+  - Estilização moderna de `.player-osd-epg` com destaque âmbar e integração de badges no `styles.css`.
+- **[v1.4.1] - Versionamento e Binários Multiplataforma:**
+  - `versionCode = 141` e `versionName = "1.4.1"` no Android.
+  - Sincronização de manifestos Web, webOS (`mk21play_1.4.1_all.ipk`) e Tizen.
+
 ## [v1.4.0] - 2026-10-15
 
 ### 🚀 Multitask & Observability (Staff Milestone)
