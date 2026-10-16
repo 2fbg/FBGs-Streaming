@@ -2,7 +2,7 @@
   {
     "id": "server_1",
     "name": "VLOG",
-    "baseUrl": "http://myopbx.beer"
+    "baseUrl": "https://myopbx.beer"
   },
   {
     "id": "server_2",
@@ -27,7 +27,7 @@
   {
     "id": "server_6",
     "name": "MK21 PRÓ",
-    "baseUrl": "http://app.vivoxi.xyz"
+    "baseUrl": "https://myopbx.beer"
   },
   {
     "id": "server_7",

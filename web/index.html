@@ -1399,12 +1399,12 @@
 
         // Inline replica of servers.json to work flawlessly offline or context-free (avoid CORS issues when testing locally via file://)
         const PREDEFINED_SERVERS = [
-            { id: "server_1", name: "VLOG", baseUrl: "http://myopbx.beer" },
+            { id: "server_1", name: "VLOG", baseUrl: "https://myopbx.beer" },
             { id: "server_2", name: "LUB TV", baseUrl: "http://pottermax.sbs" },
             { id: "server_3", name: "CINELON21", baseUrl: "http://coliseuop.site" },
             { id: "server_4", name: "TANNIX", baseUrl: "http://poptvcdn.online" },
             { id: "server_5", name: "CB6000", baseUrl: "http://cdn.caterlune.top" },
-            { id: "server_6", name: "MK21 PRÓ", baseUrl: "http://app.vivoxi.xyz" },
+            { id: "server_6", name: "MK21 PRÓ", baseUrl: "https://myopbx.beer" },
             { id: "server_7", name: "NEW TV", baseUrl: "http://cp2026.sbs" },
             { id: "server_8", name: "MULTT TV", baseUrl: "http://dali-as.skin" },
             { id: "server_9", name: "CINEVO", baseUrl: "http://antaresfusion.shop" },
@@ -3291,15 +3291,14 @@
                 }
             }
 
-            let baseUrl = serverSelector.value;
-            if (baseUrl.startsWith('https://')) {
-                baseUrl = 'http://' + baseUrl.substring(8);
-            } else if (!baseUrl.startsWith('http://')) {
+            let baseUrl = (serverSelector.value || '').trim();
+            if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
                 baseUrl = 'http://' + baseUrl;
             }
-            const profileName = (serverSelector.selectedIndex >= 0 && serverSelector.options[serverSelector.selectedIndex])
+            let profileName = (serverSelector.selectedIndex >= 0 && serverSelector.options[serverSelector.selectedIndex])
                 ? serverSelector.options[serverSelector.selectedIndex].text
                 : 'Servidor IPTV';
+            const originalSelectedProfileName = profileName;
             const user = (userInput && userInput.value.trim()) || localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
             const pass = (passInput && passInput.value.trim()) || localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || '';
             const corsMethod = (corsSelector && corsSelector.value) || localStorage.getItem('mk21_cors') || 'auto';
@@ -3406,16 +3405,11 @@
                 }
             }
 
-            // Form absolute URL with encoded attributes
             const encUser = encodeURIComponent(user);
             const encPass = encodeURIComponent(pass);
-            const rawUrl = `${baseUrl}/get.php?username=${encUser}&password=${encPass}&type=m3u_plus&output=mpegts`;
 
-            let text = '';
-            let success = false;
-            let usedMethod = '';
-
-            const methods = [
+            try {
+                const methods = [
                 { name: 'vercel', label: 'Proxy Vercel Dedicado', getUrl: (url) => `${window.location.origin}/api/proxy?url=${encodeURIComponent(url)}` },
                 { name: 'direct', label: 'Conexão Direta (sem proxy)', getUrl: (url) => url },
                 { name: 'corsproxy', label: 'Proxy CorsProxy.io', getUrl: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}` },
@@ -3424,7 +3418,6 @@
                 { name: 'thingproxy', label: 'Proxy ThingProxy', getUrl: (url) => `https://thingproxy.freeboard.io/fetch/${url}` }
             ];
 
-            // If Auto is selected, dynamically sort the proxy methods by their tested latency so the fastest is tried first
             let sortedMethods = [...methods];
             if (corsMethod === 'auto') {
                 sortedMethods.sort((a, b) => {
@@ -3434,58 +3427,203 @@
                 });
             }
 
-            const preferredLoginMethod = getEffectiveProxyMethod(rawUrl, corsMethod);
+            const preferredLoginMethod = getEffectiveProxyMethod(baseUrl, corsMethod);
             const methodsToTry = (corsMethod === 'auto')
                 ? sortedMethods.filter(m => m.name === preferredLoginMethod).concat(
                     sortedMethods.filter(m => m.name !== preferredLoginMethod)
                   )
                 : sortedMethods.filter(m => m.name === preferredLoginMethod);
 
-            // Parallel Fast Race: Dispara os proxies mais rápidos em paralelo
-            async function tryFetchMethod(method) {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 12000);
-                try {
-                    const fetchUrl = method.getUrl(rawUrl);
-                    const response = await fetch(fetchUrl, { signal: controller.signal });
-                    clearTimeout(timeoutId);
-                    if (response.ok) {
-                        const tempText = await response.text();
-                        if (tempText && !tempText.includes('<!DOCTYPE html>') && !tempText.includes('<html') && (tempText.includes('#EXTM3U') || tempText.includes('#EXTINF'))) {
-                            return { text: tempText, label: method.label };
-                        } else if (tempText && tempText.toLowerCase().includes('invalid username or password')) {
-                            throw new Error('Usuário ou senha inválidos.');
-                        }
-                    }
-                } catch (err) {
-                    if (err.message && err.message.includes('Usuário ou senha')) throw err;
-                } finally {
-                    clearTimeout(timeoutId);
+            // MONTAGEM DOS CANDIDATOS DO ECOSSISTEMA MULTI-SERVIDOR (FAILOVER AUTOMÁTICO)
+            const candidateServers = [];
+            candidateServers.push({ name: profileName, baseUrl: baseUrl });
+
+            PREDEFINED_SERVERS.forEach(srv => {
+                const sBase = srv.baseUrl.replace(/\/+$/, '').toLowerCase();
+                if (!candidateServers.some(c => c.baseUrl.replace(/\/+$/, '').toLowerCase() === sBase)) {
+                    candidateServers.push({ name: srv.name, baseUrl: srv.baseUrl });
                 }
-                throw new Error(`Falhou ${method.label}`);
+            });
+
+            let connectedServer = null;
+            let usedMethod = '';
+            let parsedSegments = null;
+
+            // FASE 1: Autenticação Rápida via Xtream Codes API (Sobrecarga de rede mínima: ~480 bytes)
+            for (let sIdx = 0; sIdx < candidateServers.length; sIdx++) {
+                const candidate = candidateServers[sIdx];
+                const cleanBase = candidate.baseUrl.replace(/\/+$/, '');
+                const apiAuthUrl = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}`;
+
+                updateLoaderProgress(20 + sIdx * 5, `Autenticando [${candidate.name}]...`);
+
+                let serverAuthOk = false;
+                for (let mIdx = 0; mIdx < methodsToTry.length; mIdx++) {
+                    const m = methodsToTry[mIdx];
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 7000);
+                    try {
+                        const targetUrl = m.getUrl(apiAuthUrl);
+                        const resp = await fetch(targetUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            if (data && data.user_info) {
+                                if (data.user_info.auth === 1) {
+                                    connectedServer = candidate;
+                                    usedMethod = m.label;
+                                    serverAuthOk = true;
+                                    break;
+                                } else if (data.user_info.auth === 0) {
+                                    hideLoader();
+                                    showLoginError(`Erro de Credenciais: Usuário ou senha incorretos no servidor ${candidate.name}.`);
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Timeout ou erro de rede no proxy/servidor atual
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                }
+
+                if (serverAuthOk) {
+                    console.log(`[MK21 Failover] Conectado com sucesso ao servidor: ${connectedServer.name} via ${usedMethod}`);
+                    break;
+                }
             }
 
-            updateLoaderProgress(35, 'Conectando ao gateway de alta velocidade...');
-            const topMethods = methodsToTry.slice(0, 3);
+            // FASE 2: Ingestão de Canais e Categorias
+            if (connectedServer) {
+                const cleanBase = connectedServer.baseUrl.replace(/\/+$/, '');
+                baseUrl = connectedServer.baseUrl;
+                profileName = connectedServer.name;
+                localStorage.setItem('mk21_baseUrl', baseUrl);
+                if (serverSelector) serverSelector.value = baseUrl;
+                const selectedLabel = document.getElementById('selected-server-name-label');
+                if (selectedLabel) selectedLabel.textContent = profileName;
 
-            try {
-                // Tenta em paralelo e pega a primeira resposta válida (corta o tempo pela metade)
-                const result = await Promise.any(topMethods.map(m => tryFetchMethod(m)));
-                text = result.text;
-                success = true;
-                usedMethod = result.label;
-            } catch (err) {
-                if (err.message && err.message.includes('Usuário ou senha')) {
-                    hideLoader();
-                    showLoginError(`Erro de Credenciais: Usuário ou senha incorretos no servidor ${profileName}.`);
-                    return;
+                updateLoaderProgress(65, `Carregando canais ao vivo de [${profileName}]...`);
+
+                const activeMethod = methodsToTry.find(m => m.label === usedMethod) || methodsToTry[0];
+                const catsUrl = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}&action=get_live_categories`;
+                const livesUrl = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}&action=get_live_streams`;
+
+                try {
+                    const [catsRes, livesRes] = await Promise.all([
+                        fetch(activeMethod.getUrl(catsUrl)),
+                        fetch(activeMethod.getUrl(livesUrl))
+                    ]);
+                    const categories = (catsRes.ok) ? await catsRes.json() : [];
+                    const liveStreams = (livesRes.ok) ? await livesRes.json() : [];
+
+                    const catMap = {};
+                    if (Array.isArray(categories)) {
+                        categories.forEach(c => catMap[c.category_id] = c.category_name);
+                    }
+
+                    const lives = (Array.isArray(liveStreams) ? liveStreams : []).map(s => ({
+                        name: s.name,
+                        category: catMap[s.category_id] || 'Canais Gerais',
+                        logo: s.stream_icon || '',
+                        url: `${cleanBase}/live/${encUser}/${encPass}/${s.stream_id}.ts`,
+                        streamId: String(s.stream_id || ''),
+                        streamType: 'LIVE',
+                        tvgId: s.epg_channel_id || '',
+                        tvgName: s.name || ''
+                    }));
+
+                    parsedSegments = {
+                        lives: lives,
+                        movies: [],
+                        series: []
+                    };
+
+                    // Busca assíncrona dos metadados de VOD e Séries em segundo plano sem travar
+                    setTimeout(async () => {
+                        try {
+                            const vodUrl = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}&action=get_vod_streams`;
+                            const seriesUrl = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}&action=get_series`;
+                            const [vodRes, seriesRes] = await Promise.all([
+                                fetch(activeMethod.getUrl(vodUrl)),
+                                fetch(activeMethod.getUrl(seriesUrl))
+                            ]);
+                            const vods = (vodRes.ok) ? await vodRes.json() : [];
+                            const series = (seriesRes.ok) ? await seriesRes.json() : [];
+
+                            const mappedMovies = (Array.isArray(vods) ? vods : []).map(m => ({
+                                name: m.name,
+                                category: m.category_name || 'Filmes VOD',
+                                logo: m.stream_icon || '',
+                                url: `${cleanBase}/movie/${encUser}/${encPass}/${m.stream_id}.${m.container_extension || 'mp4'}`,
+                                streamId: String(m.stream_id || ''),
+                                streamType: 'MOVIE',
+                                rating: m.rating || '',
+                                year: m.year || ''
+                            }));
+
+                            const mappedSeries = (Array.isArray(series) ? series : []).map(s => ({
+                                name: s.name,
+                                category: s.category_name || 'Séries',
+                                logo: s.cover || '',
+                                url: `${cleanBase}/series/${encUser}/${encPass}/${s.series_id}`,
+                                streamId: String(s.series_id || ''),
+                                streamType: 'SERIES',
+                                rating: s.rating || '',
+                                year: s.year || ''
+                            }));
+
+                            if (parsedSegments) {
+                                parsedSegments.movies = mappedMovies;
+                                parsedSegments.series = mappedSeries;
+                                saveCachedPlaylist(cacheKey, parsedSegments);
+                            }
+                            startBackgroundLoading(mappedMovies, mappedSeries);
+                        } catch (e) {
+                            console.warn('VOD background load warning:', e);
+                        }
+                    }, 1200);
+
+                } catch (e) {
+                    console.warn('Falha no endpoint de streams da API, fallback para M3U:', e);
                 }
-                // Fallback sequencial (percorre todos os métodos garantindo que o Proxy Dedicado Vercel seja tentado caso a corrida paralela tenha falhado)
+            }
+
+            // FASE 3: Fallback Tradicional M3U (para listas M3U manuais / customizadas ou servidores sem player_api)
+            if (!parsedSegments || parsedSegments.lives.length === 0) {
+                const rawUrl = `${baseUrl}/get.php?username=${encUser}&password=${encPass}&type=m3u_plus&output=ts`;
+                let text = '';
+                let success = false;
+
+                async function tryFetchM3uMethod(method) {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 12000);
+                    try {
+                        const fetchUrl = method.getUrl(rawUrl);
+                        const response = await fetch(fetchUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        if (response.ok) {
+                            const tempText = await response.text();
+                            if (tempText && !tempText.includes('<!DOCTYPE html>') && !tempText.includes('<html') && (tempText.includes('#EXTM3U') || tempText.includes('#EXTINF'))) {
+                                return { text: tempText, label: method.label };
+                            } else if (tempText && tempText.toLowerCase().includes('invalid username or password')) {
+                                throw new Error('Usuário ou senha inválidos.');
+                            }
+                        }
+                    } catch (err) {
+                        if (err.message && err.message.includes('Usuário ou senha')) throw err;
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                    throw new Error(`Falhou ${method.label}`);
+                }
+
                 for (let idx = 0; idx < methodsToTry.length; idx++) {
                     const method = methodsToTry[idx];
                     updateLoaderProgress(50 + idx * 7, `Conectando via [${method.label}]...`);
                     try {
-                        const res = await tryFetchMethod(method);
+                        const res = await tryFetchM3uMethod(method);
                         text = res.text;
                         success = true;
                         usedMethod = res.label;
@@ -3498,62 +3636,65 @@
                         }
                     }
                 }
-            }
 
-            try {
                 if (!success) {
                     throw new Error('Todos os métodos de conexão direta e proxies falharam em recuperar uma M3U válida. Verifique as credenciais ou a conexão do servidor.');
                 }
 
                 updateLoaderProgress(85, 'Processando conteúdo da lista em alta velocidade...');
-                const segments = parseM3UProgressively(text);
+                parsedSegments = parseM3UProgressively(text);
+            }
 
-                if (segments.lives.length === 0 && segments.movies.length === 0 && segments.series.length === 0) {
-                    throw new Error('Nenhum canal ativo foi decodificado. Confirme suas credenciais.');
-                }
+            if (!parsedSegments || (parsedSegments.lives.length === 0 && parsedSegments.movies.length === 0 && parsedSegments.series.length === 0)) {
+                throw new Error('Nenhum canal ativo foi decodificado. Confirme suas credenciais.');
+            }
 
-                // Salvar no IndexedDB para carregamento instantâneo nas próximas visitas
-                saveCachedPlaylist(cacheKey, segments);
+            // Salvar no IndexedDB para carregamento instantâneo nas próximas visitas
+            saveCachedPlaylist(cacheKey, parsedSegments);
 
-                updateLoaderProgress(95, 'Indexando canais ao vivo...');
+            updateLoaderProgress(95, 'Indexando canais ao vivo...');
 
-                // Initialize with LIVE streams first for fast initial rendering
-                playlistItems = segments.lives;
+            // Initialize with LIVE streams first for fast initial rendering
+            playlistItems = parsedSegments.lives;
+            if (playlistItems.length === 0) {
+                playlistItems = [...parsedSegments.movies, ...parsedSegments.series];
+            }
 
-                // If there are no live channels on the IPTV but we have movies/series, load them
-                if (playlistItems.length === 0) {
-                    playlistItems = [...segments.movies, ...segments.series];
-                }
+            // Show player screen right away
+            loginScreen.classList.add('hidden');
+            loginScreen.style.display = 'none';
+            playerScreen.classList.remove('hidden');
+            playerScreen.classList.add('flex');
+            playerScreen.style.display = 'flex';
+            setTimeout(() => {
+                playerScreen.classList.remove('scale-95', 'opacity-0');
+                playerScreen.classList.add('scale-100', 'opacity-100');
+            }, 50);
 
-                // Show player screen right away
-                loginScreen.classList.add('hidden');
-                loginScreen.style.display = 'none';
-                playerScreen.classList.remove('hidden');
-                playerScreen.classList.add('flex');
-                playerScreen.style.display = 'flex';
-                setTimeout(() => {
-                    playerScreen.classList.remove('scale-95', 'opacity-0');
-                    playerScreen.classList.add('scale-100', 'opacity-100');
-                }, 50);
+            // Set headers
+            if (activeServerDisplay && activeServerDisplay.tagName === 'SELECT') {
+                populateHeaderServers();
+            } else if (activeServerDisplay) {
+                activeServerDisplay.textContent = profileName;
+            }
+            activeUserDisplay.textContent = user;
 
-                // Set headers
-                if (activeServerDisplay && activeServerDisplay.tagName === 'SELECT') {
-                    populateHeaderServers();
-                } else if (activeServerDisplay) {
-                    activeServerDisplay.textContent = profileName;
-                }
-                activeUserDisplay.textContent = user;
+            // Load initial content (LIVE channels first)
+            activeType = 'LIVE';
+            activeCategory = 'ALL';
+            renderCategories();
+            renderMediaItems();
+            renderContinueWatching();
 
-                // Load initial content (LIVE channels first)
-                activeType = 'LIVE';
-                activeCategory = 'ALL';
-                renderCategories();
-                renderMediaItems();
-                renderContinueWatching();
+            if (originalSelectedProfileName !== profileName) {
+                showNotification(`Conectado com sucesso via failover inteligente ao servidor [${profileName}]! ⚡`, 'success');
+            } else {
+                showNotification(`Conectado ao servidor [${profileName}]! ⚡`, 'success');
+            }
 
-                // Trigger background loading for movies and series in parallel background chunks
-                startBackgroundLoading(segments.movies, segments.series);
-                renderContinueWatching();
+            if (parsedSegments.movies.length > 0 || parsedSegments.series.length > 0) {
+                startBackgroundLoading(parsedSegments.movies, parsedSegments.series);
+            }
 
             } catch (err) {
                 console.error(err);

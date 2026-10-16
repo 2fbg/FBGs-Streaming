@@ -179,6 +179,7 @@ module.exports = function handler(req, res) {
 
                 // Follow HTTP Redirects internally (301, 302, 303, 307, 308)
                 if ((statusCode === 301 || statusCode === 302 || statusCode === 303 || statusCode === 307 || statusCode === 308) && proxyRes.headers.location) {
+                    try { proxyRes.resume(); } catch (e) {}
                     let redirUrl = proxyRes.headers.location;
                     if (!redirUrl.startsWith('http://') && !redirUrl.startsWith('https://')) {
                         redirUrl = new URL(redirUrl, urlStr).toString();
@@ -248,6 +249,14 @@ module.exports = function handler(req, res) {
                 if (!res.headersSent) {
                     res.statusCode = 502;
                     res.end(`Erro de conexão do proxy: ${err.message}`);
+                }
+            });
+
+            proxyReq.setTimeout(25000, () => {
+                abortUpstream();
+                if (!res.headersSent) {
+                    res.statusCode = 504;
+                    res.end('Erro: Tempo limite de resposta esgotado no servidor IPTV.');
                 }
             });
 
