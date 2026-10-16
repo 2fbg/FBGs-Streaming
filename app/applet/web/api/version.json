@@ -10,8 +10,8 @@
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "apkSha256": "7c1d94594079c3cc44537bc8785c4984b330d37a37b54be3c2d896f98501c86d",
-  "ipkSha256": "501358398dfbfa8a0a6482da3e29350a0dba41bc331b13d94fe4246951992aa7",
+  "ipkSha256": "c2f4183a5db89deecd862518c454e94dc2fbf8f720c82658eb3c08e5633d74d5",
   "sizeBytes": 24905766,
-  "ipkSizeBytes": 148052,
+  "ipkSizeBytes": 150320,
   "updatedAt": "2026-10-16"
 }

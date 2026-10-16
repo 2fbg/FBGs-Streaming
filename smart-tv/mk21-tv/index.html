@@ -68,7 +68,6 @@
         </div>
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
-          <button id="btnSortOrder" class="util-btn sort-order-btn" tabindex="0" title="Classificação e Ordenação" style="width: auto; min-width: 130px; padding: 0 14px; font-size: 15px;">↕️ Classificação</button>
         </div>
         <ul id="listItems" class="pane-scroll"></ul>
       </div>
@@ -77,6 +76,7 @@
       <div class="col-pane col-player">
         <div id="videoContainer" class="video-box" tabindex="0">
           <video id="tvPlayer" playsinline></video>
+          <div id="playerReconnectBadge" class="player-reconnect-badge hidden">Reconectando...</div>
           <div id="channelOverlay" class="channel-overlay hidden">Canal</div>
           <!-- Controles em tela cheia modernos com barra de progresso e mudança de canal -->
           <div id="fsHudBar" class="fs-hud-bar hidden">
@@ -118,13 +118,15 @@
           </div>
         </div>
 
-        <!-- EPG / INFORMAÇÕES DO STREAM -->
-        <div class="epg-card">
+        <!-- EPG / INFORMAÇÕES DO STREAM (Mini-Guia EPG Fixo na Barra Lateral) -->
+        <div class="epg-card" id="previewEpgCard">
           <h2 id="epgTitle" class="epg-name">Selecione um canal</h2>
           <p id="epgGroup" class="epg-sub">Categoria: Geral</p>
+          <div id="previewEpgNow" class="preview-epg-now">NO AR: Programação ao Vivo</div>
           <div class="epg-bar" id="epgBarBox">
             <div class="epg-progress" id="epgProgressBar"></div>
           </div>
+          <p id="previewEpgNext" class="epg-next-text">A SEGUIR: Programação Normal</p>
           <div id="vodTimeRow" class="vod-time-row hidden">
             <span id="vodTimeCurrent">00:00:00</span>
             <span id="vodTimeDuration">00:00:00</span>
@@ -133,7 +135,6 @@
             <span id="epgStatus">🔴 Transmissão Ao Vivo</span>
             <span id="badgeStreamResolution" class="badge-quality">HD 720p</span>
           </div>
-          <p id="epgNext" class="epg-next-text">A seguir: Programação Normal</p>
         </div>
 
         <div class="player-controls">

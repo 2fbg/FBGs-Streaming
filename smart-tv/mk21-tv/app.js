@@ -1402,25 +1402,36 @@ function renderItemsList() {
       const item = currentFilteredItems[i];
       const li = document.createElement('li');
       const btn = document.createElement('button');
-      btn.className = 'list-item-btn channel-item-btn' + (activeItem && activeItem.url === item.url ? ' active' : '');
+      btn.className = 'list-item-btn channel-item-btn channel-row' + (activeItem && activeItem.url === item.url ? ' active active-playing' : '');
       btn.setAttribute('tabindex', '0');
       btn.setAttribute('data-idx', i);
+      btn.setAttribute('data-id', item.id || item.url);
 
-      if (item.logo) {
-        const img = document.createElement('img');
-        img.className = 'channel-logo-thumb';
-        img.src = getOptimizedLogoUrl(item.logo, item.name);
-        img.alt = item.name;
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        img.onerror = () => { img.style.display = 'none'; };
-        btn.appendChild(img);
-      }
+      const logoWrap = document.createElement('div');
+      logoWrap.className = 'channel-logo-wrap';
+      const img = document.createElement('img');
+      img.className = 'channel-logo';
+      const fallbackSvg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52"><rect width="52" height="52" fill="%231e1f26"/><text x="50%" y="55%" font-size="18" fill="%23ff9800" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">📺</text></svg>';
+      img.src = item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg;
+      img.alt = item.name;
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.onerror = () => { img.src = fallbackSvg; };
+      logoWrap.appendChild(img);
+      btn.appendChild(logoWrap);
 
-      const spanTitle = document.createElement('span');
-      const prefix = currentContentType === 'CONTINUE' ? '▶ ' : (favoriteUrls.has(item.url) ? '⭐ ' : '');
-      spanTitle.textContent = prefix + item.name;
-      btn.appendChild(spanTitle);
+      const details = document.createElement('div');
+      details.className = 'channel-details';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'channel-name';
+      nameSpan.textContent = item.name;
+      details.appendChild(nameSpan);
+
+      const epgSub = document.createElement('span');
+      epgSub.className = 'channel-epg-sub';
+      epgSub.textContent = item.current_program || (currentContentType === 'CONTINUE' ? '▶ Continuar' : (item.group || 'Ao Vivo'));
+      details.appendChild(epgSub);
+      btn.appendChild(details);
 
       if (item.isAdult) {
         const tag = document.createElement('span');
@@ -1438,6 +1449,21 @@ function renderItemsList() {
         pTrack.appendChild(pFill);
         btn.appendChild(pTrack);
       }
+
+      const isFav = favoriteUrls.has(item.url);
+      const favBtn = document.createElement('button');
+      favBtn.className = 'channel-fav-btn' + (isFav ? ' active' : '');
+      favBtn.textContent = isFav ? '⭐' : '☆';
+      favBtn.title = isFav ? 'Remover dos favoritos' : 'Favoritar canal';
+      favBtn.tabIndex = -1;
+      favBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleFav(item.url);
+        const nowFav = favoriteUrls.has(item.url);
+        favBtn.className = 'channel-fav-btn' + (nowFav ? ' active' : '');
+        favBtn.textContent = nowFav ? '⭐' : '☆';
+      };
+      btn.appendChild(favBtn);
 
       btn.onclick = () => playStream(item);
 
@@ -2429,6 +2455,130 @@ async function attemptDnsFailover(originalUrl) {
   return originalUrl;
 }
 
+// ============================================================================
+// WATCHDOG DE AUTO-RECONEXÃO NO AO VIVO (Item 1)
+// ============================================================================
+let stallWatchdogInterval = null;
+let lastVideoCurrentTime = -1;
+let stallCount = 0;
+let isAutoReconnecting = false;
+let autoReconnectAttempts = 0;
+const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+
+function showPlayerReconnectBadge(msg) {
+  let badge = $('playerReconnectBadge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'playerReconnectBadge';
+    badge.className = 'player-reconnect-badge';
+    const container = $('videoContainer') || ($('tvPlayer') && $('tvPlayer').parentElement);
+    if (container) container.appendChild(badge);
+  }
+  badge.textContent = msg;
+  badge.classList.remove('hidden');
+  badge.style.display = 'block';
+}
+
+function hidePlayerReconnectBadge() {
+  const badge = $('playerReconnectBadge');
+  if (badge) {
+    badge.classList.add('hidden');
+    badge.style.display = 'none';
+  }
+}
+
+function stopStallWatchdog() {
+  if (stallWatchdogInterval) {
+    clearInterval(stallWatchdogInterval);
+    stallWatchdogInterval = null;
+  }
+}
+
+function triggerAutoReconnect(cause) {
+  if (isAutoReconnecting || !activeItem) return;
+  isAutoReconnecting = true;
+  autoReconnectAttempts++;
+
+  if (autoReconnectAttempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
+    console.error('[SmartPlayer Watchdog] Limite máximo de reconexão atingido:', cause);
+    showPlayerReconnectBadge('Falha de conexão. Tente outro canal.');
+    if ($('epgStatus')) $('epgStatus').textContent = '⚠️ FORA DO AR';
+    isAutoReconnecting = false;
+    return;
+  }
+
+  const delay = Math.min(1000 * Math.pow(1.5, autoReconnectAttempts - 1), 6000);
+  showPlayerReconnectBadge(`Reconectando (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`);
+  if ($('epgStatus')) $('epgStatus').textContent = `🔄 RECONECTANDO (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`;
+
+  setTimeout(() => {
+    if (!activeItem) {
+      isAutoReconnecting = false;
+      return;
+    }
+    console.log(`[SmartPlayer Watchdog] Executando reconexão tentativa ${autoReconnectAttempts} para: ${activeItem.name}`);
+    if (hlsInstance) {
+      try {
+        hlsInstance.recoverMediaError();
+      } catch (e) {
+        if (typeof playStream === 'function') playStream(activeItem);
+      }
+    } else {
+      if (typeof playStream === 'function') playStream(activeItem);
+    }
+    isAutoReconnecting = false;
+  }, delay);
+}
+
+function startStallWatchdog() {
+  stopStallWatchdog();
+  lastVideoCurrentTime = -1;
+  stallCount = 0;
+  autoReconnectAttempts = 0;
+  isAutoReconnecting = false;
+  hidePlayerReconnectBadge();
+
+  const video = $('tvPlayer');
+  if (!video) return;
+
+  if (!video._mk21EventsBound) {
+    video._mk21EventsBound = true;
+    video.addEventListener('waiting', () => {
+      stallCount += 2;
+      if (stallCount >= 4) triggerAutoReconnect('Buffer esgotado (waiting)');
+    });
+    video.addEventListener('stalled', () => {
+      stallCount += 2;
+      if (stallCount >= 4) triggerAutoReconnect('Stream estagnado (stalled)');
+    });
+    video.addEventListener('playing', () => {
+      stallCount = 0;
+      autoReconnectAttempts = 0;
+      isAutoReconnecting = false;
+      hidePlayerReconnectBadge();
+    });
+    video.addEventListener('error', (e) => {
+      console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
+      triggerAutoReconnect('Erro nativo de reprodução');
+    });
+  }
+
+  stallWatchdogInterval = setInterval(() => {
+    if (!video || video.paused || isAutoReconnecting || !activeItem) return;
+    const nowTime = video.currentTime;
+    if (Math.abs(nowTime - lastVideoCurrentTime) < 0.2) {
+      stallCount++;
+      if (stallCount >= 4) { // 4 segundos sem avanço no tempo
+        console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
+        triggerAutoReconnect('Stream congelado');
+      }
+    } else {
+      stallCount = 0;
+      lastVideoCurrentTime = nowTime;
+    }
+  }, 1000);
+}
+
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
 function playStream(item) {
   if (!item || !item.url) return;
@@ -2437,6 +2587,7 @@ function playStream(item) {
   saveLastChannel(item);
   prefetchAdjacentChannels(item);
   startProgressTracker(item);
+  startStallWatchdog();
 
   const video = $('tvPlayer');
   if (item.currentTime && item.currentTime > 5 && (item.contentType === 'MOVIE' || item.contentType === 'SERIES' || currentContentType === 'MOVIE' || currentContentType === 'SERIES')) {
@@ -2515,6 +2666,7 @@ function playStream(item) {
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       video.play().catch(() => {});
+      hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
@@ -2527,23 +2679,18 @@ function playStream(item) {
           case Hls.ErrorTypes.NETWORK_ERROR:
             console.log('[HLS SmartTV] Tentando recuperar de erro de rede (startLoad)...');
             if ($('epgStatus')) $('epgStatus').textContent = '🔄 RECONECTANDO...';
+            showPlayerReconnectBadge('Reconectando rede...');
             hlsInstance.startLoad();
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
             console.log('[HLS SmartTV] Tentando recuperar de erro de mídia (recoverMediaError)...');
             if ($('epgStatus')) $('epgStatus').textContent = '🔄 RECUPERANDO MÍDIA...';
+            showPlayerReconnectBadge('Recuperando decodificação...');
             hlsInstance.recoverMediaError();
             break;
           default:
-            console.log('[HLS SmartTV] Erro irrecuperável, tentando fallback nativo...');
-            video.src = item.url;
-            try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (err) {}
-            video.play().then(() => {
-              if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
-            }).catch(() => {
-              if ($('epgStatus')) $('epgStatus').textContent = '⚠️ ERRO DE REPRODUÇÃO';
-            });
-            updateRealResolution(item);
+            console.log('[HLS SmartTV] Erro irrecuperável, disparando auto-reconexão progressiva...');
+            triggerAutoReconnect('Erro HLS Fatal');
             break;
         }
       }
@@ -2554,11 +2701,14 @@ function playStream(item) {
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
     video.play().then(() => {
+      hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
-    }).catch(() => {});
+    }).catch(() => {
+      triggerAutoReconnect('Falha no playback nativo');
+    });
   }
 }
 
@@ -4422,6 +4572,18 @@ document.addEventListener('keydown', function (e) {
       if (typeof switchContentType === 'function') switchContentType('LIVE');
       return;
     }
+  }
+
+  // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
+  if (k === 427 || key === 'ChannelUp') {
+    e.preventDefault();
+    if (currentContentType === 'LIVE') playPreviousChannel();
+    return;
+  }
+  if (k === 428 || key === 'ChannelDown') {
+    e.preventDefault();
+    if (currentContentType === 'LIVE') playNextChannel();
+    return;
   }
 
   // Setas em tela cheia (Fullscreen) com mudança de canal e navegação nos botões

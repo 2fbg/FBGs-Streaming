@@ -194,8 +194,9 @@ body {
   gap: 16px;
   padding: 16px 25px;
   background: #090b12;
-  height: 100%;
-  min-height: 0;
+  height: calc(100vh - 75px);
+  max-height: calc(100vh - 75px);
+  overflow: hidden;
   box-sizing: border-box;
 }
 
@@ -234,20 +235,27 @@ body {
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.25);
   display: flex;
-  gap: 8px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .search-box input {
+  width: 100%;
   flex: 1;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: #1a1e2c;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   color: #fff;
   font-size: 18px;
   outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.search-box input:focus {
+  border-color: #ff9800;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
 }
 
 
@@ -289,12 +297,17 @@ body {
   border-color: var(--primary-red);
 }
 
-/* COLUNA 3: PLAYER & EPG */
+/* COLUNA 3: PLAYER & EPG (Preview Fixo e EPG Fixo na Barra Lateral - Item 7 e 10) */
 .col-player {
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: sticky;
+  top: 0;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .video-box {
@@ -315,6 +328,29 @@ video {
   display: block;
 }
 
+/* Badge de Reconexão Automática (Item 1) */
+.player-reconnect-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(255, 152, 0, 0.95);
+  color: #000;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 6px 16px;
+  border-radius: 20px;
+  z-index: 35;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+  animation: pulseBadge 1.5s infinite;
+}
+.player-reconnect-badge.hidden { display: none !important; }
+
+@keyframes pulseBadge {
+  0% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 0.8; transform: scale(1); }
+}
+
 .channel-overlay {
   position: absolute;
   top: 12px;
@@ -326,6 +362,104 @@ video {
   font-size: 18px;
   font-weight: 800;
   pointer-events: none;
+}
+
+/* Redesign da Linha de Canal com Logo 52px e Estrela (Item 6) */
+.channel-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 8px 12px !important;
+  margin-bottom: 6px !important;
+  background: #181b28 !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.channel-row:focus,
+.channel-row:hover {
+  background: rgba(255, 152, 0, 0.2) !important;
+  border-color: #ff9800 !important;
+  transform: translateX(4px) !important;
+  outline: none !important;
+}
+
+.channel-row.active-playing {
+  border-left: 4px solid #ff9800 !important;
+  background: rgba(255, 152, 0, 0.15) !important;
+}
+
+.channel-logo-wrap {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px !important;
+  background: #1e1f26 !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+.channel-logo {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+
+.channel-details {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  text-align: left !important;
+}
+
+.channel-name {
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.channel-epg-sub {
+  font-size: 0.82rem !important;
+  color: #8c8d99 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.channel-fav-btn {
+  background: transparent !important;
+  border: none !important;
+  font-size: 1.35rem !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+  cursor: pointer !important;
+  padding: 6px !important;
+  border-radius: 50% !important;
+  transition: transform 0.2s, color 0.2s !important;
+  flex-shrink: 0 !important;
+}
+
+.channel-fav-btn.active {
+  color: #ffb703 !important;
+  text-shadow: 0 0 10px rgba(255, 183, 3, 0.6) !important;
+}
+
+.preview-epg-now {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 4px;
 }
 
 .epg-card {
@@ -1271,15 +1405,17 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   outline: 3px solid #ffd54f !important;
 }
 
-/* HUD tela cheia moderno (Glassmorphism OTT) */
+/* HUD tela cheia moderno (Glassmorphism 10-foot UI - Item 3) */
 .video-box { position: relative; }
 .fs-hud-bar {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 24px 30px 28px;
-  background: linear-gradient(180deg, transparent 0%, rgba(9, 11, 18, 0.75) 30%, rgba(5, 6, 10, 0.96) 100%);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(16, 17, 24, 0.90);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.85);
   z-index: 40;
   display: flex; flex-direction: column; gap: 14px;
 }
@@ -1405,29 +1541,30 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
 }
 .hud-ctrl-btn {
   min-height: 48px;
-  padding: 10px 18px;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50px;
   color: #ffffff;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .hud-ctrl-btn:focus {
-  background: #e50914 !important;
-  border-color: #ffffff !important;
-  box-shadow: 0 0 18px rgba(229, 9, 20, 0.95) !important;
-  transform: scale(1.06);
+  background: #ff9800 !important;
+  color: #000000 !important;
+  border-color: #ff9800 !important;
+  box-shadow: 0 0 20px rgba(255, 152, 0, 0.85) !important;
+  transform: scale(1.1);
   outline: none;
 }
 .hud-ctrl-btn.primary {
-  background: rgba(229, 9, 20, 0.4);
-  border-color: rgba(229, 9, 20, 0.7);
+  background: rgba(255, 152, 0, 0.35);
+  border-color: rgba(255, 152, 0, 0.6);
 }
 
 .vod-time-row {
