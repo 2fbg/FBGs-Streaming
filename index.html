@@ -235,7 +235,7 @@
 
             <!-- Rodapé com Versão MK21 Sincronizada -->
             <p class="text-center text-xs text-slate-500 mt-6 font-medium">
-                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v1.4.1 by FBG2</span>
+                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v2.0.0 by FBG2</span>
             </p>
         </div>
 
@@ -1404,7 +1404,7 @@
             { id: "server_3", name: "CINELON21", baseUrl: "http://coliseuop.site" },
             { id: "server_4", name: "TANNIX", baseUrl: "http://poptvcdn.online" },
             { id: "server_5", name: "CB6000", baseUrl: "http://cdn.caterlune.top" },
-            { id: "server_6", name: "MK21 PRÓ", baseUrl: "https://myopbx.beer" },
+            { id: "server_6", name: "MK21 PRÓ", baseUrl: "http://app.vivoxi.xyz" },
             { id: "server_7", name: "NEW TV", baseUrl: "http://cp2026.sbs" },
             { id: "server_8", name: "MULTT TV", baseUrl: "http://dali-as.skin" },
             { id: "server_9", name: "CINEVO", baseUrl: "http://antaresfusion.shop" },
@@ -2399,6 +2399,8 @@
             activeServerDisplay.innerHTML = '';
 
             let currentBaseUrl = localStorage.getItem('mk21_baseUrl') || '';
+            let currentServerName = localStorage.getItem('mk21_server_name') || '';
+
             if (currentBaseUrl.startsWith('https://')) {
                 currentBaseUrl = 'http://' + currentBaseUrl.substring(8);
             } else if (currentBaseUrl && !currentBaseUrl.startsWith('http://')) {
@@ -2416,8 +2418,13 @@
                 const opt = document.createElement('option');
                 opt.value = srv.baseUrl;
                 opt.textContent = srv.name;
+                opt.dataset.serverName = srv.name;
 
-                if (srvBaseUrl.replace(/\/$/, "") === currentBaseUrl.replace(/\/$/, "")) {
+                // Match by exact server name first, or fallback to first URL match
+                if (!found && currentServerName && srv.name.trim().toLowerCase() === currentServerName.trim().toLowerCase()) {
+                    opt.selected = true;
+                    found = true;
+                } else if (!found && !currentServerName && srvBaseUrl.replace(/\/$/, "") === currentBaseUrl.replace(/\/$/, "")) {
                     opt.selected = true;
                     found = true;
                 }
@@ -2427,7 +2434,7 @@
             if (!found && currentBaseUrl) {
                 const opt = document.createElement('option');
                 opt.value = currentBaseUrl;
-                opt.textContent = "CUSTOMIZADO";
+                opt.textContent = currentServerName || "CUSTOMIZADO";
                 opt.selected = true;
                 activeServerDisplay.appendChild(opt);
             }
@@ -2796,6 +2803,8 @@
                         if (serverCodeInput) serverCodeInput.value = selName;
                         const label = document.getElementById('selected-server-name-label');
                         if (label) label.textContent = selName;
+                        localStorage.setItem('mk21_server_name', selName);
+                        localStorage.setItem('mk21_baseUrl', serverSelector.value);
                         if (serverCodeBadge) {
                             serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${selName}</span>`;
                         }
@@ -2965,6 +2974,7 @@
 
                     // Store new baseUrl cached value so login/switch routine uses it correctly index-wide
                     localStorage.setItem('mk21_baseUrl', selectedVal);
+                    localStorage.setItem('mk21_server_name', selectedText);
 
                     // Show notification
                     showNotification(`Conectando ao servidor: ${selectedText}... 🔄`, 'success');
@@ -3139,6 +3149,26 @@
                             deleteCachedPlaylist(key);
                             resolve(null);
                             return;
+                        }
+                        if (result) {
+                            if (Array.isArray(result.lives)) {
+                                result.lives.forEach(item => {
+                                    if (!item.type) item.type = item.streamType || 'LIVE';
+                                    if (!item.streamType) item.streamType = item.type;
+                                });
+                            }
+                            if (Array.isArray(result.movies)) {
+                                result.movies.forEach(item => {
+                                    if (!item.type) item.type = item.streamType || 'MOVIE';
+                                    if (!item.streamType) item.streamType = item.type;
+                                });
+                            }
+                            if (Array.isArray(result.series)) {
+                                result.series.forEach(item => {
+                                    if (!item.type) item.type = item.streamType || 'SERIES';
+                                    if (!item.streamType) item.streamType = item.type;
+                                });
+                            }
                         }
                         resolve(result);
                     };
@@ -3327,6 +3357,7 @@
 
             // Persistence
             localStorage.setItem('mk21_baseUrl', baseUrl);
+            localStorage.setItem('mk21_server_name', profileName);
             const rememberCheckbox = document.getElementById('remember-credentials-checkbox');
             if (rememberCheckbox && !rememberCheckbox.checked) {
                 localStorage.removeItem('mk21_username');
@@ -3500,6 +3531,7 @@
                 baseUrl = connectedServer.baseUrl;
                 profileName = connectedServer.name;
                 localStorage.setItem('mk21_baseUrl', baseUrl);
+                localStorage.setItem('mk21_server_name', profileName);
                 if (serverSelector) serverSelector.value = baseUrl;
                 const selectedLabel = document.getElementById('selected-server-name-label');
                 if (selectedLabel) selectedLabel.textContent = profileName;
@@ -3529,6 +3561,7 @@
                         logo: s.stream_icon || '',
                         url: `${cleanBase}/live/${encUser}/${encPass}/${s.stream_id}.ts`,
                         streamId: String(s.stream_id || ''),
+                        type: 'LIVE',
                         streamType: 'LIVE',
                         tvgId: s.epg_channel_id || '',
                         tvgName: s.name || ''
@@ -3558,6 +3591,7 @@
                                 logo: m.stream_icon || '',
                                 url: `${cleanBase}/movie/${encUser}/${encPass}/${m.stream_id}.${m.container_extension || 'mp4'}`,
                                 streamId: String(m.stream_id || ''),
+                                type: 'MOVIE',
                                 streamType: 'MOVIE',
                                 rating: m.rating || '',
                                 year: m.year || ''
@@ -3569,6 +3603,7 @@
                                 logo: s.cover || '',
                                 url: `${cleanBase}/series/${encUser}/${encPass}/${s.series_id}`,
                                 streamId: String(s.series_id || ''),
+                                type: 'SERIES',
                                 streamType: 'SERIES',
                                 rating: s.rating || '',
                                 year: s.year || ''
@@ -4446,7 +4481,11 @@
 
         // Category Menu Creator (High Performance O(N) - Ultra-lightweight for Smart TVs)
         function renderCategories() {
-            const filteredItems = playlistItems.filter(item => item.type === activeType);
+            const targetType = (activeType || 'LIVE').toUpperCase();
+            const filteredItems = playlistItems.filter(item => {
+                const itType = (item.type || item.streamType || 'LIVE').toUpperCase();
+                return itType === targetType;
+            });
 
             // Single pass O(N) frequency counter map to avoid N^2 array filters
             const categoryCounts = Object.create(null);
@@ -4544,9 +4583,13 @@
         // Media Item lists Populator (Virtualized Chunk Rendering)
         function renderMediaItems() {
             const query = searchInput.value.toLowerCase().trim();
+            const targetType = (activeType || 'LIVE').toUpperCase();
 
             // Match Category and Type filtering
-            let items = playlistItems.filter(item => item.type === activeType);
+            let items = playlistItems.filter(item => {
+                const itType = (item.type || item.streamType || 'LIVE').toUpperCase();
+                return itType === targetType;
+            });
             if (activeCategory === 'FAVORITES') {
                 items = items.filter(item => isFavorite(item));
             } else if (activeCategory !== 'ALL') {
