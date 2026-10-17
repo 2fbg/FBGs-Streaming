@@ -62,22 +62,13 @@ fun decodeBase64OrGenerateKeystore(
 android {
     sourceSets {
         getByName("main") {
-            java.srcDirs("build/generated/ksp/debug/java", "build/generated/ksp/debug/kotlin")
-                "build/generated/ksp/main/java",
-                "build/generated/ksp/main/kotlin"
-            )
+            java.srcDirs("build/generated/ksp/main/java", "build/generated/ksp/main/kotlin")
         }
         getByName("debug") {
             java.srcDirs("build/generated/ksp/debug/java", "build/generated/ksp/debug/kotlin")
-                "build/generated/ksp/debug/java",
-                "build/generated/ksp/debug/kotlin"
-            )
         }
         getByName("release") {
-            java.srcDirs("build/generated/ksp/debug/java", "build/generated/ksp/debug/kotlin")
-                "build/generated/ksp/release/java",
-                "build/generated/ksp/release/kotlin"
-            )
+            java.srcDirs("build/generated/ksp/release/java", "build/generated/ksp/release/kotlin")
         }
     }
   namespace = "com.example"
