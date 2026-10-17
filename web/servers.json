@@ -1,0 +1,52 @@
+[
+  {
+    "id": "server_1",
+    "name": "VLOG",
+    "baseUrl": "https://myopbx.beer"
+  },
+  {
+    "id": "server_2",
+    "name": "LUB TV",
+    "baseUrl": "http://pottermax.sbs"
+  },
+  {
+    "id": "server_3",
+    "name": "CINELON21",
+    "baseUrl": "http://coliseuop.site"
+  },
+  {
+    "id": "server_4",
+    "name": "TANNIX",
+    "baseUrl": "http://poptvcdn.online"
+  },
+  {
+    "id": "server_5",
+    "name": "CB6000",
+    "baseUrl": "http://cdn.caterlune.top"
+  },
+  {
+    "id": "server_6",
+    "name": "MK21 PRÓ",
+    "baseUrl": "https://myopbx.beer"
+  },
+  {
+    "id": "server_7",
+    "name": "NEW TV",
+    "baseUrl": "http://cp2026.sbs"
+  },
+  {
+    "id": "server_8",
+    "name": "MULTT TV",
+    "baseUrl": "http://dali-as.skin"
+  },
+  {
+    "id": "server_9",
+    "name": "CINEVO",
+    "baseUrl": "http://antaresfusion.shop"
+  },
+  {
+    "id": "server_10",
+    "name": "MULTT BOX",
+    "baseUrl": "http://cdnconn.xyz"
+  }
+]
