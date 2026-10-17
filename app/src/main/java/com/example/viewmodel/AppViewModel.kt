@@ -1,6 +1,6 @@
 package com.example.viewmodel
 
-import com.example.network.Mk21Mk21DnsResolver
+import com.example.network.DnsResolver
 import android.net.Uri
 import androidx.media3.common.MediaItem
 

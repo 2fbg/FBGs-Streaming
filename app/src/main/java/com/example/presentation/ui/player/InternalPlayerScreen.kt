@@ -1,6 +1,6 @@
 package com.example.presentation.ui.player
 
-import com.example.network.Mk21Mk21DnsResolver
+import com.example.network.DnsResolver
 import android.net.Uri
 import androidx.media3.common.MediaItem
 
@@ -177,7 +177,7 @@ fun InternalPlayerScreen(
                             }
                             exoPlayer.stop()
                             exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl?.toString(.toString()) ?: ""))
+                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl ?: ""))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {
