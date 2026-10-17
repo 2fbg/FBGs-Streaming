@@ -1,21 +1,9 @@
 {
-  "id": "com.fbg2.mk21streaming",
-  "version": "1.4.1",
-  "vendor": "FBG2",
+  "id": "com.mk21.tv",
+  "version": "2.0.0",
+  "vendor": "MK21",
   "type": "web",
   "main": "index.html",
-  "title": "MK21 Play v1.4.1",
-  "requiredACG": [],
-  "icon": "icon.png",
-  "largeIcon": "largeIcon.png",
-  "resolution": "1920x1080",
-  "transparent": false,
-  "handlesRelaunch": true,
-  "supportTouch": false,
-  "requiredMemory": 512,
-  "disableBackHistoryAPI": false,
-  "accessibility": {
-    "supportsAudioGuidance": true
-  },
-  "updatedAt": "2026-10-15"
+  "title": "MK21 Play",
+  "icon": "icon.png"
 }
