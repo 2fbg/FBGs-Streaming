@@ -1,11 +1,11 @@
-# BGs Streaming (MK21 MultiServidor) — v1.4.0
+# BGs Streaming (MK21 MultiServidor) — v2.0.0
 
 <div align="center">
   <img src="web/icon-192.png" alt="BGs Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v1.4.0-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.0.0-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -15,40 +15,23 @@
 
 ---
 
+> **Versões por plataforma:** a release do ecossistema Web/Smart TV é `2.0.0`. O módulo Android ainda declara `1.4.2` (`versionCode` 142) em `app/build.gradle.kts`.
+
 ## 📌 Visão Geral & Foco do Cliente (Player para Listas de Terceiros)
 
 O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco exclusivo no **Cliente (Player)** para reprodução de listas IPTV de terceiros (M3U, M3U8 e APIs Xtream Codes). Projetado para máxima velocidade de inicialização de vídeo (**Fast Start**), resiliência contra oscilações de rede (**Auto-Retry Policy**, **Mk21DnsResolver** e **DNS Failover DoH**) e experiência fluida com catálogos de milhares de canais em **Android**, **Web PWA** e **Smart TVs (LG webOS e Samsung Tizen)**.
 
 ---
 
-## 🚀 Novidades da Versão v1.4.0 (Multitask & Observability)
+## 🚀 Novidades da Release v2.0.0
 
-- 📺 **Picture-in-Picture (PiP) Nativo com Auto-Enter**:
-  - Habilitação de `setAutoEnterEnabled(true)` no Android 12+ e suporte a `onUserLeaveHint`, permitindo transição contínua para janela flutuante ao sair do app durante a reprodução.
-- 📡 **Telemetria Silenciosa de Stream (`logStreamError`)**:
-  - Módulo de observabilidade integrado no `Mk21DnsResolver` e no `AppViewModel` capturando silenciosamente erros 4xx/5xx de listas e falhas de reprodução no ExoPlayer sem interferir na UI.
-- ⚡ **Network Layer Fonte da Verdade (`Mk21DnsResolver`)**:
-  - Resolução robusta de URLs e failover automático integrado no OkHttp e Media3.
-- 🔍 **Busca Global Omnisearch**:
-  - Busca unificada categorizada com contadores em tempo real para Ao Vivo, Filmes e Séries.
-- 📺 **Picture-in-Picture (PiP) Nativo & AV1**:
-  - Suporte completo a PiP no Android via `onUserLeaveHint` e decodificação acelerada por hardware de AV1/HEVC/H.264.
-- 🧼 **Limpeza e Otimização Multiplataforma**:
-  - Repositório enxuto e padronizado: Web, Android APK (`mk21.apk`) e Smart TV webOS (`mk21play_1.3.0_all.ipk`) sincronizados em v1.3.0.
+- 🔒 **Proxy com proteção contra SSRF**: restringe protocolos a HTTP/HTTPS e bloqueia destinos locais, privados e endpoints de metadados de nuvem.
+- 🛡️ **Renderização mais segura**: nomes e categorias são inseridos como texto, evitando interpretar conteúdo de playlists como HTML.
+- ⚙️ **Parsing M3U em segundo plano**: um Web Worker processa listas em lotes para manter a interface responsiva em Smart TVs.
+- ⚡ **Início e troca de canais mais rápidos**: ajustes de buffer e pré-carregamento reduzem a espera para iniciar a reprodução.
+- 🔇 **Encerramento consistente de streams**: a mídia anterior é desconectada antes de iniciar outra, evitando áudio residual.
 
-- ⚡ **Fast Start Buffer (Início Instantâneo)**:
-  - **Android (Media3 ExoPlayer)**: `minBufferMs` reduzido para 5.000ms e `bufferForPlaybackMs` ajustado para 500ms via `DefaultLoadControl`.
-  - **Web & Smart TV (Hls.js)**: Configuração otimizada com `lowLatencyMode: true`, `startFragPrefetch: true` e `maxBufferLength: 15s`.
-- 🔄 **Auto-Retry & Reconnection Policy**:
-  - Reconexão inteligente com exponential backoff (até 5 tentativas) caso o link da transmissão oscile ou caia momentaneamente.
-  - Recuperação automática de erros de mídia (`recoverMediaError`) e rede (`startLoad`).
-- 📜 **Virtualização e Alta Performance em Listas**:
-  - `LazyColumn` com chaves de estabilidade no Android e paginação virtual (`IntersectionObserver`) no Web, garantindo 60 FPS estáveis mesmo com mais de 10.000 canais.
-  - Shimmer UI esqueleto elegante durante trocas de categoria e carregamentos.
-- 📺 **Decodificação por Hardware**:
-  - Suporte total a codecs modernos (H.264, H.265/HEVC) com decodificação por hardware nativo e baixo consumo de bateria.
-- 💡 **Feedback Visual em Tempo Real**:
-  - HUD integrado com status explícitos: *"Conectando ao servidor..."*, *"Carregando canal..."*, *"Reconectando stream (Tentativa X/5)..."* e *"Erro de reprodução"*.
+Consulte o [changelog completo](docs/CHANGELOG.md) e as [notas da release](docs/RELEASE_NOTES.md).
 
 ---
 

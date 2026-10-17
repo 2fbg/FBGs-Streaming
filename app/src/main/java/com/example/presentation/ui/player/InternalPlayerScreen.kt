@@ -1,16 +1,6 @@
 package com.example.presentation.ui.player
 
-import com.example.network.DnsResolver
-import android.net.Uri
 import androidx.media3.common.MediaItem
-
-
-
-
-
-
-
-
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
@@ -130,7 +120,7 @@ fun InternalPlayerScreen(
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
-                val mediaItem = androidx.media3.common.MediaItem.fromUri(item.url.toString())
+                val mediaItem = MediaItem.fromUri(item.url)
                 setMediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
@@ -169,15 +159,9 @@ fun InternalPlayerScreen(
                     coroutineScope.launch {
                         delay(backoff)
                         try {
-                            val targetUrl = if (isHostOrDnsError) {
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                }
-                            } else {
-                                item.url
-                            }
                             exoPlayer.stop()
                             exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl ?: ""))
+                            exoPlayer.setMediaItem(MediaItem.fromUri(item.url))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {
