@@ -1,5 +1,17 @@
 package com.example.presentation.ui.player
 
+import com.example.network.Mk21Mk21DnsResolver
+import android.net.Uri
+import androidx.media3.common.MediaItem
+
+
+
+
+
+
+
+
+
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.view.ViewGroup
@@ -29,14 +41,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
-import android.util.Log
-import com.example.network.Mk21DnsResolver
-import android.net.Uri
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -108,13 +115,13 @@ fun InternalPlayerScreen(
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
-                val decoders = MediaCodecUtil.getDecoderInfos(
+                val decoders = androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(
                     mimeType,
                     requiresSecureDecoder,
                     requiresTunnelingDecoder
                 )
                 if (mimeType.contains("av01", ignoreCase = true) || mimeType.contains("av1", ignoreCase = true)) {
-                    Log.i("InternalPlayerScreen", "Decodificador AV1 ativo: ${decoders.map { it.name }}")
+                    android.util.Log.i("InternalPlayerScreen", "Decodificador AV1 ativo: ${decoders.map { it.name }}")
                 }
                 decoders
             }
@@ -123,7 +130,7 @@ fun InternalPlayerScreen(
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
-                val mediaItem = MediaItem.fromUri(Uri.parse(Mk21DnsResolver.resolveUrlWithFailover(item.url)))
+                val mediaItem = androidx.media3.common.MediaItem.fromUri(item.url.toString())
                 setMediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
@@ -146,7 +153,6 @@ fun InternalPlayerScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
-                Mk21DnsResolver.logStreamError(item.url, error.errorCode, error.errorCodeName)
                 val isHostOrDnsError = error.errorCodeName.contains("DNS", ignoreCase = true) ||
                         error.cause is java.net.UnknownHostException ||
                         error.cause?.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
@@ -165,14 +171,13 @@ fun InternalPlayerScreen(
                         try {
                             val targetUrl = if (isHostOrDnsError) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    Mk21DnsResolver.resolveUrlWithFailover(item.url)
                                 }
                             } else {
                                 item.url
                             }
                             exoPlayer.stop()
                             exoPlayer.clearMediaItems()
-                            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(targetUrl)))
+                            exoPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(targetUrl?.toString(.toString()) ?: ""))
                             exoPlayer.prepare()
                             exoPlayer.play()
                         } catch (e: Exception) {

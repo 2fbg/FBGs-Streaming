@@ -1,10 +1,19 @@
 package com.example.viewmodel
 
+import com.example.network.Mk21Mk21DnsResolver
+import android.net.Uri
+import androidx.media3.common.MediaItem
+
+
+
+
+
+
+
 import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -35,7 +44,6 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import com.example.BuildConfig
-import com.example.network.Mk21DnsResolver
 
 @kotlin.OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -343,7 +351,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val okHttpClient = OkHttpClient.Builder()
-        .dns(Mk21DnsResolver)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
@@ -355,22 +362,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (original.header("Accept") == null) {
                 requestBuilder.header("Accept", "*/*")
             }
-            try {
-                val response = chain.proceed(requestBuilder.build())
-                if (!response.isSuccessful && response.code >= 400) {
-                    Mk21DnsResolver.logStreamError(original.url.toString(), response.code, response.message)
-                }
-                response
-            } catch (e: Exception) {
-                Mk21DnsResolver.logStreamError(original.url.toString(), -1, e.message)
-                throw e
-            }
+            chain.proceed(requestBuilder.build())
         }
         .build()
-
-    fun logStreamError(url: String?, errorCode: Int, message: String? = null) {
-        Mk21DnsResolver.logStreamError(url, errorCode, message)
-    }
 
     fun mergeWithDefaults(incoming: List<ServerProfile>): List<ServerProfile> {
         val merged = mutableListOf<ServerProfile>()
@@ -982,10 +976,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var prefetchJob: kotlinx.coroutines.Job? = null
     private val prefetchClient by lazy {
-        OkHttpClient.Builder()
-            .dns(Mk21DnsResolver)
-            .connectTimeout(3, TimeUnit.SECONDS)
-            .readTimeout(3, TimeUnit.SECONDS)
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .build()
     }
 
@@ -1773,7 +1766,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _updateCheckState.value = UpdateCheckState.Checking
             val timestamp = System.currentTimeMillis()
             val endpoints = listOf(
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/api/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/api/version.json?t=$timestamp",
@@ -1916,6 +1908,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 // Ensure file is readable by system package installer
+
+
                 try {
                     apkFile.setReadable(true, false)
                 } catch (e: Exception) {
@@ -1971,7 +1965,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     if (!context.packageManager.canRequestPackageInstalls()) {
                         val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                            data = Uri.parse("package:${context.packageName}")
+                            data = android.net.Uri.parse("package:${context.packageName}")
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(settingsIntent)
@@ -2014,7 +2008,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openBrowserDownload(context: Context, downloadUrl: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(downloadUrl)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
