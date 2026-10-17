@@ -1,9 +1,0 @@
-{
-  "id": "com.mk21.tv",
-  "version": "2.0.0",
-  "vendor": "MK21",
-  "type": "web",
-  "main": "index.html",
-  "title": "MK21 Play",
-  "icon": "icon.png"
-}
