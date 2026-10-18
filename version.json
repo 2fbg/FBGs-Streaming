@@ -4,14 +4,16 @@
   "tagName": "v2.0.0",
   "name": "MK21 MultiServidor v2.0.0",
   "title": "MK21 Play v2.0.0",
-  "releaseNotes": "• Arquitetura Multiplataforma v2.0: Sincronização uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n• Fast-Start Playback (<500ms): Buffer otimizado e início imediato de reprodução HLS/MPEG-TS\n• SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sensíveis\n• Web Worker para Ingestão M3U: Parsing assíncrono em thread secundária para Smart TVs\n• Multi-Servidor Failover: Fallback automático entre servidores IPTV com telemetria ativa",
-  "body": "• Arquitetura Multiplataforma v2.0: Sincronização uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n• Fast-Start Playback (<500ms): Buffer otimizado e início imediato de reprodução HLS/MPEG-TS\n• SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sensíveis\n• Web Worker para Ingestão M3U: Parsing assíncrono em thread secundária para Smart TVs\n• Multi-Servidor Failover: Fallback automático entre servidores IPTV com telemetria ativa",
+  "releaseNotes": "• Arquitetura Multiplataforma v2.0: Sincronização uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n• Fast-Start Playback (<500ms): Buffer otimizado e início imediato de reprodução HLS/MPEG-TS\n• SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sensíveis\n• Web Worker para Ingestão M3U: Parsing assíncrono em thread secundária para Smart TVs\n• Multi-Servidor Failover: Fallback automático entre servidores IPTV com telemetria ativa\n\nAVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
+  "body": "• Arquitetura Multiplataforma v2.0: Sincronização uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n• Fast-Start Playback (<500ms): Buffer otimizado e início imediato de reprodução HLS/MPEG-TS\n• SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sensíveis\n• Web Worker para Ingestão M3U: Parsing assíncrono em thread secundária para Smart TVs\n• Multi-Servidor Failover: Fallback automático entre servidores IPTV com telemetria ativa\n\nAVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.0.0_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "apkSha256": "0be10ecbdd4171ff34b287a5225a3aa4ad5da47f991fc26b55a4a2ac25212d73",
-  "ipkSha256": "458f0e65c03af8ae171c827a11174c13c501421cd2afed97387d6b6659bece07",
-  "sizeBytes": 24905766,
-  "ipkSizeBytes": 150580,
-  "updatedAt": "2026-10-17"
+  "apkSha256": "dfa3d022b96d83e2fda6567d8bf1b1f8089e04e1e9fb79ec3decc71268e6fa1e",
+  "ipkSha256": "3efd4d75d8e043bb908c4dab59aadcc3e93a929a3e27c6ffc522f833bacae584",
+  "sizeBytes": 4760372,
+  "ipkSizeBytes": 150842,
+  "updatedAt": "2026-10-17",
+  "sha256": "dfa3d022b96d83e2fda6567d8bf1b1f8089e04e1e9fb79ec3decc71268e6fa1e",
+  "breakingChanges": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo."
 }

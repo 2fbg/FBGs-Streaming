@@ -22,25 +22,23 @@
     <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.8" />
     </filter>
+    <clipPath id="circleClip">
+      <circle cx="256" cy="256" r="242" />
+    </clipPath>
   </defs>
 
-  <!-- Rounded App Background -->
-  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bgGlow)" stroke="#E50914" stroke-width="4" stroke-opacity="0.3" filter="url(#cardShadow)"/>
+  <circle cx="256" cy="256" r="246" fill="url(#bgGlow)" stroke="#E50914" stroke-width="4" stroke-opacity="0.45" filter="url(#cardShadow)"/>
+  <g clip-path="url(#circleClip)">
+    <g transform="translate(256, 0) scale(0.88, 1) translate(-256, 0)">
+      <g transform="translate(68, 160)" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-style="italic">
+        <text x="0" y="150" font-size="160" fill="url(#silverGrad)" letter-spacing="-8">MK</text>
+        <text x="210" y="150" font-size="190" fill="url(#redGrad)" filter="url(#neonRed)" letter-spacing="-10">21</text>
+      </g>
+    </g>
 
-  <!-- Subtle Top Flare -->
-  <path d="M 64 24 Q 256 12 448 24" stroke="#E50914" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.8"/>
-
-  <!-- Logo Graphics Group -->
-  <g transform="translate(68, 160)" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-style="italic">
-    <!-- MK Text -->
-    <text x="0" y="150" font-size="160" fill="url(#silverGrad)" letter-spacing="-8">MK</text>
-    <!-- 21 Laser Text -->
-    <text x="210" y="150" font-size="190" fill="url(#redGrad)" filter="url(#neonRed)" letter-spacing="-10">21</text>
-  </g>
-
-  <!-- Tagline Banner -->
-  <g transform="translate(256, 395)" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif">
-    <rect x="-180" y="-18" width="360" height="34" rx="17" fill="#000000" fill-opacity="0.6" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="1"/>
-    <text x="0" y="4" font-size="13" font-weight="800" fill="#CBD5E1" letter-spacing="4">MULTISERVIDOR IPTV</text>
+    <g transform="translate(256, 395)" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif">
+      <rect x="-180" y="-18" width="360" height="34" rx="17" fill="#000000" fill-opacity="0.6" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="1"/>
+      <text x="0" y="4" font-size="13" font-weight="800" fill="#CBD5E1" letter-spacing="4">MULTISERVIDOR IPTV</text>
+    </g>
   </g>
 </svg>

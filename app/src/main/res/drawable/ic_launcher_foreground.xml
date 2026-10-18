@@ -12,7 +12,7 @@
         android:pathData="M 54,17 a 37,37 0 1,0 0,74 a 37,37 0 1,0 0,-74 Z"
         android:fillColor="#151417" />
 
-    <!-- Highly contrasting metallic gold & crimson gradient ring -->
+    <!-- Red gradient ring matching the web logo -->
     <path
         android:pathData="M 54,17 a 37,37 0 1,0 0,74 a 37,37 0 1,0 0,-74 Z"
         android:strokeWidth="2.0">
@@ -23,10 +23,9 @@
                 android:startY="17"
                 android:endX="91"
                 android:endY="91">
-                <item android:offset="0.0" android:color="#FFFFD700" /> <!-- Shining Gold/Amarelo Ouro -->
-                <item android:offset="0.4" android:color="#FFFF3B30" /> <!-- Vivid Red -->
-                <item android:offset="0.6" android:color="#FFFFFFFF" /> <!-- Silver Highlight -->
-                <item android:offset="1.0" android:color="#FFB30404" /> <!-- Dark Red -->
+                <item android:offset="0.0" android:color="#FFFF334B" />
+                <item android:offset="0.45" android:color="#FFE50914" />
+                <item android:offset="1.0" android:color="#FF8B0007" />
             </gradient>
         </aapt:attr>
     </path>
