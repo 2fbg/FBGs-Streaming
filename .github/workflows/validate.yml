@@ -1,31 +1,42 @@
 name: Validate
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 permissions:
   contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+
       - uses: gradle/actions/setup-gradle@v4
+
       - name: Android tests and build
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest --no-daemon || (echo "Retrying tests due to socket/network hiccup..." && ./gradlew testDebugUnitTest --no-daemon)
           ./gradlew assembleDebug --no-daemon
+
       - name: Smart TV validation
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
+          
+          # Gera o pacote IPK da versão ativa automaticamente na máquina do CI
+          python3 smart-tv/package_ipk.py
+
           TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
           test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")"
           test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/appinfo.json'))['version'])")"
@@ -37,4 +48,4 @@ jobs:
           IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
           test -f "$IPK_FILE"
           test "$(dpkg-deb --field "$IPK_FILE" Version)" = "$TV_VER"
-          echo "Smart TV IPK $TV_VER validado com sucesso."
+          echo "Smart TV IPK $TV_VER validado com sucesso.
