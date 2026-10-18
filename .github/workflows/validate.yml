@@ -30,6 +30,7 @@ jobs:
           ./gradlew assembleDebug --no-daemon
 
       - name: Smart TV validation
+        id: smart-tv-validation
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
@@ -49,3 +50,24 @@ jobs:
           PKG_VER=$(dpkg-deb --field "$IPK_FILE" Version)
           test "$PKG_VER" = "$TV_VER"
           echo "Smart TV IPK $TV_VER validado com sucesso."
+          echo "tv_version=$TV_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Upload generated apps
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-apps
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk
+          if-no-files-found: error
+
+      - name: List generated apps
+        run: |
+          echo "## Aplicativos gerados" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Android APK: \`app/build/outputs/apk/debug/app-debug.apk\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Smart TV IPK: \`smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk\`" >> "$GITHUB_STEP_SUMMARY"
+          echo ""
+          echo "Aplicativos gerados:"
+          echo "  Android APK: app/build/outputs/apk/debug/app-debug.apk"
+          echo "  Smart TV IPK: smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk"
