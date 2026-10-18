@@ -33,8 +33,6 @@ jobs:
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
-          
-          # Gera o pacote IPK da versão ativa automaticamente na máquina do CI
           python3 smart-tv/package_ipk.py
 
           TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
@@ -45,7 +43,9 @@ jobs:
           test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")"
           TIZEN_VER=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse('smart-tv/tizen/config.xml').getroot().attrib['version'])")
           test "$TV_VER" = "$TIZEN_VER"
+
           IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
           test -f "$IPK_FILE"
-          test "$(dpkg-deb --field "$IPK_FILE" Version)" = "$TV_VER"
-          echo "Smart TV IPK $TV_VER validado com sucesso.
+          PKG_VER=$(dpkg-deb --field "$IPK_FILE" Version)
+          test "$PKG_VER" = "$TV_VER"
+          echo "Smart TV IPK $TV_VER validado com sucesso."
