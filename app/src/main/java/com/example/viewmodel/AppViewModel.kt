@@ -14,6 +14,7 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -1769,8 +1770,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/api/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json?t=$timestamp",
                 "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/api/version.json?t=$timestamp",
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/version.json?t=$timestamp",
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/version.json?t=$timestamp",
                 "https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/api/version.json?t=$timestamp",
                 "https://bgstreaming.vercel.app/api/version.json?t=$timestamp",
                 "https://bgstreaming.vercel.app/app/applet/api/version.json?t=$timestamp",
@@ -1809,12 +1808,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     .map { it.toIntOrNull() ?: 0 }
                     .let { it + List((4 - it.size).coerceAtLeast(0)) { 0 } }
                 fun versionRank(value: String): Long = versionParts(value).take(4).fold(0L) { acc, n -> acc * 1000L + n }
-                val response = responses.maxByOrNull { raw ->
+                val verifiedManifests = responses.filter { raw ->
                     try {
                         val candidate = JSONObject(raw)
-                        versionRank(candidate.optString("version", candidate.optString("tag_name", "0")))
-                    } catch (e: Exception) { 0L }
-                } ?: throw IllegalStateException(lastError ?: "nenhum manifesto disponível")
+                        val candidateUrl = candidate.optString("downloadUrl", candidate.optString("apkUrl", ""))
+                        candidate.optString("version", candidate.optString("tag_name", "")).isNotBlank() &&
+                            candidate.optString("apkSha256", "").matches(Regex("^[a-fA-F0-9]{64}$")) &&
+                            candidateUrl.startsWith("https://")
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                val response = verifiedManifests.maxByOrNull { raw ->
+                    val candidate = JSONObject(raw)
+                    versionRank(candidate.optString("version", candidate.optString("tag_name", "0")))
+                } ?: throw IllegalStateException(
+                    if (responses.isNotEmpty()) {
+                        "Nenhum manifesto de atualização confiável com SHA-256 válido foi encontrado."
+                    } else {
+                        lastError ?: "Nenhum manifesto disponível."
+                    }
+                )
                 val json = JSONObject(response)
                 val tagName = json.optString("version", json.optString("tag_name", ""))
                 if (tagName.isBlank()) throw IllegalStateException("manifesto sem versão")
@@ -1823,7 +1837,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 var downloadUrl = json.optString("downloadUrl", json.optString("apkUrl", ""))
                 val expectedSha256 = json.optString("apkSha256", "").lowercase()
                 val expectedSizeBytes = json.optLong("sizeBytes", 0L)
-                if (downloadUrl.isBlank()) downloadUrl = json.optString("html_url", "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk")
                 val assets = json.optJSONArray("assets")
                 if (downloadUrl.contains("/releases") && assets != null) {
                     for (i in 0 until assets.length()) {
@@ -1855,7 +1868,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startInAppDownloadAndInstall(context: Context, downloadUrl: String, expectedSha256: String = "", expectedSizeBytes: Long = 0L) {
         viewModelScope.launch(Dispatchers.IO) {
+            var downloadedApk: File? = null
             try {
+                if (!expectedSha256.matches(Regex("^[a-fA-F0-9]{64}$"))) {
+                    throw SecurityException("Manifesto de atualização sem um SHA-256 válido.")
+                }
+
                 _updateCheckState.value = UpdateCheckState.Downloading(0, 0L, 0L)
                 
                 var currentUrl = downloadUrl
@@ -1885,6 +1903,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val totalLength = connection.contentLength.toLong()
                 val updatesDir = File(context.getExternalFilesDir(null) ?: context.cacheDir, "updates").apply { mkdirs() }
                 val apkFile = File(updatesDir, "MK21-Update.apk")
+                downloadedApk = apkFile
                 if (apkFile.exists()) {
                     apkFile.delete()
                 }
@@ -1920,39 +1939,94 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     apkFile.delete()
                     throw IllegalStateException("download incompleto ou corrompido")
                 }
-                if (expectedSha256.isNotBlank() && expectedSha256.length == 64) {
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    val actualSha256 = apkFile.inputStream().use { input ->
-                        val buffer = ByteArray(8192)
-                        var read: Int
-                        while (input.read(buffer).also { read = it } != -1) {
-                            digest.update(buffer, 0, read)
-                        }
-                        digest.digest().joinToString("") { "%02x".format(it) }
-                    }
-                    if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
-                        // Check if file starts with valid APK/ZIP magic bytes PK\x03\x04
-                        val isZip = apkFile.inputStream().use {
-                            val b = ByteArray(4)
-                            it.read(b) == 4 && b[0] == 0x50.toByte() && b[1] == 0x4b.toByte()
-                        }
-                        if (!isZip) {
-                            apkFile.delete()
-                            throw IllegalStateException("arquivo baixado não é um APK válido")
-                        }
-                    }
+                if (expectedSizeBytes > 0L && apkFile.length() != expectedSizeBytes) {
+                    apkFile.delete()
+                    throw SecurityException("O tamanho do APK baixado não corresponde ao manifesto.")
                 }
 
+                val digest = MessageDigest.getInstance("SHA-256")
+                val actualSha256 = apkFile.inputStream().use { input ->
+                    val buffer = ByteArray(8192)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        digest.update(buffer, 0, read)
+                    }
+                    digest.digest().joinToString("") { "%02x".format(it) }
+                }
+                if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
+                    apkFile.delete()
+                    throw SecurityException("O SHA-256 do APK baixado não corresponde ao manifesto.")
+                }
+
+                verifyDownloadedApkSignature(context, apkFile)
                 _updateCheckState.value = UpdateCheckState.ReadyToInstall(apkFile)
 
                 withContext(Dispatchers.Main) {
                     installApk(context, apkFile)
                 }
             } catch (e: Exception) {
+                downloadedApk?.delete()
                 _updateCheckState.value = UpdateCheckState.Error("Falha no download da atualização: ${e.message}")
             }
         }
     }
+
+    private fun verifyDownloadedApkSignature(context: Context, apkFile: File) {
+        val packageManager = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val downloadedInfo = packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags)
+            ?: throw SecurityException("O arquivo baixado não é um APK válido.")
+        if (downloadedInfo.packageName != context.packageName) {
+            throw SecurityException("O APK baixado pertence a outro aplicativo.")
+        }
+        val installedInfo = packageManager.getPackageInfo(context.packageName, flags)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val installedSigning = installedInfo.signingInfo
+                ?: throw SecurityException("Não foi possível verificar a assinatura instalada.")
+            val downloadedSigning = downloadedInfo.signingInfo
+                ?: throw SecurityException("Não foi possível verificar a assinatura do APK baixado.")
+            val installedSigners = installedSigning.apkContentsSigners
+            if (installedSigning.hasMultipleSigners() || downloadedSigning.hasMultipleSigners()) {
+                if (!installedSigning.hasMultipleSigners() ||
+                    !downloadedSigning.hasMultipleSigners() ||
+                    !sameSignatures(installedSigners, downloadedSigning.apkContentsSigners)
+                ) {
+                    throw SecurityException("A assinatura do APK baixado não corresponde ao aplicativo instalado.")
+                }
+            } else {
+                val installedSigner = installedSigners.firstOrNull()
+                    ?: throw SecurityException("Não foi possível identificar a assinatura instalada.")
+                val sharesSigningLineage = downloadedSigning.signingCertificateHistory
+                    ?.any { it.toByteArray().contentEquals(installedSigner.toByteArray()) } == true
+                if (!sharesSigningLineage) {
+                    throw SecurityException("A assinatura do APK baixado não corresponde ao aplicativo instalado.")
+                }
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            val installedSigners = installedInfo.signatures
+            @Suppress("DEPRECATION")
+            val downloadedSigners = downloadedInfo.signatures
+            if (installedSigners == null || downloadedSigners == null ||
+                !sameSignatures(installedSigners, downloadedSigners)
+            ) {
+                throw SecurityException("A assinatura do APK baixado não corresponde ao aplicativo instalado.")
+            }
+        }
+    }
+
+    private fun sameSignatures(left: Array<Signature>, right: Array<Signature>): Boolean =
+        left.size == right.size && left.all { signature ->
+            right.any { candidate ->
+                signature.toByteArray().contentEquals(candidate.toByteArray())
+            }
+        }
 
     fun installApk(context: Context, apkFile: File) {
         try {
