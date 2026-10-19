@@ -658,52 +658,26 @@ function determineType(name, category, url) {
   const uppercaseCategory = (category || '').toUpperCase().trim();
   const uppercaseUrl = (url || '').toUpperCase().trim();
 
-  // 1. Checagem explícita na URL Xtream Codes
+  // 1. Checagem explícita na rota Xtream Codes
   if (uppercaseUrl.includes("/SERIES/")) return "SERIES";
   if (uppercaseUrl.includes("/MOVIE/")) return "MOVIE";
-  if (uppercaseUrl.includes("/LIVE/")) return "LIVE";
-
-  // 2. Se a URL for fluxo de streaming ao vivo (.ts, .m3u8) sem /movie/ nem /series/
-  const isStreamingTransport = uppercaseUrl.includes(".M3U8") || uppercaseUrl.includes(".TS") || uppercaseUrl.includes("/LIVE/") || uppercaseUrl.includes("OUTPUT=MPEGTS");
-
-  // 3. CATEGORIAS DE CANAIS DE TV AO VIVO (SEMPRE AO VIVO, NUNCA FILME OU SÉRIE)
-  // Canais lineares como Telecine, HBO, Discovery, 24H, CineSky, etc. são SEMPRE canais de TV!
-  const isLiveCategory = 
-    uppercaseCategory.startsWith("CANAIS") ||
-    uppercaseCategory.startsWith("CANAL") ||
-    uppercaseCategory.startsWith("TV") ||
-    uppercaseCategory.startsWith("AO VIVO") ||
-    uppercaseCategory.startsWith("AOVIVO") ||
-    uppercaseCategory.startsWith("24H") ||
-    uppercaseCategory.startsWith("24 HORAS") ||
-    uppercaseCategory.startsWith("TV ABERTA") ||
-    uppercaseCategory.startsWith("ABERTOS") ||
-    uppercaseCategory.startsWith("NOTICIAS") ||
-    uppercaseCategory.startsWith("ESPORTES") ||
-    uppercaseCategory.startsWith("VARIEDADES") ||
-    uppercaseCategory.startsWith("INFANTIL") ||
-    uppercaseCategory.startsWith("RELIGIOSOS") ||
-    uppercaseCategory.startsWith("DOCUMENTARIOS") ||
-    uppercaseCategory.startsWith("GLOBO") ||
-    uppercaseCategory.startsWith("PREMIERE") ||
-    uppercaseCategory.startsWith("COMBATE") ||
-    uppercaseCategory.startsWith("DAZN") ||
-    uppercaseCategory.includes("CANAIS |") ||
-    uppercaseCategory.includes("CANAL |") ||
-    uppercaseCategory.includes("TV |") ||
-    uppercaseCategory.includes("CANAIS:") ||
-    uppercaseCategory.includes("CANAL:") ||
-    uppercaseCategory.includes("24H |") ||
-    uppercaseCategory.includes("AO VIVO |") ||
-    uppercaseCategory.includes("CANAIS 4K") ||
-    uppercaseCategory.includes("CANAIS FHD");
-
-  if (isLiveCategory) {
-    const isExplicitVod = (uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV")) && !uppercaseUrl.includes("/LIVE/");
-    if (!isExplicitVod) return "LIVE";
+  if (uppercaseUrl.includes("/LIVE/")) {
+    const isExplicitVodCat = uppercaseCategory.includes("FILME") || uppercaseCategory.includes("VOD") || uppercaseCategory.includes("CINEMA") || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE");
+    const isChannelIndicative = uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("24H") || uppercaseCategory.includes("AO VIVO") || uppercaseName.includes("24H") || uppercaseName.includes("CANAL");
+    if (isExplicitVodCat && !isChannelIndicative) {
+      if (uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
+      return "MOVIE";
+    }
+    return "LIVE";
   }
 
-  // 4. CATEGORIAS EXPLICITAMENTE DECLARADAS COMO SÉRIES
+  // 2. Indicador forte de Séries (Temporadas e Episódios)
+  const hasSeriesPattern = 
+    /(?:\b(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\b\d{1,3}x\d{1,4}\b|\bs\d{1,3}e\d{1,4}\b|\bt\d{1,3}e\d{1,4}\b|\btemp\.\s*\d+\s*ep\.\s*\d+\b|\btemporada\s*\d+\b)/i.test(uppercaseName) ||
+    uppercaseName.includes("TEMPORADA") || uppercaseName.includes("TEMP.") ||
+    uppercaseName.includes("CAPITULO") || uppercaseName.includes("CAPÍTULO") ||
+    uppercaseName.includes("EPISODIO") || uppercaseName.includes("EPISÓDIO");
+
   const isExplicitSeriesCategory = 
     uppercaseCategory.startsWith("SERIES") ||
     uppercaseCategory.startsWith("SÉRIES") ||
@@ -720,18 +694,12 @@ function determineType(name, category, url) {
     uppercaseCategory.includes("SERIES |") ||
     uppercaseCategory.includes("SÉRIES |") ||
     uppercaseCategory.includes("SERIES:") ||
-    uppercaseCategory.includes("SÉRIES:");
-
-  // 5. Padrão de Episódio de Séries (S01E01, etc.)
-  const hasSeriesPattern = 
-    /(?:\b(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\b\d{1,3}x\d{1,4}\b|\bs\d{1,3}e\d{1,4}\b|\bt\d{1,3}e\d{1,4}\b|\btemp\.\s*\d+\s*ep\.\s*\d+\b|\btemporada\s*\d+\b)/i.test(uppercaseName) ||
-    uppercaseName.includes("TEMPORADA") || uppercaseName.includes("TEMP.") ||
-    uppercaseName.includes("CAPITULO") || uppercaseName.includes("CAPÍTULO") ||
-    uppercaseName.includes("EPISODIO") || uppercaseName.includes("EPISÓDIO");
+    uppercaseCategory.includes("SÉRIES:") ||
+    uppercaseCategory.includes("SERIADOS");
 
   if (isExplicitSeriesCategory || hasSeriesPattern) return "SERIES";
 
-  // 6. CATEGORIAS EXPLICITAMENTE DECLARADAS COMO FILMES
+  // 3. Indicador forte de Filmes / VOD
   const isExplicitMovieCategory = 
     uppercaseCategory.startsWith("FILMES") ||
     uppercaseCategory.startsWith("FILME") ||
@@ -743,13 +711,18 @@ function determineType(name, category, url) {
     uppercaseCategory.startsWith("LANCAMENTOS") ||
     uppercaseCategory.includes("FILMES |") ||
     uppercaseCategory.includes("FILMES:") ||
+    uppercaseCategory.includes("FILME |") ||
     uppercaseCategory.includes("VOD |") ||
     uppercaseCategory.includes("VOD:") ||
-    uppercaseCategory.includes("CINEMA |");
+    uppercaseCategory.includes("CINEMA |") ||
+    uppercaseCategory.includes("4K FILMES") ||
+    uppercaseCategory.includes("FHD FILMES");
 
-  if (isExplicitMovieCategory) return "MOVIE";
+  if (isExplicitMovieCategory && !uppercaseCategory.includes("24H") && !uppercaseCategory.includes("CANAL") && !uppercaseCategory.includes("CANAIS")) {
+    return "MOVIE";
+  }
 
-  // 7. Provedoras de Streaming (Netflix, Amazon, HBO, Disney, etc.)
+  // 4. Provedores de Streaming (Netflix, Prime, Disney, etc.)
   const isVodStreamingProvider = 
     uppercaseCategory.includes("NETFLIX") ||
     uppercaseCategory.includes("AMAZON") ||
@@ -758,21 +731,51 @@ function determineType(name, category, url) {
     uppercaseCategory.includes("DISNEY+") ||
     uppercaseCategory.includes("APPLE TV") ||
     uppercaseCategory.includes("PARAMOUNT+") ||
-    uppercaseCategory.includes("GLOBOPLAY") ||
-    uppercaseCategory.includes("SERIADOS");
+    uppercaseCategory.includes("GLOBOPLAY");
 
   if (isVodStreamingProvider) {
-    if (isStreamingTransport && !uppercaseUrl.includes(".MP4") && !uppercaseUrl.includes(".MKV")) {
-      return "LIVE"; // Canal ao vivo temático
-    }
+    const isLiveChannel = uppercaseCategory.includes("AO VIVO") || uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("24H");
+    if (isLiveChannel) return "LIVE";
+    if (hasSeriesPattern || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
+    return "MOVIE";
+  }
+
+  // 5. Extensões de arquivo VOD (.mp4, .mkv, .avi)
+  const isVodExtension = uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI");
+  if (isVodExtension) {
     return hasSeriesPattern ? "SERIES" : "MOVIE";
   }
 
-  // 8. Extensões de Arquivo VOD (.mp4, .mkv, .avi)
-  const isVodExtension = uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI");
-  if (isVodExtension) return "MOVIE";
+  // 6. Categorias lineares autênticas de TV Ao Vivo
+  const isLiveCategory = 
+    uppercaseCategory.startsWith("CANAIS") ||
+    uppercaseCategory.startsWith("CANAL") ||
+    uppercaseCategory.startsWith("TV") ||
+    uppercaseCategory.startsWith("AO VIVO") ||
+    uppercaseCategory.startsWith("AOVIVO") ||
+    uppercaseCategory.startsWith("24H") ||
+    uppercaseCategory.startsWith("24 HORAS") ||
+    uppercaseCategory.startsWith("TV ABERTA") ||
+    uppercaseCategory.startsWith("ABERTOS") ||
+    uppercaseCategory.startsWith("NOTICIAS") ||
+    uppercaseCategory.startsWith("ESPORTES") ||
+    uppercaseCategory.startsWith("GLOBO") ||
+    uppercaseCategory.startsWith("PREMIERE") ||
+    uppercaseCategory.startsWith("COMBATE") ||
+    uppercaseCategory.startsWith("DAZN") ||
+    uppercaseCategory.includes("CANAIS |") ||
+    uppercaseCategory.includes("CANAL |") ||
+    uppercaseCategory.includes("TV |") ||
+    uppercaseCategory.includes("CANAIS:") ||
+    uppercaseCategory.includes("CANAL:") ||
+    uppercaseCategory.includes("24H |") ||
+    uppercaseCategory.includes("AO VIVO |") ||
+    uppercaseCategory.includes("CANAIS 4K") ||
+    uppercaseCategory.includes("CANAIS FHD");
 
-  // 9. Padrão residual: se tiver formato de stream, é TV ao vivo
+  if (isLiveCategory) return "LIVE";
+
+  // 7. Padrão residual
   return "LIVE";
 }
 
@@ -1411,7 +1414,8 @@ function renderItemsList() {
       logoWrap.className = 'channel-logo-wrap';
       const img = document.createElement('img');
       img.className = 'channel-logo';
-      const fallbackSvg = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52"><rect width="52" height="52" fill="%231e1f26"/><text x="50%" y="55%" font-size="18" fill="%23ff9800" font-family="sans-serif" text-anchor="middle" dominant-baseline="middle">📺</text></svg>';
+      img.referrerPolicy = 'no-referrer';
+      const fallbackSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52"><rect width="52" height="52" rx="8" fill="#1e1f26"/><circle cx="26" cy="26" r="16" fill="#141828"/><polygon points="23,19 33,26 23,33" fill="#ffd54f"/></svg>');
       img.src = item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg;
       img.alt = item.name;
       img.loading = 'lazy';
@@ -2579,9 +2583,179 @@ function startStallWatchdog() {
   }, 1000);
 }
 
+// ==================== LIVE DIAGNOSTIC DEV LOGGER (SMART TV) ====================
+let sessionDevLogs = [];
+const MAX_DEV_LOGS = 300;
+
+function addDevLog(msg, type = 'info') {
+  const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+  const entry = { time, msg, type };
+  sessionDevLogs.push(entry);
+  if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
+
+  try {
+    const container = $('devLogsContainer');
+    if (container) {
+      if (container.innerHTML.includes('[Console inicializado.')) {
+        container.innerHTML = '';
+      }
+      const line = document.createElement('div');
+      line.style.marginBottom = '4px';
+      line.style.wordBreak = 'break-word';
+      
+      let color = '#cbd5e1';
+      if (type === 'error') color = '#ef4444';
+      else if (type === 'warn') color = '#eab308';
+      else if (type === 'success') color = '#22c55e';
+      else if (type === 'debug') color = '#94a3b8';
+
+      line.innerHTML = `<span style="color:#64748b;">[${time}]</span> <span style="color:${color}; font-weight:600;">${escapeHtml(msg)}</span>`;
+      container.appendChild(line);
+      container.scrollTop = container.scrollHeight;
+    }
+    const badge = $('devLogsCountBadge');
+    if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
+  } catch (e) {}
+
+  if (type === 'error') console.error('[MK21-TV]', msg);
+  else if (type === 'warn') console.warn('[MK21-TV]', msg);
+  else console.log('[MK21-TV]', msg);
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[m]);
+}
+
+function toggleDevLogsModal() {
+  const modal = $('modalDevLogs');
+  if (!modal) return;
+  const isHidden = modal.classList.contains('hidden');
+  if (isHidden) {
+    modal.classList.remove('hidden');
+    addDevLog('[UI] Console de logs aberto', 'info');
+    const closeBtn = $('btnCloseDevLogs');
+    if (closeBtn) closeBtn.focus();
+  } else {
+    modal.classList.add('hidden');
+    activeZone = 'channels';
+    focusActiveElement();
+  }
+}
+
+function initDevLogs() {
+  if ($('btnHeaderLogs')) $('btnHeaderLogs').onclick = toggleDevLogsModal;
+  if ($('btnCloseDevLogs')) $('btnCloseDevLogs').onclick = toggleDevLogsModal;
+  if ($('btnClearDevLogs')) $('btnClearDevLogs').onclick = () => {
+    sessionDevLogs = [];
+    const container = $('devLogsContainer');
+    if (container) container.innerHTML = '<div style="color:#64748b;">[Logs limpos com sucesso.]</div>';
+    const badge = $('devLogsCountBadge');
+    if (badge) badge.textContent = '0 entradas';
+  };
+  if ($('btnExportDevLogs')) $('btnExportDevLogs').onclick = () => {
+    try {
+      const text = sessionDevLogs.map(l => `[${l.time}] [${l.type.toUpperCase()}] ${l.msg}`).join('\n');
+      localStorage.setItem('mk21_last_exported_logs', text);
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mk21-tv-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      addDevLog('[Logs] Arquivo de log exportado e salvo com sucesso!', 'success');
+      showChannelBanner('✅ Logs exportados com sucesso!');
+    } catch (e) {
+      addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
+    }
+  };
+}
+
+let mpegtsPlayer = null;
+
+function stopCurrentPlayer() {
+  if (mpegtsPlayer) {
+    try {
+      mpegtsPlayer.pause();
+      mpegtsPlayer.unload();
+      mpegtsPlayer.detachMediaElement();
+      mpegtsPlayer.destroy();
+    } catch (e) {}
+    mpegtsPlayer = null;
+  }
+  if (hlsInstance) {
+    try { hlsInstance.destroy(); } catch (e) {}
+    hlsInstance = null;
+  }
+  const video = $('tvPlayer');
+  if (video) {
+    try {
+      video.pause();
+      video.removeAttribute('src');
+      video.innerHTML = '';
+      video.load();
+    } catch (e) {}
+  }
+}
+
+function fallbackToHls(item) {
+  if (!item || !item.url) return;
+  const hlsUrl = item.url.replace(/\.ts($|\?)/i, '.m3u8$1');
+  addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${hlsUrl}`, 'info');
+  stopCurrentPlayer();
+  const video = $('tvPlayer');
+  if (!video) return;
+
+  if (window.Hls && Hls.isSupported()) {
+    hlsInstance = new Hls({
+      enableWorker: true,
+      lowLatencyMode: true,
+      startFragPrefetch: true,
+      backBufferLength: 10,
+      maxBufferLength: 15,
+      maxMaxBufferLength: 30,
+      liveSyncDurationCount: 3,
+      maxBufferSize: 25 * 1000 * 1000
+    });
+    hlsInstance.loadSource(hlsUrl);
+    hlsInstance.attachMedia(video);
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      addDevLog('[Player Engine] Fallback HLS reproduzindo com sucesso!', 'success');
+      try { video.preservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
+      video.play().catch(() => {});
+      hidePlayerReconnectBadge();
+      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      updateRealResolution(item);
+    });
+    hlsInstance.on(Hls.Events.ERROR, (e, data) => {
+      addDevLog(`[HLS Error] Tipo: ${data.type} | Detalhe: ${data.details}`, 'error');
+      if (data.fatal) {
+        triggerAutoReconnect('Erro HLS Fatal');
+      }
+    });
+  } else {
+    video.src = hlsUrl;
+    video.load();
+    video.play().then(() => {
+      addDevLog('[Player Engine] Fallback HLS nativo reproduzindo!', 'success');
+      hidePlayerReconnectBadge();
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      updateRealResolution(item);
+    }).catch(err => {
+      addDevLog(`[Player Error] Falha final: ${err && err.message}`, 'error');
+      triggerAutoReconnect('Falha no fallback');
+    });
+  }
+}
+
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
 function playStream(item) {
   if (!item || !item.url) return;
+  stopCurrentPlayer();
   activeItem = item;
   recordWatchedItem(item);
   saveLastChannel(item);
@@ -2590,6 +2764,13 @@ function playStream(item) {
   startStallWatchdog();
 
   const video = $('tvPlayer');
+  if (!video) return;
+
+  const streamFormatPref = localStorage.getItem('mk21_stream_format') || 'auto';
+  addDevLog(`[Player] Iniciando carregamento: "${item.name}" (Modo: ${currentContentType})`, 'info');
+  addDevLog(`[Player] URL: ${item.url}`, 'info');
+  addDevLog(`[Player] Formato preferido: ${streamFormatPref}`, 'debug');
+
   if (item.currentTime && item.currentTime > 5 && (item.contentType === 'MOVIE' || item.contentType === 'SERIES' || currentContentType === 'MOVIE' || currentContentType === 'SERIES')) {
     const resumeAt = item.currentTime;
     const onLoaded = function () {
@@ -2633,14 +2814,17 @@ function playStream(item) {
 
   showChannelBanner(item.name);
 
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
+  let streamUrl = item.url;
+  if (streamFormatPref === 'hls' && streamUrl.toLowerCase().includes('.ts')) {
+    streamUrl = streamUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
+    addDevLog(`[Player] Preferência HLS forçada: ${streamUrl}`, 'info');
   }
 
-  const isM3U8 = item.url.toLowerCase().includes('.m3u8');
+  const isM3U8 = streamUrl.toLowerCase().includes('.m3u8');
+  const isTS = streamUrl.toLowerCase().includes('.ts');
 
   if (isM3U8 && window.Hls && Hls.isSupported()) {
+    addDevLog('[Player Engine] Usando decodificador Hls.js Low-Latency...', 'info');
     hlsInstance = new Hls({
       enableWorker: true,
       lowLatencyMode: true,
@@ -2660,10 +2844,11 @@ function playStream(item) {
       fragLoadingRetryDelay: 1000,
       manifestLoadingRetryDelay: 1000
     });
-    hlsInstance.loadSource(item.url);
+    hlsInstance.loadSource(streamUrl);
     hlsInstance.attachMedia(video);
     if ($('epgStatus')) $('epgStatus').textContent = '⏳ CARREGANDO...';
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      addDevLog('[Player Engine] Manifesto HLS decodificado com sucesso!', 'success');
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       video.play().catch(() => {});
       hidePlayerReconnectBadge();
@@ -2673,41 +2858,85 @@ function playStream(item) {
       updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
-      console.warn('[HLS SmartTV Error]', data.type, data.details, data.fatal);
+      addDevLog(`[HLS Error] Tipo: ${data.type} | Detalhe: ${data.details}`, 'warn');
       if (data.fatal) {
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
-            console.log('[HLS SmartTV] Tentando recuperar de erro de rede (startLoad)...');
+            addDevLog('[HLS Error] Recuperando erro de rede...', 'warn');
             if ($('epgStatus')) $('epgStatus').textContent = '🔄 RECONECTANDO...';
             showPlayerReconnectBadge('Reconectando rede...');
             hlsInstance.startLoad();
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
-            console.log('[HLS SmartTV] Tentando recuperar de erro de mídia (recoverMediaError)...');
+            addDevLog('[HLS Error] Recuperando decodificação de mídia...', 'warn');
             if ($('epgStatus')) $('epgStatus').textContent = '🔄 RECUPERANDO MÍDIA...';
             showPlayerReconnectBadge('Recuperando decodificação...');
             hlsInstance.recoverMediaError();
             break;
           default:
-            console.log('[HLS SmartTV] Erro irrecuperável, disparando auto-reconexão progressiva...');
+            addDevLog('[HLS Fatal] Erro irrecuperável HLS, tentando auto-reconexão...', 'error');
             triggerAutoReconnect('Erro HLS Fatal');
             break;
         }
       }
     });
+  } else if (isTS && window.mpegts && mpegts.isSupported()) {
+    addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
+    try {
+      mpegtsPlayer = mpegts.createPlayer({
+        type: 'mse',
+        isLive: (currentContentType === 'LIVE'),
+        url: streamUrl
+      }, {
+        enableWorker: true,
+        lazyLoad: false,
+        liveBufferLatencyChasing: true,
+        autoCleanupSourceBuffer: true,
+        stashInitialSize: 128 * 1024
+      });
+      mpegtsPlayer.attachMediaElement(video);
+      mpegtsPlayer.load();
+      mpegtsPlayer.play().then(() => {
+        addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
+        hidePlayerReconnectBadge();
+        if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+        if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+        if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+        updateRealResolution(item);
+      }).catch(err => {
+        addDevLog(`[MPEGTS Error] ${err && err.message}. Rotacionando para HLS fallback...`, 'warn');
+        fallbackToHls(item);
+      });
+      mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
+        addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
+        fallbackToHls(item);
+      });
+    } catch (eMpeg) {
+      addDevLog(`[MPEGTS Exception] ${eMpeg.message}. Fallback HLS...`, 'warn');
+      fallbackToHls(item);
+    }
   } else {
-    // Decodificação direta acelerada por hardware na TV webOS (sem delay)
-    video.src = item.url;
+    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas
+    addDevLog('[Player Engine] Usando decodificação nativa acelerada por hardware...', 'info');
+    video.innerHTML = '';
+    const src = document.createElement('source');
+    src.src = streamUrl;
+    if (isM3U8) src.type = 'application/x-mpegURL';
+    else if (isTS) src.type = 'video/mp2t';
+    else src.type = 'video/mp4';
+    video.appendChild(src);
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
     video.play().then(() => {
+      addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
-    }).catch(() => {
-      triggerAutoReconnect('Falha no playback nativo');
+    }).catch(err => {
+      addDevLog(`[Player Fallback] Falha no playback nativo (${err && err.message}). Tentando fallback HLS...`, 'warn');
+      fallbackToHls(item);
     });
   }
 }
@@ -2871,12 +3100,13 @@ function toggleFullscreen(force = false) {
 
   if (goingIn) {
     box.classList.add('is-fullscreen');
+    document.body.classList.add('is-fullscreen');
     activeZone = 'player';
     showFsHud(true);
     pokeFsHud();
-    // Tenta fullscreen nativo do container (mantém botões)
+    addDevLog('[Player] Modo Tela Cheia ATIVADO', 'info');
     try {
-      if (box.requestFullscreen) box.requestFullscreen();
+      if (box.requestFullscreen) box.requestFullscreen().catch(() => {});
       else if (box.webkitRequestFullscreen) box.webkitRequestFullscreen();
       else if (v && v.webkitRequestFullscreen) v.webkitRequestFullscreen();
     } catch (e) {}
@@ -2885,9 +3115,11 @@ function toggleFullscreen(force = false) {
     }, 200);
   } else {
     box.classList.remove('is-fullscreen');
+    document.body.classList.remove('is-fullscreen');
     showFsHud(false);
+    addDevLog('[Player] Modo Tela Cheia DESATIVADO', 'info');
     try {
-      if (document.exitFullscreen) document.exitFullscreen();
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
       else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     } catch (e) {}
     activeZone = 'channels';
@@ -4717,9 +4949,9 @@ document.addEventListener('keydown', function (e) {
     cycleAspectRatio();
     return;
   }
-  if (k === 406 || key === 'Blue' || key === 'ColorF3Blue') {
+  if (k === 406 || key === 'Blue' || key === 'ColorF3Blue' || key === 'b' || key === 'B') {
     e.preventDefault();
-    toggleStreamDiagnostics();
+    toggleDevLogsModal();
     return;
   }
 }, true);
@@ -4934,15 +5166,20 @@ window.addEventListener('load', () => {
     if (saved !== null && SERVERS[saved]) currentServerIndex = parseInt(saved, 10);
   } catch (e) {}
 
-  try {
-    const tmdbToggle = $('cfgToggleTmdb');
-    if (tmdbToggle) {
-      tmdbToggle.checked = localStorage.getItem('mk21_use_tmdb') !== 'false';
-      tmdbToggle.onchange = () => {
-        localStorage.setItem('mk21_use_tmdb', tmdbToggle.checked);
-      };
-    }
-  } catch (e) {}
+    try {
+      const tmdbToggle = $('cfgToggleTmdb');
+      if (tmdbToggle) {
+        tmdbToggle.checked = localStorage.getItem('mk21_use_tmdb') !== 'false';
+        tmdbToggle.onchange = () => {
+          localStorage.setItem('mk21_use_tmdb', tmdbToggle.checked);
+        };
+      }
+    } catch (e) {}
+
+    try {
+      initDevLogs();
+      addDevLog('[App] MK21 Play inicializado com sucesso', 'success');
+    } catch (e) {}
 
   loadServer();
 
