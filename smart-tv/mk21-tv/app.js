@@ -699,7 +699,7 @@ function determineType(name, category, url) {
 
   if (isExplicitSeriesCategory || hasSeriesPattern) return "SERIES";
 
-  // 3. Indicador forte de Filmes / VOD
+  // 3. Indicador forte de Filmes / VOD (Prefixos e Palavras-chave)
   const isExplicitMovieCategory = 
     uppercaseCategory.startsWith("FILMES") ||
     uppercaseCategory.startsWith("FILME") ||
@@ -718,7 +718,33 @@ function determineType(name, category, url) {
     uppercaseCategory.includes("4K FILMES") ||
     uppercaseCategory.includes("FHD FILMES");
 
-  if (isExplicitMovieCategory && !uppercaseCategory.includes("24H") && !uppercaseCategory.includes("CANAL") && !uppercaseCategory.includes("CANAIS")) {
+  // Gêneros cinematográficos típicos de catálogos VOD
+  const MOVIE_GENRES = [
+    "AÇÃO", "ACAO", "ACTION", "COMÉDIA", "COMEDIA", "COMEDY", "TERROR", "HORROR",
+    "SUSPENSE", "THRILLER", "DRAMA", "AVENTURA", "ADVENTURE", "FICÇÃO", "FICCAO", "SCI-FI",
+    "ROMANCE", "ANIMAÇÃO", "ANIMACAO", "ANIMATION", "DESENHOS", "DESENHO", "INFANTIL", "KIDS",
+    "DOCUMENTÁRIO", "DOCUMENTARIO", "DOCUMENTÁRIOS", "DOCUMENTARIOS", "DOCUMENTARY",
+    "POLICIAL", "CRIME", "FAROESTE", "WESTERN", "GUERRA", "WAR", "NACIONAL", "NACIONAIS",
+    "CLÁSSICOS", "CLASSICOS", "CLASSIC", "STAND UP", "SHOWS", "SHOW", "MUSICAIS", "MUSICAL",
+    "BIOGRAFIA", "BIOGRAPHY", "MISTÉRIO", "MISTERIO", "MYSTERY", "FANTASIA", "FANTASY",
+    "FAMÍLIA", "FAMILIA", "FAMILY", "LANÇAMENTOS", "LANCAMENTOS", "RELEASES"
+  ];
+
+  const hasMovieGenre = MOVIE_GENRES.some(g => uppercaseCategory.includes(g));
+
+  const isLiveIndicative = 
+    uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") ||
+    uppercaseCategory.includes("24H") || uppercaseCategory.includes("24 HORAS") ||
+    uppercaseCategory.includes("AO VIVO") || uppercaseCategory.includes("AOVIVO") ||
+    uppercaseCategory.includes("TV ABERTA") || uppercaseCategory.includes("ABERTOS") ||
+    uppercaseCategory.includes("ESPORTES") || uppercaseCategory.includes("SPORTS") ||
+    uppercaseCategory.includes("NOTICIAS") || uppercaseCategory.includes("NEWS") ||
+    uppercaseCategory.includes("GLOBO") || uppercaseCategory.includes("PREMIERE") ||
+    uppercaseCategory.includes("COMBATE") || uppercaseCategory.includes("DAZN") ||
+    uppercaseCategory.includes("RADIO") || uppercaseCategory.includes("RÁDIO") ||
+    uppercaseName.includes("24H") || uppercaseName.includes("CANAL") || uppercaseName.includes("AO VIVO");
+
+  if ((isExplicitMovieCategory || hasMovieGenre) && !isLiveIndicative) {
     return "MOVIE";
   }
 
@@ -734,8 +760,7 @@ function determineType(name, category, url) {
     uppercaseCategory.includes("GLOBOPLAY");
 
   if (isVodStreamingProvider) {
-    const isLiveChannel = uppercaseCategory.includes("AO VIVO") || uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("24H");
-    if (isLiveChannel) return "LIVE";
+    if (isLiveIndicative) return "LIVE";
     if (hasSeriesPattern || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
     return "MOVIE";
   }
@@ -744,6 +769,12 @@ function determineType(name, category, url) {
   const isVodExtension = uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI");
   if (isVodExtension) {
     return hasSeriesPattern ? "SERIES" : "MOVIE";
+  }
+
+  // 5.1 Ano no título (ex: "Filme Exemplo (2023)") sem indicação de canal linear
+  const hasYearPattern = /\b\((?:19|20)\d{2}\)\b/.test(uppercaseName) || /\b\[(?:19|20)\d{2}\]\b/.test(uppercaseName);
+  if (hasYearPattern && !isLiveIndicative) {
+    return "MOVIE";
   }
 
   // 6. Categorias lineares autênticas de TV Ao Vivo
@@ -1420,7 +1451,10 @@ function renderItemsList() {
       img.alt = item.name;
       img.loading = 'lazy';
       img.decoding = 'async';
-      img.onerror = () => { img.src = fallbackSvg; };
+      img.onerror = function() {
+        this.onerror = null;
+        this.src = fallbackSvg;
+      };
       logoWrap.appendChild(img);
       btn.appendChild(logoWrap);
 
@@ -3092,11 +3126,12 @@ function showFsHud(show) {
   }
 }
 
-function toggleFullscreen(force = false) {
+function toggleFullscreen(force) {
   const box = $('videoContainer');
   const v = $('tvPlayer');
   if (!box) return;
-  const goingIn = force === true || (force !== false && !isAppFullscreen());
+  const currentlyFs = isAppFullscreen();
+  const goingIn = (typeof force === 'boolean') ? force : !currentlyFs;
 
   if (goingIn) {
     box.classList.add('is-fullscreen');
@@ -3106,10 +3141,16 @@ function toggleFullscreen(force = false) {
     pokeFsHud();
     addDevLog('[Player] Modo Tela Cheia ATIVADO', 'info');
     try {
-      if (box.requestFullscreen) box.requestFullscreen().catch(() => {});
-      else if (box.webkitRequestFullscreen) box.webkitRequestFullscreen();
-      else if (v && v.webkitRequestFullscreen) v.webkitRequestFullscreen();
-    } catch (e) {}
+      if (box.requestFullscreen) {
+        box.requestFullscreen().catch(() => {});
+      } else if (box.webkitRequestFullscreen) {
+        box.webkitRequestFullscreen();
+      } else if (v && v.webkitRequestFullscreen) {
+        v.webkitRequestFullscreen();
+      }
+    } catch (e) {
+      addDevLog('[Player] Fullscreen API fallback ativo (CSS is-fullscreen aplicado): ' + e.message, 'debug');
+    }
     setTimeout(function () {
       if ($('fsBtnPlay')) $('fsBtnPlay').focus();
     }, 200);
@@ -3119,8 +3160,11 @@ function toggleFullscreen(force = false) {
     showFsHud(false);
     addDevLog('[Player] Modo Tela Cheia DESATIVADO', 'info');
     try {
-      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
     } catch (e) {}
     activeZone = 'channels';
     focusActiveElement();

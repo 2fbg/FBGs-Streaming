@@ -8,23 +8,16 @@ import androidx.media3.exoplayer.ExoPlayer
 
 object PlayerFactory {
     fun createFastStartPlayer(context: Context): ExoPlayer {
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                5000,   // minBufferMs (Reduzido para início imediato)
-                15000,  // maxBufferMs
-                500,    // bufferForPlaybackMs (Inicia com apenas 500ms!)
-                1500    // bufferForPlaybackAfterRebufferMs
-            )
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .build()
+        return com.fbg.streaming.player.Mk21PlayerFactory.create(
+            context = context,
+            profile = com.fbg.streaming.player.Mk21PlayerFactory.PlaybackProfile.LIVE_FAST_ZAPPING
+        )
+    }
 
-        val renderersFactory = DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-            .setEnableDecoderFallback(true)
-
-        return ExoPlayer.Builder(context, renderersFactory)
-            .setLoadControl(loadControl)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
-            .build()
+    fun createVodPlayer(context: Context): ExoPlayer {
+        return com.fbg.streaming.player.Mk21PlayerFactory.create(
+            context = context,
+            profile = com.fbg.streaming.player.Mk21PlayerFactory.PlaybackProfile.VOD_CINEMA_STABLE
+        )
     }
 }

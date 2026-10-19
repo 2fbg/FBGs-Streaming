@@ -103,6 +103,25 @@ body {
   color: #ffffff;
 }
 
+/* Fallback instantâneo para ícones caso CDN FontAwesome esteja offline ou bloqueado pela TV */
+.fa-solid {
+  display: inline-block;
+  font-style: normal;
+  line-height: 1;
+}
+.fa-tv:empty::before { content: "📺"; }
+.fa-film:empty::before { content: "🎬"; }
+.fa-clapperboard:empty::before { content: "🍿"; }
+.fa-clock-rotate-left:empty::before { content: "🕒"; }
+.fa-star:empty::before { content: "⭐"; }
+.fa-gear:empty::before { content: "⚙️"; }
+.fa-terminal:empty::before { content: "💻"; }
+.fa-rotate:empty::before { content: "🔄"; }
+.fa-trash:empty::before { content: "🗑️"; }
+.fa-floppy-disk:empty::before { content: "💾"; }
+.fa-expand:empty::before { content: "⛶"; }
+.fa-compress:empty::before { content: "🗗"; }
+
 .header-right {
   display: flex;
   align-items: center;
