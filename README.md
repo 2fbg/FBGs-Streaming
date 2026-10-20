@@ -1,4 +1,9 @@
-# FBGs-Streaming v1.4.1
+# FBGs-Streaming v2.1.2
+
+## 🚀 Últimas Atualizações
+- Estabilização Global v2.1.2.
+- Sincronização de lista de servidores única.
+- Limpeza de arquivos obsoletos para builds/archives.
 
 ## 🚀 Novidades da Versão
 - Sincronização Única: Servidores centralizados na raiz.

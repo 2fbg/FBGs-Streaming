@@ -1,6 +1,6 @@
 {
-  "version": "2.0.0",
-  "versionCode": 200,
+  "version": "2.1.2",
+  "versionCode": 212,
   "tagName": "v2.0.0",
   "name": "MK21 MultiServidor v2.0.0",
   "title": "MK21 Play v2.0.0",
@@ -12,7 +12,7 @@
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.0.0_all.ipk",
   "ipkSha256": "3efd4d75d8e043bb908c4dab59aadcc3e93a929a3e27c6ffc522f833bacae584",
   "ipkSizeBytes": 150842,
-  "breakingChanges": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
-  "releaseNotes": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
-  "body": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo."
+  "breakingChanges": "AVISO DE INSTALA\u00c7\u00c3O: Esta vers\u00e3o foi assinada com uma nova chave. \u00c9 necess\u00e1rio desinstalar a vers\u00e3o anterior antes de instalar esta vers\u00e3o; a desinstala\u00e7\u00e3o pode apagar os dados locais do aplicativo.",
+  "releaseNotes": "AVISO DE INSTALA\u00c7\u00c3O: Esta vers\u00e3o foi assinada com uma nova chave. \u00c9 necess\u00e1rio desinstalar a vers\u00e3o anterior antes de instalar esta vers\u00e3o; a desinstala\u00e7\u00e3o pode apagar os dados locais do aplicativo.",
+  "body": "AVISO DE INSTALA\u00c7\u00c3O: Esta vers\u00e3o foi assinada com uma nova chave. \u00c9 necess\u00e1rio desinstalar a vers\u00e3o anterior antes de instalar esta vers\u00e3o; a desinstala\u00e7\u00e3o pode apagar os dados locais do aplicativo."
 }

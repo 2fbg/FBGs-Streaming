@@ -1,11 +1,11 @@
 {
-  "version": "2.0.0",
-  "versionCode": 200,
+  "version": "2.1.2",
+  "versionCode": 212,
   "tagName": "v2.0.0",
   "name": "MK21 MultiServidor v2.0.0",
   "title": "MK21 Play v2.0.0",
-  "releaseNotes": "• Arquitetura Multiplataforma v2.0: Sincronização uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n• Fast-Start Playback (<500ms): Buffer otimizado e início imediato de reprodução HLS/MPEG-TS\n• SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sensíveis\n• Web Worker para Ingestão M3U: Parsing assíncrono em thread secundária para Smart TVs\n• Multi-Servidor Failover: Fallback automático entre servidores IPTV com telemetria ativa\n\nAVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
-  "body": "• Arquitetura Multiplataforma v2.0: Sincronização uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n• Fast-Start Playback (<500ms): Buffer otimizado e início imediato de reprodução HLS/MPEG-TS\n• SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sensíveis\n• Web Worker para Ingestão M3U: Parsing assíncrono em thread secundária para Smart TVs\n• Multi-Servidor Failover: Fallback automático entre servidores IPTV com telemetria ativa\n\nAVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
+  "releaseNotes": "\u2022 Arquitetura Multiplataforma v2.0: Sincroniza\u00e7\u00e3o uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n\u2022 Fast-Start Playback (<500ms): Buffer otimizado e in\u00edcio imediato de reprodu\u00e7\u00e3o HLS/MPEG-TS\n\u2022 SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sens\u00edveis\n\u2022 Web Worker para Ingest\u00e3o M3U: Parsing ass\u00edncrono em thread secund\u00e1ria para Smart TVs\n\u2022 Multi-Servidor Failover: Fallback autom\u00e1tico entre servidores IPTV com telemetria ativa\n\nAVISO DE INSTALA\u00c7\u00c3O: Esta vers\u00e3o foi assinada com uma nova chave. \u00c9 necess\u00e1rio desinstalar a vers\u00e3o anterior antes de instalar esta vers\u00e3o; a desinstala\u00e7\u00e3o pode apagar os dados locais do aplicativo.",
+  "body": "\u2022 Arquitetura Multiplataforma v2.0: Sincroniza\u00e7\u00e3o uniforme entre Android/TV, Web/PWA e Smart TV (webOS/Tizen)\n\u2022 Fast-Start Playback (<500ms): Buffer otimizado e in\u00edcio imediato de reprodu\u00e7\u00e3o HLS/MPEG-TS\n\u2022 SSRF Guard no Proxy Serverless: Bloqueio estrito de IPs privados e endpoints sens\u00edveis\n\u2022 Web Worker para Ingest\u00e3o M3U: Parsing ass\u00edncrono em thread secund\u00e1ria para Smart TVs\n\u2022 Multi-Servidor Failover: Fallback autom\u00e1tico entre servidores IPTV com telemetria ativa\n\nAVISO DE INSTALA\u00c7\u00c3O: Esta vers\u00e3o foi assinada com uma nova chave. \u00c9 necess\u00e1rio desinstalar a vers\u00e3o anterior antes de instalar esta vers\u00e3o; a desinstala\u00e7\u00e3o pode apagar os dados locais do aplicativo.",
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.0.0_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
@@ -15,5 +15,5 @@
   "ipkSizeBytes": 150842,
   "updatedAt": "2026-10-17",
   "sha256": "dfa3d022b96d83e2fda6567d8bf1b1f8089e04e1e9fb79ec3decc71268e6fa1e",
-  "breakingChanges": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo."
+  "breakingChanges": "AVISO DE INSTALA\u00c7\u00c3O: Esta vers\u00e3o foi assinada com uma nova chave. \u00c9 necess\u00e1rio desinstalar a vers\u00e3o anterior antes de instalar esta vers\u00e3o; a desinstala\u00e7\u00e3o pode apagar os dados locais do aplicativo."
 }
