@@ -13,16 +13,16 @@ interface PlaylistItemDao {
     @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND logoUrl IS NOT NULL AND logoUrl != '' ORDER BY RANDOM() LIMIT 20")
     fun getRandomHighlights(source: String): Flow<List<PlaylistItem>>
 
-    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND contentType = :type ORDER BY name ASC LIMIT 1500")
+    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND contentType = :type ORDER BY name ASC")
     fun getItemsByType(source: String, type: String): Flow<List<PlaylistItem>>
 
     @Query("SELECT DISTINCT category FROM playlist_items WHERE playlistSource = :source AND contentType = :type ORDER BY category ASC")
     fun getCategoriesByType(source: String, type: String): Flow<List<String>>
 
-    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND category = :category AND contentType = :type ORDER BY name ASC LIMIT 1500")
+    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND category = :category AND contentType = :type ORDER BY name ASC")
     fun getItemsByCategoryAndType(source: String, category: String, type: String): Flow<List<PlaylistItem>>
 
-    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND name LIKE :query ORDER BY name ASC LIMIT 100")
+    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND name LIKE :query ORDER BY name ASC")
     fun searchItems(source: String, query: String): Flow<List<PlaylistItem>>
 
     @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND isFavorite = 1 ORDER BY name ASC")

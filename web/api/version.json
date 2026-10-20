@@ -9,11 +9,11 @@
   "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.1.0_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
-  "apkSha256": "b52b5b36391794be6019dbf155ff0b29da4b4dc91224292971b461a6ebaaa817",
+  "apkSha256": "abf211e9f86035f90110368fb56c761eaa784286aadecb402616beeb570b13e5",
   "ipkSha256": "3efd4d75d8e043bb908c4dab59aadcc3e93a929a3e27c6ffc522f833bacae584",
   "sizeBytes": 25165824,
   "ipkSizeBytes": 154726,
   "updatedAt": "2026-10-20",
-  "sha256": "b52b5b36391794be6019dbf155ff0b29da4b4dc91224292971b461a6ebaaa817",
+  "sha256": "abf211e9f86035f90110368fb56c761eaa784286aadecb402616beeb570b13e5",
   "breakingChanges": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo."
 }

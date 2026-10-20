@@ -224,7 +224,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val displayedItemsLimit = _displayedItemsLimit.asStateFlow()
 
     fun loadMoreItems() {
-        _displayedItemsLimit.value = (_displayedItemsLimit.value + 60).coerceAtMost(1500)
+        _displayedItemsLimit.value = _displayedItemsLimit.value + 100
     }
 
     fun resetItemsLimit() {
