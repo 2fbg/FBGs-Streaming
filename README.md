@@ -1,8 +1,10 @@
-# BGs Streaming (MK21 MultiServidor) — v2.0.0
+# FBGs-Streaming v1.4.1
 
-<div align="center">
-  <img src="web/icon-192.png" alt="BGs Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
-  
+## 🚀 Novidades da Versão
+- Sincronização Única: Servidores centralizados na raiz.
+- Resiliência Web: Correção do Combo de Servidores e Modo Offline.
+- Performance TV: Phased Loading para listas gigantes.
+
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
   [![Version](https://img.shields.io/badge/Version-v2.0.0-red.svg)](docs/CHANGELOG.md)
