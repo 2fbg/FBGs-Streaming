@@ -1,13 +1,11 @@
 {
-  "name": "MK21 MultiServidor Web",
-  "short_name": "MK21 Web",
-  "description": "Reprodutor Web IPTV de Alto Desempenho",
+  "name": "MK21 MultiServidor",
+  "short_name": "MK21 Play",
+  "version": "2.1.1",
   "start_url": "./index.html",
-  "scope": "./",
   "display": "standalone",
-  "background_color": "#0B0C0E",
+  "background_color": "#0E0F12",
   "theme_color": "#E50914",
-  "orientation": "any",
   "icons": [
     {
       "src": "./icon-192.png",
@@ -27,6 +25,5 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
-  ],
-  "version": "2.0.0"
+  ]
 }
