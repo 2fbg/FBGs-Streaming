@@ -1,0 +1,9 @@
+{
+  "name": "fbgs-streaming-web",
+  "version": "2.1.0",
+  "private": true,
+  "description": "MK21 Streaming Web & OTT IPTV Platform",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}
