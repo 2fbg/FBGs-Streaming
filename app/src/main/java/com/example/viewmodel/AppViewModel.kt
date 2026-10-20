@@ -300,7 +300,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 SortOrder.DEFAULT -> filtered.sortedBy { it.id } // "Ordem por número" sorts by raw insertion number (ID ascending)
             }
-            sorted.take(displayLimit)
+            sorted
         }
     }.flowOn(Dispatchers.IO).stateIn(
         scope = viewModelScope,

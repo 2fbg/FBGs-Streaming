@@ -1,11 +1,15 @@
 {
   "version": 2,
   "cleanUrls": false,
-  "rewrites": [
-    { "source": "/api/proxy", "destination": "/api/proxy.js" },
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/web", "destination": "/index.html" },
-    { "source": "/web/", "destination": "/index.html" },
-    { "source": "/web/index.html", "destination": "/index.html" }
+  "routes": [
+    { "src": "/api/proxy", "dest": "/api/proxy.js" },
+    { "src": "/api/version.json", "dest": "/version.json" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/css/(.*)", "dest": "/css/$1" },
+    { "src": "/js/(.*)", "dest": "/js/$1" },
+    { "src": "/smart-tv/(.*)", "dest": "/smart-tv/$1" },
+    { "src": "/web/(.*)", "dest": "/web/$1" },
+    { "src": "/(manifest\\.json|sw\\.js|version\\.json|servers\\.json|mk21.*|icon.*)", "dest": "/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
