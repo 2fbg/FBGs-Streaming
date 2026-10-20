@@ -4221,6 +4221,32 @@ $('btnRestoreDefaultServers').onclick = () => {
   alert('Os 7 servidores padrão foram restaurados com sucesso.');
 };
 
+if ($('btnLoadOfflineCache')) {
+  $('btnLoadOfflineCache').onclick = async () => {
+    const srv = SERVERS[currentServerIndex] || SERVERS[0];
+    const cached = await getStoredData(srv.id);
+    const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
+    const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
+    const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
+    if (cached && (liveN + movN + serN) > 0) {
+      allCatalog = {
+        LIVE: cached.LIVE || [],
+        MOVIE: cached.MOVIE || [],
+        SERIES: cached.SERIES || []
+      };
+      buildCategoryIndex(allCatalog[currentContentType] || []);
+      renderCategoriesList();
+      renderItemsList();
+      $('modalServerPicker').classList.add('hidden');
+      activeZone = 'channels';
+      addDevLog(`[Cache] Catálogo restaurado do cache local (${liveN} canais, ${movN} filmes, ${serN} séries).`, 'success');
+      alert(`Catálogo offline carregado com sucesso!\n${liveN} Canais, ${movN} Filmes, ${serN} Séries.`);
+    } else {
+      alert('Nenhum catálogo em cache offline encontrado para este servidor.');
+    }
+  };
+}
+
 $('btnHeaderServer').onclick = openServerPicker;
 $('btnCloseServerPicker').onclick = () => {
   $('modalServerPicker').classList.add('hidden');

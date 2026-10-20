@@ -1724,9 +1724,9 @@ fun HomeScreen(
     val gridColumnsCount = remember(contentType, isLandscape, configuration.screenWidthDp) {
         if (contentType == ContentType.LIVE) {
             if (isLandscape) {
-                if (configuration.screenWidthDp >= 900) 3 else 2
+                if (configuration.screenWidthDp >= 900) 4 else 3
             } else {
-                1
+                2 // Grade de 2 colunas para canais ao vivo no APK
             }
         } else {
             if (isLandscape) {
@@ -3369,11 +3369,11 @@ fun GridItemCard(
                     // Logo box with Slate background and native monogram fallback
                     Box(
                         modifier = Modifier
-                            .padding(start = 8.dp)
-                            .width(58.dp)
-                            .height(48.dp)
+                            .padding(start = 6.dp)
+                            .width(44.dp)
+                            .height(44.dp)
                             .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                            .padding(3.dp),
+                            .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         val logoModel = enhancedLogoFallback(item.logoUrl, item.name)
@@ -3392,133 +3392,107 @@ fun GridItemCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(vertical = 6.dp, horizontal = 2.dp)
+                            .padding(vertical = 4.dp, horizontal = 1.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = item.category.uppercase(),
-                                fontSize = 8.sp,
+                                fontSize = 7.5.sp,
                                 color = com.example.ui.theme.GoldPremium,
                                 fontWeight = FontWeight.Black,
-                                letterSpacing = 1.sp,
+                                letterSpacing = 0.5.sp,
                                 modifier = Modifier.weight(1f, fill = false),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .clip(RoundedCornerShape(3.dp))
                                     .background(NetflixRed.copy(alpha = 0.2f))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    .padding(horizontal = 3.dp, vertical = 0.5.dp)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
-                                            .size(4.dp)
+                                            .size(3.5.dp)
                                             .background(NetflixRed, CircleShape)
                                     )
-                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Spacer(modifier = Modifier.width(2.5.dp))
                                     Text(
                                         text = "AO VIVO",
-                                        fontSize = 7.sp,
+                                        fontSize = 6.5.sp,
                                         fontWeight = FontWeight.Black,
                                         color = NetflixRed
                                     )
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             text = item.name,
-                            fontSize = 12.sp,
-                            lineHeight = 15.sp,
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
                         
                         if (currentProgram != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = "NO AR: " + currentProgram.title,
-                                    fontSize = 8.5.sp,
-                                    color = Color(0xFFE2E8F0),
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = currentProgram.timeRange,
-                                    fontSize = 8.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Text(
+                                text = "NO AR: " + currentProgram.title,
+                                fontSize = 8.sp,
+                                color = Color(0xFFCBD5E1),
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(1.5.dp))
                             LinearProgressIndicator(
                                 progress = { currentProgram.progressPercent },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(2.5.dp)
-                                    .clip(RoundedCornerShape(1.5.dp)),
+                                    .height(2.dp)
+                                    .clip(RoundedCornerShape(1.dp)),
                                 color = NetflixRed,
                                 trackColor = Color.White.copy(alpha = 0.1f)
                             )
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
                         modifier = Modifier.padding(end = 4.dp)
                     ) {
                         if (item.isAdult) {
                             Box(
                                 modifier = Modifier
-                                    .padding(end = 2.dp)
-                                    .background(Color.Red, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    .padding(bottom = 2.dp)
+                                    .background(Color.Red, RoundedCornerShape(3.dp))
+                                    .padding(horizontal = 3.dp, vertical = 1.dp)
                             ) {
-                                Text("18+", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            }
-                        }
-
-                        // Preview EPG Info button
-                        if (onPreviewEpg != null) {
-                            IconButton(
-                                onClick = onPreviewEpg,
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = "Prévia EPG",
-                                    tint = GoldPremium.copy(alpha = 0.85f),
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Text("18+", fontSize = 6.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
 
                         // Favorite Button for TV Channels
                         IconButton(
                             onClick = onToggleFavorite,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
                                 imageVector = if (item.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 contentDescription = "Favorite",
-                                tint = if (item.isFavorite) Color.Red else Color.White.copy(alpha = 0.7f),
-                                modifier = Modifier.size(17.dp)
+                                tint = if (item.isFavorite) Color.Red else Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -4356,20 +4330,20 @@ fun VideoPlayerUI(
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(20000)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(12000)
             .setKeepPostFor302Redirects(true)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
-        // Fast Start LoadControl otimizado para abertura imediata de canais e HLS
+        // Fast Start LoadControl otimizado para abertura imediata de canais e HLS (< 300ms)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                5000,  // minBufferMs: 5s para Fast Start (início ágil)
-                30000, // maxBufferMs
-                500,   // bufferForPlaybackMs: 500ms para início ultrarrápido
-                1500   // bufferForPlaybackAfterRebufferMs: 1.5s
+                1500,  // minBufferMs: 1.5s para zapping imediato
+                15000, // maxBufferMs
+                250,   // bufferForPlaybackMs: 250ms para início ultrarrápido
+                500    // bufferForPlaybackAfterRebufferMs: 500ms
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -5019,19 +4993,7 @@ fun VideoPlayerUI(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Loading state indicator
-                if (isBuffering && errorMessage == null) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = NetflixRed, strokeWidth = 3.dp)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text("Carregando stream...", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-                        }
-                    }
-                }
+
 
                 // Error and retry indicator
                 if (errorMessage != null) {

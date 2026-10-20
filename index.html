@@ -286,6 +286,12 @@
                         <i class="fa-solid fa-play text-base" id="login-btn-icon"></i>
                         <span id="login-btn-text">ENTRAR NO MK21</span>
                     </button>
+
+                    <!-- Botão Secundário: Prosseguir para Home (Modo Offline / Cache) - Idêntico ao APK -->
+                    <button type="button" id="btn-offline-mode" class="w-full py-3.5 mt-2 text-amber-400 hover:text-amber-300 active:scale-[0.99] font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer">
+                        <i class="fa-solid fa-bolt-lightning text-xs"></i>
+                        <span>Prosseguir para Home (Modo Offline / Cache)</span>
+                    </button>
                 </div>
             </div>
 
@@ -3164,6 +3170,20 @@
                 }
             }, { passive: false });
 
+            // Suporte completo e imediato ao botão físico e de tela 'Voltar para Lista'
+            const backBtn = document.getElementById('btn-back-to-list');
+            if (backBtn) {
+                const handleBack = (e) => {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    closeMobilePlayer();
+                };
+                backBtn.addEventListener('click', handleBack);
+                backBtn.addEventListener('touchend', handleBack);
+            }
+
             // Suporte completo ao botão de voltar nativo (físico/gesto do Android e navegadores)
             window.addEventListener('popstate', (e) => {
                 // 1. Fecha modal EPG se aberto
@@ -3178,9 +3198,9 @@
                     openModals.forEach(m => m.classList.add('hidden'));
                     return;
                 }
-                // 3. Fecha o player e retorna para a lista em dispositivos móveis
+                // 3. Fecha o player e retorna para a lista em qualquer resolução móvel/tablet
                 const playerCol = document.getElementById('player-column');
-                if (playerCol && window.innerWidth < 1024 && playerCol.style.display !== 'none' && !playerCol.classList.contains('hidden')) {
+                if (playerCol && playerCol.style.display !== 'none' && !playerCol.classList.contains('hidden')) {
                     stopStream();
                     playerCol.classList.add('hidden', 'max-sm:hidden', 'max-lg:hidden');
                     playerCol.classList.remove('flex');
@@ -5600,12 +5620,9 @@
             stopStream();
             const playerCol = document.getElementById('player-column');
             if (playerCol) {
-                // Em dispositivos móveis e tablets (< 1024px), fecha e oculta o container do player
-                if (window.innerWidth < 1024) {
-                    playerCol.classList.add('hidden', 'max-sm:hidden', 'max-lg:hidden');
-                    playerCol.classList.remove('flex');
-                    playerCol.style.display = 'none';
-                }
+                playerCol.classList.add('hidden', 'max-sm:hidden', 'max-lg:hidden');
+                playerCol.classList.remove('flex');
+                playerCol.style.display = 'none';
             }
 
             // Rola suavemente a tela de volta para o catálogo de canais/mídias
