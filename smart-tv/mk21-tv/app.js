@@ -840,7 +840,7 @@ function groupSeriesItems(items) {
     map[seriesTitle].episodes.push(it);
   });
 
-  return Object.values(map).sort((a, b) => (a.title < b.title ? -1 : (a.title > b.title ? 1 : 0)));
+  return Object.values(map).sort((a, b) => a.title.localeCompare(b.title));
 }
 
 // LEITOR INCREMENTAL DE LISTAS M3U: não mantém texto bruto nem array de 300k linhas
@@ -1288,7 +1288,6 @@ function renderCategoriesList() {
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
     btn.setAttribute('tabindex', '0');
     btn.setAttribute('data-idx', idx);
-    btn.setAttribute('data-cat', k);
 
     const spanName = document.createElement('span');
     spanName.textContent = k === 'ALL' ? (
@@ -1317,14 +1316,10 @@ function renderCategoriesList() {
 function selectCategory(catKey) {
   activeCategoryKey = catKey;
 
-  const ulCats = $('listCategories');
-  if (ulCats) {
-    const prevActive = ulCats.querySelector('.cat-item-btn.active');
-    if (prevActive) prevActive.classList.remove('active');
-    const newActive = ulCats.querySelector(`.cat-item-btn[data-cat="${CSS.escape ? CSS.escape(catKey) : catKey.replace(/"/g, '\\"')}"]`) ||
-      Array.from(ulCats.querySelectorAll('.cat-item-btn')).find(b => b.getAttribute('data-cat') === catKey || (catKey === 'ALL' && b.textContent.includes('Todos')));
-    if (newActive) newActive.classList.add('active');
-  }
+  const btns = $('listCategories').querySelectorAll('.cat-item-btn');
+  btns.forEach(b => b.classList.remove('active'));
+  const activeBtn = Array.from(btns).find(b => (catKey === 'ALL' && b.textContent.includes('Todos')) || b.textContent.startsWith(catKey));
+  if (activeBtn) activeBtn.classList.add('active');
 
   $('txtCurrentCategoryTitle').textContent = catKey === 'ALL' ? (
     currentContentType === 'LIVE' ? '📺 Todos os Canais' :
@@ -1354,20 +1349,15 @@ function renderItemsList() {
     items = items.filter(c => !c.isAdult && !isAdult(c.name) && !isAdult(c.group));
   }
 
-  // Aplicar ordenação rápida (Padrão / Recente / A-Z / Z-A / Ano) otimizada para webOS TV
+  // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
   function mk21ExtractYear(name) {
     const m = String(name || '').match(/\b((?:19|20)\d{2})\b/);
     return m ? parseInt(m[1], 10) : 0;
   }
-  const fastStrCompare = (a, b) => {
-    const na = (a && a.name) || '';
-    const nb = (b && b.name) || '';
-    return na < nb ? -1 : (na > nb ? 1 : 0);
-  };
   if (currentSortOrder === 'AZ') {
-    items = items.slice().sort(fastStrCompare);
+    items = items.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
   } else if (currentSortOrder === 'ZA') {
-    items = items.slice().sort((a, b) => fastStrCompare(b, a));
+    items = items.slice().sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
   } else if (currentSortOrder === 'RECENT') {
     // Ordem da lista invertida (últimos da playlist primeiro)
     items = items.slice().reverse();
@@ -1379,7 +1369,7 @@ function renderItemsList() {
       if (ya && yb && ya !== yb) return yb - ya;
       if (ya && !yb) return -1;
       if (!ya && yb) return 1;
-      return fastStrCompare(a, b);
+      return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
     });
   }
   // DEFAULT: mantém ordem original da categoria
@@ -1800,6 +1790,43 @@ function getSimulatedTvProgram(channelName) {
   return { title, nextTitle, timeStr, progressPercent };
 }
 
+function matchEPG(channel, xmltvListings) {
+  if (!channel || !xmltvListings || !Array.isArray(xmltvListings)) return null;
+  const chanTvgId = (channel.tvgId || channel['tvg-id'] || '').trim().toLowerCase();
+  const chanStreamId = String(channel.streamId || channel.stream_id || '').trim();
+  const chanName = (channel.name || '').trim().toLowerCase();
+
+  // 1. Direct match on tvg-id
+  if (chanTvgId) {
+    const byTvgId = xmltvListings.filter(x => {
+      const xId = String(x.channel_id || x.channel || x.id || '').trim().toLowerCase();
+      return xId === chanTvgId;
+    });
+    if (byTvgId.length > 0) return byTvgId;
+  }
+
+  // 2. Direct match on streamId
+  if (chanStreamId) {
+    const byStream = xmltvListings.filter(x => {
+      const xId = String(x.channel_id || x.stream_id || x.id || '').trim();
+      return xId === chanStreamId;
+    });
+    if (byStream.length > 0) return byStream;
+  }
+
+  // 3. Fallback match by channel name
+  if (chanName) {
+    const cleanChan = chanName.replace(/\b(fhd|hd|4k|sd|br|brasil|canal|canais)\b/g, '').trim();
+    const byName = xmltvListings.filter(x => {
+      const xName = String(x.channel_name || x.name || '').toLowerCase().trim();
+      return xName && (xName === chanName || (cleanChan && xName.includes(cleanChan)));
+    });
+    if (byName.length > 0) return byName;
+  }
+
+  return null;
+}
+
 async function updateSmartTvEpg(item) {
   if (!item) return;
 
@@ -1807,6 +1834,8 @@ async function updateSmartTvEpg(item) {
   if ($('epgTitle')) $('epgTitle').textContent = (favoriteUrls.has(item.url) ? '⭐ ' : '▶ ') + item.name;
   if ($('fsHudTitle')) $('fsHudTitle').textContent = (favoriteUrls.has(item.url) ? '⭐ ' : '') + item.name;
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${sim.timeStr}`;
+  if ($('previewEpgNow')) $('previewEpgNow').textContent = `NO AR: ${sim.title}`;
+  if ($('previewEpgNext')) $('previewEpgNext').textContent = `A SEGUIR: ${sim.nextTitle}`;
   if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${sim.title}</b>`;
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${sim.progressPercent}%`;
@@ -1865,13 +1894,47 @@ async function updateSmartTvEpg(item) {
   }
 }
 
+function parseXmltvTimestamp(val) {
+  if (!val) return NaN;
+  if (typeof val === 'number') {
+    return val > 1e11 ? val : val * 1000;
+  }
+  const s = String(val).trim();
+  if (/^\d{10}$/.test(s)) return parseInt(s, 10) * 1000;
+  if (/^\d{13}$/.test(s)) return parseInt(s, 10);
+
+  // Formato padrão XMLTV: YYYYMMDDHHmmss [+/-]ZZZZ (ex: 20261021020000 +0000)
+  const xmltvMatch = s.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-]\d{4}))?/);
+  if (xmltvMatch) {
+    const y = xmltvMatch[1];
+    const m = xmltvMatch[2];
+    const d = xmltvMatch[3];
+    const h = xmltvMatch[4];
+    const min = xmltvMatch[5];
+    const sec = xmltvMatch[6];
+    const tz = xmltvMatch[7];
+    let isoString;
+    if (tz) {
+      isoString = `${y}-${m}-${d}T${h}:${min}:${sec}${tz.slice(0, 3)}:${tz.slice(3)}`;
+    } else {
+      isoString = `${y}-${m}-${d}T${h}:${min}:${sec}Z`;
+    }
+    const parsed = new Date(isoString).getTime();
+    if (!isNaN(parsed)) return parsed;
+  }
+  // Formato SQL / ISO: YYYY-MM-DD HH:mm:ss
+  const isoTry = new Date(s.replace(' ', 'T')).getTime();
+  if (!isNaN(isoTry)) return isoTry;
+  return NaN;
+}
+
 function applyRealSmartTvEpg(item, listings) {
   if (!listings || listings.length === 0 || activeItem !== item) return;
   const nowMs = Date.now();
 
   const parsed = listings.map(l => {
-    let start = l.start_timestamp ? l.start_timestamp * 1000 : new Date(l.start.replace(' ', 'T')).getTime();
-    let stop = l.stop_timestamp ? l.stop_timestamp * 1000 : new Date(l.end.replace(' ', 'T')).getTime();
+    let start = parseXmltvTimestamp(l.start_timestamp || l.start);
+    let stop = parseXmltvTimestamp(l.stop_timestamp || l.end || l.stop);
     return {
       title: decodeSmartTvEpgText(l.title),
       desc: decodeSmartTvEpgText(l.description),
@@ -1887,29 +1950,28 @@ function applyRealSmartTvEpg(item, listings) {
   let curIdx = parsed.indexOf(current);
   let next = (curIdx >= 0 && curIdx + 1 < parsed.length) ? parsed[curIdx + 1] : null;
 
-  const startH = new Date(current.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const stopH = new Date(current.stop).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const startH = new Date(current.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const stopH = new Date(current.stop).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   const total = Math.max(1, current.stop - current.start);
   const elapsed = Math.max(0, nowMs - current.start);
   const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
 
-  item._hasRealEpg = true;
-  item._realEpgTitle = current.title;
-  item._realEpgNext = next ? next.title : null;
-  item._realEpgStartH = startH;
-  item._realEpgStopH = stopH;
-
   if ($('epgTitle')) $('epgTitle').textContent = `▶ ${item.name}`;
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${startH} - ${stopH}`;
   if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${current.title}</b>`;
+  if ($('previewEpgNext')) {
+    const nextH = next ? new Date(next.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '--:--';
+    $('previewEpgNext').textContent = `A SEGUIR (${nextH}): ${next ? next.title : 'Programação Normal'}`;
+  }
   if ($('epgStatus')) {
     $('epgStatus').innerHTML = `🔴 NO AR: <b>${current.title}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
   }
-  const pBar = document.querySelector('.epg-progress') || $('epgProgressBar');
+  const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${pct}%`;
-  const nextInfo = next ? `A seguir (${new Date(next.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}): ${next.title}` : 'A SEGUIR: Programação Normal';
-  if ($('previewEpgNext')) $('previewEpgNext').textContent = nextInfo;
-  if ($('epgNext')) $('epgNext').textContent = nextInfo;
+  if ($('epgNext') && next) {
+    const nextH = new Date(next.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    $('epgNext').textContent = `A seguir (${nextH}): ${next.title}`;
+  }
 
   // Sincroniza EPG Real no Fullscreen HUD
   if ($('fsEpgCurrentTitle')) $('fsEpgCurrentTitle').textContent = current.title;
@@ -2095,37 +2157,13 @@ const ASPECT_MODES = [
   { id: 'zoom', label: 'Proporção: Zoom (Cortar Bordas)', objectFit: 'cover' }
 ];
 let currentAspectIdx = 0;
-try {
-  const savedAspect = localStorage.getItem('mk21_aspect_idx');
-  if (savedAspect !== null) currentAspectIdx = parseInt(savedAspect, 10) % ASPECT_MODES.length;
-} catch (e) {}
-
-function applyAspectRatio(mode) {
-  const video = $('tvPlayer');
-  if (!video) return;
-  const targetMode = mode || ASPECT_MODES[currentAspectIdx] || ASPECT_MODES[0];
-  video.style.setProperty('object-fit', targetMode.objectFit, 'important');
-  video.classList.remove('aspect-fit', 'aspect-fill', 'aspect-zoom', 'aspect-16-9');
-  if (targetMode.id === 'fit') video.classList.add('aspect-fit');
-  else if (targetMode.id === 'fill') video.classList.add('aspect-fill');
-  else if (targetMode.id === 'zoom') video.classList.add('aspect-zoom');
-
-  const container = $('videoContainer');
-  if (container) {
-    container.classList.remove('aspect-fit', 'aspect-fill', 'aspect-zoom');
-    container.classList.add('aspect-' + targetMode.id);
-  }
-}
 
 function cycleAspectRatio() {
   const video = $('tvPlayer');
   if (!video) return;
   currentAspectIdx = (currentAspectIdx + 1) % ASPECT_MODES.length;
   const mode = ASPECT_MODES[currentAspectIdx];
-  applyAspectRatio(mode);
-  try {
-    localStorage.setItem('mk21_aspect_idx', String(currentAspectIdx));
-  } catch (e) {}
+  video.style.objectFit = mode.objectFit;
   showChannelBanner(mode.label);
   if ($('diagAspect')) $('diagAspect').textContent = mode.label;
 }
@@ -2137,13 +2175,11 @@ function toggleMute() {
   showChannelBanner(video.muted ? '🔇 Áudio Mudo' : '🔊 Áudio Ativado');
 }
 
-let streamDiagTimer = null;
 function toggleStreamDiagnostics() {
   const modal = $('modalStreamDiagnostics');
   if (!modal) return;
   if (!modal.classList.contains('hidden')) {
     modal.classList.add('hidden');
-    if (streamDiagTimer) { clearInterval(streamDiagTimer); streamDiagTimer = null; }
     activeZone = 'channels';
     focusActiveElement();
     return;
@@ -2151,8 +2187,6 @@ function toggleStreamDiagnostics() {
   updateStreamDiagnosticsInfo();
   modal.classList.remove('hidden');
   activeZone = 'modalStreamDiagnostics';
-  if (streamDiagTimer) clearInterval(streamDiagTimer);
-  streamDiagTimer = setInterval(updateStreamDiagnosticsInfo, 1000);
   const closeBtn = $('btnCloseDiagnostics');
   if (closeBtn) closeBtn.focus();
 }
@@ -2665,26 +2699,11 @@ function startStallWatchdog() {
 let sessionDevLogs = [];
 const MAX_DEV_LOGS = 300;
 
-try {
-  const savedLogs = JSON.parse(localStorage.getItem('mk21_live_dev_logs') || '[]');
-  if (Array.isArray(savedLogs) && savedLogs.length > 0) {
-    sessionDevLogs = savedLogs.slice(-150);
-  }
-} catch (e) {}
-
-const _origConsoleLog = console.log.bind(console);
-const _origConsoleWarn = console.warn.bind(console);
-const _origConsoleError = console.error.bind(console);
-
 function addDevLog(msg, type = 'info') {
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-  const entry = { time, msg: String(msg || ''), type };
+  const entry = { time, msg, type };
   sessionDevLogs.push(entry);
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
-
-  try {
-    localStorage.setItem('mk21_live_dev_logs', JSON.stringify(sessionDevLogs.slice(-100)));
-  } catch (e) {}
 
   try {
     const container = $('devLogsContainer');
@@ -2710,11 +2729,9 @@ function addDevLog(msg, type = 'info') {
     if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
   } catch (e) {}
 
-  try {
-    if (type === 'error') _origConsoleError('[MK21-TV]', msg);
-    else if (type === 'warn') _origConsoleWarn('[MK21-TV]', msg);
-    else _origConsoleLog('[MK21-TV]', msg);
-  } catch (e) {}
+  if (type === 'error') console.error('[MK21-TV]', msg);
+  else if (type === 'warn') console.warn('[MK21-TV]', msg);
+  else console.log('[MK21-TV]', msg);
 }
 
 function escapeHtml(str) {
@@ -2729,26 +2746,6 @@ function toggleDevLogsModal() {
   const isHidden = modal.classList.contains('hidden');
   if (isHidden) {
     modal.classList.remove('hidden');
-    activeZone = 'modalDevLogs';
-    const container = $('devLogsContainer');
-    if (container) {
-      container.innerHTML = '';
-      sessionDevLogs.forEach(entry => {
-        const line = document.createElement('div');
-        line.style.marginBottom = '4px';
-        line.style.wordBreak = 'break-word';
-        let color = '#cbd5e1';
-        if (entry.type === 'error') color = '#ef4444';
-        else if (entry.type === 'warn') color = '#eab308';
-        else if (entry.type === 'success') color = '#22c55e';
-        else if (entry.type === 'debug') color = '#94a3b8';
-        line.innerHTML = `<span style="color:#64748b;">[${entry.time}]</span> <span style="color:${color}; font-weight:600;">${escapeHtml(entry.msg)}</span>`;
-        container.appendChild(line);
-      });
-      container.scrollTop = container.scrollHeight;
-    }
-    const badge = $('devLogsCountBadge');
-    if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
     addDevLog('[UI] Console de logs aberto', 'info');
     const closeBtn = $('btnCloseDevLogs');
     if (closeBtn) closeBtn.focus();
@@ -2764,7 +2761,6 @@ function initDevLogs() {
   if ($('btnCloseDevLogs')) $('btnCloseDevLogs').onclick = toggleDevLogsModal;
   if ($('btnClearDevLogs')) $('btnClearDevLogs').onclick = () => {
     sessionDevLogs = [];
-    try { localStorage.removeItem('mk21_live_dev_logs'); } catch (e) {}
     const container = $('devLogsContainer');
     if (container) container.innerHTML = '<div style="color:#64748b;">[Logs limpos com sucesso.]</div>';
     const badge = $('devLogsCountBadge');
@@ -2787,34 +2783,36 @@ function initDevLogs() {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
   };
-
-  // Interceptar logs globais de console e exceções não tratadas
-  console.log = function(...args) {
-    _origConsoleLog(...args);
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    if (!msg.startsWith('[MK21-TV]')) addDevLog(msg, 'info');
-  };
-  console.warn = function(...args) {
-    _origConsoleWarn(...args);
-    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-    if (!msg.startsWith('[MK21-TV]')) addDevLog(msg, 'warn');
-  };
-  console.error = function(...args) {
-    _origConsoleError(...args);
-    const msg = args.map(a => (a instanceof Error ? `${a.message}\n${a.stack || ''}` : (typeof a === 'object' ? JSON.stringify(a) : String(a)))).join(' ');
-    if (!msg.startsWith('[MK21-TV]')) addDevLog(msg, 'error');
-  };
-  window.addEventListener('error', function(e) {
-    addDevLog(`[Exceção JS] ${e.message} (${e.filename}:${e.lineno})`, 'error');
-  });
-  window.addEventListener('unhandledrejection', function(e) {
-    addDevLog(`[Promise Rejeitada] ${e.reason && (e.reason.message || e.reason)}`, 'error');
-  });
 }
 
 let mpegtsPlayer = null;
 
+let playAbortController = null;
+
+function safeVideoPlay(video) {
+  if (!video) return Promise.resolve();
+  try {
+    const p = video.play();
+    if (p && typeof p.then === 'function') {
+      return p.catch(err => {
+        if (err && (err.name === 'AbortError' || (err.message && err.message.includes('interrupted')))) {
+          console.debug('[Player] Play request interrupted cleanly by zapping.');
+          return;
+        }
+        console.warn('[Player Play Error]:', err && err.message);
+      });
+    }
+  } catch (e) {
+    console.warn('[Player Exception]:', e);
+  }
+  return Promise.resolve();
+}
+
 function stopCurrentPlayer() {
+  if (playAbortController) {
+    try { playAbortController.abort(); } catch (e) {}
+    playAbortController = null;
+  }
   if (mpegtsPlayer) {
     try {
       mpegtsPlayer.pause();
@@ -2832,6 +2830,7 @@ function stopCurrentPlayer() {
   if (video) {
     try {
       video.pause();
+      video.src = "";
       video.removeAttribute('src');
       video.innerHTML = '';
       video.load();
@@ -2863,11 +2862,11 @@ function fallbackToHls(item) {
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Fallback HLS reproduzindo com sucesso!', 'success');
       try { video.preservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-      video.play().catch(() => {});
+      safeVideoPlay(video);
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-      mk21SetEpgStatusPlaying(item);
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
@@ -2879,48 +2878,61 @@ function fallbackToHls(item) {
   } else {
     video.src = hlsUrl;
     video.load();
-    video.play().then(() => {
+    safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] Fallback HLS nativo reproduzindo!', 'success');
       hidePlayerReconnectBadge();
-      mk21SetEpgStatusPlaying(item);
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
-      addDevLog(`[Player Error] Falha final: ${err && err.message}`, 'error');
+      addDevLog(`[Player Error] Falha no fallback: ${err && err.message}`, 'error');
       triggerAutoReconnect('Falha no fallback');
     });
   }
 }
 
-function mk21SetEpgStatusPlaying(item) {
-  const statusEl = $('epgStatus');
-  if (!statusEl) return;
-  if (item && item._realEpgTitle) {
-    statusEl.innerHTML = `🔴 NO AR: <b>${item._realEpgTitle}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
-    if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${item._realEpgTitle}</b>`;
-  } else {
-    statusEl.textContent = '🔴 NO AR';
-  }
-}
+let zappingLockPromise = Promise.resolve();
 
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
 function playStream(item) {
   if (!item || !item.url) return;
-  stopCurrentPlayer();
-  activeItem = item;
-  recordWatchedItem(item);
-  saveLastChannel(item);
-  prefetchAdjacentChannels(item);
-  startProgressTracker(item);
-  startStallWatchdog();
 
-  const video = $('tvPlayer');
-  if (!video) return;
-  applyAspectRatio();
+  if (playAbortController) {
+    try { playAbortController.abort(); } catch (e) {}
+  }
+  playAbortController = new AbortController();
+  const currentSignal = playAbortController.signal;
 
-  const streamFormatPref = localStorage.getItem('mk21_stream_format') || 'auto';
-  addDevLog(`[Player] Iniciando carregamento: "${item.name}" (Modo: ${currentContentType})`, 'info');
-  addDevLog(`[Player] URL: ${item.url}`, 'info');
-  addDevLog(`[Player] Formato preferido: ${streamFormatPref}`, 'debug');
+  zappingLockPromise = zappingLockPromise.catch(() => {}).then(async () => {
+    if (currentSignal.aborted) return;
+    stopCurrentPlayer();
+    const video = $('tvPlayer');
+    if (video) {
+      try {
+        video.pause();
+        video.src = "";
+        video.removeAttribute('src');
+        video.innerHTML = '';
+        video.load();
+      } catch (e) {}
+    }
+
+    // Microtask buffer purge to eliminate "play() interrupted by pause()" race conditions
+    await new Promise(r => setTimeout(r, 20));
+    if (currentSignal.aborted) return;
+
+    activeItem = item;
+    recordWatchedItem(item);
+    saveLastChannel(item);
+    prefetchAdjacentChannels(item);
+    startProgressTracker(item);
+    startStallWatchdog();
+
+    if (!video) return;
+
+    const streamFormatPref = localStorage.getItem('mk21_stream_format') || 'auto';
+    addDevLog(`[Player] Iniciando carregamento: "${item.name}" (Modo: ${currentContentType})`, 'info');
+    addDevLog(`[Player] URL: ${item.url}`, 'info');
+    addDevLog(`[Player] Formato preferido: ${streamFormatPref}`, 'debug');
 
   if (item.currentTime && item.currentTime > 5 && (item.contentType === 'MOVIE' || item.contentType === 'SERIES' || currentContentType === 'MOVIE' || currentContentType === 'SERIES')) {
     const resumeAt = item.currentTime;
@@ -3001,11 +3013,11 @@ function playStream(item) {
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Manifesto HLS decodificado com sucesso!', 'success');
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-      video.play().catch(() => {});
+      safeVideoPlay(video);
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-      mk21SetEpgStatusPlaying(item);
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
@@ -3052,7 +3064,7 @@ function playStream(item) {
         hidePlayerReconnectBadge();
         if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
         if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-        mk21SetEpgStatusPlaying(item);
+        if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
         updateRealResolution(item);
       }).catch(err => {
         addDevLog(`[MPEGTS Error] ${err && err.message}. Rotacionando para HLS fallback...`, 'warn');
@@ -3078,18 +3090,19 @@ function playStream(item) {
     video.appendChild(src);
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
-    video.play().then(() => {
+    safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-      mk21SetEpgStatusPlaying(item);
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
       addDevLog(`[Player Fallback] Falha no playback nativo (${err && err.message}). Tentando fallback HLS...`, 'warn');
       fallbackToHls(item);
     });
   }
+  });
 }
 
 // DETECÇÃO REAL DE RESOLUÇÃO (HD / FHD / 4K / SD)
@@ -4383,7 +4396,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.1.2';
+const BASE_PACKAGE_VERSION = '1.4.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -4435,14 +4448,15 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.1
+    if (!data || compareSemver(data.version, '1.4.1') < 0) {
       data = {
-        version: BASE_PACKAGE_VERSION,
-        versionCode: 212,
-        title: 'MK21 Play v2.1.2',
-        releaseNotes: 'Release v2.1.2. O pacote webOS está disponível; o APK Android de release aguarda assinatura de produção.',
-        ipkUrl: '',
-        apkUrl: '',
+        version: '1.4.1',
+        versionCode: 141,
+        title: 'MK21 Play v1.4.1',
+        releaseNotes: '• Sinergia APK-to-IPK: Phased loading, DNS failover e Omnisearch na Smart TV\n• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.1_all.ipk',
+        apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
     }
@@ -4643,7 +4657,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalDevLogs', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -4782,40 +4796,6 @@ function focusActiveElement() {
   } catch (err) {
     console.warn('[MK21] focusActiveElement', err);
   }
-}
-
-let lastBackPressTime = 0;
-let vodSeekTargetTime = null;
-let vodSeekDebounceTimer = null;
-
-function performVodSeek(deltaSeconds) {
-  const v = $('tvPlayer');
-  if (!v) return;
-  const dur = v.duration || 0;
-  if (!dur) return;
-
-  if (vodSeekTargetTime === null) {
-    vodSeekTargetTime = v.currentTime || 0;
-  }
-  vodSeekTargetTime = Math.max(0, Math.min(dur, vodSeekTargetTime + deltaSeconds));
-
-  const pct = Math.min(100, Math.max(0, (vodSeekTargetTime / dur) * 100));
-  if ($('fsProgressFill')) $('fsProgressFill').style.width = pct + '%';
-  if ($('fsTimeCurrent')) $('fsTimeCurrent').textContent = formatTimeSec(vodSeekTargetTime);
-  const pBar = $('epgProgressBar') || document.querySelector('.epg-progress');
-  if (pBar) pBar.style.width = pct + '%';
-  if ($('vodTimeCurrent')) $('vodTimeCurrent').textContent = formatTimeSec(vodSeekTargetTime);
-
-  showChannelBanner((deltaSeconds > 0 ? '⏩ +' : '⏪ ') + Math.abs(deltaSeconds) + 's (' + formatTimeSec(vodSeekTargetTime) + ')');
-
-  clearTimeout(vodSeekDebounceTimer);
-  vodSeekDebounceTimer = setTimeout(() => {
-    if (v && vodSeekTargetTime !== null) {
-      try { v.currentTime = vodSeekTargetTime; } catch (e) {}
-    }
-    vodSeekTargetTime = null;
-    updateVodProgressTimeline();
-  }, 250);
 }
 
 document.addEventListener('keydown', function (e) {
@@ -5010,15 +4990,11 @@ document.addEventListener('keydown', function (e) {
     if (openModal) {
       e.preventDefault();
       openModal.classList.add('hidden');
-      if (typeof streamDiagTimer !== 'undefined' && streamDiagTimer) {
-        clearInterval(streamDiagTimer);
-        streamDiagTimer = null;
-      }
-      activeZone = 'channels';
+      activeZone = 'settings';
       focusActiveElement();
       return;
     }
-    if (document.fullscreenElement || document.webkitFullscreenElement || isAppFullscreen()) {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
       e.preventDefault();
       if (typeof toggleFullscreen === 'function') toggleFullscreen(false);
       return;
@@ -5028,54 +5004,6 @@ document.addEventListener('keydown', function (e) {
       if (typeof switchContentType === 'function') switchContentType('LIVE');
       return;
     }
-
-    // Se estiver na coluna de canais, volta o foco para categorias
-    if (activeZone === 'channels') {
-      e.preventDefault();
-      activeZone = 'categories';
-      focusActiveElement();
-      return;
-    }
-
-    // Se estiver em configurações, volta para categorias
-    if (activeZone === 'settings') {
-      e.preventDefault();
-      activeZone = 'categories';
-      focusActiveElement();
-      return;
-    }
-
-    // Raiz do app: impede saída direta e exige 2x cliques rápidos (dentro de 2.2s)
-    e.preventDefault();
-    e.stopPropagation();
-    const nowTime = Date.now();
-    if (nowTime - lastBackPressTime < 2200) {
-      try {
-        if (typeof webOS !== 'undefined' && webOS.platformBack) {
-          webOS.platformBack();
-        } else {
-          window.close();
-        }
-      } catch (err) {
-        window.close();
-      }
-    } else {
-      lastBackPressTime = nowTime;
-      showChannelBanner('Pressione VOLTAR novamente para sair');
-    }
-    return;
-  }
-
-  // Teclas de Avanço e Retrocesso de Mídia do controle remoto (Smart TV / Magic)
-  if (k === 417 || k === 10233 || key === 'FastForward' || key === 'MediaFastForward') {
-    e.preventDefault();
-    performVodSeek(15);
-    return;
-  }
-  if (k === 412 || k === 10232 || key === 'Rewind' || key === 'MediaRewind') {
-    e.preventDefault();
-    performVodSeek(-15);
-    return;
   }
 
   // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
@@ -5112,12 +5040,13 @@ document.addEventListener('keydown', function (e) {
     }
     if (k === 37 || key === 'ArrowLeft') {
       e.preventDefault();
-      if (ae && ae.id === 'fsProgressTrack') {
-        performVodSeek(-15);
-      } else if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
+      if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
         mk21MoveFocus('left');
       } else if (currentContentType !== 'LIVE') {
-        performVodSeek(-15);
+        const v = $('tvPlayer');
+        if (v) v.currentTime = Math.max(0, (v.currentTime || 0) - 10);
+        showChannelBanner('⏪ -10s');
+        updateVodProgressTimeline();
       } else {
         mk21MoveFocus('left');
       }
@@ -5125,12 +5054,13 @@ document.addEventListener('keydown', function (e) {
     }
     if (k === 39 || key === 'ArrowRight') {
       e.preventDefault();
-      if (ae && ae.id === 'fsProgressTrack') {
-        performVodSeek(15);
-      } else if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
+      if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
         mk21MoveFocus('right');
       } else if (currentContentType !== 'LIVE') {
-        performVodSeek(15);
+        const v = $('tvPlayer');
+        if (v && v.duration) v.currentTime = Math.min(v.duration, (v.currentTime || 0) + 10);
+        showChannelBanner('⏩ +10s');
+        updateVodProgressTimeline();
       } else {
         mk21MoveFocus('right');
       }
@@ -5140,21 +5070,11 @@ document.addEventListener('keydown', function (e) {
 
   // Setas — navegação espacial no modo janela
   if (k === 37 || key === 'ArrowLeft') {
-    if (currentContentType !== 'LIVE' && ae && (ae.id === 'tvPlayer' || ae.id === 'videoContainer' || ae.id === 'vodTimeRow')) {
-      e.preventDefault();
-      performVodSeek(-15);
-      return;
-    }
     e.preventDefault();
     mk21MoveFocus('left');
     return;
   }
   if (k === 39 || key === 'ArrowRight') {
-    if (currentContentType !== 'LIVE' && ae && (ae.id === 'tvPlayer' || ae.id === 'videoContainer' || ae.id === 'vodTimeRow')) {
-      e.preventDefault();
-      performVodSeek(15);
-      return;
-    }
     e.preventDefault();
     mk21MoveFocus('right');
     return;
@@ -5559,14 +5479,3 @@ function globalSearch(query) {
   return results;
 }
 
-// ==================== MAGIC REMOTE SCROLL WHEEL HANDLER ====================
-window.addEventListener('wheel', function(e) {
-  const target = e.target;
-  const scrollable = (target && target.closest ? target.closest('.pane-scroll, #devLogsContainer, .settings-body, .modal-content, .omnisearch-results') : null) ||
-    (typeof activeZone !== 'undefined' && activeZone === 'channels' ? $('listItems') :
-     (typeof activeZone !== 'undefined' && activeZone === 'categories' ? $('listCategories') : null));
-  if (scrollable) {
-    scrollable.scrollTop += e.deltaY;
-    e.preventDefault();
-  }
-}, { passive: false });

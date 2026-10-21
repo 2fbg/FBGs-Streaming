@@ -259,7 +259,7 @@ class PreferencesService(context: Context) {
         set(value) { try { prefs.edit().putString("cached_servers_json", value).apply() } catch (e: Throwable) {} }
 
     var dynamicServersUrl: String
-        get() = try { prefs.getString("dynamic_servers_url", "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/servers.json") ?: "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/servers.json" } catch (e: Throwable) { "https://raw.githubusercontent.com/2fbg/BGs-Streaming/main/servers.json" }
+        get() = try { prefs.getString("dynamic_servers_url", "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/servers.json") ?: "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/servers.json" } catch (e: Throwable) { "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/servers.json" }
         set(value) { try { prefs.edit().putString("dynamic_servers_url", value).apply() } catch (e: Throwable) {} }
 
     var loadLiveInForeground: Boolean

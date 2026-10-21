@@ -194,8 +194,7 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
-  height: calc(100vh - 105px);
-  max-height: calc(100vh - 105px);
+  height: calc(100vh - 128px);
   min-height: 0;
   background: #090b12;
 }
@@ -212,12 +211,12 @@ body {
 /* ================= 3. SEÇÃO UNIFICADA 3 COLUNAS (TV, FILMES, SÉRIES) ================= */
 #sectionUnified {
   display: grid;
-  grid-template-columns: minmax(180px, 22%) minmax(260px, 38%) minmax(320px, 40%);
+  grid-template-columns: minmax(180px, 22%) minmax(260px, 38%) minmax(340px, 40%);
   gap: 14px;
-  padding: 10px 16px;
+  padding: 12px 18px;
   background: #090b12;
-  height: 100%;
-  max-height: 100%;
+  height: calc(100vh - 75px);
+  max-height: calc(100vh - 75px);
   overflow: hidden;
   box-sizing: border-box;
   width: 100%;
@@ -254,7 +253,9 @@ body {
 .counter-badge {
   background: rgba(229, 9, 20, 0.25);
   color: #ff6b72;
-  font-size: 14px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
   padding: 2px 10px;
   border-radius: 10px;
 }
@@ -287,33 +288,39 @@ body {
 }
 
 
+/* Barra de Rolagem Visível e Otimizada para Smart TV */
+::-webkit-scrollbar {
+  width: 6px;
+  display: block !important;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 152, 0, 0.5);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 152, 0, 0.85);
+}
+
+.col-categories,
+.col-channels,
+.col-player {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px !important;
+}
+
 .pane-scroll {
   list-style: none;
   margin: 0;
   padding: 8px;
-  overflow-y: scroll !important;
+  overflow-y: auto;
   flex: 1;
-  min-height: 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(229, 9, 20, 0.7) rgba(255, 255, 255, 0.05);
-}
-
-.pane-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-.pane-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
-}
-
-.pane-scroll::-webkit-scrollbar-thumb {
-  background: #e50914;
-  border-radius: 4px;
-}
-
-.pane-scroll::-webkit-scrollbar-thumb:hover {
-  background: #ffd54f;
 }
 
 .pane-scroll li {
@@ -443,10 +450,9 @@ video {
 }
 
 .channel-logo-wrap {
-  width: calc(56px * var(--font-scale, 1)) !important;
-  height: calc(56px * var(--font-scale, 1)) !important;
-  min-width: calc(56px * var(--font-scale, 1)) !important;
-  min-height: calc(56px * var(--font-scale, 1)) !important;
+  width: 65px !important;
+  height: 65px !important;
+  min-width: 65px !important;
   background: #1e1f26 !important;
   border-radius: 8px !important;
   display: flex !important;
@@ -460,8 +466,6 @@ video {
 .channel-logo {
   width: 100% !important;
   height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
   object-fit: contain !important;
 }
 
@@ -583,9 +587,39 @@ video {
 
 .player-controls {
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
   flex-wrap: nowrap;
   width: 100%;
+  padding: 6px 0;
+}
+
+.player-controls .ctrl-btn {
+  width: 50px !important;
+  height: 50px !important;
+  min-width: 50px !important;
+  min-height: 50px !important;
+  flex: 0 0 50px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  font-size: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #252a3b;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.player-controls .ctrl-btn:focus {
+  border-color: #ffd54f !important;
+  box-shadow: 0 0 16px rgba(255, 213, 79, 0.8) !important;
+  transform: scale(1.15) !important;
+  outline: none !important;
+  background: #2f364a !important;
 }
 
 .ctrl-btn {
@@ -1652,13 +1686,8 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
 .video-box.is-fullscreen video {
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain;
+  object-fit: contain !important;
 }
-
-video.aspect-fit, .video-box video.aspect-fit { object-fit: contain !important; }
-video.aspect-fill, .video-box video.aspect-fill { object-fit: fill !important; }
-video.aspect-zoom, .video-box video.aspect-zoom { object-fit: cover !important; }
-video.aspect-16-9, .video-box video.aspect-16-9 { object-fit: fill !important; }
 
 body.is-fullscreen .app-header,
 body.is-fullscreen .remote-bar,
@@ -1730,29 +1759,16 @@ body.is-fullscreen .col-player {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 40px;
-  background: rgba(10, 12, 18, 0.96);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  height: 38px;
+  background: rgba(10, 12, 18, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 22px;
-  padding: 0 16px;
-  box-sizing: border-box;
+  gap: 32px;
   z-index: 100;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-}
-
-.fs-progress-track {
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.fs-progress-track:focus {
-  outline: 3px solid #ffd54f !important;
-  box-shadow: 0 0 16px rgba(255, 213, 79, 0.85) !important;
-  transform: scaleY(1.3);
 }
 
 .color-shortcut-item {

@@ -1,62 +1,62 @@
-# FBGs-Streaming v2.1.2
+# FBGs-Streaming (MK21 MultiServidor) — v2.1.3
 
-## 🚀 Últimas Atualizações
-- Estabilização Global v2.1.2.
-- Sincronização de lista de servidores única.
-- Limpeza de arquivos obsoletos para builds/archives.
-
-## 🚀 Novidades da Versão
-- Sincronização Única: Servidores centralizados na raiz.
-- Resiliência Web: Correção do Combo de Servidores e Modo Offline.
-- Performance TV: Phased Loading para listas gigantes.
-
+<div align="center">
+  <img src="web/icon-192.png" alt="MK21 Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
+  
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v2.1.2-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.1.3-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
-  [![Hls.js](https://img.shields.io/badge/Hls.js-Low_Latency-purple.svg)](https://github.com/video-dev/hls.js)
   [![Smart TV](https://img.shields.io/badge/Smart_TV-webOS_%26_Tizen-black.svg)](#smart-tv)
 </div>
 
 ---
 
-> **Versão global do código-fonte:** `2.1.2` (`versionCode` 212 no Android), sincronizada entre Android, Web/PWA, webOS e Tizen. O pacote webOS foi gerado; o APK Android de release depende da chave de assinatura de produção.
+## 🚀 Últimas Atualizações (Release v2.1.3 - Code 213)
 
-## 📌 Visão Geral & Foco do Cliente (Player para Listas de Terceiros)
+- 📺 **Smart TV UI & Engine Polish**:
+  - **Zapping Instantâneo (<200ms)**: Implementado `AbortController` e Promise de bloqueio assíncrono (`zappingLockPromise`). Limpeza garantida de instâncias anteriores (`pause() -> src = "" -> load()`) eliminando o erro `play() request interrupted by pause()`.
+  - **EPG & XMLTV em Tempo Real**: `matchEPG()` otimizado com correspondência precisa (`tvg-id`, `streamId` e nome sanitizado). Conversão rigorosa de timezone do XMLTV para a hora local da TV nos campos "NO AR" e "A SEGUIR".
+  - **Padronização Visual**: Tipografia unificada em 600 com espaçamento de 0.5px, contadores em 1.1rem, container de logo ampliado em 25% com `object-fit: contain`, e barra de rolagem visível e estilizada.
+  - **Controles em Círculo Perfeito**: Botões do rodapé circulares (`border-radius: 50%`) com ícones SVG nativos, eliminando placeholders e emojis quebrados.
 
-O **BGs Streaming (MK21 Play)** é uma plataforma unificada e otimizada com foco exclusivo no **Cliente (Player)** para reprodução de listas IPTV de terceiros (M3U, M3U8 e APIs Xtream Codes). Projetado para máxima velocidade de inicialização de vídeo (**Fast Start**), resiliência contra oscilações de rede (**Auto-Retry Policy**, **Mk21DnsResolver** e **DNS Failover DoH**) e experiência fluida com catálogos de milhares de canais em **Android**, **Web PWA** e **Smart TVs (LG webOS e Samsung Tizen)**.
+- 🌐 **Web PWA & Combo de Servidores**:
+  - **Fonte Única na Raiz (`servers.json`)**: Sincronização automatizada para Web (`web/servers.json`, `public/servers.json`), Smart TV (`smart-tv/mk21-tv/servers.json`) e Android (`app/src/main/assets/servers.json`).
+  - **Resolução de Dropdown em Branco**: Algoritmo defensivo em `populateServers()` com sincronização dinâmica e fallback garantido (seleção padrão nunca nula).
+  - **Modo Offline 100% Clicável**: Botão destacado com gradiente e borda, debounce contra duplo toque em mobile e fallback imediato com grade de canais essenciais demonstrativos caso o IndexedDB ainda não possua listas salvas.
+
+- 📱 **Android APK**:
+  - Remoção de qualquer limite artificial (`take(60)` / `take(1500)`) em categorias, entregando catálogo completo virtualizado.
+  - Layout ergonômico de 2 colunas fixas no modo retrato com badge nativo e monometadados.
+
+- 🧹 **Higienização do Repositório**:
+  - Binários e versões obsoletas movidos para a pasta `builds/archives/`, mantendo a raiz limpa e leve apenas com `mk21.apk` e `mk21.ipk`.
 
 ---
 
-## 🚀 Novidades da Release v2.0.0
+## 📦 Downloads Oficiais & Pacotes da Release v2.1.3
 
-- 🔒 **Proxy com proteção contra SSRF**: restringe protocolos a HTTP/HTTPS e bloqueia destinos locais, privados e endpoints de metadados de nuvem.
-- 🛡️ **Renderização mais segura**: nomes e categorias são inseridos como texto, evitando interpretar conteúdo de playlists como HTML.
-- ⚙️ **Parsing M3U em segundo plano**: um Web Worker processa listas em lotes para manter a interface responsiva em Smart TVs.
-- ⚡ **Início e troca de canais mais rápidos**: ajustes de buffer e pré-carregamento reduzem a espera para iniciar a reprodução.
-- 🔇 **Encerramento consistente de streams**: a mídia anterior é desconectada antes de iniciar outra, evitando áudio residual.
-
-Consulte o [changelog completo](docs/CHANGELOG.md) e as [notas da release](docs/RELEASE_NOTES.md).
+| Plataforma | Pacote / Binário | SHA-256 |
+|---|---|---|
+| **Android APK** | [`mk21.apk`](mk21.apk) | `45e2960a1ef5602416dba459073b2bdc5e93141b73f1359aa7bdaa1245da82dc` |
+| **LG webOS Smart TV** | [`mk21.ipk`](smart-tv/mk21play_2.1.3_all.ipk) | `1c0267042f9ec4626925402f2fc778cdb98a2b005efc43c8e0a4e1ce0371cbc2` |
+| **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---
 
 ## 📋 Como Adicionar e Gerenciar Listas
 
-O aplicativo suporta os principais formatos de listas de terceiros:
-
 ### 1. API Xtream Codes (Recomendado)
-Para carregar canais, filmes e séries categorizados com EPG e logos automáticos:
 1. Abra o aplicativo (Android, Web ou Smart TV).
-2. Na tela de login, selecione o servidor predefinido ou informe a URL base do seu provedor (ex: `http://servidor.xyz:8080`).
+2. Na tela de login, selecione o servidor predefinido no combo ou digite o código/URL.
 3. Digite seu **Usuário** e **Senha**.
-4. Toque em **Entrar**. O catálogo será baixado em segundo plano e indexado no cache local de alta velocidade.
+4. Toque em **Entrar no MK21**. O catálogo será baixado em segundo plano e indexado no cache local de alta velocidade.
 
-### 2. Listas M3U / M3U8 (URL Remota ou Arquivo Local)
-1. Vá até a tela de configuração ou gerenciamento de servidores.
-2. Cole o link M3U completo da sua lista (ex: `http://provedor.com/get.php?username=...&type=m3u_plus&output=m3u8`).
-3. O parser assíncrono processará os canais ao vivo, filmes e séries separadamente em lote (*batch processing*), sem travar a interface.
+### 2. Modo Offline / Cache
+- Se estiver sem conexão ou quiser navegar diretamente sem requisição de rede, clique em **Prosseguir para Home (Modo Offline / Cache)** na tela inicial.
+- O aplicativo carrega imediatamente o último catálogo armazenado no banco local (IndexedDB no Web/TV, Room no Android).
 
 ---
 
@@ -64,40 +64,14 @@ Para carregar canais, filmes e séries categorizados com EPG e logos automático
 
 ### Android / Android TV (`/app`)
 - **Linguagem & Framework**: Kotlin 2.1.10 + Jetpack Compose (Material 3).
-- **Player**: AndroidX Media3 ExoPlayer 1.4.1 com `DefaultRenderersFactory` (Aceleração por Hardware) e `DefaultLoadControl` customizado.
-- **Banco de Dados Local**: Room Database 2.7.0 (SQLite) com DAOs otimizados para busca instantânea.
-- **Picture-in-Picture (PiP)**: Suporte completo em smartphones com botões de play/pause e próximo canal no PiP.
-
-### Web & PWA (`/web` e `index.html`)
-- **Engine**: Hls.js v1.5.8 + MPEG-TS.js + HTML5 Video nativo.
-- **Proxy Inteligente**: Rotação transparente de proxies CORS/HTTPS para contornar restrições de Mixed Content em listas HTTP.
-- **Cache Local**: IndexedDB (`mk21_cache_db`) para armazenamento persistente das playlists.
+- **Player**: AndroidX Media3 ExoPlayer 1.4.1 com `DefaultRenderersFactory` (Aceleração por Hardware).
+- **Persistência Local**: Room Database com Room KSP.
 
 ### Smart TV (`/smart-tv`)
-- **LG webOS**: Pacote `.ipk` empacotado para navegadores webOS 3.0+ com navegação espacial via controle remoto (D-Pad).
-- **Samsung Tizen**: Pacote `.wgt` configurado com `config.xml` para Tizen 4.0+.
+- **LG webOS**: Pacote empacotado `.ipk` otimizado para webOS 3.0+ a webOS 24 via `package_ipk.py`.
+- **Samsung Tizen**: Compatível com Tizen WGT 3.0+.
+- **Navegação 10-foot UI**: Suporte total ao D-Pad do controle remoto com focus visual claro.
 
----
-
-## 🛠️ Compilação e Verificação
-
-### Android (Gradle)
-```bash
-# Compilar APK de desenvolvimento
-gradle assembleDebug
-
-# Executar testes unitários locais
-gradle testDebugUnitTest
-```
-
-### Smart TV (webOS / Tizen)
-```bash
-# Empacotar IPK para LG webOS
-python3 smart-tv/package_ipk.py
-```
-
----
-
-## 📄 Licença e Uso
-
-Este reprodutor é uma ferramenta de mídia para uso pessoal com listas e conteúdos autorizados de terceiros.
+### Web PWA (`/web` e `/`)
+- **Single Page Application**: HTML5 + Vanilla JS moderno com suporte PWA, Service Worker (`sw.js`) e IndexedDB.
+- **Proxy Anti-CORS**: `/api/proxy.js` com streaming chunked e cabeçalhos CORS completos.

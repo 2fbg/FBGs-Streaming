@@ -203,12 +203,21 @@
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-300" for="server-selector">
                             Servidor IPTV
                         </label>
-                        <div class="relative flex items-center bg-[#0f111d] border border-white/10 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
+                        <div class="relative flex items-center bg-[#0f111d] border border-white/20 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
                             <span class="pl-4 pr-2 text-red-500 text-lg">
                                 <i class="fa-solid fa-server"></i>
                             </span>
-                            <select id="server-selector" class="w-full py-4.5 pr-10 bg-transparent text-white font-bold text-base sm:text-lg outline-none cursor-pointer appearance-none" style="background-color: #0f111d !important; color: #ffffff !important;">
-                                <!-- Carregado dinamicamente via JS -->
+                            <select id="server-selector" class="w-full py-4 pr-10 bg-[#0f111d] text-white font-bold text-base sm:text-lg outline-none cursor-pointer" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; opacity: 1 !important;">
+                                <option value="https://myopbx.beer" style="background-color: #0f111d; color: #ffffff;">VLOG</option>
+                                <option value="http://pottermax.sbs" style="background-color: #0f111d; color: #ffffff;">LUB TV</option>
+                                <option value="http://coliseuop.site" style="background-color: #0f111d; color: #ffffff;">CINELON21</option>
+                                <option value="http://poptvcdn.online" style="background-color: #0f111d; color: #ffffff;">TANNIX</option>
+                                <option value="http://cdn.caterlune.top" selected style="background-color: #0f111d; color: #ffffff;">CB6000</option>
+                                <option value="http://app.vivoxi.xyz" style="background-color: #0f111d; color: #ffffff;">MK21 PRÓ</option>
+                                <option value="http://cp2026.sbs" style="background-color: #0f111d; color: #ffffff;">NEW TV</option>
+                                <option value="http://dali-as.skin" style="background-color: #0f111d; color: #ffffff;">MULTT TV</option>
+                                <option value="http://antaresfusion.shop" style="background-color: #0f111d; color: #ffffff;">CINEVO</option>
+                                <option value="http://cdnconn.xyz" style="background-color: #0f111d; color: #ffffff;">MULTT BOX</option>
                             </select>
                             <span class="absolute right-4 pointer-events-none text-slate-400 text-sm">
                                 <i class="fa-solid fa-chevron-down"></i>
@@ -288,9 +297,9 @@
                     </button>
 
                     <!-- Botão Secundário: Prosseguir para Home (Modo Offline / Cache) - Idêntico ao APK -->
-                    <button type="button" id="btn-offline-mode" class="w-full py-3.5 mt-2 text-amber-400 hover:text-amber-300 active:scale-[0.99] font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer">
-                        <i class="fa-solid fa-bolt-lightning text-xs"></i>
-                        <span>Prosseguir para Home (Modo Offline / Cache)</span>
+                    <button type="button" id="btn-offline-mode" class="w-full py-4 mt-3 bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-amber-500/20 hover:from-amber-500/30 hover:to-amber-500/30 active:scale-[0.98] border-2 border-amber-500/50 hover:border-amber-400 text-amber-300 hover:text-amber-200 font-bold text-sm sm:text-base rounded-2xl flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-lg shadow-amber-950/20">
+                        <i class="fa-solid fa-bolt text-amber-400 text-base animate-pulse"></i>
+                        <span class="tracking-wide">Prosseguir para Home (Modo Offline / Cache)</span>
                     </button>
                 </div>
             </div>
@@ -2427,54 +2436,136 @@
         const externalLauncher = document.getElementById('external-launcher');
 
         // Initialize application on load
-        window.addEventListener('DOMContentLoaded', () => {
-            // Apply High Contrast if in localStorage
-            if (localStorage.getItem('mk21_high_contrast') === 'true') {
-                document.body.classList.add('high-contrast');
+        function initApp() {
+            try {
+                if (localStorage.getItem('mk21_high_contrast') === 'true') {
+                    document.body.classList.add('high-contrast');
+                }
+            } catch (e) {}
+
+            try {
+                if (typeof seoManager !== 'undefined') seoManager.init();
+                if (typeof performanceOptimizer !== 'undefined') performanceOptimizer.initLazyLoading();
+                if (typeof accessibilityManager !== 'undefined') accessibilityManager.init();
+            } catch (e) {
+                console.warn("Manager init error:", e);
             }
 
-            // Initialize SEO, performance, and accessibility managers
-            if (typeof seoManager !== 'undefined') seoManager.init();
-            if (typeof performanceOptimizer !== 'undefined') performanceOptimizer.initLazyLoading();
-            if (typeof accessibilityManager !== 'undefined') accessibilityManager.init();
+            try {
+                populateServers();
+                syncServersFromSource();
+            } catch (e) {
+                console.error("populateServers error:", e);
+            }
 
-            populateServers();
-            loadCachedCredentials();
-            setupEventListeners();
+            try {
+                loadCachedCredentials();
+            } catch (e) {
+                console.error("loadCachedCredentials error:", e);
+            }
 
-            // Initialize YouTube-style Premium Player skin
-            initYouTubePlayer();
+            try {
+                setupEventListeners();
+            } catch (e) {
+                console.error("setupEventListeners error:", e);
+            }
 
-            // Auto run parallel proxy latency check in background
-            runProxyLatencyCheck();
+            try {
+                initYouTubePlayer();
+            } catch (e) {}
 
-            // Auto-limpeza de playlists expiradas (> 7 dias) do IndexedDB
+            try {
+                runProxyLatencyCheck();
+            } catch (e) {}
+
             try {
                 cleanExpiredPlaylistCache();
             } catch (e) {}
 
-            // Check and handle Picture-in-Picture support
-            const pipBtn = document.getElementById('pip-button');
-            if (pipBtn) {
-                const isPipSupported = document.pictureInPictureEnabled || (videoElement && typeof videoElement.requestPictureInPicture === 'function');
-                if (!isPipSupported) {
-                    pipBtn.classList.add('hidden');
+            try {
+                const pipBtn = document.getElementById('pip-button');
+                if (pipBtn) {
+                    const isPipSupported = document.pictureInPictureEnabled || (videoElement && typeof videoElement.requestPictureInPicture === 'function');
+                    if (!isPipSupported) {
+                        pipBtn.classList.add('hidden');
+                    }
                 }
-            }
-        });
+            } catch (e) {}
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            initApp();
+        }
+
+        let activeServersList = [...PREDEFINED_SERVERS];
+
+        async function syncServersFromSource() {
+            try {
+                const res = await fetch('./servers.json?ts=' + Date.now());
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        activeServersList = data;
+                        populateServers();
+                    }
+                }
+            } catch (err) {}
+        }
 
         function populateServers() {
+            if (!serverSelector) return;
             serverSelector.innerHTML = '';
-            PREDEFINED_SERVERS.forEach(srv => {
+            const list = (Array.isArray(activeServersList) && activeServersList.length > 0)
+                ? activeServersList
+                : PREDEFINED_SERVERS;
+
+            list.forEach(srv => {
                 const opt = document.createElement('option');
-                opt.value = srv.baseUrl;
-                opt.textContent = srv.name;
+                opt.value = (srv.baseUrl || '').trim().replace(/\/+$/, '');
+                opt.textContent = srv.name || srv.id;
+                opt.style.backgroundColor = '#0f111d';
+                opt.style.color = '#ffffff';
                 serverSelector.appendChild(opt);
             });
+
+            let savedUrl = (localStorage.getItem('mk21_baseUrl') || '').trim().replace(/\/+$/, '');
+            let matched = false;
+
+            if (savedUrl) {
+                for (let i = 0; i < serverSelector.options.length; i++) {
+                    const val = serverSelector.options[i].value;
+                    if (val === savedUrl || val.replace(/^https?:\/\//, '') === savedUrl.replace(/^https?:\/\//, '')) {
+                        serverSelector.selectedIndex = i;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!matched || serverSelector.selectedIndex < 0) {
+                let defaultIndex = 0;
+                for (let i = 0; i < serverSelector.options.length; i++) {
+                    if (serverSelector.options[i].textContent.includes('CB6000')) {
+                        defaultIndex = i;
+                        break;
+                    }
+                }
+                serverSelector.selectedIndex = defaultIndex;
+            }
+
+            if (serverSelector.selectedIndex >= 0) {
+                serverSelector.value = serverSelector.options[serverSelector.selectedIndex].value;
+            }
+
             renderFastServerChips();
             const label = document.getElementById('selected-server-name-label');
             if (label && serverSelector.selectedIndex >= 0) {
                 label.textContent = serverSelector.options[serverSelector.selectedIndex].text;
+            }
+            if (serverCodeInput && serverSelector.selectedIndex >= 0) {
+                serverCodeInput.value = serverSelector.options[serverSelector.selectedIndex].text;
             }
         }
 
@@ -2483,12 +2574,15 @@
             if (!container) return;
             container.innerHTML = '';
 
-            const topServers = PREDEFINED_SERVERS.slice(0, 6);
+            const list = (Array.isArray(activeServersList) && activeServersList.length > 0)
+                ? activeServersList
+                : PREDEFINED_SERVERS;
+            const topServers = list.slice(0, 6);
             let currentBase = (serverSelector && serverSelector.value) ? serverSelector.value : '';
-            currentBase = currentBase.replace(/\/$/, '');
+            currentBase = currentBase.replace(/\/+$/, '');
 
             topServers.forEach(srv => {
-                let srvBase = (srv.baseUrl || '').replace(/\/$/, '');
+                let srvBase = (srv.baseUrl || '').replace(/\/+$/, '');
                 const isSelected = (srvBase === currentBase);
                 const btn = document.createElement('button');
                 btn.type = 'button';
@@ -2875,43 +2969,88 @@
                 closeErrBtn.addEventListener('click', hideLoginError);
             }
 
-            // Botão Modo Offline (Cache)
+            // Catálogo essencial demonstrativo caso o dispositivo ainda não tenha cache no IndexedDB
+            const DEMO_OFFLINE_PLAYLIST = [
+                { id: "off_1", name: "GLOBO SP FHD", group: "TV ABERTA", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/TV_Globo_2021.svg/300px-TV_Globo_2021.svg.png", type: "LIVE" },
+                { id: "off_2", name: "SBT BRASIL HD", group: "TV ABERTA", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/SBT_logo_2014.svg/300px-SBT_logo_2014.svg.png", type: "LIVE" },
+                { id: "off_3", name: "RECORD TV HD", group: "TV ABERTA", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Record_logo_2023.svg/300px-Record_logo_2023.svg.png", type: "LIVE" },
+                { id: "off_4", name: "BAND SP HD", group: "TV ABERTA", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Rede_Bandeirantes_logo.svg/300px-Rede_Bandeirantes_logo.svg.png", type: "LIVE" },
+                { id: "off_5", name: "CULTURA HD", group: "TV ABERTA", url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4", logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/TV_Cultura_logo.svg/300px-TV_Cultura_logo.svg.png", type: "LIVE" }
+            ];
+
+            let isOpeningOffline = false;
+            // Botão Modo Offline (Cache) - Clicável diretamente de forma segura e debounced
+            async function handleOfflineModeClick(e) {
+                if (e) {
+                    try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+                }
+                if (isOpeningOffline) return;
+                isOpeningOffline = true;
+
+                const cachedUrl = (serverSelector && serverSelector.value) || localStorage.getItem('mk21_baseUrl') || (PREDEFINED_SERVERS[4] ? PREDEFINED_SERVERS[4].baseUrl : '');
+                const cachedUser = (userInput && userInput.value.trim()) || localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
+                const cacheKey = `playlist_${encodeURIComponent(cachedUrl)}_${encodeURIComponent(cachedUser)}`;
+
+                try {
+                    showLoader('Abrindo modo offline...');
+                    let cached = await getCachedPlaylist(cacheKey);
+
+                    // Se não encontrou pelo par estrito, busca em QUALQUER registro armazenado no IndexedDB deste navegador
+                    if (!cached || (!cached.lives?.length && !cached.movies?.length && !cached.series?.length)) {
+                        const allCached = await getAllCachedPlaylists();
+                        if (allCached && allCached.length > 0) {
+                            allCached.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                            cached = allCached[0];
+                        }
+                    }
+
+                    if (cached && ((cached.lives && cached.lives.length > 0) || (cached.movies && cached.movies.length > 0) || (cached.series && cached.series.length > 0))) {
+                        playlistItems = (cached.lives && cached.lives.length > 0) ? cached.lives : [...(cached.movies || []), ...(cached.series || [])];
+                        loginScreen.classList.add('hidden');
+                        playerScreen.classList.remove('hidden');
+                        playerScreen.classList.add('flex');
+                        setTimeout(() => {
+                            playerScreen.classList.remove('scale-95', 'opacity-0');
+                            playerScreen.classList.add('scale-100', 'opacity-100');
+                        }, 50);
+                        activeType = 'LIVE';
+                        activeCategory = 'ALL';
+                        renderCategories();
+                        renderMediaItems();
+                        renderContinueWatching();
+                        startBackgroundLoading(cached.movies || [], cached.series || []);
+                        hideLoader();
+                        showNotification('Entrou em modo Offline com catálogo do cache! ⚡', 'success');
+                    } else {
+                        // Fallback: abre a interface com canais essenciais demonstrativos para navegação imediata
+                        playlistItems = DEMO_OFFLINE_PLAYLIST;
+                        loginScreen.classList.add('hidden');
+                        playerScreen.classList.remove('hidden');
+                        playerScreen.classList.add('flex');
+                        setTimeout(() => {
+                            playerScreen.classList.remove('scale-95', 'opacity-0');
+                            playerScreen.classList.add('scale-100', 'opacity-100');
+                        }, 50);
+                        activeType = 'LIVE';
+                        activeCategory = 'ALL';
+                        renderCategories();
+                        renderMediaItems();
+                        renderContinueWatching();
+                        hideLoader();
+                        showNotification('Entrou no Modo Offline (catálogo essencial). Conecte ao servidor para sua lista completa.', 'info');
+                    }
+                } catch (e) {
+                    hideLoader();
+                    showLoginError('Erro ao abrir cache offline: ' + e.message);
+                } finally {
+                    setTimeout(() => { isOpeningOffline = false; }, 500);
+                }
+            }
+            window.handleOfflineModeClick = handleOfflineModeClick;
+
             const offlineBtn = document.getElementById('btn-offline-mode');
             if (offlineBtn) {
-                offlineBtn.addEventListener('click', async () => {
-                    const cachedUrl = localStorage.getItem('mk21_baseUrl') || (PREDEFINED_SERVERS[4] ? PREDEFINED_SERVERS[4].baseUrl : '');
-                    const cachedUser = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || '';
-                    const cacheKey = `playlist_${encodeURIComponent(cachedUrl)}_${encodeURIComponent(cachedUser)}`;
-
-                    try {
-                        showLoader('Verificando catálogo salvo offline...');
-                        const cached = await getCachedPlaylist(cacheKey);
-                        if (cached && cached.lives && (cached.lives.length > 0 || (cached.movies && cached.movies.length > 0))) {
-                            playlistItems = cached.lives.length > 0 ? cached.lives : [...(cached.movies || []), ...(cached.series || [])];
-                            loginScreen.classList.add('hidden');
-                            playerScreen.classList.remove('hidden');
-                            playerScreen.classList.add('flex');
-                            setTimeout(() => {
-                                playerScreen.classList.remove('scale-95', 'opacity-0');
-                                playerScreen.classList.add('scale-100', 'opacity-100');
-                            }, 50);
-                            activeType = 'LIVE';
-                            activeCategory = 'ALL';
-                            renderCategories();
-                            renderMediaItems();
-                            renderContinueWatching();
-                            startBackgroundLoading(cached.movies || [], cached.series || []);
-                            hideLoader();
-                            showNotification('Entrou em modo Offline com catálogo do cache! ⚡', 'success');
-                        } else {
-                            hideLoader();
-                            showLoginError('Nenhum catálogo em cache offline encontrado. Faça o primeiro login conectado à internet.');
-                        }
-                    } catch (e) {
-                        hideLoader();
-                        showLoginError('Erro ao abrir cache offline: ' + e.message);
-                    }
-                });
+                offlineBtn.onclick = handleOfflineModeClick;
             }
 
             // Live Autodetection quando o usuário digita o Código do Servidor
@@ -3170,20 +3309,6 @@
                 }
             }, { passive: false });
 
-            // Suporte completo e imediato ao botão físico e de tela 'Voltar para Lista'
-            const backBtn = document.getElementById('btn-back-to-list');
-            if (backBtn) {
-                const handleBack = (e) => {
-                    if (e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }
-                    closeMobilePlayer();
-                };
-                backBtn.addEventListener('click', handleBack);
-                backBtn.addEventListener('touchend', handleBack);
-            }
-
             // Suporte completo ao botão de voltar nativo (físico/gesto do Android e navegadores)
             window.addEventListener('popstate', (e) => {
                 // 1. Fecha modal EPG se aberto
@@ -3410,6 +3535,26 @@
                 });
             } catch (e) {
                 return null;
+            }
+        }
+
+        async function getAllCachedPlaylists() {
+            try {
+                const db = await openCacheDB();
+                if (!db) return [];
+                return new Promise((resolve) => {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.getAll();
+                    req.onsuccess = () => {
+                        const list = req.result || [];
+                        const valid = list.filter(item => item && (item.lives?.length || item.movies?.length || item.series?.length));
+                        resolve(valid);
+                    };
+                    req.onerror = () => resolve([]);
+                });
+            } catch (e) {
+                return [];
             }
         }
 
