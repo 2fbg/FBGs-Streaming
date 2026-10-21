@@ -67,15 +67,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     
     private val staticDefaultServers = listOf(
         ServerProfile("server_1", "VLOG", "http://myopbx.beer"),
-        ServerProfile("server_2", "LUB TV", "http://pottermax.sbs"),
-        ServerProfile("server_3", "CINELON21", "http://coliseuop.site"),
-        ServerProfile("server_4", "TANNIX", "http://poptvcdn.online"),
+        ServerProfile("server_2", "TANNIX", "http://poptvcdn.online"),
+        ServerProfile("server_3", "LUB TV", "http://pottermax.sbs"),
+        ServerProfile("server_4", "MK21 PRÓ", "http://app.vivoxi.xyz"),
         ServerProfile("server_5", "CB6000", "http://cdn.caterlune.top"),
-        ServerProfile("server_6", "MK21 PRÓ", "http://app.vivoxi.xyz"),
-        ServerProfile("server_7", "NEW TV", "http://cp2026.sbs"),
-        ServerProfile("server_8", "MULTT TV", "http://dali-as.skin"),
-        ServerProfile("server_9", "CINEVO", "http://antaresfusion.shop"),
-        ServerProfile("server_10", "MULTT BOX", "http://cdnconn.xyz")
+        ServerProfile("server_6", "CINELON", "http://coliseuop.site"),
+        ServerProfile("server_7", "MULTT TV", "http://dali-as.skin")
     )
 
     private val _predefinedServersState = MutableStateFlow<List<ServerProfile>>(staticDefaultServers)

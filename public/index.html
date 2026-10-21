@@ -208,16 +208,13 @@
                                 <i class="fa-solid fa-server"></i>
                             </span>
                             <select id="server-selector" class="w-full py-4 pr-10 bg-[#0f111d] text-white font-bold text-base sm:text-lg outline-none cursor-pointer" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; opacity: 1 !important;">
-                                <option value="https://myopbx.beer" style="background-color: #0f111d; color: #ffffff;">VLOG</option>
-                                <option value="http://pottermax.sbs" style="background-color: #0f111d; color: #ffffff;">LUB TV</option>
-                                <option value="http://coliseuop.site" style="background-color: #0f111d; color: #ffffff;">CINELON21</option>
+                                <option value="http://myopbx.beer" style="background-color: #0f111d; color: #ffffff;">VLOG</option>
                                 <option value="http://poptvcdn.online" style="background-color: #0f111d; color: #ffffff;">TANNIX</option>
-                                <option value="http://cdn.caterlune.top" selected style="background-color: #0f111d; color: #ffffff;">CB6000</option>
+                                <option value="http://pottermax.sbs" style="background-color: #0f111d; color: #ffffff;">LUB TV</option>
                                 <option value="http://app.vivoxi.xyz" style="background-color: #0f111d; color: #ffffff;">MK21 PRÓ</option>
-                                <option value="http://cp2026.sbs" style="background-color: #0f111d; color: #ffffff;">NEW TV</option>
+                                <option value="http://cdn.caterlune.top" selected style="background-color: #0f111d; color: #ffffff;">CB6000</option>
+                                <option value="http://coliseuop.site" style="background-color: #0f111d; color: #ffffff;">CINELON</option>
                                 <option value="http://dali-as.skin" style="background-color: #0f111d; color: #ffffff;">MULTT TV</option>
-                                <option value="http://antaresfusion.shop" style="background-color: #0f111d; color: #ffffff;">CINEVO</option>
-                                <option value="http://cdnconn.xyz" style="background-color: #0f111d; color: #ffffff;">MULTT BOX</option>
                             </select>
                             <span class="absolute right-4 pointer-events-none text-slate-400 text-sm">
                                 <i class="fa-solid fa-chevron-down"></i>
@@ -1503,16 +1500,13 @@
 
         // Inline replica of servers.json to work flawlessly offline or context-free (avoid CORS issues when testing locally via file://)
         const PREDEFINED_SERVERS = [
-            { id: "server_1", name: "VLOG", baseUrl: "https://myopbx.beer" },
-            { id: "server_2", name: "LUB TV", baseUrl: "http://pottermax.sbs" },
-            { id: "server_3", name: "CINELON21", baseUrl: "http://coliseuop.site" },
-            { id: "server_4", name: "TANNIX", baseUrl: "http://poptvcdn.online" },
-            { id: "server_5", name: "CB6000", baseUrl: "http://cdn.caterlune.top" },
-            { id: "server_6", name: "MK21 PRÓ", baseUrl: "http://app.vivoxi.xyz" },
-            { id: "server_7", name: "NEW TV", baseUrl: "http://cp2026.sbs" },
-            { id: "server_8", name: "MULTT TV", baseUrl: "http://dali-as.skin" },
-            { id: "server_9", name: "CINEVO", baseUrl: "http://antaresfusion.shop" },
-            { id: "server_10", name: "MULTT BOX", baseUrl: "http://cdnconn.xyz" }
+            { id: "server_1", name: "VLOG", baseUrl: "http://myopbx.beer", lotusCode: "21001", webCode: "303496" },
+            { id: "server_2", name: "TANNIX", baseUrl: "http://poptvcdn.online", lotusCode: "21002", webCode: "318246" },
+            { id: "server_3", name: "LUB TV", baseUrl: "http://pottermax.sbs", lotusCode: "21005", webCode: "827164" },
+            { id: "server_4", name: "MK21 PRÓ", baseUrl: "http://app.vivoxi.xyz", lotusCode: "21003", webCode: "739285" },
+            { id: "server_5", name: "CB6000", baseUrl: "http://cdn.caterlune.top", lotusCode: "21004", webCode: "938124" },
+            { id: "server_6", name: "CINELON", baseUrl: "http://coliseuop.site", lotusCode: "", webCode: "49375" },
+            { id: "server_7", name: "MULTT TV", baseUrl: "http://dali-as.skin", lotusCode: "", webCode: "428143" }
         ];
 
         // =====================================================================
@@ -2688,13 +2682,34 @@
             const cleaned = code.trim().toLowerCase();
             if (!cleaned) return null;
 
-            // 1. Número direto (1 a 10)
+            // 1. Códigos Específicos de Aplicativos Parceiros (Lotus & Multt Web PC)
+            const LOTUS_AND_WEB_CODES = {
+                '21001': 'server_1', // VLOG
+                '303496': 'server_1', // VLOG (Web PC)
+                '21002': 'server_2', // TANNIX
+                '318246': 'server_2', // TANNIX (Web PC)
+                '21005': 'server_3', // LUB TV
+                '827164': 'server_3', // LUB TV (Web PC)
+                '21003': 'server_4', // MK21 PRÓ
+                '739285': 'server_4', // MK21 PRÓ (Web PC)
+                '21004': 'server_5', // CB6000
+                '938124': 'server_5', // CB6000 (Web PC)
+                '49375': 'server_6',  // CINELON (Web PC)
+                '428143': 'server_7'  // MULTT TV (Web PC)
+            };
+            if (LOTUS_AND_WEB_CODES[cleaned]) {
+                const targetId = LOTUS_AND_WEB_CODES[cleaned];
+                const found = PREDEFINED_SERVERS.find(s => s.id === targetId);
+                if (found) return found;
+            }
+
+            // 2. Número direto (1 a 7)
             const num = parseInt(cleaned, 10);
             if (!isNaN(num) && num >= 1 && num <= PREDEFINED_SERVERS.length) {
                 return PREDEFINED_SERVERS[num - 1];
             }
 
-            // 2. Busca por ID, nome ou fragmento de URL
+            // 3. Busca por ID, nome ou fragmento de URL
             for (let i = 0; i < PREDEFINED_SERVERS.length; i++) {
                 const srv = PREDEFINED_SERVERS[i];
                 const srvName = (srv.name || '').toLowerCase();
@@ -2704,35 +2719,26 @@
                 if (srvName === cleaned || srvId === cleaned || srvId === `server_${cleaned}`) {
                     return srv;
                 }
-                if (cleaned.includes('cb6000') || cleaned.includes('cb6') || cleaned.includes('caterlune')) {
-                    if (srvName.includes('cb6000') || srvBase.includes('caterlune')) return srv;
-                }
                 if (cleaned.includes('vlog') || cleaned.includes('opbx')) {
                     if (srvName.includes('vlog') || srvBase.includes('myopbx')) return srv;
-                }
-                if (cleaned.includes('lub') || cleaned.includes('pottermax')) {
-                    if (srvName.includes('lub') || srvBase.includes('pottermax')) return srv;
-                }
-                if (cleaned.includes('cinelon') || cleaned.includes('coliseu')) {
-                    if (srvName.includes('cinelon') || srvBase.includes('coliseuop')) return srv;
                 }
                 if (cleaned.includes('tannix') || cleaned.includes('poptv')) {
                     if (srvName.includes('tannix') || srvBase.includes('poptvcdn')) return srv;
                 }
+                if (cleaned.includes('lub') || cleaned.includes('pottermax')) {
+                    if (srvName.includes('lub') || srvBase.includes('pottermax')) return srv;
+                }
                 if (cleaned.includes('mk21') || cleaned.includes('vivoxi')) {
                     if (srvName.includes('mk21') || srvBase.includes('vivoxi')) return srv;
                 }
-                if (cleaned.includes('new tv') || cleaned.includes('cp2026')) {
-                    if (srvName.includes('new') || srvBase.includes('cp2026')) return srv;
+                if (cleaned.includes('cb6000') || cleaned.includes('cb6') || cleaned.includes('caterlune')) {
+                    if (srvName.includes('cb6000') || srvBase.includes('caterlune')) return srv;
+                }
+                if (cleaned.includes('cinelon') || cleaned.includes('coliseu')) {
+                    if (srvName.includes('cinelon') || srvBase.includes('coliseuop')) return srv;
                 }
                 if (cleaned.includes('multt tv') || cleaned.includes('dali')) {
                     if (srvName.includes('multt tv') || srvBase.includes('dali-as')) return srv;
-                }
-                if (cleaned.includes('cinevo') || cleaned.includes('antares')) {
-                    if (srvName.includes('cinevo') || srvBase.includes('antaresfusion')) return srv;
-                }
-                if (cleaned.includes('multt box') || cleaned.includes('cdnconn')) {
-                    if (srvName.includes('multt box') || srvBase.includes('cdnconn')) return srv;
                 }
             }
 
@@ -6620,5 +6626,5 @@
     <script src="js/accessibility.js"></script>
     <script src="js/seo-meta.js"></script>
     <script src="js/tv-remote-and-pwa.js"></script>
-</body>
+<script>function enterOfflineMode(){ alert("Entrando em modo Offline..."); window.location.href="offline.html"; }</script></body>
 </html>

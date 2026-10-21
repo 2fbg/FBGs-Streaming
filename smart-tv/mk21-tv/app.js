@@ -57,13 +57,13 @@ if (!Element.prototype.replaceChildren) {
 
 // 3. CONFIGURAÇÃO DOS SERVIDORES MK21 (NOMES LIMPOS SEM ÍCONES)
 const DEFAULT_SERVERS = [
-  { id: 'vlog', name: 'VLOG', url: 'https://myopbx.beer' },
-  { id: 'cb6000', name: 'CB6000', url: 'http://cdn.caterlune.top' },
-  { id: 'lubtv', name: 'LUB TV', url: 'http://pottermax.sbs' },
-  { id: 'cinelon', name: 'CINELON21', url: 'http://coliseuop.site' },
+  { id: 'vlog', name: 'VLOG', url: 'http://myopbx.beer' },
   { id: 'tannix', name: 'TANNIX', url: 'http://poptvcdn.online' },
-  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'https://myopbx.beer' },
-  { id: 'cinevo', name: 'CINEVO', url: 'http://antaresfusion.shop' }
+  { id: 'lubtv', name: 'LUB TV', url: 'http://pottermax.sbs' },
+  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
+  { id: 'cb6000', name: 'CB6000', url: 'http://cdn.caterlune.top' },
+  { id: 'cinelon', name: 'CINELON', url: 'http://coliseuop.site' },
+  { id: 'multttv', name: 'MULTT TV', url: 'http://dali-as.skin' }
 ];
 
 function cleanServerName(name) {

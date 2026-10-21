@@ -24,15 +24,12 @@ class ServerRepositoryImpl(
 
     private val staticDefaultServers = listOf(
         ServerProfile("srv_1", "VLOG", "http://myopbx.beer"),
-        ServerProfile("srv_2", "LUB TV", "http://pottermax.sbs"),
-        ServerProfile("srv_3", "CINELON21", "http://coliseuop.site"),
-        ServerProfile("srv_4", "TANNIX", "http://poptvcdn.online"),
+        ServerProfile("srv_2", "TANNIX", "http://poptvcdn.online"),
+        ServerProfile("srv_3", "LUB TV", "http://pottermax.sbs"),
+        ServerProfile("srv_4", "MK21 PRÓ", "http://app.vivoxi.xyz"),
         ServerProfile("srv_5", "CB6000", "http://cdn.caterlune.top"),
-        ServerProfile("srv_6", "MK21 PRÓ", "http://app.vivoxi.xyz"),
-        ServerProfile("srv_7", "NEW TV", "http://cp2026.sbs"),
-        ServerProfile("srv_8", "MULTT TV", "http://dali-as.skin"),
-        ServerProfile("srv_9", "CINEVO", "http://antaresfusion.shop"),
-        ServerProfile("srv_10", "MULTT BOX", "http://cdnconn.xyz")
+        ServerProfile("srv_6", "CINELON", "http://coliseuop.site"),
+        ServerProfile("srv_7", "MULTT TV", "http://dali-as.skin")
     )
 
     override fun getAllServers(): Flow<List<ServerProfile>> = serverDao.getAllServers()

@@ -2,51 +2,50 @@
   {
     "id": "server_1",
     "name": "VLOG",
-    "baseUrl": "https://myopbx.beer"
+    "baseUrl": "http://myopbx.beer",
+    "lotusCode": "21001",
+    "webCode": "303496"
   },
   {
     "id": "server_2",
-    "name": "LUB TV",
-    "baseUrl": "http://pottermax.sbs"
+    "name": "TANNIX",
+    "baseUrl": "http://poptvcdn.online",
+    "lotusCode": "21002",
+    "webCode": "318246"
   },
   {
     "id": "server_3",
-    "name": "CINELON21",
-    "baseUrl": "http://coliseuop.site"
+    "name": "LUB TV",
+    "baseUrl": "http://pottermax.sbs",
+    "lotusCode": "21005",
+    "webCode": "827164"
   },
   {
     "id": "server_4",
-    "name": "TANNIX",
-    "baseUrl": "http://poptvcdn.online"
+    "name": "MK21 PRÓ",
+    "baseUrl": "http://app.vivoxi.xyz",
+    "lotusCode": "21003",
+    "webCode": "739285"
   },
   {
     "id": "server_5",
     "name": "CB6000",
-    "baseUrl": "http://cdn.caterlune.top"
+    "baseUrl": "http://cdn.caterlune.top",
+    "lotusCode": "21004",
+    "webCode": "938124"
   },
   {
     "id": "server_6",
-    "name": "MK21 PRÓ",
-    "baseUrl": "http://app.vivoxi.xyz"
+    "name": "CINELON",
+    "baseUrl": "http://coliseuop.site",
+    "lotusCode": "",
+    "webCode": "49375"
   },
   {
     "id": "server_7",
-    "name": "NEW TV",
-    "baseUrl": "http://cp2026.sbs"
-  },
-  {
-    "id": "server_8",
     "name": "MULTT TV",
-    "baseUrl": "http://dali-as.skin"
-  },
-  {
-    "id": "server_9",
-    "name": "CINEVO",
-    "baseUrl": "http://antaresfusion.shop"
-  },
-  {
-    "id": "server_10",
-    "name": "MULTT BOX",
-    "baseUrl": "http://cdnconn.xyz"
+    "baseUrl": "http://dali-as.skin",
+    "lotusCode": "",
+    "webCode": "428143"
   }
 ]
