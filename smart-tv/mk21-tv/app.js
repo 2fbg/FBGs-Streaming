@@ -840,7 +840,7 @@ function groupSeriesItems(items) {
     map[seriesTitle].episodes.push(it);
   });
 
-  return Object.values(map).sort((a, b) => a.title.localeCompare(b.title));
+  return Object.values(map).sort((a, b) => (a.title < b.title ? -1 : (a.title > b.title ? 1 : 0)));
 }
 
 // LEITOR INCREMENTAL DE LISTAS M3U: não mantém texto bruto nem array de 300k linhas
@@ -1288,6 +1288,7 @@ function renderCategoriesList() {
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
     btn.setAttribute('tabindex', '0');
     btn.setAttribute('data-idx', idx);
+    btn.setAttribute('data-cat', k);
 
     const spanName = document.createElement('span');
     spanName.textContent = k === 'ALL' ? (
@@ -1316,10 +1317,14 @@ function renderCategoriesList() {
 function selectCategory(catKey) {
   activeCategoryKey = catKey;
 
-  const btns = $('listCategories').querySelectorAll('.cat-item-btn');
-  btns.forEach(b => b.classList.remove('active'));
-  const activeBtn = Array.from(btns).find(b => (catKey === 'ALL' && b.textContent.includes('Todos')) || b.textContent.startsWith(catKey));
-  if (activeBtn) activeBtn.classList.add('active');
+  const ulCats = $('listCategories');
+  if (ulCats) {
+    const prevActive = ulCats.querySelector('.cat-item-btn.active');
+    if (prevActive) prevActive.classList.remove('active');
+    const newActive = ulCats.querySelector(`.cat-item-btn[data-cat="${CSS.escape ? CSS.escape(catKey) : catKey.replace(/"/g, '\\"')}"]`) ||
+      Array.from(ulCats.querySelectorAll('.cat-item-btn')).find(b => b.getAttribute('data-cat') === catKey || (catKey === 'ALL' && b.textContent.includes('Todos')));
+    if (newActive) newActive.classList.add('active');
+  }
 
   $('txtCurrentCategoryTitle').textContent = catKey === 'ALL' ? (
     currentContentType === 'LIVE' ? '📺 Todos os Canais' :
@@ -1349,15 +1354,20 @@ function renderItemsList() {
     items = items.filter(c => !c.isAdult && !isAdult(c.name) && !isAdult(c.group));
   }
 
-  // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
+  // Aplicar ordenação rápida (Padrão / Recente / A-Z / Z-A / Ano) otimizada para webOS TV
   function mk21ExtractYear(name) {
     const m = String(name || '').match(/\b((?:19|20)\d{2})\b/);
     return m ? parseInt(m[1], 10) : 0;
   }
+  const fastStrCompare = (a, b) => {
+    const na = (a && a.name) || '';
+    const nb = (b && b.name) || '';
+    return na < nb ? -1 : (na > nb ? 1 : 0);
+  };
   if (currentSortOrder === 'AZ') {
-    items = items.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    items = items.slice().sort(fastStrCompare);
   } else if (currentSortOrder === 'ZA') {
-    items = items.slice().sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
+    items = items.slice().sort((a, b) => fastStrCompare(b, a));
   } else if (currentSortOrder === 'RECENT') {
     // Ordem da lista invertida (últimos da playlist primeiro)
     items = items.slice().reverse();
@@ -1369,7 +1379,7 @@ function renderItemsList() {
       if (ya && yb && ya !== yb) return yb - ya;
       if (ya && !yb) return -1;
       if (!ya && yb) return 1;
-      return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+      return fastStrCompare(a, b);
     });
   }
   // DEFAULT: mantém ordem original da categoria
@@ -1883,17 +1893,23 @@ function applyRealSmartTvEpg(item, listings) {
   const elapsed = Math.max(0, nowMs - current.start);
   const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
 
+  item._hasRealEpg = true;
+  item._realEpgTitle = current.title;
+  item._realEpgNext = next ? next.title : null;
+  item._realEpgStartH = startH;
+  item._realEpgStopH = stopH;
+
   if ($('epgTitle')) $('epgTitle').textContent = `▶ ${item.name}`;
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${startH} - ${stopH}`;
+  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${current.title}</b>`;
   if ($('epgStatus')) {
     $('epgStatus').innerHTML = `🔴 NO AR: <b>${current.title}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
   }
-  const pBar = document.querySelector('.epg-progress');
+  const pBar = document.querySelector('.epg-progress') || $('epgProgressBar');
   if (pBar) pBar.style.width = `${pct}%`;
-  if ($('epgNext') && next) {
-    const nextH = new Date(next.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    $('epgNext').textContent = `A seguir (${nextH}): ${next.title}`;
-  }
+  const nextInfo = next ? `A seguir (${new Date(next.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}): ${next.title}` : 'A SEGUIR: Programação Normal';
+  if ($('previewEpgNext')) $('previewEpgNext').textContent = nextInfo;
+  if ($('epgNext')) $('epgNext').textContent = nextInfo;
 
   // Sincroniza EPG Real no Fullscreen HUD
   if ($('fsEpgCurrentTitle')) $('fsEpgCurrentTitle').textContent = current.title;
@@ -2079,13 +2095,37 @@ const ASPECT_MODES = [
   { id: 'zoom', label: 'Proporção: Zoom (Cortar Bordas)', objectFit: 'cover' }
 ];
 let currentAspectIdx = 0;
+try {
+  const savedAspect = localStorage.getItem('mk21_aspect_idx');
+  if (savedAspect !== null) currentAspectIdx = parseInt(savedAspect, 10) % ASPECT_MODES.length;
+} catch (e) {}
+
+function applyAspectRatio(mode) {
+  const video = $('tvPlayer');
+  if (!video) return;
+  const targetMode = mode || ASPECT_MODES[currentAspectIdx] || ASPECT_MODES[0];
+  video.style.setProperty('object-fit', targetMode.objectFit, 'important');
+  video.classList.remove('aspect-fit', 'aspect-fill', 'aspect-zoom', 'aspect-16-9');
+  if (targetMode.id === 'fit') video.classList.add('aspect-fit');
+  else if (targetMode.id === 'fill') video.classList.add('aspect-fill');
+  else if (targetMode.id === 'zoom') video.classList.add('aspect-zoom');
+
+  const container = $('videoContainer');
+  if (container) {
+    container.classList.remove('aspect-fit', 'aspect-fill', 'aspect-zoom');
+    container.classList.add('aspect-' + targetMode.id);
+  }
+}
 
 function cycleAspectRatio() {
   const video = $('tvPlayer');
   if (!video) return;
   currentAspectIdx = (currentAspectIdx + 1) % ASPECT_MODES.length;
   const mode = ASPECT_MODES[currentAspectIdx];
-  video.style.objectFit = mode.objectFit;
+  applyAspectRatio(mode);
+  try {
+    localStorage.setItem('mk21_aspect_idx', String(currentAspectIdx));
+  } catch (e) {}
   showChannelBanner(mode.label);
   if ($('diagAspect')) $('diagAspect').textContent = mode.label;
 }
@@ -2097,11 +2137,13 @@ function toggleMute() {
   showChannelBanner(video.muted ? '🔇 Áudio Mudo' : '🔊 Áudio Ativado');
 }
 
+let streamDiagTimer = null;
 function toggleStreamDiagnostics() {
   const modal = $('modalStreamDiagnostics');
   if (!modal) return;
   if (!modal.classList.contains('hidden')) {
     modal.classList.add('hidden');
+    if (streamDiagTimer) { clearInterval(streamDiagTimer); streamDiagTimer = null; }
     activeZone = 'channels';
     focusActiveElement();
     return;
@@ -2109,6 +2151,8 @@ function toggleStreamDiagnostics() {
   updateStreamDiagnosticsInfo();
   modal.classList.remove('hidden');
   activeZone = 'modalStreamDiagnostics';
+  if (streamDiagTimer) clearInterval(streamDiagTimer);
+  streamDiagTimer = setInterval(updateStreamDiagnosticsInfo, 1000);
   const closeBtn = $('btnCloseDiagnostics');
   if (closeBtn) closeBtn.focus();
 }
@@ -2621,11 +2665,26 @@ function startStallWatchdog() {
 let sessionDevLogs = [];
 const MAX_DEV_LOGS = 300;
 
+try {
+  const savedLogs = JSON.parse(localStorage.getItem('mk21_live_dev_logs') || '[]');
+  if (Array.isArray(savedLogs) && savedLogs.length > 0) {
+    sessionDevLogs = savedLogs.slice(-150);
+  }
+} catch (e) {}
+
+const _origConsoleLog = console.log.bind(console);
+const _origConsoleWarn = console.warn.bind(console);
+const _origConsoleError = console.error.bind(console);
+
 function addDevLog(msg, type = 'info') {
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-  const entry = { time, msg, type };
+  const entry = { time, msg: String(msg || ''), type };
   sessionDevLogs.push(entry);
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
+
+  try {
+    localStorage.setItem('mk21_live_dev_logs', JSON.stringify(sessionDevLogs.slice(-100)));
+  } catch (e) {}
 
   try {
     const container = $('devLogsContainer');
@@ -2651,9 +2710,11 @@ function addDevLog(msg, type = 'info') {
     if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
   } catch (e) {}
 
-  if (type === 'error') console.error('[MK21-TV]', msg);
-  else if (type === 'warn') console.warn('[MK21-TV]', msg);
-  else console.log('[MK21-TV]', msg);
+  try {
+    if (type === 'error') _origConsoleError('[MK21-TV]', msg);
+    else if (type === 'warn') _origConsoleWarn('[MK21-TV]', msg);
+    else _origConsoleLog('[MK21-TV]', msg);
+  } catch (e) {}
 }
 
 function escapeHtml(str) {
@@ -2668,6 +2729,26 @@ function toggleDevLogsModal() {
   const isHidden = modal.classList.contains('hidden');
   if (isHidden) {
     modal.classList.remove('hidden');
+    activeZone = 'modalDevLogs';
+    const container = $('devLogsContainer');
+    if (container) {
+      container.innerHTML = '';
+      sessionDevLogs.forEach(entry => {
+        const line = document.createElement('div');
+        line.style.marginBottom = '4px';
+        line.style.wordBreak = 'break-word';
+        let color = '#cbd5e1';
+        if (entry.type === 'error') color = '#ef4444';
+        else if (entry.type === 'warn') color = '#eab308';
+        else if (entry.type === 'success') color = '#22c55e';
+        else if (entry.type === 'debug') color = '#94a3b8';
+        line.innerHTML = `<span style="color:#64748b;">[${entry.time}]</span> <span style="color:${color}; font-weight:600;">${escapeHtml(entry.msg)}</span>`;
+        container.appendChild(line);
+      });
+      container.scrollTop = container.scrollHeight;
+    }
+    const badge = $('devLogsCountBadge');
+    if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
     addDevLog('[UI] Console de logs aberto', 'info');
     const closeBtn = $('btnCloseDevLogs');
     if (closeBtn) closeBtn.focus();
@@ -2683,6 +2764,7 @@ function initDevLogs() {
   if ($('btnCloseDevLogs')) $('btnCloseDevLogs').onclick = toggleDevLogsModal;
   if ($('btnClearDevLogs')) $('btnClearDevLogs').onclick = () => {
     sessionDevLogs = [];
+    try { localStorage.removeItem('mk21_live_dev_logs'); } catch (e) {}
     const container = $('devLogsContainer');
     if (container) container.innerHTML = '<div style="color:#64748b;">[Logs limpos com sucesso.]</div>';
     const badge = $('devLogsCountBadge');
@@ -2705,6 +2787,29 @@ function initDevLogs() {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
   };
+
+  // Interceptar logs globais de console e exceções não tratadas
+  console.log = function(...args) {
+    _origConsoleLog(...args);
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    if (!msg.startsWith('[MK21-TV]')) addDevLog(msg, 'info');
+  };
+  console.warn = function(...args) {
+    _origConsoleWarn(...args);
+    const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+    if (!msg.startsWith('[MK21-TV]')) addDevLog(msg, 'warn');
+  };
+  console.error = function(...args) {
+    _origConsoleError(...args);
+    const msg = args.map(a => (a instanceof Error ? `${a.message}\n${a.stack || ''}` : (typeof a === 'object' ? JSON.stringify(a) : String(a)))).join(' ');
+    if (!msg.startsWith('[MK21-TV]')) addDevLog(msg, 'error');
+  };
+  window.addEventListener('error', function(e) {
+    addDevLog(`[Exceção JS] ${e.message} (${e.filename}:${e.lineno})`, 'error');
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    addDevLog(`[Promise Rejeitada] ${e.reason && (e.reason.message || e.reason)}`, 'error');
+  });
 }
 
 let mpegtsPlayer = null;
@@ -2762,7 +2867,7 @@ function fallbackToHls(item) {
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      mk21SetEpgStatusPlaying(item);
       updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
@@ -2777,12 +2882,23 @@ function fallbackToHls(item) {
     video.play().then(() => {
       addDevLog('[Player Engine] Fallback HLS nativo reproduzindo!', 'success');
       hidePlayerReconnectBadge();
-      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      mk21SetEpgStatusPlaying(item);
       updateRealResolution(item);
     }).catch(err => {
       addDevLog(`[Player Error] Falha final: ${err && err.message}`, 'error');
       triggerAutoReconnect('Falha no fallback');
     });
+  }
+}
+
+function mk21SetEpgStatusPlaying(item) {
+  const statusEl = $('epgStatus');
+  if (!statusEl) return;
+  if (item && item._realEpgTitle) {
+    statusEl.innerHTML = `🔴 NO AR: <b>${item._realEpgTitle}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
+    if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${item._realEpgTitle}</b>`;
+  } else {
+    statusEl.textContent = '🔴 NO AR';
   }
 }
 
@@ -2799,6 +2915,7 @@ function playStream(item) {
 
   const video = $('tvPlayer');
   if (!video) return;
+  applyAspectRatio();
 
   const streamFormatPref = localStorage.getItem('mk21_stream_format') || 'auto';
   addDevLog(`[Player] Iniciando carregamento: "${item.name}" (Modo: ${currentContentType})`, 'info');
@@ -2888,7 +3005,7 @@ function playStream(item) {
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      mk21SetEpgStatusPlaying(item);
       updateRealResolution(item);
     });
     hlsInstance.on(Hls.Events.ERROR, (e, data) => {
@@ -2935,7 +3052,7 @@ function playStream(item) {
         hidePlayerReconnectBadge();
         if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
         if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-        if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+        mk21SetEpgStatusPlaying(item);
         updateRealResolution(item);
       }).catch(err => {
         addDevLog(`[MPEGTS Error] ${err && err.message}. Rotacionando para HLS fallback...`, 'warn');
@@ -2966,7 +3083,7 @@ function playStream(item) {
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
-      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      mk21SetEpgStatusPlaying(item);
       updateRealResolution(item);
     }).catch(err => {
       addDevLog(`[Player Fallback] Falha no playback nativo (${err && err.message}). Tentando fallback HLS...`, 'warn');
@@ -4526,7 +4643,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalDevLogs', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -4665,6 +4782,40 @@ function focusActiveElement() {
   } catch (err) {
     console.warn('[MK21] focusActiveElement', err);
   }
+}
+
+let lastBackPressTime = 0;
+let vodSeekTargetTime = null;
+let vodSeekDebounceTimer = null;
+
+function performVodSeek(deltaSeconds) {
+  const v = $('tvPlayer');
+  if (!v) return;
+  const dur = v.duration || 0;
+  if (!dur) return;
+
+  if (vodSeekTargetTime === null) {
+    vodSeekTargetTime = v.currentTime || 0;
+  }
+  vodSeekTargetTime = Math.max(0, Math.min(dur, vodSeekTargetTime + deltaSeconds));
+
+  const pct = Math.min(100, Math.max(0, (vodSeekTargetTime / dur) * 100));
+  if ($('fsProgressFill')) $('fsProgressFill').style.width = pct + '%';
+  if ($('fsTimeCurrent')) $('fsTimeCurrent').textContent = formatTimeSec(vodSeekTargetTime);
+  const pBar = $('epgProgressBar') || document.querySelector('.epg-progress');
+  if (pBar) pBar.style.width = pct + '%';
+  if ($('vodTimeCurrent')) $('vodTimeCurrent').textContent = formatTimeSec(vodSeekTargetTime);
+
+  showChannelBanner((deltaSeconds > 0 ? '⏩ +' : '⏪ ') + Math.abs(deltaSeconds) + 's (' + formatTimeSec(vodSeekTargetTime) + ')');
+
+  clearTimeout(vodSeekDebounceTimer);
+  vodSeekDebounceTimer = setTimeout(() => {
+    if (v && vodSeekTargetTime !== null) {
+      try { v.currentTime = vodSeekTargetTime; } catch (e) {}
+    }
+    vodSeekTargetTime = null;
+    updateVodProgressTimeline();
+  }, 250);
 }
 
 document.addEventListener('keydown', function (e) {
@@ -4859,11 +5010,15 @@ document.addEventListener('keydown', function (e) {
     if (openModal) {
       e.preventDefault();
       openModal.classList.add('hidden');
-      activeZone = 'settings';
+      if (typeof streamDiagTimer !== 'undefined' && streamDiagTimer) {
+        clearInterval(streamDiagTimer);
+        streamDiagTimer = null;
+      }
+      activeZone = 'channels';
       focusActiveElement();
       return;
     }
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
+    if (document.fullscreenElement || document.webkitFullscreenElement || isAppFullscreen()) {
       e.preventDefault();
       if (typeof toggleFullscreen === 'function') toggleFullscreen(false);
       return;
@@ -4873,6 +5028,54 @@ document.addEventListener('keydown', function (e) {
       if (typeof switchContentType === 'function') switchContentType('LIVE');
       return;
     }
+
+    // Se estiver na coluna de canais, volta o foco para categorias
+    if (activeZone === 'channels') {
+      e.preventDefault();
+      activeZone = 'categories';
+      focusActiveElement();
+      return;
+    }
+
+    // Se estiver em configurações, volta para categorias
+    if (activeZone === 'settings') {
+      e.preventDefault();
+      activeZone = 'categories';
+      focusActiveElement();
+      return;
+    }
+
+    // Raiz do app: impede saída direta e exige 2x cliques rápidos (dentro de 2.2s)
+    e.preventDefault();
+    e.stopPropagation();
+    const nowTime = Date.now();
+    if (nowTime - lastBackPressTime < 2200) {
+      try {
+        if (typeof webOS !== 'undefined' && webOS.platformBack) {
+          webOS.platformBack();
+        } else {
+          window.close();
+        }
+      } catch (err) {
+        window.close();
+      }
+    } else {
+      lastBackPressTime = nowTime;
+      showChannelBanner('Pressione VOLTAR novamente para sair');
+    }
+    return;
+  }
+
+  // Teclas de Avanço e Retrocesso de Mídia do controle remoto (Smart TV / Magic)
+  if (k === 417 || k === 10233 || key === 'FastForward' || key === 'MediaFastForward') {
+    e.preventDefault();
+    performVodSeek(15);
+    return;
+  }
+  if (k === 412 || k === 10232 || key === 'Rewind' || key === 'MediaRewind') {
+    e.preventDefault();
+    performVodSeek(-15);
+    return;
   }
 
   // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
@@ -4909,13 +5112,12 @@ document.addEventListener('keydown', function (e) {
     }
     if (k === 37 || key === 'ArrowLeft') {
       e.preventDefault();
-      if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
+      if (ae && ae.id === 'fsProgressTrack') {
+        performVodSeek(-15);
+      } else if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
         mk21MoveFocus('left');
       } else if (currentContentType !== 'LIVE') {
-        const v = $('tvPlayer');
-        if (v) v.currentTime = Math.max(0, (v.currentTime || 0) - 10);
-        showChannelBanner('⏪ -10s');
-        updateVodProgressTimeline();
+        performVodSeek(-15);
       } else {
         mk21MoveFocus('left');
       }
@@ -4923,13 +5125,12 @@ document.addEventListener('keydown', function (e) {
     }
     if (k === 39 || key === 'ArrowRight') {
       e.preventDefault();
-      if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
+      if (ae && ae.id === 'fsProgressTrack') {
+        performVodSeek(15);
+      } else if (hudVisible && ae && ae.classList.contains('hud-ctrl-btn')) {
         mk21MoveFocus('right');
       } else if (currentContentType !== 'LIVE') {
-        const v = $('tvPlayer');
-        if (v && v.duration) v.currentTime = Math.min(v.duration, (v.currentTime || 0) + 10);
-        showChannelBanner('⏩ +10s');
-        updateVodProgressTimeline();
+        performVodSeek(15);
       } else {
         mk21MoveFocus('right');
       }
@@ -4939,11 +5140,21 @@ document.addEventListener('keydown', function (e) {
 
   // Setas — navegação espacial no modo janela
   if (k === 37 || key === 'ArrowLeft') {
+    if (currentContentType !== 'LIVE' && ae && (ae.id === 'tvPlayer' || ae.id === 'videoContainer' || ae.id === 'vodTimeRow')) {
+      e.preventDefault();
+      performVodSeek(-15);
+      return;
+    }
     e.preventDefault();
     mk21MoveFocus('left');
     return;
   }
   if (k === 39 || key === 'ArrowRight') {
+    if (currentContentType !== 'LIVE' && ae && (ae.id === 'tvPlayer' || ae.id === 'videoContainer' || ae.id === 'vodTimeRow')) {
+      e.preventDefault();
+      performVodSeek(15);
+      return;
+    }
     e.preventDefault();
     mk21MoveFocus('right');
     return;
@@ -5347,3 +5558,15 @@ function globalSearch(query) {
   }
   return results;
 }
+
+// ==================== MAGIC REMOTE SCROLL WHEEL HANDLER ====================
+window.addEventListener('wheel', function(e) {
+  const target = e.target;
+  const scrollable = (target && target.closest ? target.closest('.pane-scroll, #devLogsContainer, .settings-body, .modal-content, .omnisearch-results') : null) ||
+    (typeof activeZone !== 'undefined' && activeZone === 'channels' ? $('listItems') :
+     (typeof activeZone !== 'undefined' && activeZone === 'categories' ? $('listCategories') : null));
+  if (scrollable) {
+    scrollable.scrollTop += e.deltaY;
+    e.preventDefault();
+  }
+}, { passive: false });
