@@ -1,0 +1,8 @@
+{
+  "cleanUrls": false,
+  "rewrites": [
+    { "source": "/api/proxy", "destination": "/api/proxy.js" },
+    { "source": "/api/version.json", "destination": "/version.json" },
+    { "source": "/((?!api/|css/|js/|.*\\..*).*)", "destination": "/index.html" }
+  ]
+}

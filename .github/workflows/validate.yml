@@ -37,18 +37,20 @@ jobs:
           python3 smart-tv/package_ipk.py
 
           TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")"
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/appinfo.json'))['version'])")"
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/webos/appinfo.json'))['version'])")"
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('web/version.json'))['version'])")"
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")"
+          echo "Validando sincronismo de versões multiplataforma (Alvo: $TV_VER)..."
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('version.json'))['version'])")" || (echo "Mismatch em version.json" && exit 1)
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")" || (echo "Mismatch em smart-tv/mk21-tv/version.json" && exit 1)
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/appinfo.json'))['version'])")" || (echo "Mismatch em smart-tv/mk21-tv/appinfo.json" && exit 1)
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/webos/appinfo.json'))['version'])")" || (echo "Mismatch em smart-tv/webos/appinfo.json" && exit 1)
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('web/version.json'))['version'])")" || (echo "Mismatch em web/version.json" && exit 1)
+          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")" || (echo "Mismatch em manifest.json" && exit 1)
           TIZEN_VER=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse('smart-tv/tizen/config.xml').getroot().attrib['version'])")
-          test "$TV_VER" = "$TIZEN_VER"
+          test "$TV_VER" = "$TIZEN_VER" || (echo "Mismatch em smart-tv/tizen/config.xml: $TIZEN_VER != $TV_VER" && exit 1)
 
           IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
-          test -f "$IPK_FILE"
+          test -f "$IPK_FILE" || (echo "IPK $IPK_FILE não encontrado" && exit 1)
           PKG_VER=$(dpkg-deb --field "$IPK_FILE" Version)
-          test "$PKG_VER" = "$TV_VER"
+          test "$PKG_VER" = "$TV_VER" || (echo "Versão interna do pacote IPK $PKG_VER difere de $TV_VER" && exit 1)
           echo "Smart TV IPK $TV_VER validado com sucesso."
           echo "tv_version=$TV_VER" >> "$GITHUB_OUTPUT"
 

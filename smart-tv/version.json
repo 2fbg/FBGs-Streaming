@@ -4,12 +4,12 @@
   "tagName": "v2.1.2",
   "name": "MK21 MultiServidor v2.1.2",
   "title": "MK21 Play v2.1.2",
+  "releaseNotes": "Release v2.1.2: sincroniza\u00e7\u00e3o das vers\u00f5es e metadados entre Android, Web/PWA, webOS e Tizen.\nPacote webOS gerado e validado. APK Android de release pendente de assinatura de produ\u00e7\u00e3o.",
+  "body": "Release v2.1.2: sincroniza\u00e7\u00e3o das vers\u00f5es e metadados entre Android, Web/PWA, webOS e Tizen.\nPacote webOS gerado e validado. APK Android de release pendente de assinatura de produ\u00e7\u00e3o.",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.1.2_all.ipk",
   "apkUrl": "",
   "downloadUrl": "",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.1.2_all.ipk",
-  "releaseNotes": "Estabiliza\u00e7\u00e3o global v2.1.2.\nSincroniza\u00e7\u00e3o de metadados entre Android, Web/PWA, webOS e Tizen.\nIPK webOS gerado; APK Android de release aguarda assinatura de produ\u00e7\u00e3o.",
-  "body": "Estabiliza\u00e7\u00e3o global v2.1.2.\nSincroniza\u00e7\u00e3o de metadados entre Android, Web/PWA, webOS e Tizen.\nIPK webOS gerado; APK Android de release aguarda assinatura de produ\u00e7\u00e3o.",
   "updatedAt": "2026-10-21",
-  "ipkSha256": "6bdd136b6c893dd43e0ecab49f37d74879575c080a7d4c0b70dee2813367717f",
-  "ipkSizeBytes": 150614
+  "ipkSha256": "7ee55883a153e8abcba0e36f37849ac0998edae906aa704848062c8f2942be04",
+  "ipkSizeBytes": 154410
 }

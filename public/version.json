@@ -1,0 +1,15 @@
+{
+  "version": "2.1.2",
+  "versionCode": 212,
+  "tagName": "v2.1.2",
+  "name": "MK21 MultiServidor v2.1.2",
+  "title": "MK21 Play v2.1.2",
+  "releaseNotes": "Release v2.1.2: sincroniza\u00e7\u00e3o das vers\u00f5es e metadados entre Android, Web/PWA, webOS e Tizen.\nPacote webOS gerado e validado. APK Android de release pendente de assinatura de produ\u00e7\u00e3o.",
+  "body": "Release v2.1.2: sincroniza\u00e7\u00e3o das vers\u00f5es e metadados entre Android, Web/PWA, webOS e Tizen.\nPacote webOS gerado e validado. APK Android de release pendente de assinatura de produ\u00e7\u00e3o.",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.1.2_all.ipk",
+  "apkUrl": "",
+  "downloadUrl": "",
+  "updatedAt": "2026-10-21",
+  "ipkSha256": "7ee55883a153e8abcba0e36f37849ac0998edae906aa704848062c8f2942be04",
+  "ipkSizeBytes": 154410
+}

@@ -224,7 +224,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val displayedItemsLimit = _displayedItemsLimit.asStateFlow()
 
     fun loadMoreItems() {
-        _displayedItemsLimit.value = (_displayedItemsLimit.value + 60).coerceAtMost(1500)
+        _displayedItemsLimit.value = _displayedItemsLimit.value + 100
     }
 
     fun resetItemsLimit() {
@@ -300,7 +300,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 SortOrder.DEFAULT -> filtered.sortedBy { it.id } // "Ordem por número" sorts by raw insertion number (ID ascending)
             }
-            sorted.take(displayLimit)
+            sorted
         }
     }.flowOn(Dispatchers.IO).stateIn(
         scope = viewModelScope,

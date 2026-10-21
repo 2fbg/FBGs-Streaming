@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.4">
+  <link rel="stylesheet" href="styles.css?v=1.0.5">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
 </head>
 <body>
 
@@ -20,14 +22,14 @@
         <span class="logo-title">PLAY <span>OTT</span></span>
       </div>
 
-      <!-- ABAS DE CONTEÚDO (IDÊNTICAS AO APK E NETFLIX) -->
+      <!-- ABAS DE CONTEÚDO COM ÍCONES FONTAWESOME -->
       <nav class="main-tabs" id="headerTabsNav">
-        <button id="tabLive" class="tab-btn active header-focusable" tabindex="0">📺 TV AO VIVO</button>
-        <button id="tabMovies" class="tab-btn header-focusable" tabindex="0">🎬 FILMES</button>
-        <button id="tabSeries" class="tab-btn header-focusable" tabindex="0">🍿 SÉRIES</button>
-        <button id="tabContinue" class="tab-btn header-focusable" tabindex="0">▶ CONTINUAR</button>
-        <button id="tabFavs" class="tab-btn header-focusable" tabindex="0">⭐ FAVORITOS</button>
-        <button id="tabSettings" class="tab-btn header-focusable" tabindex="0">⚙️ CONFIGURAÇÕES</button>
+        <button id="tabLive" class="tab-btn active header-focusable" tabindex="0"><i class="fa-solid fa-tv"></i> TV AO VIVO</button>
+        <button id="tabMovies" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-film"></i> FILMES</button>
+        <button id="tabSeries" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clapperboard"></i> SÉRIES</button>
+        <button id="tabContinue" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clock-rotate-left"></i> CONTINUAR</button>
+        <button id="tabFavs" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-star"></i> FAVORITOS</button>
+        <button id="tabSettings" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-gear"></i> CONFIGURAÇÕES</button>
       </nav>
     </div>
 
@@ -38,10 +40,14 @@
         <span style="font-size: 12px; opacity:0.7;">▼</span>
       </button>
 
-      <button id="btnRefreshList" class="action-btn header-focusable" title="Atualizar lista agora" tabindex="0">
-        🔄 Atualizar
+      <button id="btnHeaderLogs" class="action-btn header-focusable" title="Console de Logs (Dev / Homologação)" tabindex="0" style="background:#1e293b; border-color:#3b82f6;">
+        <i class="fa-solid fa-terminal text-blue-400"></i> Logs
       </button>
-<div id="liveClock" class="clock-display">00:00:00</div>
+
+      <button id="btnRefreshList" class="action-btn header-focusable" title="Atualizar lista agora" tabindex="0">
+        <i class="fa-solid fa-rotate"></i> Atualizar
+      </button>
+      <div id="liveClock" class="clock-display">00:00:00</div>
     </div>
   </header>
 
@@ -222,8 +228,9 @@
             <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
             <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
             <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 10px 22px;" tabindex="0">💾 Salvar e Conectar</button>
+            <button id="btnLoadOfflineCache" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; color: #ffd54f; border-color: #ffd54f;" tabindex="0">📂 Carregar Cache Offline</button>
             <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">Cancelar Edição</button>
             <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar 7 Padrões</button>
           </div>
@@ -395,7 +402,7 @@
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-blue"></span>
-      <span>🔵 Diagnóstico</span>
+      <span>🔵 Logs / Diag</span>
     </div>
   </footer>
 
@@ -403,6 +410,27 @@
   <div id="channelNumberOverlay" class="channel-number-overlay hidden">
     <span class="channel-number-label">Canal</span>
     <span id="channelNumberDigits" class="channel-number-digits">1</span>
+  </div>
+
+  <!-- Modal Console de Logs em Tempo Real (Dev / Homologação) -->
+  <div id="modalDevLogs" class="app-modal hidden">
+    <div class="modal-content" style="width: 860px; max-width: 95vw; background: #0c0f1a; border: 1px solid rgba(59, 130, 246, 0.5); border-radius: 14px; padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.9);">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 12px;">
+        <span style="color:#ffd54f; font-weight:800; font-size:18px;"><i class="fa-solid fa-terminal"></i> Console de Logs em Tempo Real (Dev / Homologação)</span>
+        <div style="display:flex; gap:8px;">
+          <button id="btnClearDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-solid fa-trash"></i> Limpar</button>
+          <button id="btnExportDevLogs" class="ctrl-btn primary" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-solid fa-floppy-disk"></i> Salvar / Exportar</button>
+          <button id="btnCloseDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0">✕ Fechar</button>
+        </div>
+      </div>
+      <div id="devLogsContainer" style="background:#05070d; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; height: 380px; overflow-y: auto; font-family: monospace, Courier, sans-serif; font-size: 13px; line-height: 1.5; color: #cbd5e1; user-select: text;">
+        <div style="color:#64748b;">[Console inicializado. Logs do player, rede, codecs e controle remoto aparecerão aqui...]</div>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px; font-size: 12px; color: #94a3b8;">
+        <span>Atalho: Tecla Azul do controle ou botão "Logs" no cabeçalho.</span>
+        <span id="devLogsCountBadge" style="background:#1e293b; padding:2px 8px; border-radius:4px;">0 entradas</span>
+      </div>
+    </div>
   </div>
 
   <!-- Modal Diagnóstico Técnico do Stream (Tecla Azul) -->

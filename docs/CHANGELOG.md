@@ -2,6 +2,12 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.1.2] - 2026-10-21
+
+- Sincronização das versões Android, Web/PWA, webOS e Tizen para `2.1.2` / `212`.
+- Atualização dos manifests de deploy e dos metadados de servidores.
+- Pacote webOS gerado e validado; o APK Android de release aguarda assinatura de produção.
+
 ## [2.0.0] - 2026-10-17
 
 ### 🚀 Destaques da Release Major (v2.0.0)

@@ -5,5 +5,14 @@
   "type": "web",
   "main": "index.html",
   "title": "MK21 Play",
-  "icon": "icon.png"
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080",
+  "trustLevel": "trusted",
+  "requiredPermissions": [
+    "media.controller",
+    "net.connectivity"
+  ],
+  "supportTouchMode": false,
+  "disableBackHistoryFilter": true
 }

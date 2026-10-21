@@ -1,0 +1,4 @@
+[
+  { "id": 1, "name": "MK21 Servidor Principal", "url": "https://api.fbg2.com/v1" },
+  { "id": 2, "name": "MK21 Servidor Backup", "url": "https://backup.fbg2.com/v1" }
+]

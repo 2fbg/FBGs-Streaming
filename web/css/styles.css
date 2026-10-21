@@ -18,6 +18,11 @@
     box-sizing: border-box;
 }
 
+html, body, #main-dashboard, main, .custom-scroll {
+    overscroll-behavior-y: contain !important;
+    overscroll-behavior: none !important;
+}
+
 /* ========================================================
    CRITICAL AUTOFILL & MODERN INPUT STYLING (DARK / OTT THEME)
    Impede que o navegador (Brave, Chrome, Edge) deixe fundo

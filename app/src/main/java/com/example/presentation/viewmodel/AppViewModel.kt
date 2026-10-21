@@ -156,7 +156,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             playlistDao.getItemsByCategoryAndType(playlist, category, type.name)
         }
-        baseFlow.map { list -> list.take(limit) }
+        baseFlow
     }.flowOn(Dispatchers.IO).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),

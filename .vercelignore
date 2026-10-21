@@ -1,0 +1,10 @@
+.gradle
+.idea
+build
+app/build
+gradle
+gradlew
+gradlew.bat
+debug.keystore
+*.jks
+*.base64

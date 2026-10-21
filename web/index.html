@@ -22,7 +22,15 @@
     <!-- Critical Smart TV Fallback Styles & Modern Inputs -->
     <style>
         .hidden, [hidden] { display: none !important; }
-        body { background-color: #07080a; color: #ffffff; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        html, body {
+            background-color: #07080a;
+            color: #ffffff;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overscroll-behavior-y: contain !important;
+            overscroll-behavior: none !important;
+            -webkit-overflow-scrolling: touch;
+        }
         .glass-card { background: rgba(14, 15, 18, 0.95); border: 1px solid rgba(229, 9, 20, 0.2); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); }
         input, select, button { font-family: inherit; }
         
@@ -71,6 +79,54 @@
         }
         .animate-shake { animation: shake 0.4s ease-in-out; }
         .fast-server-chip:active { transform: scale(0.97); }
+
+        /* 10-Foot UI: Smart TV High-Contrast D-Pad Focus Styles */
+        [data-nav="true"]:focus,
+        .cat-select-btn:focus,
+        .quick-cat-chip:focus,
+        .media-item-card:focus,
+        .tv-focused {
+            outline: 3px solid #E50914 !important;
+            outline-offset: 3px !important;
+            box-shadow: 0 0 30px rgba(229, 9, 20, 0.95), inset 0 0 12px rgba(229, 9, 20, 0.4) !important;
+            transform: scale(1.04) !important;
+            z-index: 50 !important;
+            border-color: #E50914 !important;
+            transition: transform 0.15s ease-out, box-shadow 0.15s ease-out !important;
+        }
+
+        /* Smart TV Fullscreen Player Mode */
+        .player-tv-fullscreen {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999 !important;
+            background: #000000 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+        }
+        .player-tv-fullscreen #video-player-container {
+            width: 100% !important;
+            height: 100% !important;
+            flex-grow: 1 !important;
+            aspect-ratio: auto !important;
+            background: #000000 !important;
+        }
+        .player-tv-fullscreen video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain !important;
+            background: #000000 !important;
+        }
+
+        /* Quick Category Chip Style */
+        .quick-cat-chip {
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+        }
     </style>
 
     <!-- FontAwesome for Premium Icons -->
@@ -230,6 +286,12 @@
                         <i class="fa-solid fa-play text-base" id="login-btn-icon"></i>
                         <span id="login-btn-text">ENTRAR NO MK21</span>
                     </button>
+
+                    <!-- Botão Secundário: Prosseguir para Home (Modo Offline / Cache) - Idêntico ao APK -->
+                    <button type="button" id="btn-offline-mode" class="w-full py-3.5 mt-2 text-amber-400 hover:text-amber-300 active:scale-[0.99] font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer">
+                        <i class="fa-solid fa-bolt-lightning text-xs"></i>
+                        <span>Prosseguir para Home (Modo Offline / Cache)</span>
+                    </button>
                 </div>
             </div>
 
@@ -333,7 +395,7 @@
                 </aside>
 
                 <!-- COLUMN 2: Media Listing -->
-                <section class="flex-grow md:w-96 glass-card rounded-2xl flex flex-col overflow-hidden min-w-[320px]">
+                <section id="media-grid-column" class="flex-grow glass-card rounded-2xl flex flex-col overflow-hidden min-w-0">
                     <!-- Search and Actions Bar -->
                     <div class="p-4 border-b border-slate-800 space-y-3">
                         <div class="relative">
@@ -428,15 +490,16 @@
                 </section>
 
                 <!-- COLUMN 3: Active Video & Media Screen details -->
-                <section id="player-column" class="fixed inset-0 z-50 bg-[#040405] flex flex-col hidden lg:relative lg:flex lg:inset-auto lg:z-0 lg:w-[480px] lg:xl:w-[600px] lg:bg-transparent glass-card rounded-2xl overflow-hidden shrink-0">
-                    <!-- Mobile Close / Back Bar -->
-                    <div class="lg:hidden p-4 bg-slate-950 border-b border-slate-900 flex items-center justify-between shrink-0">
-                        <button onclick="closeMobilePlayer()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-850 text-slate-350 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2">
-                            <i class="fa-solid fa-arrow-left text-[#E50914]"></i>
+                <section id="player-column" class="max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:bg-[#040405] flex flex-col sm:relative sm:inset-auto sm:z-0 w-full sm:w-[380px] lg:w-[460px] xl:w-[540px] 2xl:w-[600px] sm:bg-transparent glass-card rounded-2xl overflow-hidden shrink-0 min-w-0">
+                    <!-- Mobile & Tablet Close / Back Bar -->
+                    <div class="lg:hidden p-3.5 bg-slate-950 border-b border-slate-900 flex items-center justify-between shrink-0 select-none">
+                        <button id="btn-back-to-list" onclick="closeMobilePlayer()" class="px-4 py-2.5 bg-slate-900 active:bg-red-950/80 hover:bg-slate-850 text-slate-200 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 border border-slate-800 transition-all cursor-pointer shadow-sm touch-manipulation">
+                            <i class="fa-solid fa-arrow-left text-[#E50914] text-sm"></i>
                             <span>Voltar para Lista</span>
                         </button>
-                        <div class="text-right">
-                            <span class="text-[10px] text-[#E50914] font-mono tracking-wider font-bold">REPRODUTOR MK21</span>
+                        <div class="flex items-center gap-2 text-right">
+                            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                            <span class="text-[10px] text-[#E50914] font-mono tracking-wider font-extrabold uppercase">REPRODUTOR MK21</span>
                         </div>
                     </div>
                     <!-- Video Player Container (YouTube Style) -->
@@ -695,16 +758,39 @@
                                         </button>
                                     </div>
                                     <h2 id="detail-name" class="font-extrabold text-xl leading-tight">Nome da Mídia</h2>
-                                    <div id="detail-epg-container" class="hidden flex flex-wrap items-center justify-between gap-2 mt-2 py-1.5 px-3 bg-red-950/25 border border-red-500/20 rounded-xl max-w-full">
-                                        <div class="flex items-center gap-2 min-w-0 flex-1">
-                                            <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse shrink-0"></span>
-                                            <span id="detail-epg-program" class="text-xs font-semibold text-red-400 truncate">Carregando programa...</span>
-                                            <span id="detail-epg-real-badge" class="hidden text-[8.5px] px-1.5 py-0.5 bg-emerald-950/70 text-emerald-400 border border-emerald-500/30 rounded font-black tracking-wider uppercase shrink-0">XMLTV Real</span>
+                                    <!-- Modern EPG Card: Full Program Visibility & Live Progress -->
+                                    <div id="detail-epg-container" class="hidden flex flex-col gap-2.5 mt-3 p-3.5 bg-gradient-to-br from-red-950/35 via-slate-900/50 to-slate-950/70 border border-red-500/30 rounded-2xl w-full select-none shadow-md">
+                                        <!-- Row 1: Badges + Time + Action Button -->
+                                        <div class="flex items-center justify-between gap-2">
+                                            <div class="flex items-center gap-2 flex-wrap min-w-0">
+                                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-red-600/25 border border-red-500/40 rounded-full text-[10px] font-black uppercase text-red-400 tracking-wider">
+                                                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> NO AR AGORA
+                                                </span>
+                                                <span id="detail-epg-time" class="text-[11px] font-mono text-slate-350 font-bold">--:-- - --:--</span>
+                                                <span id="detail-epg-real-badge" class="hidden text-[8.5px] px-1.5 py-0.5 bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 rounded font-black tracking-wider uppercase">XMLTV Real</span>
+                                            </div>
+                                            <button id="btn-open-epg-guide" onclick="window.openCurrentStreamEpgModal()" class="text-[11px] text-slate-200 hover:text-white bg-slate-900/90 hover:bg-red-950/80 border border-slate-750 hover:border-red-500/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5 shrink-0 transition-all font-bold shadow-sm" title="Abrir Guia de Programação EPG">
+                                                <i class="fa-solid fa-calendar-days text-red-500 text-xs"></i>
+                                                <span>Grade EPG</span>
+                                            </button>
                                         </div>
-                                        <button id="btn-open-epg-guide" onclick="window.openCurrentStreamEpgModal()" class="text-[11px] text-slate-300 hover:text-white bg-slate-900/90 hover:bg-red-950/60 border border-slate-750 hover:border-red-500/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shrink-0 transition-all font-semibold" title="Abrir Guia de Programação EPG">
-                                            <i class="fa-solid fa-calendar-days text-red-500"></i>
-                                            <span>Grade EPG</span>
-                                        </button>
+
+                                        <!-- Row 2: Program Title (Full readability without truncation) -->
+                                        <div class="min-w-0 pt-0.5">
+                                            <h4 id="detail-epg-program" class="text-sm font-extrabold text-white leading-snug line-clamp-2">Carregando programação...</h4>
+                                            <p id="detail-epg-desc" class="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed hidden"></p>
+                                        </div>
+
+                                        <!-- Row 3: Progress Bar -->
+                                        <div class="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden my-0.5">
+                                            <div id="detail-epg-progress-bar" class="bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                        </div>
+
+                                        <!-- Row 4: Next Program Preview -->
+                                        <div id="detail-epg-next-container" class="flex items-center gap-1.5 text-[11px] text-slate-400 pt-1 border-t border-slate-800/60 truncate">
+                                            <span class="font-bold text-slate-500 uppercase text-[9px] tracking-wider shrink-0">A Seguir:</span>
+                                            <span id="detail-epg-next" class="text-slate-300 truncate font-medium">Carregando...</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1042,7 +1128,7 @@
                                 <span class="font-bold text-white text-sm">Baixar App Android (APK Nativo)</span>
                                 <span class="text-[9px] bg-red-600/30 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-bold uppercase">Recomendado</span>
                             </div>
-                            <div class="text-[11px] text-slate-400 mt-0.5">Instalação direta para Celular Android, TV Box e Fire TV Stick</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">APK disponível: v2.1.1. A versão Android v2.1.2 aguarda assinatura de produção.</div>
                         </div>
                     </div>
                     <i class="fa-solid fa-arrow-down-to-bracket text-lg text-white group-hover:translate-y-0.5 transition-transform"></i>
@@ -1072,14 +1158,23 @@
                             <i class="fa-solid fa-tv text-amber-400"></i>
                             <span>Smart TV LG (webOS) e Samsung (Tizen)</span>
                         </div>
-                        <a href="/mk21.ipk" download="mk21play_1.0.4_all.ipk" class="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] rounded-lg border border-amber-500/40 flex items-center gap-1.5 transition-colors">
+                        <a href="/mk21.ipk" download="mk21play_2.1.2_all.ipk" class="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] rounded-lg border border-amber-500/40 flex items-center gap-1.5 transition-colors">
                             <i class="fa-solid fa-download"></i>
-                            <span>Baixar .IPK</span>
+                            <span>Baixar .IPK (PC/Celular)</span>
                         </a>
                     </div>
-                    <p class="text-[11px] text-slate-400 leading-relaxed">
-                        Para <strong>LG webOS</strong>: baixe o pacote <strong>.ipk</strong> para instalar via Dev Manager / Homebrew Channel. No navegador nativo da TV (LG ou Samsung), adicione aos favoritos ou fixe na barra de apps.
-                    </p>
+                    <div class="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200/90 leading-relaxed space-y-1.5">
+                        <div>
+                            <strong>💡 Por que o navegador da LG exibe "Sem armazenamento externo"?</strong><br>
+                            O navegador nativo da TV LG webOS não possui permissão de segurança para gravar arquivos na memória interna da TV (exige um pendrive USB). Além disso, mesmo com pendrive, o navegador da TV não é um instalador de aplicativos.
+                        </div>
+                        <div class="pt-1 border-t border-amber-500/20">
+                            <strong>⭐ Opção 1 (Recomendada - Uso Imediato):</strong> Acesse este site direto pelo navegador da sua Smart TV e adicione aos <strong>Favoritos</strong> da TV. Toda a navegação por controle remoto (setas D-pad, OK, Voltar), player de vídeo e catálogo funcionam 100% direto na TV sem ocupar memória!
+                        </div>
+                        <div class="pt-1 border-t border-amber-500/20">
+                            <strong>🛠️ Opção 2 (Instalar Pacote IPK Nativo):</strong> Baixe o arquivo <code>.ipk</code> no computador ou celular e use o aplicativo <strong>webOS Dev Manager</strong> para instalar na TV pela rede Wi-Fi através do Modo Desenvolvedor.
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1488,6 +1583,24 @@
                         return this.cache.get(k);
                     }
                 }
+                // Tenta carregar do sessionStorage para troca instantânea de canais
+                for (const k of keys) {
+                    try {
+                        const raw = sessionStorage.getItem(`mk21_epg_${k}`);
+                        if (raw) {
+                            const parsed = JSON.parse(raw);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                const hydrated = parsed.map(p => ({
+                                    ...p,
+                                    start: new Date(p.start),
+                                    stop: new Date(p.stop)
+                                }));
+                                this.cache.set(k, hydrated);
+                                return hydrated;
+                            }
+                        }
+                    } catch (e) {}
+                }
                 return null;
             },
 
@@ -1495,6 +1608,16 @@
                 const keys = this.getChannelKeys(item);
                 for (const k of keys) {
                     this.cache.set(k, schedule);
+                    try {
+                        const serializable = schedule.slice(0, 15).map(p => ({
+                            title: p.title,
+                            description: p.description,
+                            start: p.start.toISOString(),
+                            stop: p.stop.toISOString(),
+                            isReal: p.isReal
+                        }));
+                        sessionStorage.setItem(`mk21_epg_${k}`, JSON.stringify(serializable));
+                    } catch (e) {}
                 }
             },
 
@@ -1818,11 +1941,36 @@
             updateActiveStreamEpgUI(item) {
                 this.activeEpgItem = item;
                 const epgProg = document.getElementById('detail-epg-program');
+                const epgTime = document.getElementById('detail-epg-time');
+                const epgDesc = document.getElementById('detail-epg-desc');
+                const epgProgBar = document.getElementById('detail-epg-progress-bar');
+                const epgNext = document.getElementById('detail-epg-next');
                 const epgRealBadge = document.getElementById('detail-epg-real-badge');
                 if (!epgProg) return;
 
                 const info = this.getProgramInfo(item);
-                epgProg.textContent = `NO AR AGORA: ${info.currentTitle}`;
+                epgProg.textContent = info.currentTitle || 'Transmissão Ao Vivo';
+
+                if (epgTime) {
+                    epgTime.textContent = info.timeRange || '--:-- - --:--';
+                }
+
+                if (epgDesc) {
+                    if (info.currentDesc && info.currentDesc !== info.currentTitle) {
+                        epgDesc.textContent = info.currentDesc;
+                        epgDesc.classList.remove('hidden');
+                    } else {
+                        epgDesc.classList.add('hidden');
+                    }
+                }
+
+                if (epgProgBar) {
+                    epgProgBar.style.width = `${info.progressPercent || 0}%`;
+                }
+
+                if (epgNext) {
+                    epgNext.textContent = info.nextTitle ? `${info.nextTitle}${info.nextTime ? ' (' + info.nextTime + ')' : ''}` : 'Programação regular da emissora';
+                }
 
                 if (epgRealBadge) {
                     if (info.isReal) {
@@ -2986,6 +3134,92 @@
                     performLogin();
                 });
             }
+
+            // Botão Voltar para Lista no Reprodutor (Mobile & Tablet)
+            const backBtn = document.getElementById('btn-back-to-list');
+            if (backBtn) {
+                const handleBack = (e) => {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    closeMobilePlayer();
+                };
+                backBtn.addEventListener('click', handleBack);
+                backBtn.addEventListener('touchend', handleBack);
+            }
+
+            // Prevenção de pull-to-refresh nativo involuntário em navegadores móveis (Chrome, Safari, Edge)
+            let touchStartY = 0;
+            window.addEventListener('touchstart', (e) => {
+                if (e.touches && e.touches.length === 1) {
+                    touchStartY = e.touches[0].clientY;
+                }
+            }, { passive: true });
+
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches && e.touches.length === 1) {
+                    const touchCurrentY = e.touches[0].clientY;
+                    const touchDeltaY = touchCurrentY - touchStartY;
+                    // Se o usuário está no topo da tela e arrasta para baixo, bloqueia o recarregamento acidental da página
+                    if (touchDeltaY > 0 && (window.scrollY <= 0 || document.documentElement.scrollTop <= 0)) {
+                        if (e.cancelable) {
+                            e.preventDefault();
+                        }
+                    }
+                }
+            }, { passive: false });
+
+            // Suporte completo e imediato ao botão físico e de tela 'Voltar para Lista'
+            const backBtn = document.getElementById('btn-back-to-list');
+            if (backBtn) {
+                const handleBack = (e) => {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    closeMobilePlayer();
+                };
+                backBtn.addEventListener('click', handleBack);
+                backBtn.addEventListener('touchend', handleBack);
+            }
+
+            // Suporte completo ao botão de voltar nativo (físico/gesto do Android e navegadores)
+            window.addEventListener('popstate', (e) => {
+                // 1. Fecha modal EPG se aberto
+                const epgModal = document.getElementById('epg-guide-modal');
+                if (epgModal && !epgModal.classList.contains('hidden')) {
+                    closeEpgGuideModal();
+                    return;
+                }
+                // 2. Fecha modais de configuração/retomada se abertos
+                const openModals = document.querySelectorAll('#settings-modal:not(.hidden), #resume-modal:not(.hidden)');
+                if (openModals.length > 0) {
+                    openModals.forEach(m => m.classList.add('hidden'));
+                    return;
+                }
+                // 3. Fecha o player e retorna para a lista em qualquer resolução móvel/tablet
+                const playerCol = document.getElementById('player-column');
+                if (playerCol && playerCol.style.display !== 'none' && !playerCol.classList.contains('hidden')) {
+                    stopStream();
+                    playerCol.classList.add('hidden', 'max-sm:hidden', 'max-lg:hidden');
+                    playerCol.classList.remove('flex');
+                    playerCol.style.display = 'none';
+                    const mediaCol = document.getElementById('media-grid-column') || document.getElementById('channels-list') || document.getElementById('main-dashboard');
+                    if (mediaCol) {
+                        try { mediaCol.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(err){}
+                    } else {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                }
+            });
+
+            // Atualização contínua e em tempo real da barra de progresso e programas do EPG
+            setInterval(() => {
+                if (window.EpgManager && window.EpgManager.activeEpgItem && currentActiveItem && currentActiveItem.type === 'LIVE') {
+                    window.EpgManager.updateActiveStreamEpgUI(window.EpgManager.activeEpgItem);
+                }
+            }, 30000);
         }
 
         const PROXY_ROTATION_LIST = ['auto', 'corsproxy', 'vercel', 'codetabs', 'allorigins', 'direct'];
@@ -4177,11 +4411,12 @@
                 }
             }
 
-            // On mobile, slide open player panel
+            // Unconditionally show player column on all screen sizes & Smart TVs
             const playerCol = document.getElementById('player-column');
-            if (playerCol && window.innerWidth < 1024) {
-                playerCol.classList.remove('hidden');
+            if (playerCol) {
+                playerCol.classList.remove('hidden', 'max-lg:hidden');
                 playerCol.classList.add('flex');
+                playerCol.style.display = 'flex';
             }
         }
 
@@ -4323,8 +4558,20 @@
                         } else {
                             const isStreamingTransport = urlUpper.includes('.M3U8') || urlUpper.includes('.TS') || urlUpper.includes('OUTPUT=MPEGTS');
 
+                            const isLiveIndicative =
+                                categoryUpper.includes("CANAL") || categoryUpper.includes("CANAIS") ||
+                                categoryUpper.includes("24H") || categoryUpper.includes("24 HORAS") ||
+                                categoryUpper.includes("AO VIVO") || categoryUpper.includes("AOVIVO") ||
+                                categoryUpper.includes("TV ABERTA") || categoryUpper.includes("ABERTOS") ||
+                                categoryUpper.includes("ESPORTES") || categoryUpper.includes("SPORTS") ||
+                                categoryUpper.includes("NOTICIAS") || categoryUpper.includes("NEWS") ||
+                                categoryUpper.includes("GLOBO") || categoryUpper.includes("PREMIERE") ||
+                                categoryUpper.includes("COMBATE") || categoryUpper.includes("DAZN") ||
+                                categoryUpper.includes("RADIO") || categoryUpper.includes("RÁDIO") ||
+                                nameUpper.includes("24H") || nameUpper.includes("CANAL") || nameUpper.includes("AO VIVO");
+
                             const isLiveCat =
-                                categoryUpper.startsWith("CANAIS") ||
+                                (categoryUpper.startsWith("CANAIS") ||
                                 categoryUpper.startsWith("CANAL") ||
                                 categoryUpper.startsWith("TV") ||
                                 categoryUpper.startsWith("AO VIVO") ||
@@ -4334,10 +4581,6 @@
                                 categoryUpper.startsWith("ABERTOS") ||
                                 categoryUpper.startsWith("NOTICIAS") ||
                                 categoryUpper.startsWith("ESPORTES") ||
-                                categoryUpper.startsWith("VARIEDADES") ||
-                                categoryUpper.startsWith("INFANTIL") ||
-                                categoryUpper.startsWith("RELIGIOSOS") ||
-                                categoryUpper.startsWith("DOCUMENTARIOS") ||
                                 categoryUpper.startsWith("GLOBO") ||
                                 categoryUpper.startsWith("PREMIERE") ||
                                 categoryUpper.startsWith("COMBATE") ||
@@ -4346,7 +4589,7 @@
                                 categoryUpper.includes("CANAL |") ||
                                 categoryUpper.includes("TV |") ||
                                 categoryUpper.includes("CANAIS:") ||
-                                categoryUpper.includes("24H |");
+                                categoryUpper.includes("24H |")) && isLiveIndicative;
 
                             const isSeriesCat =
                                 categoryUpper.startsWith("SERIES") ||
@@ -4376,25 +4619,35 @@
                                 categoryUpper.includes("VOD |") ||
                                 categoryUpper.includes("CINEMA |");
 
+                            const movieGenres = [
+                                "AÇÃO", "ACAO", "ACTION", "COMÉDIA", "COMEDIA", "COMEDY", "TERROR", "HORROR",
+                                "SUSPENSE", "THRILLER", "DRAMA", "AVENTURA", "ADVENTURE", "FICÇÃO", "FICCAO", "SCI-FI",
+                                "ROMANCE", "ANIMAÇÃO", "ANIMACAO", "ANIMATION", "DESENHOS", "DESENHO", "INFANTIL", "KIDS",
+                                "DOCUMENTÁRIO", "DOCUMENTARIO", "DOCUMENTÁRIOS", "DOCUMENTARIOS", "DOCUMENTARY",
+                                "POLICIAL", "CRIME", "FAROESTE", "WESTERN", "GUERRA", "WAR", "NACIONAL", "NACIONAIS",
+                                "CLÁSSICOS", "CLASSICOS", "CLASSIC", "STAND UP", "SHOWS", "SHOW", "MUSICAIS", "MUSICAL",
+                                "BIOGRAFIA", "BIOGRAPHY", "MISTÉRIO", "MISTERIO", "MYSTERY", "FANTASIA", "FANTASY",
+                                "FAMÍLIA", "FAMILIA", "FAMILY", "LANÇAMENTOS", "LANCAMENTOS", "RELEASES"
+                            ];
+                            const hasMovieGenre = movieGenres.some(g => categoryUpper.includes(g));
+
                             const hasSeriesPattern =
                                 /(?:\b(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\b\d{1,3}x\d{1,4}\b|\bs\d{1,3}e\d{1,4}\b|\bt\d{1,3}e\d{1,4}\b|\btemp\.\s*\d+\s*ep\.\s*\d+\b|\btemporada\s*\d+\b)/i.test(nameUpper) ||
                                 nameUpper.includes("TEMPORADA") || nameUpper.includes("TEMP.") ||
                                 nameUpper.includes("CAPITULO") || nameUpper.includes("EPISODIO");
 
-                            if (isLiveCat) {
+                            const hasYearPattern = /\b\((?:19|20)\d{2}\)\b/.test(nameUpper) || /\b\[(?:19|20)\d{2}\]\b/.test(nameUpper);
+
+                            if (isSeriesCat || hasSeriesPattern) {
+                                streamType = 'SERIES';
+                            } else if ((isMovieCat || hasMovieGenre) && !isLiveIndicative) {
+                                streamType = 'MOVIE';
+                            } else if (isLiveCat) {
                                 const isVodFile = (urlUpper.endsWith('.MP4') || urlUpper.endsWith('.MKV')) && !urlUpper.includes('/LIVE/');
                                 streamType = isVodFile ? (hasSeriesPattern ? 'SERIES' : 'MOVIE') : 'LIVE';
-                            } else if (isSeriesCat || hasSeriesPattern) {
-                                streamType = 'SERIES';
-                            } else if (isMovieCat) {
-                                streamType = 'MOVIE';
-                            } else if ((categoryUpper.includes('NETFLIX') || categoryUpper.includes('AMAZON') || categoryUpper.includes('PRIME VIDEO') || categoryUpper.includes('HBO MAX') || categoryUpper.includes('DISNEY+') || categoryUpper.includes('GLOBOPLAY')) && !isLiveCat) {
-                                if (isStreamingTransport && !urlUpper.includes('.MP4') && !urlUpper.includes('.MKV')) {
-                                    streamType = 'LIVE';
-                                } else {
-                                    streamType = hasSeriesPattern ? 'SERIES' : 'MOVIE';
-                                }
-                            } else if (urlUpper.endsWith('.MP4') || urlUpper.endsWith('.MKV') || urlUpper.endsWith('.AVI')) {
+                            } else if ((categoryUpper.includes('NETFLIX') || categoryUpper.includes('AMAZON') || categoryUpper.includes('PRIME VIDEO') || categoryUpper.includes('HBO MAX') || categoryUpper.includes('DISNEY+') || categoryUpper.includes('GLOBOPLAY')) && !isLiveIndicative) {
+                                streamType = hasSeriesPattern ? 'SERIES' : 'MOVIE';
+                            } else if (urlUpper.endsWith('.MP4') || urlUpper.endsWith('.MKV') || urlUpper.endsWith('.AVI') || (hasYearPattern && !isLiveIndicative)) {
                                 streamType = hasSeriesPattern ? 'SERIES' : 'MOVIE';
                             } else {
                                 streamType = 'LIVE';
@@ -4529,11 +4782,37 @@
             // Apply Mobile View and map triggers
             mobileCategoryList.innerHTML = html;
 
-            document.querySelectorAll('.cat-select-btn').forEach(btn => {
+            // Populate Horizontal Quick Category Chips (TopIbo / Netflix TV Style)
+            const quickChipsBar = document.getElementById('quick-category-chips-bar');
+            if (quickChipsBar) {
+                let chipsHtml = `
+                    <button data-cat="ALL" class="quick-cat-chip px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 shrink-0 flex items-center gap-1.5 ${activeCategory === 'ALL' ? 'bg-[#E50914] text-white shadow-md shadow-red-950/40 font-black' : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800'}" tabindex="0">
+                        <i class="fa-solid fa-list-ul text-xs"></i> <span>Todas</span>
+                    </button>
+                    <button data-cat="FAVORITES" class="quick-cat-chip px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 shrink-0 flex items-center gap-1.5 ${activeCategory === 'FAVORITES' ? 'bg-[#E50914] text-white shadow-md shadow-red-950/40 font-black' : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800'}" tabindex="0">
+                        <i class="fa-solid fa-heart text-red-500 text-xs"></i> <span>Favoritos</span>
+                    </button>
+                `;
+                for (let i = 0; i < Math.min(categories.length, 35); i++) {
+                    const cat = categories[i];
+                    const isActive = (activeCategory === cat);
+                    chipsHtml += `
+                        <button data-cat="${cat}" class="quick-cat-chip px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 shrink-0 flex items-center gap-1.5 ${isActive ? 'bg-[#E50914] text-white shadow-md shadow-red-950/40 font-black' : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800'}" tabindex="0">
+                            <span class="truncate max-w-[150px]">${cat}</span>
+                            <span class="text-[10px] font-mono opacity-75">(${categoryCounts[cat]})</span>
+                        </button>
+                    `;
+                }
+                quickChipsBar.innerHTML = chipsHtml;
+            }
+
+            // Bind click events on all category buttons (sidebar, modal, horizontal chips)
+            document.querySelectorAll('.cat-select-btn, .quick-cat-chip').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const cat = e.currentTarget.dataset.cat;
+                    if (!cat) return;
                     activeCategory = cat;
-                    itemsLimit = 30;
+                    itemsLimit = 35;
                     mobileCategoryLabel.textContent = cat === 'ALL' ? 'Todas as Categorias' : (cat === 'FAVORITES' ? 'Meus Favoritos ❤️' : cat);
 
                     // Close mobile modal if open
@@ -4605,9 +4884,9 @@
 
             // Apply modern responsive dynamic classes based on whether VOD (movie/series) or LIVE channels are shown
             if (activeType === 'LIVE') {
-                mediaGrid.className = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3";
+                mediaGrid.className = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5";
             } else {
-                mediaGrid.className = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-4";
+                mediaGrid.className = "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-2.5";
             }
 
             // Handle SERIES ( Netflix TV Show Grouping )
@@ -4623,7 +4902,8 @@
 
                 groupedShows.slice(0, itemsLimit).forEach(show => {
                     const colCard = document.createElement('div');
-                    colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/30 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/10";
+                    colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/40 rounded-xl overflow-hidden cursor-pointer flex flex-col transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/20 media-item-card focus:outline-none";
+                    colCard.setAttribute('tabindex', '0');
 
                     const countShow = show.episodes.length;
                     const seasonsSet = new Set(show.episodes.map(e => e.season));
@@ -4633,25 +4913,26 @@
                     const seText = countSeas === 1 ? '1 temp' : `${countSeas} temps`;
 
                     const posterUrl = show.logo || '';
+                    const safePoster = posterUrl ? (location.protocol === 'https:' && posterUrl.startsWith('http://') ? posterUrl.replace(/^http:\/\//i, 'https://') : posterUrl) : '';
                     const imageHtml = posterUrl
-                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-500" src="${posterUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${show.title}">`
-                        : `<div class="w-full aspect-[2/3] bg-gradient-to-tr from-slate-950 to-slate-900 text-red-500 flex flex-col items-center justify-center p-4 border-b border-slate-800/40">
-                             <i class="fa-solid fa-tv text-3xl mb-2 opacity-40"></i>
-                             <span class="font-extrabold text-[10px] text-center uppercase tracking-wider line-clamp-2">${show.title}</span>
+                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-300" src="${safePoster}" data-orig-src="${posterUrl}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${show.title.replace(/"/g, '&quot;')}">`
+                        : `<div class="w-full aspect-[2/3] bg-gradient-to-tr from-slate-950 to-slate-900 text-red-500 flex flex-col items-center justify-center p-2 border-b border-slate-800/40">
+                             <i class="fa-solid fa-tv text-2xl mb-1 opacity-40"></i>
+                             <span class="font-extrabold text-[9px] text-center uppercase tracking-wider line-clamp-2">${show.title}</span>
                           </div>`;
 
                     colCard.innerHTML = `
                         <div class="relative overflow-hidden w-full aspect-[2/3] bg-slate-950/80 shrink-0">
                             ${imageHtml}
-                            <div class="absolute top-2 left-2 bg-red-650/95 text-[8px] font-black uppercase text-white tracking-widest px-2 py-0.5 rounded-md shadow z-10 flex items-center gap-1">
+                            <div class="absolute top-1.5 left-1.5 bg-red-650/95 text-[7px] font-black uppercase text-white tracking-widest px-1.5 py-0.5 rounded shadow z-10 flex items-center gap-1">
                                 <i class="fa-solid fa-square-rss"></i> SÉRIE
                             </div>
                         </div>
-                        <div class="p-3 flex flex-col flex-grow justify-between min-w-0">
-                            <h4 class="font-black text-xs text-slate-100 group-hover:text-red-500 transition-colors line-clamp-2 leading-snug">${show.title}</h4>
-                            <div class="flex items-center gap-1.5 mt-2 flex-wrap">
-                                <span class="text-[8px] text-[#E50914] bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider">${seText}</span>
-                                <span class="text-[8px] text-slate-300 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded-md font-bold font-mono">${epText}</span>
+                        <div class="p-2 flex flex-col flex-grow justify-between min-w-0">
+                            <h4 class="font-bold text-[11px] text-slate-100 group-hover:text-red-500 transition-colors line-clamp-1 leading-snug">${show.title}</h4>
+                            <div class="flex items-center gap-1 mt-1 flex-wrap">
+                                <span class="text-[7.5px] text-[#E50914] bg-red-950/40 border border-red-500/20 px-1 py-0.2 rounded font-black uppercase tracking-wider">${seText}</span>
+                                <span class="text-[7.5px] text-slate-300 bg-slate-950 border border-slate-800 px-1 py-0.2 rounded font-bold font-mono">${epText}</span>
                             </div>
                         </div>
                     `;
@@ -4659,17 +4940,21 @@
                     colCard.addEventListener('click', () => {
                         selectShow(show);
                     });
+                    colCard.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); colCard.click(); }
+                    });
 
                     mediaGrid.appendChild(colCard);
                 });
 
                 if (groupedShows.length > itemsLimit) {
                     const loadMoreBtn = document.createElement('button');
-                    loadMoreBtn.className = "col-span-full py-3.5 px-6 my-4 bg-gradient-to-r from-red-950/25 to-slate-900 border border-slate-800 hover:border-[#E50914]/40 hover:bg-[#E50914]/10 rounded-2xl text-slate-250 text-xs font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 outline-none shadow-md shadow-black/40";
+                    loadMoreBtn.className = "col-span-full py-3 px-6 my-3 bg-gradient-to-r from-red-950/25 to-slate-900 border border-slate-800 hover:border-[#E50914]/40 hover:bg-[#E50914]/10 rounded-2xl text-slate-250 text-xs font-bold transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 outline-none shadow-md shadow-black/40 media-item-card"
+                    loadMoreBtn.setAttribute('tabindex', '0');
                     loadMoreBtn.innerHTML = `<i class="fa-solid fa-circle-chevron-down text-[#E50914] text-sm animate-bounce"></i> Mostrar mais séries (Exibindo ${itemsLimit} de ${groupedShows.length})`;
                     loadMoreBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        itemsLimit += 30;
+                        itemsLimit += 35;
                         renderMediaItems();
                     });
                     mediaGrid.appendChild(loadMoreBtn);
@@ -4689,37 +4974,41 @@
                 const colCard = document.createElement('div');
 
                 if (activeType === 'MOVIE') {
-                    colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/30 rounded-2xl overflow-hidden cursor-pointer flex flex-col transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/10";
+                    colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/40 rounded-xl overflow-hidden cursor-pointer flex flex-col transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/20 media-item-card focus:outline-none";
+                    colCard.setAttribute('tabindex', '0');
 
                     const posterUrl = item.logo || '';
+                    const safePoster = posterUrl ? (location.protocol === 'https:' && posterUrl.startsWith('http://') ? posterUrl.replace(/^http:\/\//i, 'https://') : posterUrl) : '';
                     const imageHtml = posterUrl
-                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-500" src="${posterUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${item.name}">`
-                        : `<div class="w-full aspect-[2/3] bg-gradient-to-tr from-slate-950 to-slate-900 text-red-500 flex flex-col items-center justify-center p-4 border-b border-slate-800/40">
-                             <i class="fa-solid fa-film text-3xl mb-2 opacity-40"></i>
-                             <span class="font-extrabold text-[10px] text-center uppercase tracking-wider line-clamp-2">${item.name}</span>
+                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-300" src="${safePoster}" data-orig-src="${posterUrl}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${item.name.replace(/"/g, '&quot;')}">`
+                        : `<div class="w-full aspect-[2/3] bg-gradient-to-tr from-slate-950 to-slate-900 text-red-500 flex flex-col items-center justify-center p-2 border-b border-slate-800/40">
+                             <i class="fa-solid fa-film text-2xl mb-1 opacity-40"></i>
+                             <span class="font-extrabold text-[9px] text-center uppercase tracking-wider line-clamp-2">${item.name}</span>
                           </div>`;
 
                     colCard.innerHTML = `
                         <div class="relative overflow-hidden w-full aspect-[2/3] bg-slate-950/80 shrink-0">
                             ${imageHtml}
-                            <div class="absolute top-2 left-2 bg-gradient-to-r from-red-650 to-red-600 text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md shadow z-10">
+                            <div class="absolute top-1.5 left-1.5 bg-gradient-to-r from-red-650 to-red-600 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded shadow z-10">
                                 FILME
                             </div>
+                            ${item.rating ? `<div class="absolute top-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-amber-400 text-[8px] font-bold px-1.5 py-0.5 rounded shadow z-10 flex items-center gap-0.5"><i class="fa-solid fa-star text-[7px]"></i> ${item.rating}</div>` : ''}
                         </div>
-                        <div class="p-3 flex flex-col flex-grow justify-between min-w-0">
-                            <h4 class="font-black text-xs text-slate-100 group-hover:text-red-500 transition-colors line-clamp-2 leading-snug">${item.name}</h4>
-                            <div class="text-[9px] text-slate-400 mt-1 truncate font-semibold flex items-center gap-1">
-                                <i class="fa-solid fa-masks-theater text-[8px] text-red-500/65"></i>
+                        <div class="p-2 flex flex-col flex-grow justify-between min-w-0">
+                            <h4 class="font-bold text-[11px] text-slate-100 group-hover:text-red-500 transition-colors line-clamp-1 leading-snug">${item.name}</h4>
+                            <div class="text-[8.5px] text-slate-400 mt-1 truncate font-medium flex items-center gap-1">
+                                <i class="fa-solid fa-masks-theater text-[7px] text-red-500/65"></i>
                                 <span class="truncate">${item.category}</span>
                             </div>
                         </div>
                     `;
                 } else {
                     // LIVE channels - Horizontal List with elegant badge
-                    colCard.className = "group p-3 bg-slate-900/60 hover:bg-slate-850/50 border border-slate-850 hover:border-red-500/20 rounded-xl cursor-pointer flex gap-3.5 items-center transition-all duration-300 transform hover:scale-[1.015] hover:shadow";
+                    colCard.className = "group p-3 bg-slate-900/60 hover:bg-slate-850/50 border border-slate-850 hover:border-red-500/20 rounded-xl cursor-pointer flex gap-3.5 items-center transition-all duration-300 transform hover:scale-[1.015] hover:shadow media-item-card focus:outline-none";
+                    colCard.setAttribute('tabindex', '0');
 
                     const logoHtml = item.logo
-                        ? `<img class="w-12 h-12 rounded-xl object-contain bg-slate-950 p-1 border border-slate-800 shadow" src="${item.logo}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="${item.name}">`
+                        ? `<img class="w-12 h-12 rounded-xl object-contain bg-slate-950 p-1 border border-slate-800 shadow" src="${item.logo}" data-orig-src="${item.logo}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${item.name.replace(/"/g, '&quot;')}">`
                         : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-red-950/30 to-slate-950 text-red-500 flex items-center justify-center font-black text-lg border border-red-500/10 shadow">${item.name.charAt(0).toUpperCase()}</div>`;
 
                     const epgInfo = window.EpgManager ? window.EpgManager.getProgramInfo(item) : { currentTitle: getCurrentEpgProgram(item.name), isReal: false };
@@ -4744,6 +5033,9 @@
 
                 colCard.addEventListener('click', () => {
                     playStream(item);
+                });
+                colCard.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); colCard.click(); }
                 });
 
                 mediaGrid.appendChild(colCard);
@@ -5116,11 +5408,22 @@
                 hlsAttemptFailed = false;
             }
 
-            // Show player column on mobile if hidden
+            // Unconditionally show player column on all screen sizes & Smart TVs
             const playerCol = document.getElementById('player-column');
-            if (playerCol && window.innerWidth < 1024) {
-                playerCol.classList.remove('hidden');
+            if (playerCol) {
+                playerCol.classList.remove('hidden', 'max-lg:hidden', 'max-sm:hidden');
                 playerCol.classList.add('flex');
+                playerCol.style.display = 'flex';
+                if (window.innerWidth < 1024) {
+                    try { playerCol.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e){}
+                    try {
+                        if (!window.history.state || window.history.state.mk21View !== 'player') {
+                            window.history.pushState({ mk21View: 'player' }, '');
+                        }
+                    } catch(e){}
+                } else {
+                    try { playerCol.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(e){}
+                }
             }
 
             const effectiveSelectorValue = customProxyMethod || getEffectiveProxyMethod(item.url, getStoredProxyMode());
@@ -5316,11 +5619,32 @@
         function closeMobilePlayer() {
             stopStream();
             const playerCol = document.getElementById('player-column');
-            if (playerCol && window.innerWidth < 1024) {
-                playerCol.classList.add('hidden');
+            if (playerCol) {
+                playerCol.classList.add('hidden', 'max-sm:hidden', 'max-lg:hidden');
                 playerCol.classList.remove('flex');
+                playerCol.style.display = 'none';
             }
+
+            // Rola suavemente a tela de volta para o catálogo de canais/mídias
+            const mediaCol = document.getElementById('media-grid-column') || document.getElementById('channels-list') || document.getElementById('main-dashboard');
+            if (mediaCol) {
+                try {
+                    mediaCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } catch (e) {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            // Sincroniza histórico de navegação para botões de voltar nativos do navegador
+            try {
+                if (window.history.state && window.history.state.mk21View === 'player') {
+                    window.history.back();
+                }
+            } catch (e) {}
         }
+        window.closeMobilePlayer = closeMobilePlayer;
 
         function stopStream() {
             isStreamStopping = true;
@@ -5456,46 +5780,256 @@
             });
 
             // Prevent spacebar scrolling and handle hotkeys
-            window.addEventListener('keydown', (e) => {
-                // Ignore if typing inside search input, server, pass, user selectors
-                const active = document.activeElement;
-                if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) {
+            // Spatial Navigation Engine for Smart TV (LG webOS, Samsung Tizen, Android TV, PC D-pad)
+            const SPATIAL_SELECTOR = [
+                'button:not([disabled])',
+                'a[href]',
+                'input:not([disabled])',
+                'select:not([disabled])',
+                '[tabindex="0"]',
+                '.media-item-card',
+                '.cat-select-btn',
+                '.quick-cat-chip',
+                '.fast-server-chip',
+                '.yt-btn',
+                '.ctrl-btn'
+            ].join(',');
+
+            function getSpatialFocusables() {
+                const openModal = document.querySelector('#smart-tv-install-modal:not(.hidden), #mobile-category-modal:not(.hidden), #advanced-filters-modal:not(.hidden), #epg-program-modal:not(.hidden), #xmltv-preview-modal:not(.hidden)');
+                const container = openModal || document;
+                return Array.from(container.querySelectorAll(SPATIAL_SELECTOR)).filter(el => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none' && window.getComputedStyle(el).visibility !== 'hidden';
+                });
+            }
+
+            function getRectCenter(el) {
+                const r = el.getBoundingClientRect();
+                return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            }
+
+            function moveSpatial(direction) {
+                const items = getSpatialFocusables();
+                if (!items.length) return;
+
+                let current = document.activeElement;
+                if (!current || !items.includes(current) || current === document.body) {
+                    const first = items.find(el => el.classList.contains('media-item-card') || el.classList.contains('quick-cat-chip') || el.classList.contains('cat-select-btn')) || items[0];
+                    if (first) {
+                        first.focus();
+                        first.classList.add('tv-focused');
+                        try { first.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+                    }
                     return;
                 }
 
-                if (e.code === 'Space') {
+                const cur = getRectCenter(current);
+                let best = null;
+                let bestScore = Infinity;
+
+                for (let i = 0; i < items.length; i++) {
+                    const el = items[i];
+                    if (el === current) continue;
+                    const c = getRectCenter(el);
+                    const dx = c.x - cur.x;
+                    const dy = c.y - cur.y;
+                    let ok = false;
+                    let primary = 0;
+                    let secondary = 0;
+
+                    if (direction === 'left') {
+                        ok = dx < -6;
+                        primary = -dx;
+                        secondary = Math.abs(dy);
+                    } else if (direction === 'right') {
+                        ok = dx > 6;
+                        primary = dx;
+                        secondary = Math.abs(dy);
+                    } else if (direction === 'up') {
+                        ok = dy < -6;
+                        primary = -dy;
+                        secondary = Math.abs(dx);
+                    } else if (direction === 'down') {
+                        ok = dy > 6;
+                        primary = dy;
+                        secondary = Math.abs(dx);
+                    }
+
+                    if (!ok) continue;
+                    // Primary distance + penalize orthogonal shift
+                    const score = primary + secondary * 2.2;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        best = el;
+                    }
+                }
+
+                if (best) {
+                    current.classList.remove('tv-focused');
+                    best.focus();
+                    best.classList.add('tv-focused');
+                    try { best.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); } catch (e) {}
+                }
+            }
+
+            function navigatePlaylist(step) {
+                if (!currentActiveItem) return;
+                const targetType = (activeType || 'LIVE').toUpperCase();
+                const items = playlistItems.filter(item => {
+                    const itType = (item.type || item.streamType || 'LIVE').toUpperCase();
+                    return itType === targetType;
+                });
+                const idx = items.findIndex(i => i.url === currentActiveItem.url);
+                const nextIdx = idx + step;
+                if (nextIdx >= 0 && nextIdx < items.length) {
+                    playStream(items[nextIdx]);
+                }
+            }
+
+            // Keyboard and Remote Control Event Handler
+            window.addEventListener('keydown', (e) => {
+                const active = document.activeElement;
+                const isTyping = active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA');
+                const key = e.key || '';
+                const k = e.keyCode || e.which || 0;
+
+                // Handle search input enter / down
+                if (active && active.id === 'search-input') {
+                    if (key === 'ArrowDown' || k === 40) {
+                        e.preventDefault();
+                        active.blur();
+                        moveSpatial('down');
+                        return;
+                    }
+                    if (key === 'Enter' || k === 13) {
+                        e.preventDefault();
+                        active.blur();
+                        renderMediaItems();
+                        return;
+                    }
+                }
+
+                if (isTyping && active.id !== 'search-input') {
+                    if (key === 'ArrowDown' || key === 'ArrowUp') {
+                        active.blur();
+                    } else {
+                        return;
+                    }
+                }
+
+                const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('is-tv-fullscreen'));
+
+                // Voltar / Back (LG webOS: 461, Tizen: 10009, Escape: 27, Backspace: 8)
+                if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back' || key === 'GoBack') {
+                    e.preventDefault();
+                    if (isFullscreen) {
+                        toggleFullscreen();
+                        return;
+                    }
+                    const openModal = document.querySelector('#smart-tv-install-modal:not(.hidden), #mobile-category-modal:not(.hidden), #advanced-filters-modal:not(.hidden), #epg-program-modal:not(.hidden)');
+                    if (openModal) {
+                        openModal.classList.add('hidden');
+                        return;
+                    }
+                    const playerCol = document.getElementById('player-column');
+                    if (playerCol && window.innerWidth < 1024 && !playerCol.classList.contains('hidden')) {
+                        closeMobilePlayer();
+                        return;
+                    }
+                    return;
+                }
+
+                // If in fullscreen video player, use arrows for playback seeking & channel change
+                if (isFullscreen) {
+                    if (key === 'ArrowRight' || k === 39) {
+                        e.preventDefault();
+                        seekRelative(10);
+                        return;
+                    }
+                    if (key === 'ArrowLeft' || k === 37) {
+                        e.preventDefault();
+                        seekRelative(-10);
+                        return;
+                    }
+                    if (key === 'ArrowUp' || k === 38 || k === 427 || key === 'ChannelUp') {
+                        e.preventDefault();
+                        navigatePlaylist(-1);
+                        return;
+                    }
+                    if (key === 'ArrowDown' || k === 40 || k === 428 || key === 'ChannelDown') {
+                        e.preventDefault();
+                        navigatePlaylist(1);
+                        return;
+                    }
+                    if (key === 'Enter' || k === 13 || key === ' ' || k === 32) {
+                        e.preventDefault();
+                        togglePlay();
+                        return;
+                    }
+                }
+
+                // Normal Mode: D-Pad Spatial Navigation between UI elements
+                if (key === 'ArrowLeft' || k === 37) {
+                    e.preventDefault();
+                    moveSpatial('left');
+                    return;
+                }
+                if (key === 'ArrowRight' || k === 39) {
+                    e.preventDefault();
+                    moveSpatial('right');
+                    return;
+                }
+                if (key === 'ArrowUp' || k === 38) {
+                    e.preventDefault();
+                    moveSpatial('up');
+                    return;
+                }
+                if (key === 'ArrowDown' || k === 40) {
+                    e.preventDefault();
+                    moveSpatial('down');
+                    return;
+                }
+
+                // OK / Enter key
+                if (key === 'Enter' || k === 13) {
+                    if (active && active !== document.body && typeof active.click === 'function') {
+                        e.preventDefault();
+                        active.click();
+                        return;
+                    }
+                }
+
+                // Space key: toggle play
+                if (e.code === 'Space' && !isTyping) {
                     e.preventDefault();
                     togglePlay();
-                } else if (e.code === 'ArrowRight') {
+                    return;
+                }
+
+                // Media remote buttons (LG, Samsung, Android TV)
+                if (k === 415 || k === 19 || k === 179 || key === 'MediaPlayPause' || key === 'Play' || key === 'Pause') {
                     e.preventDefault();
-                    seekRelative(5);
-                } else if (e.code === 'ArrowLeft') {
-                    e.preventDefault();
-                    seekRelative(-5);
-                } else if (e.code === 'ArrowUp') {
-                    e.preventDefault();
-                    adjustVolume(0.05);
-                } else if (e.code === 'ArrowDown') {
-                    e.preventDefault();
-                    adjustVolume(-0.05);
-                } else if (e.code === 'KeyF') {
+                    togglePlay();
+                    return;
+                }
+
+                // Quick Keys (F: Fullscreen, M: Mute, P: PiP)
+                if (e.code === 'KeyF') {
                     e.preventDefault();
                     toggleFullscreen();
-                } else if (e.code === 'KeyM') {
+                } else if (e.code === 'KeyM' || k === 403 || key === 'Red' || key === 'ColorF0Red') {
                     e.preventDefault();
                     toggleMute();
                 } else if (e.code === 'KeyP') {
                     e.preventDefault();
                     togglePictureInPicture();
-                } else if (e.key >= '0' && e.key <= '9') {
+                } else if (k === 404 || key === 'Green' || key === 'ColorF1Green') {
                     e.preventDefault();
-                    const targetVolume = parseInt(e.key) / 10;
-                    video.volume = targetVolume;
-                    video.muted = targetVolume === 0;
-                    if (volumeSlider) volumeSlider.value = targetVolume;
-                    localStorage.setItem('mk21_player_volume', targetVolume);
-                    updateVolumeUI(targetVolume);
-                    showNotification(`Volume ajustado para ${parseInt(e.key) * 10}%`, 'success');
+                    if (currentActiveItem) toggleFavorite(currentActiveItem);
+                } else if (k === 405 || key === 'Yellow' || key === 'ColorF2Yellow') {
+                    e.preventDefault();
+                    toggleFullscreen();
                 }
             });
 
@@ -5741,28 +6275,18 @@
 
             function toggleTheaterMode() {
                 const playerCol = document.getElementById('player-column');
-                const centralFeed = document.getElementById('media-grid-column'); // Grid / list container
+                const centralFeed = document.getElementById('media-grid-column');
 
                 if (playerCol && centralFeed) {
-                    if (playerCol.classList.contains('lg:col-span-4') || playerCol.classList.contains('lg:col-span-5')) {
-                        // Activate cinema mode (expanding the width of player column to make it dominant)
-                        playerCol.classList.remove('lg:col-span-4', 'lg:col-span-5');
-                        playerCol.classList.add('lg:col-span-7');
-
-                        centralFeed.classList.remove('lg:col-span-8', 'lg:col-span-7');
-                        centralFeed.classList.add('lg:col-span-5');
-
-                        theaterBtn.innerHTML = '<i class="fa-solid fa-compress-arrows-alt text-xs"></i>';
+                    const isTheater = playerCol.classList.toggle('theater-mode-active');
+                    if (isTheater) {
+                        playerCol.style.width = 'min(58vw, 860px)';
+                        theaterBtn.innerHTML = '<i class="fa-solid fa-compress text-xs"></i>';
                         showNotification('Modo Cinema Ativado 🍿', 'success');
-                    } else if (playerCol.classList.contains('lg:col-span-7')) {
-                        // Return back to standard layout
-                        playerCol.classList.add('lg:col-span-4');
-                        playerCol.classList.remove('lg:col-span-7');
-
-                        centralFeed.classList.add('lg:col-span-8');
-                        centralFeed.classList.remove('lg:col-span-5');
-
-                        theaterBtn.innerHTML = '<i class="fa-solid fa-expand-arrows-alt text-xs"></i>';
+                    } else {
+                        playerCol.style.width = '';
+                        theaterBtn.innerHTML = '<i class="fa-solid fa-expand text-xs"></i>';
+                        showNotification('Modo Padrão Restaurado', 'info');
                     }
                 }
             }
