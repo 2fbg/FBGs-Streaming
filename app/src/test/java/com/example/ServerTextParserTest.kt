@@ -55,6 +55,24 @@ class ServerTextParserTest {
     }
 
     @Test
+    fun testExtractsUsernameAndPasswordFromQueryString() {
+        val message = """
+            *🌐Bem vindo a MK21 Plataformas.*
+            *✅ Usuário:* 601334065
+            *✅ Senha:* 820866576
+
+            *🆔URL XCIPTV SERVIDORES:*
+            *VLOG:* http://myopbx.beer/get.php?username=601334065&password=820866576
+        """.trimIndent()
+
+        val parsed = ServerTextParser.parse(message)
+        assertEquals(1, parsed.size)
+        assertEquals("VLOG", parsed[0].name)
+        assertEquals("601334065", parsed[0].username)
+        assertEquals("820866576", parsed[0].password)
+    }
+
+    @Test
     fun testIgnoresNonServerUrls() {
         val textWithIrrelevantLinks = """
 Baixe o app na Play Store: https://play.google.com/store/apps/details?id=com.app

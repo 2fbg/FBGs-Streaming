@@ -24,8 +24,8 @@ object ServerTextParser {
 
     private val URL_REGEX = Regex("""(?i)\b(https?://[^\s<>"'{}|\\^`\[\]]+)""")
     private val BASE_URL_REGEX = Regex("""^(https?://[^/?#]+)""", RegexOption.IGNORE_CASE)
-    private val USERNAME_REGEX = Regex("""[?&]username=([^&]+)""", RegexOption.IGNORE_CASE)
-    private val PASSWORD_REGEX = Regex("""[?&]password=([^&]+)""", RegexOption.IGNORE_CASE)
+    private val USERNAME_REGEX = Regex("""[?&](?:username|user|u)=([^&]+)""", RegexOption.IGNORE_CASE)
+    private val PASSWORD_REGEX = Regex("""[?&](?:password|pass|p)=([^&]+)""", RegexOption.IGNORE_CASE)
     private val GLOBAL_USER_REGEX = Regex("""(?i)\*?✅?\s*(?:Usu[aá]rio|User|Login)\s*:\*?\s*([a-zA-Z0-9_\-\.]+)""")
     private val GLOBAL_PASS_REGEX = Regex("""(?i)\*?✅?\s*(?:Senha|Pass(?:word)?)\s*:\*?\s*([a-zA-Z0-9_\-\.]+)""")
     private val EMOJI_CLEANER = Regex("""[🟢🔴🔵⚪🟠🟣🟤🟡⚫✅🔰✔️🌟📱📺🌐🆔💻🔗\*]""")

@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python3 -c 'import json, pathlib; paths=\\[\"servers\\.json\",\"smart-tv/mk21-tv/servers\\.json\",\"version\\.json\",\"api/version\\.json\",\"smart-tv/version\\.json\",\"smart-tv/mk21-tv/version\\.json\",\"web/version\\.json\",\"web/api/version\\.json\",\"smart-tv/mk21-tv/appinfo\\.json\",\"smart-tv/webos/appinfo\\.json\",\"manifest\\.json\",\"web/manifest\\.json\"\\]; \\[\\(print\\(f\"OK \\{p\\}\"\\), json\\.loads\\(pathlib\\.Path\\(p\\)\\.read_text\\(\\)\\)\\) if pathlib\\.Path\\(p\\)\\.exists\\(\\) else print\\(f\"MISSING \\{p\\}\"\\) for p in paths\\]'$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
