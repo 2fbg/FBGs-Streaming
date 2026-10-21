@@ -1,7 +1,7 @@
 {
   "name": "MK21 MultiServidor",
   "short_name": "MK21 Play",
-  "version": "2.0.0",
+  "version": "2.1.2",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0E0F12",

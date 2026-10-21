@@ -3964,7 +3964,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.4.1';
+const BASE_PACKAGE_VERSION = '2.1.2';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -4016,15 +4016,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.1
-    if (!data || compareSemver(data.version, '1.4.1') < 0) {
+    if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
-        version: '1.4.1',
-        versionCode: 141,
-        title: 'MK21 Play v1.4.1',
-        releaseNotes: '• Sinergia APK-to-IPK: Phased loading, DNS failover e Omnisearch na Smart TV\n• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.1_all.ipk',
-        apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
+        version: BASE_PACKAGE_VERSION,
+        versionCode: 212,
+        title: 'MK21 Play v2.1.2',
+        releaseNotes: 'Estabilização global v2.1.2. Pacotes de instalação ainda não publicados.',
+        ipkUrl: '',
+        apkUrl: '',
         isPendingPush: false
       };
     }
@@ -5041,4 +5040,3 @@ function globalSearch(query) {
   }
   return results;
 }
-

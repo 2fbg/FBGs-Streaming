@@ -12,7 +12,7 @@
 
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v2.0.0-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.1.2-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -22,7 +22,7 @@
 
 ---
 
-> **Versões por plataforma:** a release do ecossistema Web/Smart TV é `2.0.0`. O módulo Android ainda declara `1.4.2` (`versionCode` 142) em `app/build.gradle.kts`.
+> **Versão global do código-fonte:** `2.1.2` (`versionCode` 212 no Android), sincronizada entre Android, Web/PWA, webOS e Tizen. O pacote webOS foi gerado; o APK Android de release depende da chave de assinatura de produção.
 
 ## 📌 Visão Geral & Foco do Cliente (Player para Listas de Terceiros)
 
