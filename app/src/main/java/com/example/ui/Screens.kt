@@ -3695,7 +3695,6 @@ fun ChannelEpgPreviewDialog(
                 modifier = Modifier
                     .padding(18.dp)
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
             ) {
                 // Header: Logo + Channel Name + Close
                 Row(
@@ -3788,7 +3787,7 @@ fun ChannelEpgPreviewDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
+                        .aspectRatio(16f / 9f, matchHeightConstraintsFirst = true)
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color.Black)
                         .border(1.dp, NetflixRed.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
@@ -3904,160 +3903,162 @@ fun ChannelEpgPreviewDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Passando Agora Hero Card
-                if (currentProgram != null) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF181822)),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, NetflixRed.copy(alpha = 0.35f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .background(NetflixRed, CircleShape)
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "PASSANDO AGORA",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = NetflixRed,
-                                    letterSpacing = 1.sp
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
-                                Text(
-                                    text = currentProgram.timeRange,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = GoldPremium
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Text(
-                                text = currentProgram.title,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            Text(
-                                text = currentProgram.description,
-                                fontSize = 10.sp,
-                                color = Color(0xFFB0B0C0),
-                                lineHeight = 14.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            LinearProgressIndicator(
-                                progress = { currentProgram.progressPercent },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(1.5.dp)),
-                                color = NetflixRed,
-                                trackColor = Color.White.copy(alpha = 0.1f)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "PROGRAMAÇÃO DO DIA",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.Gray,
-                    letterSpacing = 1.sp
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
                 Column(
                     modifier = Modifier
+                        .weight(1f)
                         .fillMaxWidth()
-                        .heightIn(max = 130.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    schedule.forEach { prog ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    // Passando Agora Hero Card
+                    if (currentProgram != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF181822)),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, NetflixRed.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = prog.timeRange,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (prog.isCurrent) GoldPremium else Color.Gray,
-                                modifier = Modifier.width(78.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = prog.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (prog.isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                color = if (prog.isCurrent) Color.White else Color(0xFFCBD5E1),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (prog.isCurrent) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(NetflixRed, RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 5.dp, vertical = 1.dp)
-                                ) {
-                                    Text("NO AR", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .background(NetflixRed, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "PASSANDO AGORA",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = NetflixRed,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = currentProgram.timeRange,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = GoldPremium
+                                    )
                                 }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = currentProgram.title,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = currentProgram.description,
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFB0B0C0),
+                                    lineHeight = 14.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                LinearProgressIndicator(
+                                    progress = { currentProgram.progressPercent },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(1.5.dp)),
+                                    color = NetflixRed,
+                                    trackColor = Color.White.copy(alpha = 0.1f)
+                                )
                             }
                         }
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
                     }
-                }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                // Transition directly to normal fullscreen player!
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onPlay(item)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = NetflixRed),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 50.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Fullscreen,
-                        contentDescription = "Tela Cheia",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "ASSISTIR EM TELA CHEIA",
+                        text = "PROGRAMAÇÃO DO DIA",
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Black,
-                        fontSize = 12.5.sp,
-                        letterSpacing = 0.5.sp,
-                        color = Color.White,
-                        maxLines = 1
+                        color = Color.Gray,
+                        letterSpacing = 1.sp
                     )
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        schedule.forEach { prog ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = prog.timeRange,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (prog.isCurrent) GoldPremium else Color.Gray,
+                                    modifier = Modifier.width(78.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = prog.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (prog.isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (prog.isCurrent) Color.White else Color(0xFFCBD5E1),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (prog.isCurrent) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(NetflixRed, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                                    ) {
+                                        Text("NO AR", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            }
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Transition directly to normal fullscreen player!
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onPlay(item)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NetflixRed),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Tela Cheia",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "ASSISTIR EM TELA CHEIA",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 12.5.sp,
+                            letterSpacing = 0.5.sp,
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
         }
     }
