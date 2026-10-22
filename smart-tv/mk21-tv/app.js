@@ -2768,7 +2768,13 @@ function initDevLogs() {
   };
   if ($('btnExportDevLogs')) $('btnExportDevLogs').onclick = () => {
     try {
-      const text = sessionDevLogs.map(l => `[${l.time}] [${l.type.toUpperCase()}] ${l.msg}`).join('\n');
+      const text = [
+        'MK21 Smart TV - Logs de diagnóstico',
+        `Data: ${new Date().toISOString()}`,
+        'Credenciais e caminhos autenticados foram mascarados.',
+        '',
+        ...sessionDevLogs.map(l => `[${l.time}] [${l.type.toUpperCase()}] ${redactDiagnosticLog(l.msg)}`)
+      ].join('\n');
       localStorage.setItem('mk21_last_exported_logs', text);
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
@@ -2783,6 +2789,16 @@ function initDevLogs() {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
   };
+  if ($('btnGitHubDevLogs')) $('btnGitHubDevLogs').onclick = () => {
+    window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
+  };
+}
+
+function redactDiagnosticLog(value) {
+  return String(value)
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, '$1[REDACTED]@')
+    .replace(/([?&](?:username|user|password|pass|token|auth|api[_-]?key)=)[^&#\s]*/gi, '$1[REDACTED]')
+    .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]');
 }
 
 let mpegtsPlayer = null;
@@ -5478,4 +5494,3 @@ function globalSearch(query) {
   }
   return results;
 }
-

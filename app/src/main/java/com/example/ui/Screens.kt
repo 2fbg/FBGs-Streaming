@@ -1,6 +1,8 @@
 package com.example.ui
 
 import kotlinx.coroutines.*
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.app.Activity
 import android.os.Build
@@ -8,6 +10,8 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.media3.common.util.UnstableApi
@@ -8706,6 +8710,28 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
             val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
             var crashLog by remember { mutableStateOf(com.example.utils.CrashLogger.getLatestCrashLog(context)) }
             val diagInfo = remember { com.example.utils.CrashLogger.getSystemDiagnosticInfo(context) }
+            val exportText = remember(crashLog, diagInfo) {
+                buildString {
+                    appendLine("MK21 Android - Logs de diagnóstico")
+                    appendLine(diagInfo)
+                    appendLine()
+                    appendLine(crashLog ?: "Nenhum relatório de falha capturado.")
+                }.let(::redactDiagnosticLog)
+            }
+            val saveLogLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("text/plain")
+            ) { uri ->
+                if (uri != null) {
+                    try {
+                        val output = context.contentResolver.openOutputStream(uri)
+                            ?: error("Não foi possível abrir o arquivo selecionado.")
+                        output.bufferedWriter(Charsets.UTF_8).use { it.write(exportText) }
+                        android.widget.Toast.makeText(context, "Log salvo com sucesso.", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (error: Exception) {
+                        android.widget.Toast.makeText(context, "Falha ao salvar o log: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
 
             Dialog(onDismissRequest = { showDiagnosticLogsDialog = false }) {
                 Card(
@@ -8762,19 +8788,62 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (crashLog != null) {
+                            Button(
+                                onClick = { saveLogLauncher.launch("mk21-android-logs.txt") },
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("SALVAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        context.startActivity(
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse("https://github.com/2fbg/FBGs-Streaming/upload/main/logs")
+                                            )
+                                        )
+                                    } catch (error: Exception) {
+                                        android.widget.Toast.makeText(context, "Não foi possível abrir o GitHub: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color(0xFF4C8DFF).copy(alpha = 0.6f))
+                            ) {
+                                Text("GITHUB", color = Color(0xFF9CC2FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { showDiagnosticLogsDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("FECHAR", color = Color.White, fontSize = 10.sp)
+                            }
+                        }
+
+                        if (crashLog != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Button(
                                     onClick = {
-                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(crashLog!!))
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(exportText))
                                         android.widget.Toast.makeText(context, "Log copiado para a Área de Transferência!", android.widget.Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
-                                    modifier = Modifier.weight(1.2f),
+                                    modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("COPIAR LOG", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    Text("COPIAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                                 }
 
                                 OutlinedButton(
@@ -8783,27 +8852,40 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                         crashLog = null
                                         android.widget.Toast.makeText(context, "Logs limpos com sucesso!", android.widget.Toast.LENGTH_SHORT).show()
                                     },
-                                    modifier = Modifier.weight(0.9f),
+                                    modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),
                                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                                 ) {
                                     Text("LIMPAR", color = Color.LightGray, fontSize = 10.sp)
                                 }
                             }
-
-                            Button(
-                                onClick = { showDiagnosticLogsDialog = false },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
-                                modifier = Modifier.weight(0.9f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("FECHAR", color = Color.White, fontSize = 10.sp)
-                            }
                         }
+                        Text(
+                            "Salve o arquivo e envie-o manualmente para 2fbg/FBGs-Streaming/logs. O app não publica logs automaticamente.",
+                            color = Color.Gray,
+                            fontSize = 9.sp
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+private fun redactDiagnosticLog(value: String): String {
+    val withCredentialsMasked = Regex(
+        """(https?://)[^/@\s:]+:[^/@\s]+@""",
+        RegexOption.IGNORE_CASE
+    ).replace(value) { match -> "${match.groupValues[1]}[REDACTED]@" }
+    val withQuerySecretsMasked = Regex(
+        """([?&](?:username|user|password|pass|token|auth|api[_-]?key)=)[^&#\s]*""",
+        RegexOption.IGNORE_CASE
+    ).replace(withCredentialsMasked) { match -> "${match.groupValues[1]}[REDACTED]" }
+    return Regex(
+        """/(live|movie|series)/[^/\s?]+/[^/\s?]+""",
+        RegexOption.IGNORE_CASE
+    ).replace(withQuerySecretsMasked) { match ->
+        "/${match.groupValues[1]}/[REDACTED]/[REDACTED]"
     }
 }
 

@@ -79,6 +79,16 @@
         }
         .animate-shake { animation: shake 0.4s ease-in-out; }
         .fast-server-chip:active { transform: scale(0.97); }
+        #active-server-display { max-width: min(52vw, 180px); }
+        #player-column { width: 100%; }
+        #video-player-container { max-height: 42vh; }
+        @media (min-width: 640px) {
+            #player-column { width: min(42vw, 380px); }
+            #video-player-container { max-height: none; }
+        }
+        @media (min-width: 1024px) { #player-column { width: 460px; } }
+        @media (min-width: 1280px) { #player-column { width: 540px; } }
+        @media (min-width: 1536px) { #player-column { width: 600px; } }
 
         /* 10-Foot UI: Smart TV High-Contrast D-Pad Focus Styles */
         [data-nav="true"]:focus,
@@ -111,6 +121,7 @@
         .player-tv-fullscreen #video-player-container {
             width: 100% !important;
             height: 100% !important;
+            max-height: none !important;
             flex-grow: 1 !important;
             aspect-ratio: auto !important;
             background: #000000 !important;
@@ -142,44 +153,27 @@
     <div class="h-1 bg-gradient-to-r from-red-650 via-red-600 to-black w-full"></div>
 
     <!-- MAIN APP CONTAINER -->
-    <main class="flex-grow flex flex-col justify-center items-center w-full px-4 py-8 sm:px-8 sm:py-12 min-h-[90vh]">
+    <main class="flex-grow flex flex-col justify-start items-center w-full px-3 pt-3 pb-6 sm:px-8 sm:py-8 min-h-[90vh]">
 
         <!-- 1. LOGIN / GATEWAY SCREEN (Design OTT Moderno, Fluido & Responsivo) -->
         <div id="login-screen" class="w-full max-w-3xl sm:max-w-4xl px-2 sm:px-6 transition-all duration-300 block">
             <!-- Branding: Emblema Oficial MK21 com Aura Ruby & Slogan Fiel ao APK -->
-            <div class="relative text-center mb-6 flex flex-col items-center select-none">
+            <div class="relative text-center mb-4 flex flex-col items-center select-none">
                 <!-- Aura de Luz Difusa de Fundo (Cinema Glow) -->
                 <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-80 h-80 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
-                <!-- Emblema Circular Oficial MK21 (Idêntico ao APK, moderno e sem caixa quadrada) -->
-                <div class="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full p-[2.5px] bg-gradient-to-tr from-amber-400 via-[#E50914] to-red-600 shadow-[0_16px_45px_rgba(229,9,20,0.55)] flex items-center justify-center mb-3 transition-transform hover:scale-105 duration-300">
-                    <div class="w-full h-full rounded-full bg-gradient-to-b from-[#1b1922] to-[#0c0d14] flex items-center justify-center border border-white/10 shadow-inner">
-                        <span class="text-4xl sm:text-5xl font-black italic tracking-tighter text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
-                            MK<span class="text-[#E50914] drop-shadow-[0_0_22px_rgba(229,9,20,0.95)]">21</span>
-                        </span>
-                    </div>
-                </div>
-
-                <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">MK21 Player</h1>
-                <div class="flex items-center gap-2 text-center w-full max-w-xs mt-1 mb-2">
-                    <div class="h-[1px] flex-grow bg-gradient-to-r from-transparent to-[#E50914]"></div>
-                    <span class="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.25em] text-red-500 whitespace-nowrap">
-                        LOGIN ÚNICO MULTI-SERVIDOR
-                    </span>
-                    <div class="h-[1px] flex-grow bg-gradient-to-l from-transparent to-[#E50914]"></div>
-                </div>
-
+                <img src="icon.svg" alt="MK21" class="relative w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_16px_35px_rgba(229,9,20,0.35)]">
             </div>
 
             <!-- Segmented Control (Abas Elegantes estilo iOS/Netflix) -->
-            <div class="bg-[#0e1017] border border-white/10 p-1.5 rounded-2xl flex items-center mb-6 w-full select-none shadow-md">
-                <button id="tab-login-predefined" type="button" class="flex-1 py-3 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 bg-[#E50914] text-white shadow-lg shadow-red-950/40">
+            <div class="bg-[#0e1017] border border-white/10 p-1 rounded-2xl flex items-center mb-3 sm:mb-4 w-full select-none shadow-md">
+                <button id="tab-login-predefined" type="button" class="flex-1 min-w-0 min-h-11 py-2 px-2 sm:px-3 rounded-xl text-[11px] sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 bg-[#E50914] text-white shadow-lg shadow-red-950/40">
                     <i class="fa-solid fa-server text-xs"></i>
-                    <span>Servidores MK21</span>
+                    <span class="truncate">Servidores MK21</span>
                 </button>
-                <button id="tab-login-manual" type="button" class="flex-1 py-3 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-white">
+                <button id="tab-login-manual" type="button" class="flex-1 min-w-0 min-h-11 py-2 px-2 sm:px-3 rounded-xl text-[11px] sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 text-slate-400 hover:text-white">
                     <i class="fa-solid fa-link text-xs"></i>
-                    <span>Lista M3U / Custom</span>
+                    <span class="truncate">Lista M3U / Custom</span>
                 </button>
             </div>
 
@@ -203,11 +197,11 @@
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-300" for="server-selector">
                             Servidor IPTV
                         </label>
-                        <div class="relative flex items-center bg-[#0f111d] border border-white/20 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
-                            <span class="pl-4 pr-2 text-red-500 text-lg">
+                        <div class="relative flex items-center min-w-0 bg-[#0f111d] border border-white/20 rounded-2xl focus-within:border-[#E50914] focus-within:ring-2 focus-within:ring-red-600/40 transition-all shadow-inner">
+                            <span class="pl-3 sm:pl-4 pr-2 text-red-500 text-base sm:text-lg shrink-0">
                                 <i class="fa-solid fa-server"></i>
                             </span>
-                            <select id="server-selector" class="w-full py-4 pr-10 bg-[#0f111d] text-white font-bold text-base sm:text-lg outline-none cursor-pointer" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; opacity: 1 !important;">
+                            <select id="server-selector" class="w-full min-w-0 py-3 pr-9 bg-[#0f111d] text-white font-bold text-sm sm:text-base outline-none cursor-pointer" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; opacity: 1 !important;">
                                 <option value="http://myopbx.beer" style="background-color: #0f111d; color: #ffffff;">VLOG</option>
                                 <option value="http://poptvcdn.online" style="background-color: #0f111d; color: #ffffff;">TANNIX</option>
                                 <option value="http://pottermax.sbs" style="background-color: #0f111d; color: #ffffff;">LUB TV</option>
@@ -216,7 +210,7 @@
                                 <option value="http://coliseuop.site" style="background-color: #0f111d; color: #ffffff;">CINELON</option>
                                 <option value="http://dali-as.skin" style="background-color: #0f111d; color: #ffffff;">MULTT TV</option>
                             </select>
-                            <span class="absolute right-4 pointer-events-none text-slate-400 text-sm">
+                            <span class="absolute right-3 pointer-events-none text-slate-400 text-xs">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </span>
                         </div>
@@ -309,34 +303,29 @@
 
 
         <!-- 2. MAIN PLAYER / CONTENT SCREEN -->
-        <div id="player-screen" class="w-full max-w-[1600px] flex-col h-[calc(100vh-4rem)] transition-all duration-300 transform scale-95 opacity-0 hidden">
+        <div id="player-screen" class="w-full max-w-[1600px] flex-col h-[calc(100vh-1.5rem)] min-h-0 transition-all duration-300 transform scale-95 opacity-0 hidden">
             <!-- App Dashboard Header -->
             <header class="glass-card rounded-2xl px-4 md:px-6 py-3 md:py-4 flex flex-wrap items-center justify-between gap-3 md:gap-4 mb-3 md:mb-4 select-none">
                 <div class="flex items-center gap-3 md:gap-4">
                     <button id="sidebar-toggle" class="hidden md:flex p-2.5 bg-slate-900 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs transition-all outline-none" title="Ocultar/Exibir Categorias">
                         <i class="fa-solid fa-bars-staggered"></i>
                     </button>
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#E50914] to-black flex items-center justify-center text-white text-xl font-black drop-shadow-[0_2px_4px_rgba(229,9,20,0.4)] border border-red-950/40 shrink-0">
-                        MK
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
+                    <img src="icon.svg" alt="MK21" class="w-10 h-10 rounded-xl object-contain shrink-0">
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
                             <span class="text-[9px] text-[#E50914] uppercase tracking-widest font-black select-none bg-red-950/40 border border-red-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
                                 <i class="fa-solid fa-server animate-pulse"></i> Servidor
                             </span>
                             <div class="relative flex items-center">
-                                <select id="active-server-display" class="bg-black hover:bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-100 text-xs font-black rounded-lg px-2.5 py-1 focus:ring-1 focus:ring-[#E50914] outline-none cursor-pointer appearance-none pr-8 transition-all duration-200">
+                                <select id="active-server-display" aria-label="Servidor ativo" class="bg-black hover:bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-100 text-[11px] sm:text-xs font-black rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-[#E50914] outline-none cursor-pointer appearance-none pr-7 transition-all duration-200">
                                     <!-- Populated dynamically via populateHeaderServers() -->
                                 </select>
-                                <div class="pointer-events-none absolute right-2.5 flex items-center text-slate-400 text-[9px]">
+                                <div class="pointer-events-none absolute right-2 flex items-center text-slate-400 text-[9px]">
                                     <i class="fa-solid fa-chevron-down"></i>
                                 </div>
                             </div>
                         </div>
-                        <span class="text-[11px] text-emerald-400 flex items-center gap-1.5 font-semibold mt-1">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            Conectado: <span id="active-user-display" class="font-bold text-slate-200"></span>
-                        </span>
+                        <span id="active-user-display" class="sr-only"></span>
                     </div>
                 </div>
 
@@ -403,7 +392,7 @@
                 <!-- COLUMN 2: Media Listing -->
                 <section id="media-grid-column" class="flex-grow glass-card rounded-2xl flex flex-col overflow-hidden min-w-0">
                     <!-- Search and Actions Bar -->
-                    <div class="p-4 border-b border-slate-800 space-y-3">
+                    <div class="px-3 pt-2.5 pb-2 border-b border-slate-800 space-y-2">
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                                 <i class="fa-solid fa-magnifying-glass text-sm"></i>
@@ -496,7 +485,7 @@
                 </section>
 
                 <!-- COLUMN 3: Active Video & Media Screen details -->
-                <section id="player-column" class="max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:bg-[#040405] flex flex-col sm:relative sm:inset-auto sm:z-0 w-full sm:w-[380px] lg:w-[460px] xl:w-[540px] 2xl:w-[600px] sm:bg-transparent glass-card rounded-2xl overflow-hidden shrink-0 min-w-0">
+                <section id="player-column" class="max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:bg-[#040405] flex flex-col sm:relative sm:inset-auto sm:z-0 glass-card rounded-2xl overflow-hidden shrink-0 min-w-0">
                     <!-- Mobile & Tablet Close / Back Bar -->
                     <div class="lg:hidden p-3.5 bg-slate-950 border-b border-slate-900 flex items-center justify-between shrink-0 select-none">
                         <button id="btn-back-to-list" onclick="closeMobilePlayer()" class="px-4 py-2.5 bg-slate-900 active:bg-red-950/80 hover:bg-slate-850 text-slate-200 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 border border-slate-800 transition-all cursor-pointer shadow-sm touch-manipulation">
@@ -509,7 +498,7 @@
                         </div>
                     </div>
                     <!-- Video Player Container (YouTube Style) -->
-                    <div id="video-player-container" class="w-full aspect-video bg-black relative group overflow-hidden border-b border-slate-800 select-none">
+                    <div id="video-player-container" class="w-full aspect-video max-h-[42vh] sm:max-h-none bg-black relative group overflow-hidden border-b border-slate-800 select-none">
                         <!-- Native Video Element (WITHOUT Browser Controls for custom skinning) -->
                         <video id="iptv-video" class="w-full h-full object-contain cursor-pointer" preload="auto"></video>
 
@@ -745,10 +734,10 @@
                     </div>
 
                     <!-- Selected Channel Details / Info -->
-                    <div class="p-6 flex-grow flex flex-col overflow-y-auto">
+                    <div class="min-h-0 p-3 sm:p-6 flex-grow flex flex-col overflow-y-auto">
                         <div id="detail-pane" class="hidden">
-                            <div class="flex items-start gap-4 mb-3">
-                                <div id="detail-logo-container" class="w-20 h-20 bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 border border-slate-800">
+                            <div class="flex items-start gap-3 sm:gap-4 mb-3">
+                                <div id="detail-logo-container" class="w-14 h-14 sm:w-20 sm:h-20 bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 border border-slate-800">
                                     <img id="detail-logo" class="w-full h-full object-cover" src="" alt="logo">
                                 </div>
                                 <div class="flex-grow min-w-0">
@@ -765,9 +754,9 @@
                                     </div>
                                     <h2 id="detail-name" class="font-extrabold text-xl leading-tight">Nome da Mídia</h2>
                                     <!-- Modern EPG Card: Full Program Visibility & Live Progress -->
-                                    <div id="detail-epg-container" class="hidden flex flex-col gap-2.5 mt-3 p-3.5 bg-gradient-to-br from-red-950/35 via-slate-900/50 to-slate-950/70 border border-red-500/30 rounded-2xl w-full select-none shadow-md">
+                                    <div id="detail-epg-container" class="hidden flex flex-col gap-2 mt-2 sm:mt-3 p-2.5 sm:p-3.5 bg-gradient-to-br from-red-950/35 via-slate-900/50 to-slate-950/70 border border-red-500/30 rounded-xl sm:rounded-2xl w-full min-w-0 select-none shadow-md">
                                         <!-- Row 1: Badges + Time + Action Button -->
-                                        <div class="flex items-center justify-between gap-2">
+                                        <div class="flex flex-wrap items-center justify-between gap-2 min-w-0">
                                             <div class="flex items-center gap-2 flex-wrap min-w-0">
                                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-red-600/25 border border-red-500/40 rounded-full text-[10px] font-black uppercase text-red-400 tracking-wider">
                                                     <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> NO AR AGORA
@@ -783,8 +772,8 @@
 
                                         <!-- Row 2: Program Title (Full readability without truncation) -->
                                         <div class="min-w-0 pt-0.5">
-                                            <h4 id="detail-epg-program" class="text-sm font-extrabold text-white leading-snug line-clamp-2">Carregando programação...</h4>
-                                            <p id="detail-epg-desc" class="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed hidden"></p>
+                                            <h4 id="detail-epg-program" class="text-sm font-extrabold text-white leading-snug line-clamp-2 break-words">Carregando programação...</h4>
+                                            <p id="detail-epg-desc" class="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed break-words hidden"></p>
                                         </div>
 
                                         <!-- Row 3: Progress Bar -->
@@ -823,7 +812,7 @@
                             </div>
 
                             <!-- Integration Tips & External Player Launchers inside a beautiful collapsible details box -->
-                            <details open class="group bg-slate-950/40 border border-slate-900/60 rounded-2xl overflow-hidden shadow-lg transition-all duration-300">
+                            <details class="group bg-slate-950/40 border border-slate-900/60 rounded-2xl overflow-hidden shadow-lg transition-all duration-300">
                                 <summary class="flex justify-between items-center p-3 sm:p-4 cursor-pointer hover:bg-slate-900/40 transition-colors select-none">
                                     <div class="flex items-center gap-2.5">
                                         <i class="fa-solid fa-gears text-[#E50914] group-open:rotate-90 transition-transform duration-300"></i>
@@ -925,12 +914,16 @@
                                             <div class="mt-4 border-t border-slate-800/60 pt-3">
                                                 <div class="flex items-center justify-between gap-2 mb-1.5">
                                                     <label class="block text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Console de Diagnóstico & Logs (Tempo Real)</label>
-                                                    <button onclick="clearDiagnosticLogs(); event.preventDefault();" class="text-[8.5px] text-[#E50914] bg-red-950/25 border border-red-900/30 px-2 py-0.5 rounded hover:bg-red-950/50 font-bold transition-colors outline-none">Limpar Logs</button>
+                                                    <div class="flex items-center gap-1">
+                                                        <button type="button" onclick="downloadDiagnosticLogs()" class="text-[8.5px] text-slate-200 bg-slate-900 border border-slate-700 px-2 py-1 rounded hover:bg-slate-800 font-bold transition-colors outline-none">Salvar</button>
+                                                        <button type="button" onclick="openDiagnosticLogsOnGitHub()" class="text-[8.5px] text-blue-300 bg-blue-950/30 border border-blue-800/50 px-2 py-1 rounded hover:bg-blue-950/60 font-bold transition-colors outline-none">GitHub</button>
+                                                        <button type="button" onclick="clearDiagnosticLogs()" class="text-[8.5px] text-[#E50914] bg-red-950/25 border border-red-900/30 px-2 py-1 rounded hover:bg-red-950/50 font-bold transition-colors outline-none">Limpar</button>
+                                                    </div>
                                                 </div>
                                                 <div id="diagnostic-log-console" class="w-full h-40 bg-black border border-slate-900 rounded-lg p-2.5 overflow-y-auto text-[10px] font-mono leading-normal space-y-1 select-text scrollbar-thin scrollbar-thumb-slate-850 scrollbar-track-transparent">
                                                     <div class="text-slate-500 italic">[Sem logs de transmissão. Inicie uma reprodução para capturar eventos em tempo real]</div>
                                                 </div>
-                                                <span class="text-[8.5px] text-slate-500 block mt-1 leading-normal">Estes logs detalham as respostas dos servidores, do reprodutor HLS/MPEGTS e os bypasses de CORS/Mixed Content.</span>
+                                                <span class="text-[8.5px] text-slate-500 block mt-1 leading-normal">Credenciais são mascaradas. Salve o arquivo e anexe-o manualmente no GitHub; nada é enviado sem sua ação.</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1056,26 +1049,27 @@
     </div>
 
     <!-- MODAL: GUIA DE PROGRAMAÇÃO EPG (METADADOS XMLTV DO SERVIDOR) -->
-    <div id="epg-guide-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-4">
-        <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-3xl max-w-xl w-full p-6 text-white shadow-2xl relative flex flex-col max-h-[85vh]">
-            <button onclick="window.closeEpgGuideModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-            <div class="flex items-center gap-3 mb-4 pr-10">
-                <div id="epg-modal-logo-container" class="w-12 h-12 rounded-2xl bg-red-600/10 border border-red-500/30 flex items-center justify-center overflow-hidden shrink-0">
+    <div id="epg-guide-modal" class="fixed inset-0 bg-black/85 z-50 backdrop-blur-md items-center justify-center hidden p-2 sm:p-4">
+        <div class="glass-card bg-[#0e0e12]/95 border border-slate-800 rounded-2xl sm:rounded-3xl max-w-xl w-full p-3 sm:p-6 text-white shadow-2xl relative flex flex-col min-h-0 max-h-[85vh]" style="max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem);">
+            <div class="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div id="epg-modal-logo-container" class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-red-600/10 border border-red-500/30 flex items-center justify-center overflow-hidden shrink-0">
                     <i class="fa-solid fa-calendar-days text-[#E50914] text-xl"></i>
                 </div>
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2">
-                        <h3 id="epg-modal-channel-name" class="font-black text-lg text-white truncate">Guia de Programação EPG</h3>
-                        <span id="epg-modal-source-badge" class="text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">XMLTV Real</span>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <h3 id="epg-modal-channel-name" class="font-black text-base sm:text-lg text-white truncate">Guia de Programação EPG</h3>
+                        <span id="epg-modal-source-badge" class="hidden sm:inline-block text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">XMLTV Real</span>
                     </div>
                     <p id="epg-modal-subtitle" class="text-xs text-slate-400 truncate">Grade em tempo real via metadados do servidor</p>
                 </div>
+                <button type="button" onclick="window.closeEpgGuideModal()" aria-label="Voltar e fechar guia EPG" class="shrink-0 px-2.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-red-500/40 flex items-center justify-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span class="hidden sm:inline text-xs font-bold">Voltar</span>
+                </button>
             </div>
 
             <!-- Progress / current on-air highlight card -->
-            <div id="epg-modal-current-card" class="mb-4 p-3.5 bg-gradient-to-r from-red-950/40 to-slate-900/60 border border-red-500/20 rounded-2xl">
+            <div id="epg-modal-current-card" class="shrink-0 mb-2 sm:mb-4 p-2.5 sm:p-3.5 bg-gradient-to-r from-red-950/40 to-slate-900/60 border border-red-500/20 rounded-xl sm:rounded-2xl">
                 <div class="flex items-center justify-between text-xs mb-1.5">
                     <span class="text-red-400 font-bold flex items-center gap-1.5">
                         <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> NO AR AGORA
@@ -1090,16 +1084,16 @@
             </div>
 
             <!-- EPG Timeline Schedule List -->
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cronograma de Programas</span>
-                <button onclick="window.refreshActiveChannelEpg()" class="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 font-semibold transition-colors">
-                    <i class="fa-solid fa-arrows-rotate"></i> Atualizar do Servidor
+            <div class="flex items-center justify-between gap-2 mb-2 shrink-0">
+                <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Cronograma de Programas</span>
+                <button onclick="window.refreshActiveChannelEpg()" aria-label="Atualizar programação do servidor" class="text-[10px] sm:text-xs text-red-400 hover:text-red-300 flex items-center gap-1 font-semibold transition-colors whitespace-nowrap">
+                    <i class="fa-solid fa-arrows-rotate"></i><span class="hidden sm:inline">Atualizar do Servidor</span>
                 </button>
             </div>
-            <div id="epg-modal-schedule-list" class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scroll min-h-[180px]">
+            <div id="epg-modal-schedule-list" class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scroll min-h-0">
                 <!-- Schedule items dynamically rendered -->
             </div>
-            <div class="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+            <div class="pt-2 sm:pt-3 mt-2 sm:mt-3 border-t border-slate-800/80 flex items-center justify-between text-[9px] sm:text-[11px] text-slate-500 shrink-0">
                 <span id="epg-modal-footer-info">Sincronizado via metadados XMLTV</span>
                 <span class="font-bold text-[#E50914]">MK21 EPG Engine</span>
             </div>
@@ -1999,6 +1993,7 @@
             openScheduleModal(item) {
                 const modal = document.getElementById('epg-guide-modal');
                 if (!modal) return;
+                const wasAlreadyOpen = !modal.classList.contains('hidden');
 
                 this.activeEpgItem = item;
                 const chNameEl = document.getElementById('epg-modal-channel-name');
@@ -2069,14 +2064,28 @@
 
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
+                if (!wasAlreadyOpen) {
+                    try {
+                        const currentState = window.history.state;
+                        const nextState = currentState && typeof currentState === 'object' ? { ...currentState } : {};
+                        nextState.mk21Overlay = 'epg';
+                        window.history.pushState(nextState, '');
+                    } catch (error) {
+                        console.warn('Não foi possível registrar a navegação do guia EPG:', error);
+                    }
+                }
             }
         };
 
         window.EpgManager = EpgManager;
 
-        window.closeEpgGuideModal = function() {
+        window.closeEpgGuideModal = function(fromPopState = false) {
             const modal = document.getElementById('epg-guide-modal');
             if (modal) {
+                if (!fromPopState && window.history.state && window.history.state.mk21Overlay === 'epg') {
+                    window.history.back();
+                    return;
+                }
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
             }
@@ -2138,6 +2147,23 @@
         let itemsLimit = 30;
         let upgradedHttpsAttempted = false;
         let isStreamStopping = false;
+
+        function activateLiveHomeView() {
+            activeType = 'LIVE';
+            activeCategory = 'ALL';
+            itemsLimit = 30;
+            searchInput.value = '';
+            document.querySelectorAll('.type-filter-btn').forEach(btn => {
+                const isLive = btn.dataset.type === 'LIVE';
+                btn.classList.toggle('bg-[#E50914]', isLive);
+                btn.classList.toggle('text-white', isLive);
+                btn.classList.toggle('shadow-md', isLive);
+                btn.classList.toggle('shadow-red-950/20', isLive);
+                btn.classList.toggle('text-slate-400', !isLive);
+            });
+            const mobileCategoryLabel = document.getElementById('mobile-category-label');
+            if (mobileCategoryLabel) mobileCategoryLabel.textContent = 'Todas as Categorias';
+        }
         let currentProxyRotationIndex = 0;
         let currentStreamUrl = '';
         let currentActiveItem = null;
@@ -2146,6 +2172,15 @@
         let hlsAttemptFailed = false;
 
         // Diagnostic Console Logger to track requests, buffers and errors in real-time
+        const diagnosticLogEntries = [];
+
+        function redactDiagnosticLog(value) {
+            return String(value)
+                .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, '$1[REDACTED]@')
+                .replace(/([?&](?:username|user|password|pass|token|auth|api[_-]?key)=)[^&#\s]*/gi, '$1[REDACTED]')
+                .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]');
+        }
+
         function addLog(msg, type = 'info') {
             const consoleEl = document.getElementById('diagnostic-log-console');
             if (!consoleEl) return;
@@ -2156,6 +2191,9 @@
             }
 
             const timestamp = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+            const safeMessage = redactDiagnosticLog(msg);
+            diagnosticLogEntries.push({ timestamp, type, message: safeMessage });
+            if (diagnosticLogEntries.length > 150) diagnosticLogEntries.shift();
             let typeClass = 'text-slate-350';
             let icon = '⚡';
 
@@ -2175,11 +2213,16 @@
 
             const logItem = document.createElement('div');
             logItem.className = `flex gap-1.5 border-b border-white/5 pb-0.5 leading-snug ${typeClass}`;
-            logItem.innerHTML = `
-                <span class="text-slate-500 select-none shrink-0 font-bold font-mono">[${timestamp}]</span>
-                <span class="select-none shrink-0 font-bold">${icon}</span>
-                <span class="break-all font-mono">${msg}</span>
-            `;
+            const timeLabel = document.createElement('span');
+            timeLabel.className = 'text-slate-500 select-none shrink-0 font-bold font-mono';
+            timeLabel.textContent = `[${timestamp}]`;
+            const iconLabel = document.createElement('span');
+            iconLabel.className = 'select-none shrink-0 font-bold';
+            iconLabel.textContent = icon;
+            const messageLabel = document.createElement('span');
+            messageLabel.className = 'break-all font-mono';
+            messageLabel.textContent = safeMessage;
+            logItem.append(timeLabel, iconLabel, messageLabel);
 
             consoleEl.appendChild(logItem);
 
@@ -2194,9 +2237,32 @@
 
         function clearDiagnosticLogs() {
             const consoleEl = document.getElementById('diagnostic-log-console');
+            diagnosticLogEntries.length = 0;
             if (consoleEl) {
                 consoleEl.innerHTML = '<div class="text-slate-500 italic">[Logs limpos. Inicie uma transmissão para capturar novos logs]</div>';
             }
+        }
+
+        function downloadDiagnosticLogs() {
+            const payload = [
+                'MK21 Web - Logs de diagnóstico',
+                `Data: ${new Date().toISOString()}`,
+                'Credenciais e caminhos autenticados foram mascarados.',
+                '',
+                ...diagnosticLogEntries.map(entry => `[${entry.timestamp}] [${entry.type.toUpperCase()}] ${entry.message}`)
+            ].join('\n');
+            const blobUrl = URL.createObjectURL(new Blob([payload], { type: 'text/plain;charset=utf-8' }));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `mk21-web-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        }
+
+        function openDiagnosticLogsOnGitHub() {
+            window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
         }
 
         function showPlayerHud(status, substatus) {
@@ -3030,8 +3096,7 @@
                             playerScreen.classList.remove('scale-95', 'opacity-0');
                             playerScreen.classList.add('scale-100', 'opacity-100');
                         }, 50);
-                        activeType = 'LIVE';
-                        activeCategory = 'ALL';
+                        activateLiveHomeView();
                         renderCategories();
                         renderMediaItems();
                         renderContinueWatching();
@@ -3048,8 +3113,7 @@
                             playerScreen.classList.remove('scale-95', 'opacity-0');
                             playerScreen.classList.add('scale-100', 'opacity-100');
                         }, 50);
-                        activeType = 'LIVE';
-                        activeCategory = 'ALL';
+                        activateLiveHomeView();
                         renderCategories();
                         renderMediaItems();
                         renderContinueWatching();
@@ -3331,7 +3395,7 @@
                 // 1. Fecha modal EPG se aberto
                 const epgModal = document.getElementById('epg-guide-modal');
                 if (epgModal && !epgModal.classList.contains('hidden')) {
-                    closeEpgGuideModal();
+                    closeEpgGuideModal(true);
                     return;
                 }
                 // 2. Fecha modais de configuração/retomada se abertos
@@ -3805,8 +3869,7 @@
                         }
                         activeUserDisplay.textContent = user;
 
-                        activeType = 'LIVE';
-                        activeCategory = 'ALL';
+                        activateLiveHomeView();
                         renderCategories();
                         renderMediaItems();
                         renderContinueWatching();
@@ -4111,8 +4174,7 @@
             activeUserDisplay.textContent = user;
 
             // Load initial content (LIVE channels first)
-            activeType = 'LIVE';
-            activeCategory = 'ALL';
+            activateLiveHomeView();
             renderCategories();
             renderMediaItems();
             renderContinueWatching();
@@ -5958,7 +6020,7 @@
             ].join(',');
 
             function getSpatialFocusables() {
-                const openModal = document.querySelector('#smart-tv-install-modal:not(.hidden), #mobile-category-modal:not(.hidden), #advanced-filters-modal:not(.hidden), #epg-program-modal:not(.hidden), #xmltv-preview-modal:not(.hidden)');
+                const openModal = document.querySelector('#smart-tv-install-modal:not(.hidden), #mobile-category-modal:not(.hidden), #advanced-filters-modal:not(.hidden), #epg-guide-modal:not(.hidden), #epg-program-modal:not(.hidden), #xmltv-preview-modal:not(.hidden)');
                 const container = openModal || document;
                 return Array.from(container.querySelectorAll(SPATIAL_SELECTOR)).filter(el => {
                     const rect = el.getBoundingClientRect();
@@ -6089,7 +6151,12 @@
                         toggleFullscreen();
                         return;
                     }
-                    const openModal = document.querySelector('#smart-tv-install-modal:not(.hidden), #mobile-category-modal:not(.hidden), #advanced-filters-modal:not(.hidden), #epg-program-modal:not(.hidden)');
+                    const epgModal = document.getElementById('epg-guide-modal');
+                    if (epgModal && !epgModal.classList.contains('hidden')) {
+                        closeEpgGuideModal();
+                        return;
+                    }
+                    const openModal = document.querySelector('#smart-tv-install-modal:not(.hidden), #mobile-category-modal:not(.hidden), #advanced-filters-modal:not(.hidden), #epg-guide-modal:not(.hidden), #epg-program-modal:not(.hidden)');
                     if (openModal) {
                         openModal.classList.add('hidden');
                         return;
