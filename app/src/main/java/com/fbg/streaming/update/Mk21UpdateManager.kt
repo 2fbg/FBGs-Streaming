@@ -39,10 +39,10 @@ class Mk21UpdateManager(
            if (remoteVersionCode > currentVersionCode) {
                UpdateInfo(
                    versionCode = remoteVersionCode,
-                   versionName = json.optString("versionName", "2.1.0"),
-                   apkUrl = json.optString("apkUrl", "https://github.com/2fbg/FBGs-Streaming/raw/main/mk21.apk"),
-                   sha256 = json.optString("sha256", ""),
-                   changelog = json.optString("changelog", "Melhorias de estabilidade e performance.")
+                   versionName = json.optString("versionName", json.optString("version", "2.1.3")),
+                   apkUrl = json.optString("apkUrl", json.optString("downloadUrl", "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk")),
+                   sha256 = json.optString("apkSha256", json.optString("sha256", "")),
+                   changelog = json.optString("changelog", json.optString("releaseNotes", "Melhorias de estabilidade e performance."))
                )
            } else {
                null

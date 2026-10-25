@@ -15,5 +15,7 @@
   "ipkSizeBytes": 157120,
   "updatedAt": "2026-10-21",
   "sha256": "bcf13f47e3cb0e47ee1f30ad329bea36a01b11caa32ec3b5d7010caa8d25b497",
-  "breakingChanges": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo."
+  "breakingChanges": "AVISO DE INSTALAÇÃO: Esta versão foi assinada com uma nova chave. É necessário desinstalar a versão anterior antes de instalar esta versão; a desinstalação pode apagar os dados locais do aplicativo.",
+  "versionName": "2.1.3",
+  "changelog": "• Upgrade Smart TV & Web v2.1.3: Padronização UI, resolução de race condition no zapping e sincronização EPG/XMLTV com ajuste de Timezone.\n• Combo Servidor Unificado: Sincronização centralizada a partir da raiz (servers.json) com fallback seguro contra dropdown em branco.\n• Modo Offline Aperfeiçoado: Acesso rápido e responsivo ao catálogo do cache com canais essenciais demonstrativos.\n• Higienização de Repositório: Arquivos e versões obsoletos movidos para builds/archives."
 }
