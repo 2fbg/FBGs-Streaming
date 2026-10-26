@@ -4102,14 +4102,6 @@ function renderTimeSettingsPanel() {
         <input type="checkbox" id="chk24Hours" ${cur24 ? 'checked' : ''} style="width:22px; height:22px;">
       </div>
 
-      <div style="background:#1a1e2d; padding:16px 20px; border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <div style="font-size:16px; color:#fff; font-weight:bold;">Sincronização Automática com Servidor</div>
-          <div style="font-size:13px; color:#888;">Sincroniza o relógio da TV com o horário do servidor IPTV</div>
-        </div>
-        <input type="checkbox" id="chkAutoSync" ${curSync ? 'checked' : ''} style="width:22px; height:22px;">
-      </div>
-
       <button id="btnSaveTimeSettings" class="ctrl-btn primary" style="padding:14px; font-size:16px;" tabindex="0">💾 Salvar Configurações de Tempo</button>
       <div id="msgTimeSaved" style="font-size:16px; font-weight:bold; color:#4caf50; display:none;">✅ Configurações de tempo salvas com sucesso!</div>
 
@@ -4119,7 +4111,6 @@ function renderTimeSettingsPanel() {
   $('btnSaveTimeSettings').onclick = () => {
     localStorage.setItem('mk21_timezone', $('selTimezone').value);
     localStorage.setItem('mk21_24h', $('chk24Hours').checked);
-    localStorage.setItem('mk21_autosync', $('chkAutoSync').checked);
     const msg = $('msgTimeSaved');
     if (msg) {
       msg.style.display = 'block';

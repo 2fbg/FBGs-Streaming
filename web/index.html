@@ -138,6 +138,126 @@
             white-space: nowrap !important;
             flex-shrink: 0 !important;
         }
+
+        /* SAIMO-INSPIRED CANAL GRID & EXPERT UI */
+        .canal-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+            gap: 12px !important;
+            width: 100% !important;
+        }
+        @media (min-width: 640px) {
+            .canal-grid {
+                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+                gap: 14px !important;
+            }
+        }
+        @media (min-width: 1280px) {
+            .canal-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+                gap: 16px !important;
+            }
+        }
+
+        .channel-grid-card {
+            position: relative !important;
+            aspect-ratio: 1 / 1 !important;
+            width: 100% !important;
+            background: rgba(15, 23, 42, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 16px !important;
+            overflow: hidden !important;
+            cursor: pointer !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease !important;
+            user-select: none !important;
+        }
+
+        /* Efeito de Foco / Hover: Aumento para 1.1 e Borda Brilhante #ff9800 */
+        .channel-grid-card:hover,
+        .channel-grid-card:focus,
+        .channel-grid-card.tv-focused {
+            transform: scale(1.1) !important;
+            box-shadow: 0 0 15px #ff9800 !important;
+            border-color: #ff9800 !important;
+            outline: none !important;
+            z-index: 25 !important;
+        }
+
+        .channel-grid-card.active-playing {
+            border-color: #ff9800 !important;
+            box-shadow: 0 0 12px rgba(255, 152, 0, 0.6) !important;
+        }
+
+        .channel-grid-card .channel-card-logo-wrap {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 12px 34px 12px;
+        }
+
+        .channel-grid-card .channel-card-logo {
+            max-height: 60%;
+            max-width: 80%;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+            transition: transform 0.3s ease;
+        }
+
+        .channel-grid-card:hover .channel-card-logo,
+        .channel-grid-card:focus .channel-card-logo,
+        .channel-grid-card.tv-focused .channel-card-logo {
+            transform: scale(1.08);
+        }
+
+        .channel-grid-card .channel-card-footer {
+            position: absolute;
+            inset-inline: 0;
+            bottom: 0;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.75) 60%, transparent 100%);
+            padding: 16px 8px 8px 8px;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .channel-grid-card .channel-card-name {
+            font-size: 11px;
+            font-weight: 700;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.2;
+        }
+
+        .channel-grid-card .channel-card-category {
+            font-size: 9px;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }
+
+        /* Busca On-Top Fixa */
+        .search-bar-sticky {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 28 !important;
+            background: rgba(14, 15, 18, 0.96) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+        }
+
+        /* Upscaling CSS */
+        .upscale-filter {
+            filter: contrast(1.1) saturate(1.1) brightness(1.05) !important;
+        }
     </style>
 
     <!-- FontAwesome for Premium Icons -->
@@ -163,7 +283,6 @@
                 <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-80 h-80 bg-red-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
                 <img src="icon.svg" alt="MK21" class="relative w-16 h-16 sm:w-16 sm:h-16 object-contain drop-shadow-[0_12px_26px_rgba(229,9,20,0.3)]">
-
             </div>
 
             <!-- Segmented Control (Abas Elegantes estilo iOS/Netflix) -->
@@ -293,12 +412,21 @@
                         <i class="fa-solid fa-bolt text-amber-400 text-base animate-pulse"></i>
                         <span class="tracking-wide">Prosseguir para Home (Modo Offline / Cache)</span>
                     </button>
+
+                    <!-- Carregar Lista M3U Local do Dispositivo -->
+                    <div class="flex items-center gap-2 mt-2">
+                        <button type="button" id="btn-load-local-m3u" onclick="window.triggerLocalM3uUpload()" class="w-full py-3 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/40 text-slate-300 hover:text-amber-300 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer">
+                            <i class="fa-solid fa-file-arrow-up text-amber-400"></i>
+                            <span>Carregar Lista M3U Local (.m3u/.m3u8)</span>
+                        </button>
+                    </div>
+                    <input type="file" id="offline-m3u-file-input" accept=".m3u,.m3u8,.txt" class="hidden">
                 </div>
             </div>
 
             <!-- Rodapé com Versão MK21 Sincronizada -->
             <p class="text-center text-xs text-slate-500 mt-6 font-medium">
-                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v2.1.2 by FBG2</span>
+                MK21 MultiServidor • <span class="font-bold text-[#E50914] tracking-wide">v2.2.0 by FBG2</span>
             </p>
         </div>
 
@@ -392,8 +520,8 @@
 
                 <!-- COLUMN 2: Media Listing -->
                 <section id="media-grid-column" class="flex-grow glass-card rounded-2xl flex flex-col overflow-hidden min-w-0">
-                    <!-- Search and Actions Bar -->
-                    <div class="px-3 pt-2.5 pb-2 border-b border-slate-800 space-y-2">
+                    <!-- Search and Actions Bar (Busca On-Top Fixa) -->
+                    <div class="search-bar-sticky px-3 pt-2.5 pb-2 border-b border-slate-800 space-y-2">
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
                                 <i class="fa-solid fa-magnifying-glass text-sm"></i>
@@ -678,6 +806,12 @@
                                     <!-- Picture-in-Picture Mini Player -->
                                     <button id="yt-pip-btn" class="hover:text-[#E50914] transition-colors focus:outline-none flex items-center justify-center" title="Mini Player (PiP)" aria-label="Ativar Picture-in-Picture">
                                         <i class="fa-solid fa-window-restore text-xs"></i>
+                                    </button>
+
+                                    <!-- Upscaling CSS (HD Enhance) -->
+                                    <button id="btn-toggle-upscale" onclick="window.toggleUpscaleFilter()" class="hover:text-amber-400 text-slate-300 transition-colors focus:outline-none flex items-center justify-center gap-1 px-1.5 py-0.5 rounded border border-slate-700/60" title="Upscaling CSS (HD Enhance) [Atalho: U]" aria-label="Ativar Upscaling CSS">
+                                        <i class="fa-solid fa-wand-magic-sparkles text-xs text-amber-400"></i>
+                                        <span class="text-[9px] font-bold">HD+</span>
                                     </button>
 
                                     <!-- Theater Mode Wide Toggle -->
@@ -2242,28 +2376,28 @@
             if (consoleEl) {
                 consoleEl.innerHTML = '<div class="text-slate-500 italic">[Logs limpos. Inicie uma transmissão para capturar novos logs]</div>';
             }
+        }
 
-            function downloadDiagnosticLogs() {
-                const payload = [
-                    'MK21 Web - Logs de diagnóstico',
-                    `Data: ${new Date().toISOString()}`,
-                    'Credenciais e caminhos autenticados foram mascarados.',
-                    '',
-                    ...diagnosticLogEntries.map(entry => `[${entry.timestamp}] [${entry.type.toUpperCase()}] ${entry.message}`)
-                ].join('\n');
-                const blobUrl = URL.createObjectURL(new Blob([payload], { type: 'text/plain;charset=utf-8' }));
-                const link = document.createElement('a');
-                link.href = blobUrl;
-                link.download = `mk21-web-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-            }
+        function downloadDiagnosticLogs() {
+            const payload = [
+                'MK21 Web - Logs de diagnóstico',
+                `Data: ${new Date().toISOString()}`,
+                'Credenciais e caminhos autenticados foram mascarados.',
+                '',
+                ...diagnosticLogEntries.map(entry => `[${entry.timestamp}] [${entry.type.toUpperCase()}] ${entry.message}`)
+            ].join('\n');
+            const blobUrl = URL.createObjectURL(new Blob([payload], { type: 'text/plain;charset=utf-8' }));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `mk21-web-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        }
 
-            function openDiagnosticLogsOnGitHub() {
-                window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
-            }
+        function openDiagnosticLogsOnGitHub() {
+            window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
         }
 
         function showPlayerHud(status, substatus) {
@@ -2507,11 +2641,221 @@
         const vlcLauncher = document.getElementById('vlc-launcher');
         const externalLauncher = document.getElementById('external-launcher');
 
+        // ----------------------------------------------------
+        // PERSISTÊNCIA DE ESTADO E EXPERT ENGINE (SAIMO-INSPIRED)
+        // ----------------------------------------------------
+        const MK21_CONFIG = {
+            STORAGE_KEY: 'MK21_CONFIG',
+            defaults: {
+                last_channel_id: null,
+                volume_level: 1.0,
+                favorites_list: [],
+                upscaling_active: false,
+                zapping_mode: 'zero-delay' // 'zero-delay' | 'instant' | 'smooth'
+            },
+            getAll() {
+                try {
+                    const raw = localStorage.getItem(this.STORAGE_KEY);
+                    if (!raw) return { ...this.defaults };
+                    return { ...this.defaults, ...JSON.parse(raw) };
+                } catch (e) {
+                    return { ...this.defaults };
+                }
+            },
+            get(key) {
+                const conf = this.getAll();
+                return conf[key] !== undefined ? conf[key] : this.defaults[key];
+            },
+            set(key, value) {
+                try {
+                    const conf = this.getAll();
+                    conf[key] = value;
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(conf));
+                    if (key === 'volume_level') localStorage.setItem('mk21_player_volume', String(value));
+                    if (key === 'favorites_list') localStorage.setItem('mk21_favorites', JSON.stringify(value));
+                    return conf;
+                } catch (e) {
+                    console.warn('[MK21_CONFIG] Erro ao salvar chave:', key, e);
+                }
+            },
+            update(obj) {
+                try {
+                    const conf = this.getAll();
+                    Object.assign(conf, obj);
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(conf));
+                    return conf;
+                } catch (e) {}
+            }
+        };
+        window.MK21_CONFIG = MK21_CONFIG;
+
+        // Modo Zero Delay: Pre-fetching de manifestos HLS para os 2 canais seguintes
+        function prefetchZeroDelayChannels(currentItem) {
+            try {
+                if (!Array.isArray(playlistItems) || playlistItems.length <= 1) return;
+                const zMode = MK21_CONFIG.get('zapping_mode');
+                if (zMode !== 'zero-delay' && zMode !== 'instant') return;
+
+                const curIdx = playlistItems.findIndex(it => (it.id && it.id === currentItem.id) || it.url === currentItem.url);
+                if (curIdx === -1) return;
+
+                const nextTargets = [
+                    playlistItems[(curIdx + 1) % playlistItems.length],
+                    playlistItems[(curIdx + 2) % playlistItems.length]
+                ];
+
+                nextTargets.forEach((target, i) => {
+                    if (!target || !target.url) return;
+                    const effectiveProxy = getEffectiveProxyMethod(target.url, getStoredProxyMode());
+                    const playable = getPlayableStreamUrl(target.url, effectiveProxy);
+                    const urlToPrefetch = playable.url;
+
+                    try {
+                        const ctrl = new AbortController();
+                        const timer = setTimeout(() => ctrl.abort(), 4000);
+                        fetch(urlToPrefetch, {
+                            method: 'GET',
+                            headers: { 'Range': 'bytes=0-2048' },
+                            signal: ctrl.signal
+                        }).then(() => {
+                            clearTimeout(timer);
+                            console.debug(`[Zero Delay] Manifesto pré-carregado (+${i + 1}): ${target.name}`);
+                        }).catch(() => {
+                            clearTimeout(timer);
+                        });
+                    } catch (e) {}
+                });
+            } catch (err) {
+                console.debug('[Zero Delay] Erro de prefetch:', err);
+            }
+        }
+        window.prefetchZeroDelayChannels = prefetchZeroDelayChannels;
+
+        // Upscaling CSS: alternar classe .upscale-filter no vídeo
+        function toggleUpscaleFilter() {
+            const video = document.getElementById('iptv-video');
+            if (!video) return;
+            const isActive = video.classList.toggle('upscale-filter');
+            MK21_CONFIG.set('upscaling_active', isActive);
+            updateUpscaleUI(isActive);
+            showNotification(isActive ? 'Upscaling de Imagem Ativado (HD Enhance) ✨' : 'Upscaling de Imagem Desativado', 'info');
+        }
+        window.toggleUpscaleFilter = toggleUpscaleFilter;
+
+        function updateUpscaleUI(active) {
+            const btn = document.getElementById('btn-toggle-upscale');
+            if (btn) {
+                if (active) {
+                    btn.classList.add('text-amber-400', 'border-amber-500/60', 'bg-amber-500/15');
+                    btn.classList.remove('text-slate-300');
+                } else {
+                    btn.classList.remove('text-amber-400', 'border-amber-500/60', 'bg-amber-500/15');
+                    btn.classList.add('text-slate-300');
+                }
+            }
+        }
+        window.updateUpscaleUI = updateUpscaleUI;
+
+        // Auto-sintonização automática no último canal assistido salvo em MK21_CONFIG
+        function resumeLastChannelIfAvailable() {
+            try {
+                const lastId = MK21_CONFIG.get('last_channel_id');
+                if (!lastId || !playlistItems || !playlistItems.length) return false;
+                const target = playlistItems.find(it => String(it.id) === String(lastId) || String(it.stream_id) === String(lastId) || it.name === lastId);
+                if (target) {
+                    console.log('[MK21_CONFIG] Sintonizando automaticamente no canal:', target.name);
+                    playStream(target);
+                    return true;
+                }
+            } catch (e) {
+                console.warn('[MK21_CONFIG] Erro ao retomar canal:', e);
+            }
+            return false;
+        }
+        window.resumeLastChannelIfAvailable = resumeLastChannelIfAvailable;
+
+        // Modo Offline: Carregamento de lista M3U local (Input File)
+        function triggerLocalM3uUpload() {
+            const fileInput = document.getElementById('offline-m3u-file-input');
+            if (fileInput) fileInput.click();
+        }
+        window.triggerLocalM3uUpload = triggerLocalM3uUpload;
+
+        function handleLocalM3uFile(file) {
+            if (!file) return;
+            showLoader(`Processando lista local: ${file.name}...`);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const parsed = parseM3U(content);
+                    if (!parsed || parsed.length === 0) {
+                        hideLoader();
+                        showNotification('Nenhum canal válido encontrado no arquivo M3U local.', 'error');
+                        return;
+                    }
+                    playlistItems = parsed;
+                    const loginScreen = document.getElementById('login-screen');
+                    const playerScreen = document.getElementById('player-screen');
+                    if (loginScreen) loginScreen.classList.add('hidden');
+                    if (playerScreen) {
+                        playerScreen.classList.remove('hidden');
+                        playerScreen.classList.add('flex');
+                        setTimeout(() => {
+                            playerScreen.classList.remove('scale-95', 'opacity-0');
+                            playerScreen.classList.add('scale-100', 'opacity-100');
+                        }, 50);
+                    }
+                    activateLiveHomeView();
+                    renderCategories();
+                    renderMediaItems();
+                    renderContinueWatching();
+                    hideLoader();
+                    showNotification(`Lista M3U local carregada com ${parsed.length} canais! ⚡`, 'success');
+                    resumeLastChannelIfAvailable();
+                } catch (err) {
+                    hideLoader();
+                    showNotification('Erro ao processar arquivo M3U: ' + err.message, 'error');
+                }
+            };
+            reader.onerror = function() {
+                hideLoader();
+                showNotification('Erro ao ler arquivo do dispositivo.', 'error');
+            };
+            reader.readAsText(file);
+        }
+        window.handleLocalM3uFile = handleLocalM3uFile;
+
         // Initialize application on load
         function initApp() {
             try {
                 if (localStorage.getItem('mk21_high_contrast') === 'true') {
                     document.body.classList.add('high-contrast');
+                }
+            } catch (e) {}
+
+            // Aplicar estado persistido via MK21_CONFIG (Volume e Upscaling)
+            try {
+                const savedVol = MK21_CONFIG.get('volume_level');
+                if (videoElement && savedVol !== undefined) {
+                    videoElement.volume = parseFloat(savedVol);
+                }
+                const isUpscale = MK21_CONFIG.get('upscaling_active');
+                if (isUpscale && videoElement) {
+                    videoElement.classList.add('upscale-filter');
+                    updateUpscaleUI(true);
+                }
+            } catch (e) {}
+
+            // Configurar listener para upload M3U local offline
+            try {
+                const offlineFileInput = document.getElementById('offline-m3u-file-input');
+                if (offlineFileInput) {
+                    offlineFileInput.addEventListener('change', (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                            handleLocalM3uFile(e.target.files[0]);
+                        }
+                    });
                 }
             } catch (e) {}
 
@@ -3101,6 +3445,7 @@
                         renderCategories();
                         renderMediaItems();
                         renderContinueWatching();
+                        resumeLastChannelIfAvailable();
                         startBackgroundLoading(cached.movies || [], cached.series || []);
                         hideLoader();
                         showNotification('Entrou em modo Offline com catálogo do cache! ⚡', 'success');
@@ -3118,6 +3463,7 @@
                         renderCategories();
                         renderMediaItems();
                         renderContinueWatching();
+                        resumeLastChannelIfAvailable();
                         hideLoader();
                         showNotification('Entrou no Modo Offline (catálogo essencial). Conecte ao servidor para sua lista completa.', 'info');
                     }
@@ -4179,6 +4525,7 @@
             renderCategories();
             renderMediaItems();
             renderContinueWatching();
+            resumeLastChannelIfAvailable();
 
             if (originalSelectedProfileName !== profileName) {
                 showNotification(`Conectado com sucesso via failover inteligente ao servidor [${profileName}]! ⚡`, 'success');
@@ -4192,7 +4539,7 @@
 
             } catch (err) {
                 console.error(err);
-                showLoginError(`Erro de Conectividade: ${err.message}. Tente usar outro servidor predefinido ou selecione outro método de conexão nas Opções Avançadas.`);
+                showLoginError(`Erro de Conectividade: ${err.message}. Você pode usar o "Modo Offline" ou carregar uma lista M3U local.`);
             } finally {
                 hideLoader();
                 if (loginButton) {
@@ -5050,19 +5397,20 @@
         }
 
         // Shimmer Skeleton UI Generator for channels and VODs
-        function renderShimmerSkeleton(count = 9) {
+        function renderShimmerSkeleton(count = 12) {
             mediaGrid.innerHTML = '';
             if (activeType === 'LIVE') {
-                mediaGrid.className = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3";
+                mediaGrid.className = "canal-grid";
                 for (let i = 0; i < count; i++) {
                     const sk = document.createElement('div');
-                    sk.className = "p-3 bg-slate-900/60 border border-slate-800/60 rounded-xl flex gap-3.5 items-center animate-pulse";
+                    sk.className = "channel-grid-card animate-pulse bg-slate-900/60";
                     sk.innerHTML = `
-                        <div class="w-12 h-12 rounded-xl bg-slate-800/80 shrink-0"></div>
-                        <div class="flex-grow space-y-2">
-                            <div class="h-3.5 bg-slate-800/80 rounded w-3/4"></div>
-                            <div class="h-2.5 bg-slate-800/60 rounded w-1/2"></div>
-                            <div class="h-2 bg-slate-800/40 rounded w-1/4"></div>
+                        <div class="channel-card-logo-wrap">
+                            <div class="w-14 h-14 rounded-2xl bg-slate-800/80"></div>
+                        </div>
+                        <div class="channel-card-footer">
+                            <div class="h-3 bg-slate-800/80 rounded w-3/4 mx-auto mb-1"></div>
+                            <div class="h-2 bg-slate-800/60 rounded w-1/2 mx-auto"></div>
                         </div>
                     `;
                     mediaGrid.appendChild(sk);
@@ -5107,9 +5455,9 @@
 
             mediaGrid.innerHTML = '';
 
-            // Apply modern responsive dynamic classes based on whether VOD (movie/series) or LIVE channels are shown
+            // Saimo-inspired Canal Grid for LIVE, poster grid for VOD
             if (activeType === 'LIVE') {
-                mediaGrid.className = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5";
+                mediaGrid.className = "canal-grid";
             } else {
                 mediaGrid.className = "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-2.5";
             }
@@ -5228,29 +5576,37 @@
                         </div>
                     `;
                 } else {
-                    // LIVE channels - Horizontal List with elegant badge
-                    colCard.className = "group p-3 bg-slate-900/60 hover:bg-slate-850/50 border border-slate-850 hover:border-red-500/20 rounded-xl cursor-pointer flex gap-3.5 items-center transition-all duration-300 transform hover:scale-[1.015] hover:shadow media-item-card focus:outline-none";
+                    // LIVE channels - Saimo-inspired Dynamic Square Grid Card
+                    const isCurrentlyPlaying = currentActiveItem && currentActiveItem.url === item.url;
+                    colCard.className = "channel-grid-card media-item-card" + (isCurrentlyPlaying ? " active-playing" : "");
                     colCard.setAttribute('tabindex', '0');
+                    colCard.setAttribute('data-channel-id', item.id || item.stream_id || item.name);
 
                     const logoHtml = item.logo
-                        ? `<img class="w-12 h-12 rounded-xl object-contain bg-slate-950 p-1 border border-slate-800 shadow" src="${item.logo}" data-orig-src="${item.logo}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${item.name.replace(/"/g, '&quot;')}">`
-                        : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-red-950/30 to-slate-950 text-red-500 flex items-center justify-center font-black text-lg border border-red-500/10 shadow">${item.name.charAt(0).toUpperCase()}</div>`;
+                        ? `<img class="channel-card-logo" src="${item.logo}" data-orig-src="${item.logo}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23ff9800%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${item.name.replace(/"/g, '&quot;')}">`
+                        : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500/20 to-slate-800 text-amber-400 flex items-center justify-center font-black text-xl border border-amber-500/30 shadow">${item.name.charAt(0).toUpperCase()}</div>`;
 
                     const epgInfo = window.EpgManager ? window.EpgManager.getProgramInfo(item) : { currentTitle: getCurrentEpgProgram(item.name), isReal: false };
                     const safeName = item.name.replace(/"/g, '&quot;');
 
                     colCard.innerHTML = `
-                        ${logoHtml}
-                        <div class="flex-grow min-w-0 flex flex-col justify-center">
-                            <h4 class="font-extrabold text-xs truncate text-slate-100 group-hover:text-red-500 transition-colors leading-tight">${item.name}</h4>
-                            <div class="text-[9.5px] text-red-500 font-extrabold truncate mt-1 flex items-center gap-1.5 min-w-0" data-epg-for="${safeName}">
-                                <span class="w-1.5 h-1.5 bg-red-500 rounded-full inline-block animate-pulse shrink-0"></span>
-                                <span class="truncate text-red-400">NO AR: ${epgInfo.currentTitle}</span>
-                                ${epgInfo.isReal ? '<span class="text-[8px] px-1 py-0.2 bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 rounded font-black tracking-widest shrink-0">XMLTV</span>' : ''}
-                            </div>
-                            <div class="flex items-center gap-1.5 mt-1 min-w-0">
-                                <span class="text-[8px] text-red-500 bg-red-950/20 border border-red-500/15 px-1.5 py-0.2 rounded font-black tracking-widest uppercase">AO VIVO</span>
-                                <span class="text-[9px] text-slate-450 truncate font-semibold">${item.category}</span>
+                        <!-- Badge Ao Vivo Sutil -->
+                        <div class="absolute top-2 left-2 z-10 flex items-center gap-1 pointer-events-none">
+                            <span class="text-[7.5px] font-black uppercase tracking-wider text-red-500 bg-black/85 px-1.5 py-0.5 rounded border border-red-500/30 flex items-center gap-1 backdrop-blur-sm">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> AO VIVO
+                            </span>
+                        </div>
+
+                        <!-- Logo Centralizada -->
+                        <div class="channel-card-logo-wrap">
+                            ${logoHtml}
+                        </div>
+
+                        <!-- Rodapé com Overlay Semi-Transparente e Nome do Canal -->
+                        <div class="channel-card-footer">
+                            <div class="channel-card-name" title="${safeName}">${item.name}</div>
+                            <div class="channel-card-category" data-epg-for="${safeName}">
+                                ${epgInfo.currentTitle ? `<span class="text-amber-400 font-semibold truncate">${epgInfo.currentTitle}</span>` : `<span class="truncate">${item.category || 'Geral'}</span>`}
                             </div>
                         </div>
                     `;
@@ -5719,6 +6075,16 @@
 
             // Record to continue watching list
             addToContinueWatching(item);
+
+            // Persistência no MK21_CONFIG e pre-fetching Zero Delay dos próximos 2 canais
+            try {
+                if (window.MK21_CONFIG) {
+                    window.MK21_CONFIG.set('last_channel_id', item.id || item.stream_id || item.name);
+                }
+                if (typeof prefetchZeroDelayChannels === 'function') {
+                    prefetchZeroDelayChannels(item);
+                }
+            } catch (e) {}
 
             // Toggle YouTube controls Next Episode button
             const ytNextBtn = document.getElementById('yt-next-btn');
@@ -6244,7 +6610,7 @@
                     return;
                 }
 
-                // Quick Keys (F: Fullscreen, M: Mute, P: PiP)
+                // Quick Keys (F: Fullscreen, M: Mute, P: PiP, U: Upscale)
                 if (e.code === 'KeyF') {
                     e.preventDefault();
                     toggleFullscreen();
@@ -6254,6 +6620,9 @@
                 } else if (e.code === 'KeyP') {
                     e.preventDefault();
                     togglePictureInPicture();
+                } else if (e.code === 'KeyU') {
+                    e.preventDefault();
+                    toggleUpscaleFilter();
                 } else if (k === 404 || key === 'Green' || key === 'ColorF1Green') {
                     e.preventDefault();
                     if (currentActiveItem) toggleFavorite(currentActiveItem);
@@ -6343,6 +6712,7 @@
                 video.volume = vol;
                 if (volumeSlider) volumeSlider.value = vol;
                 localStorage.setItem('mk21_player_volume', vol);
+                if (window.MK21_CONFIG) window.MK21_CONFIG.set('volume_level', vol);
                 updateVolumeUI(vol);
             }
 
@@ -6353,6 +6723,7 @@
                     video.volume = vol;
                     video.muted = false;
                     localStorage.setItem('mk21_player_volume', vol);
+                    if (window.MK21_CONFIG) window.MK21_CONFIG.set('volume_level', vol);
                     updateVolumeUI(vol);
                 });
             }
