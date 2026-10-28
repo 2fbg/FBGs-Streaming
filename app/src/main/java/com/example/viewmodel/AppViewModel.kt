@@ -332,6 +332,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         if (isSportsIntent) {
             try {
+                val globalSports = playlistItemDao.getLiveSportsChannelsGlobal()
+                if (globalSports.isNotEmpty()) {
+                    return@withContext globalSports
+                }
                 val liveChannels = playlistItemDao.getItemsByType(playlist, ContentType.LIVE.name).first()
                 val sportsMatches = liveChannels.filter { item ->
                     val n = item.name.uppercase()

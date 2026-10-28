@@ -191,7 +191,7 @@ class GeminiAiService {
             sb.appendLine("📡 **Como usar o recurso 'Escolha a fonte':**\n")
             sb.appendLine("• Durante a reprodução de qualquer canal ou filme, abra os controles e toque no botão **Fonte**.")
             sb.appendLine("• Você pode alternar entre os 7 servidores oficiais do MK21 (VLOG, TANNIX, LUB TV, MK21 PRÓ, CB6000, CINELON e MULTT TV).")
-            sb.appendLine("• O aplicativo possui **Watchdog automático de 8 segundos**: se uma fonte congelar, o player tenta reconectar automaticamente na próxima fonte disponível.")
+            sb.appendLine("• O aplicativo possui **Watchdog automático de 15 segundos**: se uma fonte congelar, o player tenta reconectar automaticamente na próxima fonte disponível.")
             return sb.toString().trim()
         }
 

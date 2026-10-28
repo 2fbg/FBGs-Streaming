@@ -24,6 +24,7 @@ sealed interface GeminiUiState {
 data class CopilotMessage(
     val sender: String, // "user" or "gemini"
     val text: String,
+    val suggestedItems: List<PlaylistItem> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -38,7 +39,7 @@ class GeminiAiViewModel(
         listOf(
             CopilotMessage(
                 sender = "gemini",
-                text = "Olá! Sou o MK21 AI Copilot, alimentado pelo Gemini API. Posso recomendar canais, filmes ou séries da sua lista, sugerir o que assistir hoje ou analisar o conteúdo atual. Em que posso te ajudar?"
+                text = "Olá! Sou o MK21 AI Copilot. Posso te dizer onde assistir a qualquer jogo de futebol ao vivo, recomendar filmes ou séries da sua lista e tirar dúvidas sobre fontes e qualidade. Como posso te ajudar?"
             )
         )
     )
@@ -90,9 +91,42 @@ class GeminiAiViewModel(
                 val finalOutput = accumulated.toString().trim()
                 if (finalOutput.isNotEmpty()) {
                     _uiState.value = GeminiUiState.Success(finalOutput)
+
+                    // Extract clickable recommended items for instant play
+                    val lower = trimmedPrompt.lowercase()
+                    val isSports = lower.contains("jogo") || lower.contains("futebol") ||
+                            lower.contains("onde assistir") || lower.contains("assistir") ||
+                            lower.contains("palmeiras") || lower.contains("santos") ||
+                            lower.contains("flamengo") || lower.contains("corinthians") ||
+                            lower.contains("são paulo") || lower.contains("sao paulo") ||
+                            lower.contains("vasco") || lower.contains("botafogo") ||
+                            lower.contains("fluminense") || lower.contains("gremio") ||
+                            lower.contains("grêmio") || lower.contains("inter") ||
+                            lower.contains("cruzeiro") || lower.contains("atletico") ||
+                            lower.contains("champions") || lower.contains("libertadores") ||
+                            lower.contains("premiere") || lower.contains("sportv") ||
+                            lower.contains("espn") || lower.contains("cazé") || lower.contains("caze")
+
+                    val matchedSuggestions = if (isSports) {
+                        targetCatalog.filter { item ->
+                            val n = item.name.uppercase()
+                            val c = item.category.uppercase()
+                            n.contains("PREMIERE") || n.contains("SPORTV") || n.contains("ESPN") ||
+                            n.contains("GLOBO") || n.contains("CAZÉ") || n.contains("CAZE") ||
+                            n.contains("TNT") || n.contains("RECORD") || n.contains("BAND") ||
+                            c.contains("ESPORTE") || c.contains("FUTEBOL")
+                        }.distinctBy { it.name }.take(5)
+                    } else {
+                        val words = lower.split(" ", ",", ".", "-").filter { it.length >= 3 }
+                        targetCatalog.filter { item ->
+                            words.any { kw -> item.name.lowercase().contains(kw) || item.category.lowercase().contains(kw) }
+                        }.distinctBy { it.name }.take(4)
+                    }
+
                     _messages.value = _messages.value + CopilotMessage(
                         sender = "gemini",
-                        text = finalOutput
+                        text = finalOutput,
+                        suggestedItems = matchedSuggestions
                     )
                 } else {
                     _uiState.value = GeminiUiState.Error("O modelo não retornou conteúdo.")
@@ -126,7 +160,8 @@ class GeminiAiViewModel(
                 _uiState.value = GeminiUiState.Success(synopsis)
                 _messages.value = _messages.value + CopilotMessage(
                     sender = "gemini",
-                    text = "🎬 **Análise com Gemini:** ${item.name}\n\n$synopsis"
+                    text = "🎬 **Análise com Gemini:** ${item.name}\n\n$synopsis",
+                    suggestedItems = listOf(item)
                 )
             } catch (e: CancellationException) {
                 throw e

@@ -31,6 +31,9 @@ interface PlaylistItemDao {
     @Query("SELECT * FROM playlist_items WHERE isFavorite = 1")
     suspend fun getAllFavoriteItems(): List<PlaylistItem>
 
+    @Query("SELECT * FROM playlist_items WHERE contentType = 'LIVE' AND (name LIKE '%PREMIERE%' OR name LIKE '%SPORTV%' OR name LIKE '%ESPN%' OR name LIKE '%GLOBO%' OR name LIKE '%CAZÉ%' OR name LIKE '%CAZE%' OR name LIKE '%TNT%' OR category LIKE '%ESPORTE%' OR category LIKE '%FUTEBOL%') LIMIT 60")
+    suspend fun getLiveSportsChannelsGlobal(): List<PlaylistItem>
+
     @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND contentType = :type AND lastWatchedTime > 0 ORDER BY lastWatchedTime DESC LIMIT 15")
     fun getContinueWatching(source: String, type: String): Flow<List<PlaylistItem>>
 

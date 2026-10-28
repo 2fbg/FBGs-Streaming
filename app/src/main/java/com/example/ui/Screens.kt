@@ -4254,12 +4254,52 @@ fun VideoPlayerUI(
     var selectedQualityOption by remember { mutableStateOf("auto") }
     var superResolutionMode by remember { mutableStateOf(viewModel.preferencesService.superResolutionMode) }
 
-    // Multi-source extraction from active server & predefined server pool (Saimo TV pattern)
-    val availableSources = remember(playlistItem, viewModel.predefinedServers) {
+    // Multi-source extraction: sibling resolutions from active playlist + predefined server pool (Saimo TV pattern)
+    val availableSources = remember(playlistItem, viewModel.predefinedServers, viewModel.activeItemsList.value) {
         val originalUrl = playlistItem.url.trim()
         val list = mutableListOf<Pair<String, String>>()
-        list.add("Fonte 1" to originalUrl)
+        list.add("Fonte 1 (Atual)" to originalUrl)
 
+        var sourceIdx = 2
+
+        // 1. Sibling channels from user's active playlist (e.g. GLOBO SP FHD, GLOBO SP HD, GLOBO SP SD)
+        try {
+            val rawName = playlistItem.name.uppercase()
+            val cleanName = rawName
+                .replace(" 4K", "")
+                .replace(" 4k", "")
+                .replace(" FHD", "")
+                .replace(" HD", "")
+                .replace(" SD", "")
+                .replace(" H.265", "")
+                .replace(" HEVC", "")
+                .replace("[4K]", "")
+                .replace("[FHD]", "")
+                .replace("[HD]", "")
+                .replace("[SD]", "")
+                .trim()
+
+            if (cleanName.length >= 3) {
+                val siblings = viewModel.activeItemsList.value.filter {
+                    it.id != playlistItem.id &&
+                    it.url.trim().isNotEmpty() &&
+                    it.url.trim() != originalUrl &&
+                    it.name.uppercase().contains(cleanName)
+                }.take(3)
+
+                for (sibling in siblings) {
+                    val candidate = sibling.url.trim()
+                    if (list.none { it.second == candidate }) {
+                        list.add("Fonte $sourceIdx (${sibling.name})" to candidate)
+                        sourceIdx++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // sibling matching safety
+        }
+
+        // 2. Multi-server mirror candidates (VLOG, TANNIX, LUB TV, MK21 PRÓ, CB6000, CINELON, MULTT TV)
         try {
             val uri = android.net.Uri.parse(originalUrl)
             val path = uri.encodedPath ?: ""
@@ -4271,7 +4311,6 @@ fun VideoPlayerUI(
                                !pathAndQuery.contains("get.php") && 
                                !pathAndQuery.endsWith(".m3u")
             if (isStreamPath) {
-                var sourceIdx = 2
                 for (server in viewModel.predefinedServers) {
                     val base = server.baseUrl.trim().removeSuffix("/")
                     val candidate = "$base$pathAndQuery"
@@ -4287,6 +4326,7 @@ fun VideoPlayerUI(
         list
     }
     var selectedSourceIndex by remember(playlistItem) { mutableIntStateOf(0) }
+    var sourceSwitchTrigger by remember(playlistItem) { mutableIntStateOf(0) }
     
     var overlayDismissJob by remember { mutableStateOf<Job?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -4379,8 +4419,11 @@ fun VideoPlayerUI(
             val builder = MediaItem.Builder().setUri(rawUrl)
             val lower = rawUrl.lowercase()
             when {
-                lower.contains(".m3u8") || lower.contains("/live/") -> {
+                lower.contains(".m3u8") -> {
                     builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+                }
+                lower.contains(".ts") -> {
+                    builder.setMimeType(MimeTypes.VIDEO_MP2T)
                 }
                 lower.contains(".mpd") -> {
                     builder.setMimeType(MimeTypes.APPLICATION_MPD)
@@ -4390,9 +4433,6 @@ fun VideoPlayerUI(
                 }
                 lower.contains(".mkv") -> {
                     builder.setMimeType(MimeTypes.VIDEO_MATROSKA)
-                }
-                lower.contains(".ts") -> {
-                    builder.setMimeType(MimeTypes.VIDEO_MP2T)
                 }
             }
             builder.build()
@@ -4454,9 +4494,10 @@ fun VideoPlayerUI(
     LaunchedEffect(playlistItem) {
         retryCount = 0
         selectedSourceIndex = 0
+        sourceSwitchTrigger = 0
     }
 
-    LaunchedEffect(playlistItem, selectedSourceIndex, retryCount) {
+    LaunchedEffect(playlistItem, selectedSourceIndex, retryCount, sourceSwitchTrigger) {
         errorMessage = null
         val activeSourceUrl = availableSources.getOrNull(selectedSourceIndex)?.second ?: playlistItem.url.trim()
         val url = activeSourceUrl.trim()
@@ -4468,7 +4509,7 @@ fun VideoPlayerUI(
         try {
             isBuffering = true
             if (retryCount > 0) {
-                Log.d("PlayerScreen", "Auto-reconnecting stream: attempt $retryCount/5 in 2s...")
+                Log.d("PlayerScreen", "Auto-reconnecting stream: attempt $retryCount/2 in 2s...")
                 kotlinx.coroutines.delay(2000L)
             }
             // Stop and clear previous playback state first to prevent native decoding deadlocks/crashes!
@@ -4501,6 +4542,8 @@ fun VideoPlayerUI(
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
                 selectedSourceIndex = nextIdx
+                retryCount = 0
+                sourceSwitchTrigger++
             }
         }
     }
@@ -4541,6 +4584,7 @@ fun VideoPlayerUI(
                 } else if (selectedSourceIndex < availableSources.size - 1) {
                     selectedSourceIndex++
                     retryCount = 0
+                    sourceSwitchTrigger++
                     android.widget.Toast.makeText(
                         context,
                         "Fonte instável. Alternando para ${availableSources[selectedSourceIndex].first}...",
@@ -4769,7 +4813,7 @@ fun VideoPlayerUI(
                         modifier = Modifier.size(36.dp)
                     )
                     Text(
-                        text = if (retryCount > 0) "Reconectando canal (Tentativa $retryCount de 5)..." else "Carregando canal...",
+                        text = if (retryCount > 0) "Reconectando canal (Tentativa $retryCount de 2)..." else "Carregando canal...",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -5887,7 +5931,19 @@ fun VideoPlayerUI(
                 sources = availableSources,
                 selectedIndex = selectedSourceIndex,
                 onSelectIndex = { idx ->
-                    selectedSourceIndex = idx
+                    if (idx in availableSources.indices) {
+                        selectedSourceIndex = idx
+                        retryCount = 0
+                        sourceSwitchTrigger++
+                        isBuffering = true
+                        errorMessage = null
+                        val sourceName = availableSources[idx].first
+                        android.widget.Toast.makeText(
+                            context,
+                            "Sintonizando $sourceName...",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                     showSourcesDialog = false
                 },
                 onDismiss = { showSourcesDialog = false }

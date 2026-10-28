@@ -16,9 +16,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,11 +174,15 @@ fun GeminiCopilotDialog(
                     )
 
                     // Quick suggestion chips
+                    // Quick suggestion chips
                     val suggestions = remember(currentPlaying) {
                         val list = mutableListOf(
+                            "⚽ Onde assistir Palmeiras x Santos",
+                            "⚽ Jogos de futebol de hoje",
+                            "⚽ Flamengo e Brasileirão",
                             "🍿 Recomendar filmes em alta",
-                            "⚽ Canais de esportes e futebol",
-                            "📺 Melhores canais da lista"
+                            "📡 Como trocar as Fontes do canal",
+                            "📺 Melhores canais 4K da lista"
                         )
                         if (currentPlaying != null) {
                             list.add(0, "ℹ️ Analisar ${currentPlaying.name}")
@@ -239,26 +245,90 @@ fun GeminiCopilotDialog(
                                             .padding(top = 4.dp, end = 6.dp)
                                     )
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .widthIn(max = 280.dp)
-                                        .background(
-                                            color = if (isUser) Color(0xFFE50914) else Color(0xFF181B26),
-                                            shape = RoundedCornerShape(16.dp)
-                                        )
-                                        .border(
-                                            width = 1.dp,
-                                            color = if (isUser) Color.Transparent else Color.White.copy(alpha = 0.08f),
-                                            shape = RoundedCornerShape(16.dp)
-                                        )
-                                        .padding(12.dp)
+                                Column(
+                                    modifier = Modifier.widthIn(max = 300.dp)
                                 ) {
-                                    Text(
-                                        text = msg.text,
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                color = if (isUser) Color(0xFFE50914) else Color(0xFF181B26),
+                                                shape = RoundedCornerShape(16.dp)
+                                            )
+                                            .border(
+                                                width = 1.dp,
+                                                color = if (isUser) Color.Transparent else Color.White.copy(alpha = 0.08f),
+                                                shape = RoundedCornerShape(16.dp)
+                                            )
+                                            .padding(12.dp)
+                                    ) {
+                                        Text(
+                                            text = msg.text,
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp
+                                        )
+                                    }
+
+                                    if (!isUser && msg.suggestedItems.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "▶ Toque para assistir agora:",
+                                            color = Color(0xFFFF9800),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                                        )
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            msg.suggestedItems.forEach { suggestedItem ->
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = Color(0xFF202434),
+                                                    border = BorderStroke(1.dp, Color(0xFFE50914).copy(alpha = 0.5f)),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            onSelectItem?.invoke(suggestedItem)
+                                                            onDismiss()
+                                                        }
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.weight(1f)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.PlayArrow,
+                                                                contentDescription = "Assistir",
+                                                                tint = Color(0xFFE50914),
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = suggestedItem.name,
+                                                                color = Color.White,
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = suggestedItem.category,
+                                                            color = Color.Gray,
+                                                            fontSize = 10.sp,
+                                                            maxLines = 1,
+                                                            modifier = Modifier.padding(start = 6.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
