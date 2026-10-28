@@ -94,6 +94,8 @@ android {
     val hasReleaseCredentials = !storePass.isNullOrEmpty() && !keyPass.isNullOrEmpty()
 
     create("debugConfig") {
+      enableV1Signing = true
+      enableV2Signing = true
       val keystoreFile = File(rootProject.rootDir, "debug.keystore")
       val base64File = File(rootProject.rootDir, "debug.keystore.base64")
       decodeBase64OrGenerateKeystore(
@@ -111,6 +113,8 @@ android {
     }
 
     create("release") {
+      enableV1Signing = true
+      enableV2Signing = true
       if (hasReleaseCredentials) {
         val keystorePath = System.getenv("KEYSTORE_PATH")
         val keystoreFile = if (!keystorePath.isNullOrEmpty()) file(keystorePath) else File(rootProject.rootDir, "my-upload-key.jks")
