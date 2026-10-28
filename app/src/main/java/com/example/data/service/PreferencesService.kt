@@ -286,6 +286,10 @@ class PreferencesService(context: Context) {
         get() = try { prefs.getBoolean("hide_background_progress", false) } catch (e: Throwable) { false }
         set(value) { try { prefs.edit().putBoolean("hide_background_progress", value).apply() } catch (e: Throwable) {} }
 
+    var superResolutionMode: String
+        get() = try { prefs.getString("saimo_super_resolution", "off") ?: "off" } catch (e: Throwable) { "off" }
+        set(value) { try { prefs.edit().putString("saimo_super_resolution", value).apply() } catch (e: Throwable) {} }
+
     fun isCredentialsConfigured(predefinedNames: Set<String>): Boolean {
         val isPredefined = predefinedNames.contains(activePlaylistName)
         return activePlaylistName.isNotEmpty() && (

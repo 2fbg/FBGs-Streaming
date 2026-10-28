@@ -79,8 +79,8 @@ android {
     applicationId = "com.aistudio.multiservidor.iptvmk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 231
-    versionName = "2.3.1"
+    versionCode = 232
+    versionName = "2.3.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -201,6 +201,7 @@ dependencies {
   implementation(libs.androidx.media3.ui)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
+  implementation(libs.firebase.appcheck.playintegrity)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)

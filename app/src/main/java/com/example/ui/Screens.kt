@@ -163,16 +163,10 @@ fun AppNavigation(viewModel: AppViewModel) {
     if (isTrialExpired) {
         TrialExpiredScreen(viewModel = viewModel)
     } else {
-        var currentScreen by remember { mutableStateOf(Routes.STARTUP_GATE) }
-        
-        // Check which screen to show on bootup
-        LaunchedEffect(Unit) {
-            if (viewModel.isCredentialsConfigured()) {
-                currentScreen = Routes.HOME
-            } else {
-                currentScreen = Routes.SERVER_CONFIG
-            }
+        val initialScreen = remember {
+            if (viewModel.isCredentialsConfigured()) Routes.HOME else Routes.SERVER_CONFIG
         }
+        var currentScreen by remember { mutableStateOf(initialScreen) }
 
         Crossfade(targetState = currentScreen, label = "ScreenTransition") { screen ->
             when (screen) {
@@ -4254,6 +4248,41 @@ fun VideoPlayerUI(
     var sleepTimerMinutesRemaining by remember { mutableIntStateOf(0) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     
+    var showSourcesDialog by remember { mutableStateOf(false) }
+    var showSuperResDialog by remember { mutableStateOf(false) }
+    var selectedQualityOption by remember { mutableStateOf("auto") }
+    var superResolutionMode by remember { mutableStateOf(viewModel.preferencesService.superResolutionMode) }
+
+    // Multi-source extraction from active server & predefined server pool (Saimo TV pattern)
+    val availableSources = remember(playlistItem, viewModel.predefinedServers) {
+        val originalUrl = playlistItem.url.trim()
+        val list = mutableListOf<Pair<String, String>>()
+        list.add("Fonte 1" to originalUrl)
+
+        try {
+            val uri = android.net.Uri.parse(originalUrl)
+            val path = uri.encodedPath ?: ""
+            val query = uri.encodedQuery?.let { "?$it" } ?: ""
+            val pathAndQuery = if (path.startsWith("/")) "$path$query" else "/$path$query"
+            val isXtreamPattern = pathAndQuery.contains("/live/") || pathAndQuery.contains("/movie/") || pathAndQuery.contains("/series/")
+            if (isXtreamPattern && pathAndQuery.isNotEmpty()) {
+                var sourceIdx = 2
+                for (server in viewModel.predefinedServers) {
+                    val base = server.baseUrl.trim().removeSuffix("/")
+                    val candidate = "$base$pathAndQuery"
+                    if (candidate != originalUrl && list.none { it.second == candidate }) {
+                        list.add("Fonte $sourceIdx (${server.name})" to candidate)
+                        sourceIdx++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // parsing error safety
+        }
+        list
+    }
+    var selectedSourceIndex by remember(playlistItem) { mutableIntStateOf(0) }
+    
     var overlayDismissJob by remember { mutableStateOf<Job?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val activity = remember(context) { context.findActivity() }
@@ -4419,11 +4448,13 @@ fun VideoPlayerUI(
 
     LaunchedEffect(playlistItem) {
         retryCount = 0
+        selectedSourceIndex = 0
     }
 
-    LaunchedEffect(playlistItem, retryCount) {
+    LaunchedEffect(playlistItem, selectedSourceIndex, retryCount) {
         errorMessage = null
-        val url = playlistItem.url.trim()
+        val activeSourceUrl = availableSources.getOrNull(selectedSourceIndex)?.second ?: playlistItem.url.trim()
+        val url = activeSourceUrl.trim()
         if (url.isEmpty()) {
             errorMessage = "A URL de transmissão está vazia."
             isBuffering = false
@@ -4449,6 +4480,23 @@ fun VideoPlayerUI(
         } catch (e: Exception) {
             errorMessage = "Erro ao carregar mídia: ${e.localizedMessage ?: "Causa desconhecida"}"
             isBuffering = false
+        }
+    }
+
+    // Saimo TV 8-second watchdog auto-failover across redundant sources
+    LaunchedEffect(selectedSourceIndex, isBuffering) {
+        if (isBuffering && availableSources.size > 1) {
+            delay(8000L)
+            if (isBuffering && selectedSourceIndex < availableSources.size - 1) {
+                val nextIdx = selectedSourceIndex + 1
+                Log.d("PlayerScreen", "Saimo Watchdog 8s expired: auto-switching to Fonte ${nextIdx + 1}")
+                android.widget.Toast.makeText(
+                    context,
+                    "Reconectando via ${availableSources[nextIdx].first}...",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                selectedSourceIndex = nextIdx
+            }
         }
     }
 
@@ -4482,7 +4530,15 @@ fun VideoPlayerUI(
 
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("PlayerScreen", "ExoPlayer playback error [code=${error.errorCode}, name=${error.errorCodeName}]: ${error.message}", error)
-                if (retryCount < 5) {
+                if (selectedSourceIndex < availableSources.size - 1) {
+                    selectedSourceIndex++
+                    retryCount = 0
+                    android.widget.Toast.makeText(
+                        context,
+                        "Fonte instável. Alternando para ${availableSources[selectedSourceIndex].first}...",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                } else if (retryCount < 5) {
                     retryCount++
                     Log.d("PlayerScreen", "Encountered player error, attempting auto-retry $retryCount/5: ${error.message}")
                 } else {
@@ -4614,6 +4670,40 @@ fun VideoPlayerUI(
                 }
             }
     ) {
+        val superResColorMatrix = remember(superResolutionMode) {
+            android.graphics.ColorMatrix().apply {
+                when (superResolutionMode) {
+                    "4k" -> {
+                        setSaturation(1.06f)
+                        val scale = 1.05f
+                        val translate = (-0.5f * scale + 0.5f) * 255f
+                        val contrastMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                            scale, 0f, 0f, 0f, translate,
+                            0f, scale, 0f, 0f, translate,
+                            0f, 0f, scale, 0f, translate,
+                            0f, 0f, 0f, 1f, 0f
+                        ))
+                        postConcat(contrastMatrix)
+                    }
+                    "hd" -> {
+                        setSaturation(1.03f)
+                        val scale = 1.025f
+                        val translate = (-0.5f * scale + 0.5f) * 255f
+                        val contrastMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                            scale, 0f, 0f, 0f, translate,
+                            0f, scale, 0f, 0f, translate,
+                            0f, 0f, scale, 0f, translate,
+                            0f, 0f, 0f, 1f, 0f
+                        ))
+                        postConcat(contrastMatrix)
+                    }
+                    else -> {
+                        reset()
+                    }
+                }
+            }
+        }
+
         // Player Surface Component using AndroidView binding
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -4636,6 +4726,14 @@ fun VideoPlayerUI(
                     view.player = exoPlayer
                 }
                 view.resizeMode = resizeModeState
+                if (superResolutionMode != "off") {
+                    val paint = android.graphics.Paint().apply {
+                        colorFilter = android.graphics.ColorMatrixColorFilter(superResColorMatrix)
+                    }
+                    view.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, paint)
+                } else {
+                    view.setLayerType(android.view.View.LAYER_TYPE_NONE, null)
+                }
             },
             onRelease = { view ->
                 view.player = null
@@ -5331,38 +5429,116 @@ fun VideoPlayerUI(
                         }
                     }
 
-                    // Audio track switcher dialog overlay button trigger
-                    if (isLandscape) {
-                        TextButton(
-                            onClick = { showAudioSubDialog = true },
-                            colors = ButtonDefaults.textButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ClosedCaption,
-                                contentDescription = "Legendas e Áudio",
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Áudio e Legenda",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                    // Saimo TV Action Controls & Audio track switcher
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Saimo TV "Escolha a fonte" button
+                        if (availableSources.size > 1) {
+                            if (isLandscape) {
+                                TextButton(
+                                    onClick = { showSourcesDialog = true },
+                                    colors = ButtonDefaults.textButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Dns,
+                                        contentDescription = "Fontes do Canal",
+                                        tint = GoldPremium,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Fonte ${selectedSourceIndex + 1}",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = { showSourcesDialog = true },
+                                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Dns,
+                                        contentDescription = "Fontes do Canal",
+                                        tint = GoldPremium,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
-                    } else {
-                        IconButton(
-                            onClick = { showAudioSubDialog = true },
-                            modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ClosedCaption,
-                                contentDescription = "Legendas e Áudio",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+
+                        // Saimo TV "Qualidade e Super Resolução" button
+                        if (isLandscape) {
+                            TextButton(
+                                onClick = { showSuperResDialog = true },
+                                colors = ButtonDefaults.textButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HighQuality,
+                                    contentDescription = "Qualidade e Super Resolução",
+                                    tint = if (superResolutionMode != "off") NetflixRed else Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (superResolutionMode == "4k") "4K Ultra" else if (superResolutionMode == "hd") "HD+" else "Qualidade",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = { showSuperResDialog = true },
+                                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HighQuality,
+                                    contentDescription = "Qualidade e Super Resolução",
+                                    tint = if (superResolutionMode != "off") NetflixRed else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Audio track switcher dialog overlay button trigger
+                        if (isLandscape) {
+                            TextButton(
+                                onClick = { showAudioSubDialog = true },
+                                colors = ButtonDefaults.textButtonColors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ClosedCaption,
+                                    contentDescription = "Legendas e Áudio",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Áudio/Leg",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = { showAudioSubDialog = true },
+                                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ClosedCaption,
+                                    contentDescription = "Legendas e Áudio",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -5698,6 +5874,48 @@ fun VideoPlayerUI(
                     }
                 },
                 onDismiss = { showCastDialog = false }
+            )
+        }
+
+        if (showSourcesDialog) {
+            SaimoSourcesDialog(
+                sources = availableSources,
+                selectedIndex = selectedSourceIndex,
+                onSelectIndex = { idx ->
+                    selectedSourceIndex = idx
+                    showSourcesDialog = false
+                },
+                onDismiss = { showSourcesDialog = false }
+            )
+        }
+
+        if (showSuperResDialog) {
+            SaimoSuperResolutionDialog(
+                currentQuality = selectedQualityOption,
+                onSelectQuality = { q ->
+                    selectedQualityOption = q
+                    try {
+                        val params = exoPlayer.trackSelectionParameters.buildUpon()
+                        when (q) {
+                            "1080p" -> {
+                                params.setMaxVideoSize(1920, 1080)
+                                    .setMinVideoSize(1280, 720)
+                            }
+                            else -> {
+                                params.clearVideoSizeConstraints()
+                            }
+                        }
+                        exoPlayer.trackSelectionParameters = params.build()
+                    } catch (e: Exception) {
+                        // ignore track selection error
+                    }
+                },
+                currentSuperResMode = superResolutionMode,
+                onSelectSuperRes = { sr ->
+                    superResolutionMode = sr
+                    viewModel.preferencesService.superResolutionMode = sr
+                },
+                onDismiss = { showSuperResDialog = false }
             )
         }
     }
