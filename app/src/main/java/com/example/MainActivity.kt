@@ -36,6 +36,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // STEP 1: Configure App Check with launch intent before any UI or Firebase operations
+        com.example.utils.configureAppCheck(this, intent)
         
         // Initialize autonomous Crash Logger to capture full diagnostics and stack traces
         com.example.utils.CrashLogger.init(applicationContext)

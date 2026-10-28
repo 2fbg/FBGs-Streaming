@@ -1721,6 +1721,7 @@ fun HomeScreen(
     var showPlaylistMenu by remember { mutableStateOf(false) }
     var selectedSeriesForDetail by remember { mutableStateOf<GroupedSeries?>(null) }
     var showSortOrderDialog by remember { mutableStateOf(false) }
+    var showGeminiDialog by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -1950,6 +1951,17 @@ fun HomeScreen(
                     IconButton(onClick = { viewModel.refreshActivePlaylist() }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh list", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
+                    IconButton(
+                        onClick = { showGeminiDialog = true },
+                        modifier = Modifier.size(36.dp).testTag("gemini_copilot_button_landscape")
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "MK21 AI Copilot (Gemini)",
+                            tint = GoldPremium,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     IconButton(onClick = onNavigateToSettings, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
@@ -2034,6 +2046,17 @@ fun HomeScreen(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Refresh content list",
                             tint = Color.White
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showGeminiDialog = true },
+                        modifier = Modifier.testTag("gemini_copilot_button_portrait")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "MK21 AI Copilot (Gemini)",
+                            tint = GoldPremium
                         )
                     }
 
@@ -2759,6 +2782,18 @@ fun HomeScreen(
                 onOptionSelected = {
                     viewModel.updateMenuSortOrder(it)
                     showSortOrderDialog = false
+                }
+            )
+        }
+
+        if (showGeminiDialog) {
+            GeminiCopilotDialog(
+                currentPlaying = currentPlayingItem,
+                catalog = itemsList,
+                onDismiss = { showGeminiDialog = false },
+                onSelectItem = { item ->
+                    viewModel.playContent(item)
+                    showGeminiDialog = false
                 }
             )
         }
