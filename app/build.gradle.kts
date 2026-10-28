@@ -9,6 +9,49 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+// Assegura que o google-services.json exista no ambiente de compilação (ex: CI/CD do GitHub Actions)
+val googleServicesFile = File(projectDir, "google-services.json")
+if (!googleServicesFile.exists()) {
+  try {
+    googleServicesFile.writeText(
+      """
+      {
+        "project_info": {
+          "project_number": "736577956980",
+          "project_id": "gen-lang-client-0474959166",
+          "storage_bucket": "gen-lang-client-0474959166.firebasestorage.app"
+        },
+        "client": [
+          {
+            "client_info": {
+              "mobilesdk_app_id": "1:736577956980:android:8b24803d286868ab723521",
+              "android_client_info": {
+                "package_name": "com.aistudio.multiservidor.iptvmk"
+              }
+            },
+            "oauth_client": [],
+            "api_key": [
+              {
+                "current_key": "AIzaSyDbFO4VGaBNxxphP99Mu6NbKZ1nATzHMmI"
+              }
+            ],
+            "services": {
+              "appinvite_service": {
+                "other_platform_oauth_client": []
+              }
+            }
+          }
+        ],
+        "configuration_version": "1"
+      }
+      """.trimIndent()
+    )
+    println("Fallback google-services.json gerado automaticamente em ${googleServicesFile.absolutePath}")
+  } catch (e: Exception) {
+    System.err.println("Erro ao gerar fallback google-services.json: ${e.message}")
+  }
+}
+
 fun decodeBase64OrGenerateKeystore(
   keystoreFile: java.io.File,
   base64File: java.io.File,

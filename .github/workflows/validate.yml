@@ -26,6 +26,41 @@ jobs:
       - name: Android tests and build
         run: |
           chmod +x gradlew
+          if [ ! -f "app/google-services.json" ]; then
+            echo "Criando fallback de google-services.json para o ambiente CI..."
+            mkdir -p app
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "736577956980",
+              "project_id": "gen-lang-client-0474959166",
+              "storage_bucket": "gen-lang-client-0474959166.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:736577956980:android:8b24803d286868ab723521",
+                  "android_client_info": {
+                    "package_name": "com.aistudio.multiservidor.iptvmk"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDbFO4VGaBNxxphP99Mu6NbKZ1nATzHMmI"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
           ./gradlew testDebugUnitTest --no-daemon || (echo "Retrying tests due to socket/network hiccup..." && ./gradlew testDebugUnitTest --no-daemon)
           ./gradlew assembleDebug --no-daemon
 
