@@ -2784,6 +2784,7 @@ fun HomeScreen(
             GeminiCopilotDialog(
                 currentPlaying = currentPlayingItem,
                 catalog = itemsList,
+                relevantCatalogFetcher = { query -> viewModel.getRelevantItemsForCopilot(query) },
                 onDismiss = { showGeminiDialog = false },
                 onSelectItem = { item ->
                     viewModel.playContent(item)
@@ -4264,8 +4265,12 @@ fun VideoPlayerUI(
             val path = uri.encodedPath ?: ""
             val query = uri.encodedQuery?.let { "?$it" } ?: ""
             val pathAndQuery = if (path.startsWith("/")) "$path$query" else "/$path$query"
-            val isXtreamPattern = pathAndQuery.contains("/live/") || pathAndQuery.contains("/movie/") || pathAndQuery.contains("/series/")
-            if (isXtreamPattern && pathAndQuery.isNotEmpty()) {
+            
+            // Check if this is a streaming media URL with a path (live, vod, series, or direct xtream id)
+            val isStreamPath = pathAndQuery.length > 3 && 
+                               !pathAndQuery.contains("get.php") && 
+                               !pathAndQuery.endsWith(".m3u")
+            if (isStreamPath) {
                 var sourceIdx = 2
                 for (server in viewModel.predefinedServers) {
                     val base = server.baseUrl.trim().removeSuffix("/")
@@ -4483,13 +4488,13 @@ fun VideoPlayerUI(
         }
     }
 
-    // Saimo TV 8-second watchdog auto-failover across redundant sources
+    // Saimo TV auto-failover across redundant sources with stable 15s timeout
     LaunchedEffect(selectedSourceIndex, isBuffering) {
         if (isBuffering && availableSources.size > 1) {
-            delay(8000L)
+            delay(15000L)
             if (isBuffering && selectedSourceIndex < availableSources.size - 1) {
                 val nextIdx = selectedSourceIndex + 1
-                Log.d("PlayerScreen", "Saimo Watchdog 8s expired: auto-switching to Fonte ${nextIdx + 1}")
+                Log.d("PlayerScreen", "Saimo Watchdog 15s expired: auto-switching to Fonte ${nextIdx + 1}")
                 android.widget.Toast.makeText(
                     context,
                     "Reconectando via ${availableSources[nextIdx].first}...",
@@ -4530,7 +4535,10 @@ fun VideoPlayerUI(
 
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("PlayerScreen", "ExoPlayer playback error [code=${error.errorCode}, name=${error.errorCodeName}]: ${error.message}", error)
-                if (selectedSourceIndex < availableSources.size - 1) {
+                if (retryCount < 2) {
+                    retryCount++
+                    Log.d("PlayerScreen", "Encountered player error on source $selectedSourceIndex, attempting auto-retry $retryCount/2: ${error.message}")
+                } else if (selectedSourceIndex < availableSources.size - 1) {
                     selectedSourceIndex++
                     retryCount = 0
                     android.widget.Toast.makeText(
@@ -4538,9 +4546,6 @@ fun VideoPlayerUI(
                         "Fonte instável. Alternando para ${availableSources[selectedSourceIndex].first}...",
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
-                } else if (retryCount < 5) {
-                    retryCount++
-                    Log.d("PlayerScreen", "Encountered player error, attempting auto-retry $retryCount/5: ${error.message}")
                 } else {
                     val detail = error.errorCodeName.replace("ERROR_CODE_", "").replace("_", " ").lowercase()
                     errorMessage = "Impossível reproduzir canal/mídia ($detail). Conexão recusada ou formato incompatível."
@@ -5435,7 +5440,7 @@ fun VideoPlayerUI(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Saimo TV "Escolha a fonte" button
-                        if (availableSources.size > 1) {
+                        if (availableSources.isNotEmpty()) {
                             if (isLandscape) {
                                 TextButton(
                                     onClick = { showSourcesDialog = true },

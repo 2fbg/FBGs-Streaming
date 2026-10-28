@@ -43,6 +43,7 @@ fun GeminiCopilotDialog(
     viewModel: GeminiAiViewModel = viewModel(),
     currentPlaying: PlaylistItem?,
     catalog: List<PlaylistItem>,
+    relevantCatalogFetcher: (suspend (String) -> List<PlaylistItem>)? = null,
     onDismiss: () -> Unit,
     onSelectItem: ((PlaylistItem) -> Unit)? = null
 ) {
@@ -199,7 +200,7 @@ fun GeminiCopilotDialog(
                                         if (chipText.startsWith("ℹ️") && currentPlaying != null) {
                                             viewModel.enrichContentSynopsis(currentPlaying)
                                         } else {
-                                            viewModel.askGemini(chipText, currentPlaying, catalog)
+                                            viewModel.askGemini(chipText, currentPlaying, catalog, relevantCatalogFetcher)
                                         }
                                     }
                             ) {
@@ -362,7 +363,7 @@ fun GeminiCopilotDialog(
                             onClick = {
                                 val prompt = inputText.trim()
                                 if (prompt.isNotEmpty()) {
-                                    viewModel.askGemini(prompt, currentPlaying, catalog)
+                                    viewModel.askGemini(prompt, currentPlaying, catalog, relevantCatalogFetcher)
                                     inputText = ""
                                 }
                             },

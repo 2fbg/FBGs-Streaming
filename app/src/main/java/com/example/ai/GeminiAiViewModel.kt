@@ -49,7 +49,8 @@ class GeminiAiViewModel(
     fun askGemini(
         prompt: String,
         currentPlaying: PlaylistItem?,
-        catalog: List<PlaylistItem>
+        catalog: List<PlaylistItem>,
+        relevantCatalogFetcher: (suspend (String) -> List<PlaylistItem>)? = null
     ) {
         val trimmedPrompt = prompt.trim()
         if (trimmedPrompt.isEmpty()) return
@@ -64,11 +65,23 @@ class GeminiAiViewModel(
             val accumulated = StringBuilder()
 
             try {
+                // Dynamically fetch targeted items for this prompt (e.g., live sports channels for football matches)
+                val targetCatalog = if (relevantCatalogFetcher != null) {
+                    try {
+                        val fetched = relevantCatalogFetcher(trimmedPrompt)
+                        if (fetched.isNotEmpty()) fetched else catalog
+                    } catch (e: Exception) {
+                        catalog
+                    }
+                } else {
+                    catalog
+                }
+
                 // Stream response token-by-token
                 aiService.streamCopilotResponse(
                     userPrompt = trimmedPrompt,
                     currentPlaying = currentPlaying,
-                    catalogSample = catalog
+                    catalogSample = targetCatalog
                 ).collect { chunk ->
                     accumulated.append(chunk)
                     _uiState.value = GeminiUiState.Streaming(accumulated.toString())

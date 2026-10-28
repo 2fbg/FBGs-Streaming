@@ -305,6 +305,76 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = emptyList()
     )
 
+    /**
+     * Searches database for the most relevant items across LIVE, MOVIES and SERIES for AI Copilot queries.
+     * Prioritizes sports channels (Premiere, SporTV, ESPN, CazéTV, Globo) when sports/match queries are detected.
+     */
+    suspend fun getRelevantItemsForCopilot(prompt: String): List<PlaylistItem> = withContext(Dispatchers.IO) {
+        val playlist = _activePlaylistName.value
+        val lower = prompt.lowercase()
+
+        val isSportsIntent = lower.contains("palmeiras") || lower.contains("santos") ||
+                lower.contains("flamengo") || lower.contains("corinthians") ||
+                lower.contains("são paulo") || lower.contains("sao paulo") ||
+                lower.contains("gremio") || lower.contains("grêmio") ||
+                lower.contains("inter") || lower.contains("internacional") ||
+                lower.contains("vasco") || lower.contains("botafogo") ||
+                lower.contains("fluminense") || lower.contains("cruzeiro") ||
+                lower.contains("atletico") || lower.contains("atlético") ||
+                lower.contains("bahia") || lower.contains("fortaleza") ||
+                lower.contains("futebol") || lower.contains("jogo") ||
+                lower.contains("jogos") || lower.contains("esporte") ||
+                lower.contains("onde assistir") || lower.contains("assistir") ||
+                lower.contains("campeonato") || lower.contains("paulistão") ||
+                lower.contains("brasileirão") || lower.contains("libertadores") ||
+                lower.contains("premiere") || lower.contains("sportv") ||
+                lower.contains("espn") || lower.contains("cazé") || lower.contains("caze")
+
+        if (isSportsIntent) {
+            try {
+                val liveChannels = playlistItemDao.getItemsByType(playlist, ContentType.LIVE.name).first()
+                val sportsMatches = liveChannels.filter { item ->
+                    val n = item.name.uppercase()
+                    val c = item.category.uppercase()
+                    n.contains("PREMIERE") || n.contains("SPORTV") || n.contains("ESPN") ||
+                    n.contains("GLOBO") || n.contains("CAZÉ") || n.contains("CAZE") ||
+                    n.contains("TNT") || n.contains("BAND") || n.contains("RECORD") ||
+                    n.contains("COMBATE") || n.contains("DAZN") ||
+                    c.contains("ESPORTE") || c.contains("FUTEBOL") || c.contains("SPORTS")
+                }
+                if (sportsMatches.isNotEmpty()) {
+                    return@withContext sportsMatches.take(50)
+                }
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+
+        // Generic keyword search in active playlist
+        try {
+            val words = prompt.split(" ", ",", "-", "?", "!")
+                .map { it.trim().lowercase() }
+                .filter { it.length >= 3 && it !in setOf("onde", "assistir", "qual", "como", "quem", "para", "com", "está", "esta", "sobre", "filme", "serie") }
+
+            for (w in words) {
+                val results = playlistItemDao.searchItems(playlist, "%$w%").first()
+                if (results.isNotEmpty()) {
+                    return@withContext results.take(40)
+                }
+            }
+        } catch (e: Exception) {
+            // fallback
+        }
+
+        // Fallback to active items or random highlights
+        try {
+            val highlights = playlistItemDao.getRandomHighlights(playlist).first()
+            if (highlights.isNotEmpty()) return@withContext highlights.take(40)
+        } catch (e: Exception) {}
+
+        emptyList()
+    }
+
     // Dynamic categorizations loaded dynamically from the playlist items
     val activeCategories = combine(
         _activePlaylistName,
