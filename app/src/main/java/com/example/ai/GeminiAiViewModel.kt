@@ -89,11 +89,16 @@ class GeminiAiViewModel(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Gemini copilot query failed", e)
-                val errMsg = e.localizedMessage ?: "Erro na comunicação com o Gemini."
-                _uiState.value = GeminiUiState.Error(errMsg)
+                val rawMsg = e.localizedMessage ?: "Erro na comunicação com o Gemini."
+                val userFriendlyMsg = if (rawMsg.contains("App Check", ignoreCase = true)) {
+                    "A validação de segurança (Firebase App Check) está sincronizando. Aguarde alguns segundos e toque novamente na pergunta."
+                } else {
+                    rawMsg
+                }
+                _uiState.value = GeminiUiState.Error(userFriendlyMsg)
                 _messages.value = _messages.value + CopilotMessage(
                     sender = "gemini",
-                    text = "⚠️ Não foi possível completar a consulta: $errMsg"
+                    text = "⚠️ Não foi possível completar a consulta: $userFriendlyMsg"
                 )
             }
         }
