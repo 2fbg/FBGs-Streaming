@@ -4273,17 +4273,15 @@ fun VideoPlayerUI(
         // Only bring predefined servers from the supplier's dynamic server list (no invented channels)
         for (server in predefinedServersList) {
             if (server.name.equals(currentServerName, ignoreCase = true)) continue
-
-            val candidateUrl = viewModel.buildServerStreamUrl(server, playlistItem)
-            if (candidateUrl.isNotBlank() && list.none { it.second == candidateUrl }) {
-                list.add("Fonte $sourceIdx (${server.name})" to candidateUrl)
-                sourceIdx++
-            }
+            list.add("Fonte $sourceIdx (${server.name})" to server.name)
+            sourceIdx++
         }
         list
     }
+    var activePlaybackUrl by remember(playlistItem) { mutableStateOf(playlistItem.url.trim()) }
     var selectedSourceIndex by remember(playlistItem) { mutableIntStateOf(0) }
     var sourceSwitchTrigger by remember(playlistItem) { mutableIntStateOf(0) }
+    var isResolvingSource by remember { mutableStateOf(false) }
     
     var overlayDismissJob by remember { mutableStateOf<Job?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -4452,12 +4450,14 @@ fun VideoPlayerUI(
         retryCount = 0
         selectedSourceIndex = 0
         sourceSwitchTrigger = 0
+        activePlaybackUrl = playlistItem.url.trim()
+        isResolvingSource = false
     }
 
-    LaunchedEffect(playlistItem, selectedSourceIndex, retryCount, sourceSwitchTrigger) {
+    LaunchedEffect(playlistItem, activePlaybackUrl, retryCount, sourceSwitchTrigger) {
+        if (isResolvingSource) return@LaunchedEffect
         errorMessage = null
-        val activeSourceUrl = availableSources.getOrNull(selectedSourceIndex)?.second ?: playlistItem.url.trim()
-        val url = activeSourceUrl.trim()
+        val url = activePlaybackUrl.trim()
         if (url.isEmpty()) {
             errorMessage = "A URL de transmissão está vazia."
             isBuffering = false
@@ -4488,19 +4488,26 @@ fun VideoPlayerUI(
 
     // Saimo TV auto-failover across redundant sources with stable 15s timeout
     LaunchedEffect(selectedSourceIndex, isBuffering) {
-        if (isBuffering && availableSources.size > 1) {
+        if (isBuffering && !isResolvingSource && availableSources.size > 1) {
             delay(15000L)
-            if (isBuffering && selectedSourceIndex < availableSources.size - 1) {
+            if (isBuffering && !isResolvingSource && selectedSourceIndex < availableSources.size - 1) {
                 val nextIdx = selectedSourceIndex + 1
-                Log.d("PlayerScreen", "Saimo Watchdog 15s expired: auto-switching to Fonte ${nextIdx + 1}")
-                android.widget.Toast.makeText(
-                    context,
-                    "Reconectando via ${availableSources[nextIdx].first}...",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-                selectedSourceIndex = nextIdx
-                retryCount = 0
-                sourceSwitchTrigger++
+                val targetServerName = availableSources[nextIdx].second
+                Log.d("PlayerScreen", "Saimo Watchdog 15s expired: auto-resolving Fonte ${nextIdx + 1} ($targetServerName)")
+                isResolvingSource = true
+                val resolvedUrl = viewModel.resolveRealChannelUrlOnServer(targetServerName, playlistItem)
+                isResolvingSource = false
+                if (resolvedUrl != null && resolvedUrl.isNotBlank()) {
+                    selectedSourceIndex = nextIdx
+                    activePlaybackUrl = resolvedUrl
+                    retryCount = 0
+                    sourceSwitchTrigger++
+                    android.widget.Toast.makeText(
+                        context,
+                        "Reconectando via ${availableSources[nextIdx].first}...",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
     }
@@ -4538,15 +4545,6 @@ fun VideoPlayerUI(
                 if (retryCount < 2) {
                     retryCount++
                     Log.d("PlayerScreen", "Encountered player error on source $selectedSourceIndex, attempting auto-retry $retryCount/2: ${error.message}")
-                } else if (selectedSourceIndex < availableSources.size - 1) {
-                    selectedSourceIndex++
-                    retryCount = 0
-                    sourceSwitchTrigger++
-                    android.widget.Toast.makeText(
-                        context,
-                        "Fonte instável. Alternando para ${availableSources[selectedSourceIndex].first}...",
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
                 } else {
                     val detail = error.errorCodeName.replace("ERROR_CODE_", "").replace("_", " ").lowercase()
                     errorMessage = "Impossível reproduzir canal/mídia ($detail). Conexão recusada ou formato incompatível."
@@ -5888,18 +5886,57 @@ fun VideoPlayerUI(
                 sources = availableSources,
                 selectedIndex = selectedSourceIndex,
                 onSelectIndex = { idx ->
-                    if (idx in availableSources.indices) {
-                        selectedSourceIndex = idx
-                        retryCount = 0
-                        sourceSwitchTrigger++
-                        isBuffering = true
-                        errorMessage = null
-                        val sourceName = availableSources[idx].first
-                        android.widget.Toast.makeText(
-                            context,
-                            "Sintonizando $sourceName...",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
+                    if (idx in availableSources.indices && idx != selectedSourceIndex) {
+                        if (idx == 0) {
+                            // Voltar para a fonte primária original verificada
+                            selectedSourceIndex = 0
+                            activePlaybackUrl = playlistItem.url.trim()
+                            retryCount = 0
+                            sourceSwitchTrigger++
+                            isBuffering = true
+                            errorMessage = null
+                            val sourceName = availableSources[0].first
+                            android.widget.Toast.makeText(
+                                context,
+                                "Sintonizando $sourceName...",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            // Resolução assíncrona protegida no servidor de destino
+                            val targetServerName = availableSources[idx].second
+                            coroutineScope.launch {
+                                isResolvingSource = true
+                                isBuffering = true
+                                errorMessage = null
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Buscando '${playlistItem.name}' em $targetServerName...",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+
+                                val resolvedUrl = viewModel.resolveRealChannelUrlOnServer(targetServerName, playlistItem)
+                                isResolvingSource = false
+
+                                if (resolvedUrl != null && resolvedUrl.isNotBlank()) {
+                                    selectedSourceIndex = idx
+                                    activePlaybackUrl = resolvedUrl
+                                    retryCount = 0
+                                    sourceSwitchTrigger++
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Fonte $targetServerName sintonizada com sucesso!",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    isBuffering = false
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Canal indisponível no servidor $targetServerName. Mantendo transmissão.",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
                     }
                     showSourcesDialog = false
                 },

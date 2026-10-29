@@ -908,8 +908,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (shouldSyncBasedOnFrequency(lastUpdate)) {
                         Log.d("MK21_VM", "Starting background pre-sync of playlist: $listName")
                         downloadAndParsePlaylistSilently(listName)
-                        // Give the system 20 seconds of breathing room between playlists to safeguard CPU/Network/Database
-                        delay(20000L)
+                        // Gentle 3s pause between servers to safeguard network and CPU
+                        delay(3000L)
                     }
                 }
             } catch (e: Exception) {
@@ -951,11 +951,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Delay background pre-sync of non-active lists (5 minutes / 300000 ms)
-        // This ensures the current selected playlist gets 100% of network & DB resources immediately on bootup
+        // Delay background pre-sync of non-active lists (5 seconds)
+        // Gives the primary active playlist immediate priority, then indexes alternative servers in Room for instant source switching
         viewModelScope.launch {
             try {
-                delay(300000L)
+                delay(5000L)
                 syncAllConfiguredPlaylistsInBackground()
             } catch (e: Throwable) {
                 Log.e("MK21_VM", "Error launching delayed background playlist sync", e)
@@ -1542,10 +1542,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun downloadAndParsePlaylistSilently(targetPlaylist: String = _activePlaylistName.value) {
-        try {
+    suspend fun downloadAndParsePlaylistSilently(targetPlaylist: String = _activePlaylistName.value): Boolean {
+        return try {
             val candidateUrls = getActivePlaylistCandidateUrls(targetPlaylist)
-            if (candidateUrls.isEmpty()) return
+            if (candidateUrls.isEmpty()) return false
 
             var response: okhttp3.Response? = null
             for (url in candidateUrls) {
@@ -1566,11 +1566,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val parsedItems = M3UParser.parse(stream, targetPlaylist) { _ -> }
                     if (parsedItems.isNotEmpty()) {
                         savePlaylistStaged(targetPlaylist, parsedItems, isSilent = true)
+                        return true
                     }
                 }
             }
+            false
         } catch (e: Exception) {
             Log.e("MK21_VM", "Silent download/parse failed safely context: ${e.message}", e)
+            false
         }
     }
 
@@ -1653,23 +1656,110 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Resolve a URL de transmissão de um canal em outro servidor:
-     * 1. Busca primeiro no banco de dados local Room se a lista daquele servidor já foi baixada.
-     * 2. Caso contrário, faz o fallback inteligente para a baseUrl do servidor com a porta correta.
+     * Normaliza nomes de canais para comparação cruzada entre servidores diferentes,
+     * removendo sufixos de resolução (FHD, HD, 4K, H265), prefixos (BR |, [BR], 01 -) e acentuação.
      */
-    suspend fun resolveRealChannelUrlOnServer(targetServerName: String, currentItem: PlaylistItem): String {
-        return try {
-            val dbMatch = playlistItemDao.findItemInPlaylistByName(targetServerName, currentItem.name)
-                ?: playlistItemDao.findItemInPlaylistFuzzy(targetServerName, currentItem.name, "%${currentItem.name.take(12)}%")
-            if (dbMatch != null && dbMatch.url.isNotBlank()) {
-                dbMatch.url.trim()
-            } else {
-                val targetServer = predefinedServers.find { it.name.equals(targetServerName, ignoreCase = true) }
-                if (targetServer != null) buildServerStreamUrl(targetServer, currentItem) else currentItem.url
-            }
+    fun cleanChannelName(rawName: String): String {
+        var name = rawName.trim().uppercase()
+        name = name.replace(Regex("\\[.*?\\]"), "")
+        name = name.replace(Regex("\\(.*?\\)"), "")
+        name = name.replace(Regex("^(BR|BRA|BRASIL|CANAL|CANAIS|TV)\\s*[:|\\-/]\\s*"), "")
+        name = name.replace(Regex("^\\d+\\s*[:|\\-]\\s*"), "")
+        name = name.replace(Regex("\\b(4K|UHD|FHD|FULL HD|HD|SD|H265|HEVC|60FPS|VIP|PLUS|ALT|LEG|DUB)\\b"), "")
+        name = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        name = name.replace(Regex("[^A-Z0-9]"), " ")
+        return name.replace(Regex("\\s+"), " ").trim()
+    }
+
+    /**
+     * Testa rapidamente se uma URL de streaming responde com fluxo de vídeo real (HTTP 200/206 com cabeçalho de mídia),
+     * rejeitando páginas de erro HTML (404/500/401/403) que causariam crash no ExoPlayer (parsing container unsupported).
+     */
+    suspend fun isStreamReachableAndValid(streamUrl: String): Boolean = withContext(Dispatchers.IO) {
+        if (streamUrl.isBlank()) return@withContext false
+        try {
+            val req = Request.Builder()
+                .url(streamUrl)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                .header("Range", "bytes=0-1024")
+                .build()
+            okHttpClient.newBuilder()
+                .connectTimeout(2500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .readTimeout(2500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .build()
+                .newCall(req)
+                .execute()
+                .use { response ->
+                    val code = response.code
+                    val contentType = response.header("Content-Type")?.lowercase() ?: ""
+                    (code in 200..206) && !contentType.contains("text/html") && !contentType.contains("text/plain")
+                }
         } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Resolve a URL real de transmissão de um canal em outro servidor:
+     * 1. Busca primeiro no banco de dados local Room por nome exato ou normalizado.
+     * 2. Se a lista daquele servidor ainda não foi baixada, efetua o download sob demanda e repete a busca.
+     * 3. Caso não encontre por nome, testa o espelho CDN sintético mas SOMENTE se responder com vídeo real (nunca repassa HTML).
+     * 4. Retorna null se o canal for inexistente no servidor de destino, impedindo crash no ExoPlayer.
+     */
+    suspend fun resolveRealChannelUrlOnServer(targetServerName: String, currentItem: PlaylistItem): String? = withContext(Dispatchers.IO) {
+        try {
             val targetServer = predefinedServers.find { it.name.equals(targetServerName, ignoreCase = true) }
-            if (targetServer != null) buildServerStreamUrl(targetServer, currentItem) else currentItem.url
+                ?: return@withContext null
+
+            // 1. Verificar se a lista do servidor de destino já está no banco de dados local Room
+            var count = playlistItemDao.getItemCountByPlaylist(targetServerName)
+            if (count == 0) {
+                Log.d("MK21_VM", "Servidor $targetServerName ainda não sincronizado. Baixando lista sob demanda...")
+                downloadAndParsePlaylistSilently(targetServerName)
+                count = playlistItemDao.getItemCountByPlaylist(targetServerName)
+            }
+
+            // 2. Busca exata por nome na lista do servidor de destino
+            val exactMatch = playlistItemDao.findItemInPlaylistByName(targetServerName, currentItem.name)
+            if (exactMatch != null && exactMatch.url.isNotBlank()) {
+                Log.d("MK21_VM", "Canal encontrado no $targetServerName por nome exato: ${exactMatch.name}")
+                return@withContext exactMatch.url.trim()
+            }
+
+            // 3. Busca por nome limpo / normalizado (ignora tags [BR], FHD, HD, etc.)
+            if (count > 0) {
+                val targetItems = playlistItemDao.getItemsByPlaylistAndTypeSync(targetServerName, currentItem.contentType)
+                val targetClean = cleanChannelName(currentItem.name)
+                if (targetClean.length >= 3) {
+                    val cleanMatch = targetItems.find { cleanChannelName(it.name) == targetClean }
+                    if (cleanMatch != null && cleanMatch.url.isNotBlank()) {
+                        Log.d("MK21_VM", "Canal encontrado no $targetServerName por normalização: '${cleanMatch.name}' (query: '$targetClean')")
+                        return@withContext cleanMatch.url.trim()
+                    }
+                    val partialMatch = targetItems.find {
+                        val itemClean = cleanChannelName(it.name)
+                        itemClean.contains(targetClean) || targetClean.contains(itemClean)
+                    }
+                    if (partialMatch != null && partialMatch.url.isNotBlank()) {
+                        Log.d("MK21_VM", "Canal encontrado no $targetServerName por match parcial: '${partialMatch.name}'")
+                        return@withContext partialMatch.url.trim()
+                    }
+                }
+            }
+
+            // 4. Fallback protegido: só aceita URL sintética se responder com fluxo de vídeo real comprovado
+            val candidateUrl = buildServerStreamUrl(targetServer, currentItem)
+            if (candidateUrl.isNotBlank() && isStreamReachableAndValid(candidateUrl)) {
+                Log.d("MK21_VM", "URL sintética validada com sucesso no $targetServerName: $candidateUrl")
+                return@withContext candidateUrl
+            }
+
+            Log.w("MK21_VM", "Canal '${currentItem.name}' não encontrado e sem stream válido no servidor $targetServerName.")
+            null
+        } catch (e: Exception) {
+            Log.e("MK21_VM", "Erro ao resolver canal no servidor $targetServerName: ${e.message}", e)
+            null
         }
     }
 

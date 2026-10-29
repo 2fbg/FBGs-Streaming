@@ -34,6 +34,12 @@ interface PlaylistItemDao {
     @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND (name = :name OR name LIKE :nameLike) LIMIT 1")
     suspend fun findItemInPlaylistFuzzy(source: String, name: String, nameLike: String): PlaylistItem?
 
+    @Query("SELECT COUNT(*) FROM playlist_items WHERE playlistSource = :source")
+    suspend fun getItemCountByPlaylist(source: String): Int
+
+    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND contentType = :type")
+    suspend fun getItemsByPlaylistAndTypeSync(source: String, type: String): List<PlaylistItem>
+
     @Query("SELECT * FROM playlist_items WHERE isFavorite = 1")
     suspend fun getAllFavoriteItems(): List<PlaylistItem>
 

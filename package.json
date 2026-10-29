@@ -1,6 +1,6 @@
 {
   "name": "fbgs-streaming",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "private": true,
   "description": "MK21 Streaming Web & OTT IPTV Platform",
   "scripts": {
