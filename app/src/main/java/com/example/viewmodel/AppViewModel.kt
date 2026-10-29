@@ -1614,6 +1614,65 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return getActivePlaylistCandidateUrls(targetPlaylist).firstOrNull() ?: ""
     }
 
+    /**
+     * Constrói dinamicamente a URL de streaming para um servidor específico mantendo o caminho Xtream
+     * e preservando a porta original de transmissão caso a baseUrl não especifique porta.
+     */
+    fun buildServerStreamUrl(targetServer: ServerProfile, currentItem: PlaylistItem): String {
+        val originalUrl = currentItem.url.trim()
+        if (originalUrl.isEmpty()) return ""
+
+        val originalUri = try { android.net.Uri.parse(originalUrl) } catch (e: Exception) { null }
+        if (originalUri == null) return originalUrl
+
+        val path = originalUri.encodedPath ?: ""
+        val query = originalUri.encodedQuery?.let { "?$it" } ?: ""
+        val pathAndQuery = if (path.startsWith("/")) "$path$query" else "/$path$query"
+
+        if (pathAndQuery.length <= 3 || pathAndQuery.contains("get.php") || pathAndQuery.endsWith(".m3u")) {
+            return originalUrl
+        }
+
+        var base = targetServer.baseUrl.trim().removeSuffix("/")
+        if (!base.startsWith("http://", ignoreCase = true) && !base.startsWith("https://", ignoreCase = true)) {
+            base = "http://$base"
+        }
+        val targetUri = try { android.net.Uri.parse(base) } catch (e: Exception) { null }
+        val targetScheme = targetUri?.scheme?.takeIf { it.isNotEmpty() } ?: "http"
+        val targetHost = targetUri?.host ?: base.removePrefix("http://").removePrefix("https://").removeSuffix("/")
+
+        val portSuffix = if (targetUri != null && targetUri.port != -1) {
+            ":${targetUri.port}"
+        } else if (originalUri.port != -1 && originalUri.port != 80 && originalUri.port != 443) {
+            ":${originalUri.port}"
+        } else {
+            ""
+        }
+
+        return "$targetScheme://$targetHost$portSuffix$pathAndQuery"
+    }
+
+    /**
+     * Resolve a URL de transmissão de um canal em outro servidor:
+     * 1. Busca primeiro no banco de dados local Room se a lista daquele servidor já foi baixada.
+     * 2. Caso contrário, faz o fallback inteligente para a baseUrl do servidor com a porta correta.
+     */
+    suspend fun resolveRealChannelUrlOnServer(targetServerName: String, currentItem: PlaylistItem): String {
+        return try {
+            val dbMatch = playlistItemDao.findItemInPlaylistByName(targetServerName, currentItem.name)
+                ?: playlistItemDao.findItemInPlaylistFuzzy(targetServerName, currentItem.name, "%${currentItem.name.take(12)}%")
+            if (dbMatch != null && dbMatch.url.isNotBlank()) {
+                dbMatch.url.trim()
+            } else {
+                val targetServer = predefinedServers.find { it.name.equals(targetServerName, ignoreCase = true) }
+                if (targetServer != null) buildServerStreamUrl(targetServer, currentItem) else currentItem.url
+            }
+        } catch (e: Exception) {
+            val targetServer = predefinedServers.find { it.name.equals(targetServerName, ignoreCase = true) }
+            if (targetServer != null) buildServerStreamUrl(targetServer, currentItem) else currentItem.url
+        }
+    }
+
     // ==========================================
     // BACKUP & RESTAURAÇÃO DE CONFIGURAÇÕES
     // ==========================================

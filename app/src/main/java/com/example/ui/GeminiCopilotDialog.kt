@@ -32,6 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.ai.CopilotMessage
@@ -54,8 +59,10 @@ fun GeminiCopilotDialog(
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // Auto-scroll on new messages or streaming tokens
-    LaunchedEffect(messages.size, (uiState as? GeminiUiState.Streaming)?.text) {
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+
+    // Auto-scroll on new messages, streaming tokens, or keyboard popping up
+    LaunchedEffect(messages.size, (uiState as? GeminiUiState.Streaming)?.text, imeBottom, inputText) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
@@ -66,20 +73,23 @@ fun GeminiCopilotDialog(
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
-            dismissOnClickOutside = true
+            dismissOnClickOutside = true,
+            decorFitsSystemWindows = false
         )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.75f))
-                .padding(horizontal = 16.dp, vertical = 24.dp),
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.88f)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(24.dp))
                     .border(
                         width = 1.dp,
@@ -173,21 +183,69 @@ fun GeminiCopilotDialog(
                         color = Color.White.copy(alpha = 0.1f)
                     )
 
-                    // Quick suggestion chips
-                    // Quick suggestion chips
-                    val suggestions = remember(currentPlaying) {
-                        val list = mutableListOf(
-                            "⚽ Onde assistir Palmeiras x Santos",
-                            "⚽ Jogos de futebol de hoje",
-                            "⚽ Flamengo e Brasileirão",
-                            "🍿 Recomendar filmes em alta",
-                            "📡 Como trocar as Fontes do canal",
-                            "📺 Melhores canais 4K da lista"
-                        )
+                    // Dynamic suggestion chips based on currently playing, active catalog, and conversation context
+                    val dynamicSuggestions = remember(currentPlaying, catalog, messages.size) {
+                        val list = mutableListOf<String>()
+
+                        // 1. Current playing context
                         if (currentPlaying != null) {
-                            list.add(0, "ℹ️ Analisar ${currentPlaying.name}")
+                            val cleanName = currentPlaying.name.take(22)
+                            list.add("ℹ️ Analisar $cleanName")
+                            list.add("🔄 Canais parecidos com $cleanName")
                         }
-                        list
+
+                        // 2. Dynamic conversation context
+                        val lastBotMsg = messages.lastOrNull { it.sender == "gemini" }?.text?.lowercase() ?: ""
+                        val lastUserMsg = messages.lastOrNull { it.sender == "user" }?.text?.lowercase() ?: ""
+                        val contextText = "$lastBotMsg $lastUserMsg"
+
+                        if (contextText.contains("futebol") || contextText.contains("jogo") || contextText.contains("partida") || contextText.contains("onde assistir")) {
+                            list.add("⚽ Próximos jogos do Brasileirão")
+                            list.add("⚽ Qual canal passa futebol agora?")
+                            list.add("⚽ Jogos na Libertadores e Champions")
+                        } else if (contextText.contains("filme") || contextText.contains("cinema") || contextText.contains("série") || contextText.contains("recomendar")) {
+                            list.add("🍿 Top 5 filmes mais bem avaliados")
+                            list.add("🎬 Melhores lançamentos de ação")
+                            list.add("🍿 Séries populares para maratonar")
+                        } else if (contextText.contains("fonte") || contextText.contains("servidor") || contextText.contains("trava")) {
+                            list.add("⚡ Como trocar para o servidor mais rápido?")
+                            list.add("📡 Qual a diferença entre as 7 Fontes?")
+                            list.add("🔧 Dicas para evitar travamentos")
+                        }
+
+                        // 3. Dynamic sports channels extracted from active catalog
+                        val sportsChannels = catalog.filter { item ->
+                            val n = item.name.uppercase()
+                            n.contains("PREMIERE") || n.contains("SPORTV") || n.contains("ESPN") || n.contains("TNT") || n.contains("CAZÉ") || n.contains("BANDSPORTS")
+                        }.take(3)
+                        for (ch in sportsChannels) {
+                            val nameShort = ch.name.trim().take(18)
+                            if (list.size < 8 && !list.any { it.contains(nameShort) }) {
+                                list.add("⚽ Jogos no $nameShort")
+                            }
+                        }
+
+                        // 4. Dynamic movie channels extracted from active catalog
+                        val movieChannels = catalog.filter { item ->
+                            val n = item.name.uppercase()
+                            n.contains("TELECINE") || n.contains("HBO") || n.contains("MEGAPIX") || n.contains("PARAMOUNT") || n.contains("MAX")
+                        }.take(2)
+                        for (ch in movieChannels) {
+                            val nameShort = ch.name.trim().take(18)
+                            if (list.size < 8 && !list.any { it.contains(nameShort) }) {
+                                list.add("🍿 Filmes no $nameShort")
+                            }
+                        }
+
+                        // 5. Default rotating dynamic fallbacks
+                        if (list.size < 6) {
+                            list.add("⚽ Jogos de futebol de hoje")
+                            list.add("🍿 Recomendar filmes em alta")
+                            list.add("📺 Melhores canais 4K da lista")
+                            list.add("📡 Status dos servidores MK21")
+                        }
+
+                        list.distinct().take(10)
                     }
 
                     LazyRow(
@@ -196,7 +254,7 @@ fun GeminiCopilotDialog(
                             .padding(bottom = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(suggestions) { chipText ->
+                        items(dynamicSuggestions) { chipText ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = Color(0xFF1B1E2B),
@@ -414,7 +472,21 @@ fun GeminiCopilotDialog(
                             placeholder = {
                                 Text("Pergunte ao Gemini sobre canais ou filmes...", fontSize = 12.sp, color = Color.Gray)
                             },
-                            singleLine = true,
+                            singleLine = false,
+                            maxLines = 3,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Send
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onSend = {
+                                    val prompt = inputText.trim()
+                                    if (prompt.isNotEmpty()) {
+                                        viewModel.askGemini(prompt, currentPlaying, catalog, relevantCatalogFetcher)
+                                        inputText = ""
+                                    }
+                                }
+                            ),
                             shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color(0xFFE50914),

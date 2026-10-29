@@ -28,6 +28,12 @@ interface PlaylistItemDao {
     @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND isFavorite = 1 ORDER BY name ASC")
     fun getFavorites(source: String): Flow<List<PlaylistItem>>
 
+    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND name = :name LIMIT 1")
+    suspend fun findItemInPlaylistByName(source: String, name: String): PlaylistItem?
+
+    @Query("SELECT * FROM playlist_items WHERE playlistSource = :source AND (name = :name OR name LIKE :nameLike) LIMIT 1")
+    suspend fun findItemInPlaylistFuzzy(source: String, name: String, nameLike: String): PlaylistItem?
+
     @Query("SELECT * FROM playlist_items WHERE isFavorite = 1")
     suspend fun getAllFavoriteItems(): List<PlaylistItem>
 

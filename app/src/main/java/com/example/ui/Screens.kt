@@ -4254,74 +4254,31 @@ fun VideoPlayerUI(
     var selectedQualityOption by remember { mutableStateOf("auto") }
     var superResolutionMode by remember { mutableStateOf(viewModel.preferencesService.superResolutionMode) }
 
-    // Multi-source extraction: sibling resolutions from active playlist + predefined server pool (Saimo TV pattern)
-    val availableSources = remember(playlistItem, viewModel.predefinedServers, viewModel.activeItemsList.value) {
+    // Multi-source extraction: strictly dynamic server list from servers.json (no invented channels)
+    val predefinedServersList by viewModel.predefinedServersState.collectAsState()
+    val activePlaylistName by viewModel.activePlaylistName.collectAsState()
+
+    val availableSources = remember(playlistItem, predefinedServersList, activePlaylistName) {
         val originalUrl = playlistItem.url.trim()
         val list = mutableListOf<Pair<String, String>>()
-        list.add("Fonte 1 (Atual)" to originalUrl)
+
+        // Identify which server currently corresponds to active playlist
+        val currentServer = predefinedServersList.find { it.name.equals(activePlaylistName, ignoreCase = true) }
+        val currentServerName = currentServer?.name ?: activePlaylistName.takeIf { it.isNotBlank() } ?: "Servidor Atual"
+
+        // Fonte 1 is ALWAYS the current active server with original verified URL
+        list.add("Fonte 1 ($currentServerName - Atual)" to originalUrl)
 
         var sourceIdx = 2
+        // Only bring predefined servers from the supplier's dynamic server list (no invented channels)
+        for (server in predefinedServersList) {
+            if (server.name.equals(currentServerName, ignoreCase = true)) continue
 
-        // 1. Sibling channels from user's active playlist (e.g. GLOBO SP FHD, GLOBO SP HD, GLOBO SP SD)
-        try {
-            val rawName = playlistItem.name.uppercase()
-            val cleanName = rawName
-                .replace(" 4K", "")
-                .replace(" 4k", "")
-                .replace(" FHD", "")
-                .replace(" HD", "")
-                .replace(" SD", "")
-                .replace(" H.265", "")
-                .replace(" HEVC", "")
-                .replace("[4K]", "")
-                .replace("[FHD]", "")
-                .replace("[HD]", "")
-                .replace("[SD]", "")
-                .trim()
-
-            if (cleanName.length >= 3) {
-                val siblings = viewModel.activeItemsList.value.filter {
-                    it.id != playlistItem.id &&
-                    it.url.trim().isNotEmpty() &&
-                    it.url.trim() != originalUrl &&
-                    it.name.uppercase().contains(cleanName)
-                }.take(3)
-
-                for (sibling in siblings) {
-                    val candidate = sibling.url.trim()
-                    if (list.none { it.second == candidate }) {
-                        list.add("Fonte $sourceIdx (${sibling.name})" to candidate)
-                        sourceIdx++
-                    }
-                }
+            val candidateUrl = viewModel.buildServerStreamUrl(server, playlistItem)
+            if (candidateUrl.isNotBlank() && list.none { it.second == candidateUrl }) {
+                list.add("Fonte $sourceIdx (${server.name})" to candidateUrl)
+                sourceIdx++
             }
-        } catch (e: Exception) {
-            // sibling matching safety
-        }
-
-        // 2. Multi-server mirror candidates (VLOG, TANNIX, LUB TV, MK21 PRÓ, CB6000, CINELON, MULTT TV)
-        try {
-            val uri = android.net.Uri.parse(originalUrl)
-            val path = uri.encodedPath ?: ""
-            val query = uri.encodedQuery?.let { "?$it" } ?: ""
-            val pathAndQuery = if (path.startsWith("/")) "$path$query" else "/$path$query"
-            
-            // Check if this is a streaming media URL with a path (live, vod, series, or direct xtream id)
-            val isStreamPath = pathAndQuery.length > 3 && 
-                               !pathAndQuery.contains("get.php") && 
-                               !pathAndQuery.endsWith(".m3u")
-            if (isStreamPath) {
-                for (server in viewModel.predefinedServers) {
-                    val base = server.baseUrl.trim().removeSuffix("/")
-                    val candidate = "$base$pathAndQuery"
-                    if (candidate != originalUrl && list.none { it.second == candidate }) {
-                        list.add("Fonte $sourceIdx (${server.name})" to candidate)
-                        sourceIdx++
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // parsing error safety
         }
         list
     }
