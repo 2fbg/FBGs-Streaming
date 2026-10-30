@@ -1,11 +1,11 @@
-# FBGs-Streaming (MK21 MultiServidor) — v2.2.0
+# FBGs-Streaming (MK21 MultiServidor) — v2.3.7
 
 <div align="center">
   <img src="web/icon-192.png" alt="MK21 Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v2.2.0-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.3.7-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -14,38 +14,12 @@
 
 ---
 
-## 🚀 Últimas Atualizações (Release v2.2.0 - Code 220 - Saimo-Inspired Overhaul)
-
-- 🎨 **UI Redesign: Canal Grid Dinâmico (Saimo-Inspired)**:
-  - Segunda coluna de canais reestruturada com Grid Dinâmico responsivo (`.canal-grid` com `display: grid`).
-  - Cards quadrados com Logo centralizada em alta definição e nome do canal em overlay semi-transparente no rodapé.
-  - **Efeito de Foco Premium**: Ao passar o mouse ou focar via D-Pad do controle remoto, o card escala com suavidade (`transform: scale(1.1)`) e ganha borda brilhante (`box-shadow: 0 0 15px #ff9800`).
-
-- 🧠 **Persistência de Estado (`MK21_CONFIG` LocalStorage Engine)**:
-  - Objeto unificado `MK21_CONFIG` gerenciando `last_channel_id`, `volume_level`, `favorites_list`, `upscaling_active` e `zapping_mode`.
-  - Ao carregar a aplicação (`window.onload`), sintoniza automaticamente no último canal assistido e aplica o volume salvo.
-
-- ⚡ **Recursos Avançados (Expert Settings)**:
-  - **Modo Zero Delay**: Pre-fetching assíncrono em segundo plano dos manifestos HLS para os 2 canais seguintes, eliminando travamentos de buffer na troca de canais.
-  - **Upscaling CSS (HD Enhance)**: Filtro dinâmico `.upscale-filter` (`filter: contrast(1.1) saturate(1.1) brightness(1.05)`) com botão na barra do player e atalho de teclado `[U]`.
-  - **Busca Fixa On-Top**: Barra de pesquisa com `position: sticky; top: 0; z-index: 28` e fundo blur, garantindo visibilidade total durante a rolagem do catálogo.
-
-- 📁 **Combo de Servidores e Modo Offline Aperfeiçoado**:
-  - Sincronização centralizada com `servers.json` da raiz com os 7 servidores oficiais (VLOG, TANNIX, LUB TV, MK21 PRÓ, CB6000, CINELON, MULTT TV).
-  - Suporte completo ao carregamento de arquivos M3U locais (`.m3u` / `.m3u8`) diretamente do dispositivo via input de arquivo com parser client-side ultrarrápido.
-
-- 🧹 **Higienização e Versionamento Limpo**:
-  - Remoção de badges de "Sincronização Automática" obsoletas.
-  - Versões anteriores arquivadas em `builds/archives/`.
-
----
-
-## 📦 Downloads Oficiais & Pacotes da Release v2.2.0
+## 📦 Downloads Oficiais & Pacotes da Release v2.3.7
 
 | Plataforma | Pacote / Binário | SHA-256 |
 |---|---|---|
-| **Android APK** | [`mk21.apk`](mk21.apk) | `4699c0eadb5c20f9e80cfcbd942aa31325861d4972c802fda9adb43f871c457a` |
-| **LG webOS Smart TV** | [`mk21.ipk`](smart-tv/mk21play_2.2.0_all.ipk) | `1a8cdfe9b939673459939ed567b9afa9b060e58c6b3893e0a1e5112ed142cd7e` |
+| **Android APK** | [`mk21.apk`](mk21.apk) | `3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce` |
+| **LG webOS Smart TV** | [`mk21.ipk`](smart-tv/mk21play_2.3.7_all.ipk) | `3303ded24f2a830f509e270d91bffc31ec715ccc04efa2a8079de4a9b7c55917` |
 | **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---
