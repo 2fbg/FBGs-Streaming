@@ -1,6 +1,7 @@
 package com.example
 
 import com.example.data.parser.M3UParser
+import com.example.player.PlaybackSourceFallback
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -96,6 +97,62 @@ class ExampleUnitTest {
         val item = parsed[0]
         assertEquals("Canais de Filmes", item.category)
         assertEquals("http://logo.com/hbo.png", item.logoUrl)
+    }
+
+    @Test
+    fun testParseM3U_MergesLiveStreamsWithSameTvgId() {
+        val m3uData = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="news.br" group-title="Notícias",Canal News HD
+            https://one.example/live/news.m3u8
+            #EXTINF:-1 tvg-id="NEWS.BR" group-title="Alternativos",Canal News FHD
+            https://two.example/live/news.m3u8
+        """.trimIndent()
+
+        val parsed = M3UParser.parse(ByteArrayInputStream(m3uData.toByteArray()), "source_test") { _ -> }
+
+        assertEquals(1, parsed.size)
+        assertEquals("https://one.example/live/news.m3u8", parsed.single().url)
+        assertEquals(listOf("https://two.example/live/news.m3u8"), parsed.single().alternateUrls)
+    }
+
+    @Test
+    fun testParseM3U_DoesNotMergeDifferentTvgIds() {
+        val m3uData = """
+            #EXTM3U
+            #EXTINF:-1 tvg-id="news.one" group-title="Notícias",Canal News
+            https://one.example/live/news.m3u8
+            #EXTINF:-1 tvg-id="news.two" group-title="Notícias",Canal News
+            https://two.example/live/news.m3u8
+        """.trimIndent()
+
+        val parsed = M3UParser.parse(ByteArrayInputStream(m3uData.toByteArray()), "source_test") { _ -> }
+
+        assertEquals(2, parsed.size)
+        assertTrue(parsed.all { it.alternateUrls.isEmpty() })
+    }
+
+    @Test
+    fun testParseM3U_MergesNormalizedNamesWhenTvgIdIsMissing() {
+        val m3uData = """
+            #EXTM3U
+            #EXTINF:-1 group-title="Notícias",Canal   News
+            https://one.example/live/news.m3u8
+            #EXTINF:-1 group-title="notícias",canal news
+            https://two.example/live/news.m3u8
+        """.trimIndent()
+
+        val parsed = M3UParser.parse(ByteArrayInputStream(m3uData.toByteArray()), "source_test") { _ -> }
+
+        assertEquals(1, parsed.size)
+        assertEquals(listOf("https://two.example/live/news.m3u8"), parsed.single().alternateUrls)
+    }
+
+    @Test
+    fun testPlaybackSourceFallbackSelectsOnlyUntriedSources() {
+        assertEquals(1, PlaybackSourceFallback.nextUntriedSource(3, setOf(0)))
+        assertEquals(2, PlaybackSourceFallback.nextUntriedSource(3, setOf(0, 1)))
+        assertNull(PlaybackSourceFallback.nextUntriedSource(2, setOf(0, 1)))
     }
 
     @Test

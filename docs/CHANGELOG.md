@@ -2,6 +2,12 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.3.7] - 2026-10-30
+
+- **Android:** agrupa URLs alternativas do mesmo canal/conteúdo M3U por `tvg-id` ou, sem ID, por nome, categoria e tipo normalizados.
+- **Android:** adiciona seleção manual e fallback automático entre URLs da playlist, mantendo a troca já existente entre servidores.
+- **Android:** preserva a posição de filmes e episódios ao trocar de fonte e migra o catálogo Room sem apagar dados.
+
 ## [2.1.2] - 2026-10-21
 
 - Sincronização das versões Android, Web/PWA, webOS e Tizen para `2.1.2` / `212`.

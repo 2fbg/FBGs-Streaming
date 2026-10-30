@@ -69,6 +69,7 @@
 ### Android / Android TV (`/app`)
 - **Linguagem & Framework**: Kotlin 2.1.10 + Jetpack Compose (Material 3).
 - **Player**: AndroidX Media3 ExoPlayer 1.4.1 com `DefaultRenderersFactory` (Aceleração por Hardware).
+- **Fontes alternativas (Android):** URLs M3U do mesmo canal/conteúdo podem ser selecionadas manualmente ou tentadas automaticamente após falhas; filmes e episódios retomam a posição ao trocar de fonte.
 - **Persistência Local**: Room Database com Room KSP.
 
 ### Smart TV (`/smart-tv`)

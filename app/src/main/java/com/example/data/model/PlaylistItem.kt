@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import androidx.compose.runtime.Immutable
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -28,5 +29,7 @@ data class PlaylistItem(
     val isAdult: Boolean = false,
     val playlistSource: String = "Principal",
     val lastWatchedTime: Long = 0,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    @ColumnInfo(defaultValue = "'[]'")
+    val alternateUrls: List<String> = emptyList()
 )

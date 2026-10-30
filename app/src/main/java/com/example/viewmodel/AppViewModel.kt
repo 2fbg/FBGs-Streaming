@@ -53,7 +53,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         application,
         IptvDatabase::class.java,
         "mk21_iptv_db"
-    ).fallbackToDestructiveMigration().build()
+    ).addMigrations(IptvDatabase.MIGRATION_1_2)
+        .fallbackToDestructiveMigration()
+        .build()
 
     private val playlistItemDao = db.playlistItemDao()
     private val manualPlaylistDao = db.manualPlaylistDao()

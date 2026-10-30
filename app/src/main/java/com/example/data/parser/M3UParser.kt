@@ -5,8 +5,13 @@ import okio.buffer
 import okio.source
 import java.io.InputStream
 import java.net.URI
+import java.util.Locale
 
 object M3UParser {
+    private data class ParsedEntry(
+        val item: PlaylistItem,
+        val tvgId: String? = null
+    )
 
     /**
      * Parse an M3U playlist from an input stream using Okio for optimized I/O buffering.
@@ -14,7 +19,7 @@ object M3UParser {
      */
     fun parse(inputStream: InputStream, playlistSource: String, onProgress: (Int) -> Unit): List<PlaylistItem> {
         val source = inputStream.source().buffer()
-        val items = mutableListOf<PlaylistItem>()
+        val items = mutableListOf<ParsedEntry>()
 
         var currentMetaData: String? = null
         var currentGroup: String? = null
@@ -50,14 +55,15 @@ object M3UParser {
                     val sanitizedUrl = sanitizeStreamUrl(currentLine)
                     if (sanitizedUrl != null) {
                         if (currentMetaData != null) {
-                            val item = parseItem(currentMetaData, sanitizedUrl, playlistSource, currentGroup)
-                            items.add(item)
+                            val metadata = currentMetaData
+                            val item = parseItem(metadata, sanitizedUrl, playlistSource, currentGroup)
+                            items.add(ParsedEntry(item, extractAttribute(metadata, "tvg-id")))
                             currentMetaData = null
                             currentGroup = null
                         } else if (isValidUrl(sanitizedUrl)) {
                             // Fallback: parse plain URL without metadata
                             val item = parseUrlOnly(sanitizedUrl, playlistSource)
-                            items.add(item)
+                            items.add(ParsedEntry(item))
                         }
                     } else {
                         currentMetaData = null
@@ -89,8 +95,46 @@ object M3UParser {
             }
         }
 
-        return items
+        return mergeAlternateStreams(items)
     }
+
+    private fun mergeAlternateStreams(entries: List<ParsedEntry>): List<PlaylistItem> {
+        val merged = ArrayList<PlaylistItem>(entries.size)
+        val firstIndexByIdentity = LinkedHashMap<String, Int>()
+
+        entries.forEach { entry ->
+            val item = entry.item
+            val normalizedName = normalizeIdentity(item.name)
+            val normalizedType = item.contentType.uppercase(Locale.ROOT)
+            val identity = entry.tvgId
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+                ?.let { tvgId ->
+                    val episodeIdentity = if (normalizedType == "LIVE") "" else "|$normalizedName"
+                    "id:${normalizeIdentity(tvgId)}|$normalizedType$episodeIdentity"
+                }
+                ?: "name:$normalizedName|category:${normalizeIdentity(item.category)}|$normalizedType"
+
+            val existingIndex = firstIndexByIdentity[identity]
+            if (existingIndex == null) {
+                firstIndexByIdentity[identity] = merged.size
+                merged.add(item.copy(alternateUrls = emptyList()))
+                return@forEach
+            }
+
+            val existing = merged[existingIndex]
+            val alternatives = (listOf(existing.url) + existing.alternateUrls + item.url + item.alternateUrls)
+                .filter(String::isNotBlank)
+                .distinct()
+                .drop(1)
+            merged[existingIndex] = existing.copy(alternateUrls = alternatives)
+        }
+
+        return merged
+    }
+
+    private fun normalizeIdentity(value: String): String =
+        value.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
 
     /**
      * Sanitizes stream URLs to only permit safe streaming protocols and reject local/file attacks.

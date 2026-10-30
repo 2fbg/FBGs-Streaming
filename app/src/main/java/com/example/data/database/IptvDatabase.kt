@@ -1,6 +1,8 @@
 package com.example.data.database
 
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.ManualPlaylist
 import com.example.data.model.PlaylistItem
 import kotlinx.coroutines.flow.Flow
@@ -105,8 +107,19 @@ interface ManualPlaylistDao {
     suspend fun deleteManualPlaylist(name: String)
 }
 
-@Database(entities = [PlaylistItem::class, ManualPlaylist::class], version = 1, exportSchema = false)
+@Database(entities = [PlaylistItem::class, ManualPlaylist::class], version = 2, exportSchema = false)
+@TypeConverters(PlaylistItemConverters::class)
 abstract class IptvDatabase : RoomDatabase() {
     abstract fun playlistItemDao(): PlaylistItemDao
     abstract fun manualPlaylistDao(): ManualPlaylistDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE playlist_items ADD COLUMN alternateUrls TEXT NOT NULL DEFAULT '[]'"
+                )
+            }
+        }
+    }
 }
