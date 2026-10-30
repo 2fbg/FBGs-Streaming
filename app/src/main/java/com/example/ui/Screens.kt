@@ -4218,7 +4218,6 @@ fun VideoPlayerUI(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    
     var isPlaying by remember { mutableStateOf(true) }
     
     LaunchedEffect(isPlaying) {
@@ -4226,8 +4225,7 @@ fun VideoPlayerUI(
     }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isBuffering by remember { mutableStateOf(true) }
-    var retryCount by remember { mutableIntStateOf(0) }
-    
+    var retryCount by remember(playlistItem.id, playlistItem.url, playlistItem.alternateUrls) { mutableIntStateOf(0) }
     // Gestures and control states
     var brightnessValue by remember { mutableFloatStateOf(1.0f) }
     var volumeValue by remember { mutableFloatStateOf(1.0f) }
@@ -4619,9 +4617,6 @@ fun VideoPlayerUI(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 isBuffering = state == Player.STATE_BUFFERING
-                if (state == Player.STATE_READY) {
-                    retryCount = 0
-                }
             }
 
             override fun onIsPlayingChanged(isPlayingParam: Boolean) {

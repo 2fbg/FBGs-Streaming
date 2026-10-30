@@ -100,20 +100,28 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testParseM3U_MergesLiveStreamsWithSameTvgId() {
+    fun testParseM3U_MergesLiveStreamsWithSameTvgIdInPlaylistOrder() {
         val m3uData = """
             #EXTM3U
             #EXTINF:-1 tvg-id="news.br" group-title="Notícias",Canal News HD
             https://one.example/live/news.m3u8
             #EXTINF:-1 tvg-id="NEWS.BR" group-title="Alternativos",Canal News FHD
             https://two.example/live/news.m3u8
+            #EXTINF:-1 tvg-id="news.br" group-title="Notícias",Canal News 4K
+            https://three.example/live/news.m3u8
         """.trimIndent()
 
         val parsed = M3UParser.parse(ByteArrayInputStream(m3uData.toByteArray()), "source_test") { _ -> }
 
         assertEquals(1, parsed.size)
         assertEquals("https://one.example/live/news.m3u8", parsed.single().url)
-        assertEquals(listOf("https://two.example/live/news.m3u8"), parsed.single().alternateUrls)
+        assertEquals(
+            listOf(
+                "https://two.example/live/news.m3u8",
+                "https://three.example/live/news.m3u8"
+            ),
+            parsed.single().alternateUrls
+        )
     }
 
     @Test
