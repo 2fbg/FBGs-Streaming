@@ -8,11 +8,6 @@
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
   "resolution": "1920x1080",
-  "trustLevel": "trusted",
-  "requiredPermissions": [
-    "media.controller",
-    "net.connectivity"
-  ],
   "supportTouchMode": false,
   "disableBackHistoryFilter": true
 }

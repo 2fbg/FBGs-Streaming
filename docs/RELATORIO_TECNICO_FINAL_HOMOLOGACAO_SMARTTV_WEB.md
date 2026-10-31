@@ -19,19 +19,14 @@ Todas as 6 falhas críticas apontadas durante os testes operacionais foram resol
 
 ### Problema 1: "IPK não está funcionando os canais (só áudio ou falha de conexão)"
 
-- **Causa Raiz 1 (Permissões de Plataforma):** O arquivo `appinfo.json` do pacote webOS não declarava `trustLevel: "trusted"` nem as permissões `media.controller` e `net.connectivity`. Como consequência, o sistema operacional da TV executava o aplicativo sob a política rígida de sandbox de navegador de terceiros, bloqueando streams HTTP e conexões externas com erro de CORS/Security.
+- **Nota de compatibilidade do manifesto:** Uma validação posterior em uma LG 50UN8000PSD (webOS 5.6.2) mostrou que o pacote só foi registrado e aberto após remover `trustLevel` e `requiredPermissions` do `appinfo.json`. Como os dois campos foram removidos juntos, o teste não identifica qual deles causava a falha. Não se deve inferir que `trustLevel: "trusted"` ou essas permissões removam restrições de rede no webOS TV.
 - **Causa Raiz 2 (Incompatibilidade de Contêiner MPEG-TS):** A maioria dos canais IPTV em servidores Xtream Codes é transmitida em contêiner MPEG-TS (`.ts`). O app dependia exclusivamente do `Hls.js` (que processa apenas manifestos `.m3u8`) e delegava `.ts` para a tag HTML5 `<video>` pura sem configurar o MIME Type correto (`type="video/mp2t"`), gerando `MEDIA_ERR_SRC_NOT_SUPPORTED`.
 - **Solução Arquitetural:**
-  1. Atualizado `smart-tv/mk21-tv/appinfo.json`:
+  1. O manifesto webOS mantém os metadados suportados e não declara `trustLevel` nem `requiredPermissions`:
      ```json
      {
        "id": "com.mk21.tv",
        "version": "2.0.0",
-       "trustLevel": "trusted",
-       "requiredPermissions": [
-         "media.controller",
-         "net.connectivity"
-       ],
        "resolution": "1920x1080",
        "disableBackHistoryFilter": true
      }
@@ -195,5 +190,5 @@ ares-launch --device tv_lg com.mk21.tv
 | `web/mk21.ipk` | Aplicação Web / Vercel | ~151 KB | Arquivo servido para download via navegador |
 | `smart-tv/mk21-tv/app.js` | Core TV | ~212 KB | Lógica de reprodução, Hls.js/mpegts.js, logs, D-Pad e filtros |
 | `smart-tv/mk21-tv/styles.css` | Estilos TV | ~42 KB | Grade 3 colunas fluida com min-width 0 e fullscreen corrigido |
-| `smart-tv/mk21-tv/appinfo.json` | Manifesto webOS | 382 B | Configuração de privilégios (`trustLevel: "trusted"`) e resolução 1080p |
+| `smart-tv/mk21-tv/appinfo.json` | Manifesto webOS | Metadados do app e resolução 1080p, sem declarações de confiança/permissões não validadas |
 | `index.html` e `web/index.html` | Web / PWA / Vercel | ~373 KB | Aplicação Web com densidade de banners corrigida e grid anti-blowout |
