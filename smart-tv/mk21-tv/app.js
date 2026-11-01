@@ -20,6 +20,27 @@ const Mk21DnsResolver = {
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
+window.addEventListener('error', function (event) {
+  const target = event && event.target;
+  if (target && target !== window) {
+    const resource = target.currentSrc || target.src || target.href || target.tagName || 'recurso';
+    let resourceLabel = target.tagName || 'recurso';
+    try { resourceLabel = getSourceHostLabel(resource); } catch (e) {}
+    addDevLog(`[Runtime] Falha ao carregar ${resourceLabel}`, 'error');
+    return;
+  }
+  const location = event && event.filename
+    ? ` (${event.filename}:${event.lineno || 0}:${event.colno || 0})`
+    : '';
+  addDevLog(`[JavaScript] ${event && event.message ? event.message : 'Erro não identificado'}${location}`, 'error');
+}, true);
+
+window.addEventListener('unhandledrejection', function (event) {
+  const reason = event && event.reason;
+  const message = reason && reason.message ? reason.message : String(reason || 'Promise rejeitada sem detalhe');
+  addDevLog(`[Promise] ${message}`, 'error');
+});
+
 // 1. SPLASH SCREEN STATUS UPDATER
 function updateSplash(percent, text) {
   const bar = $('splashProgressBar');
@@ -146,19 +167,25 @@ async function getStoredData(id) {
   } catch (e) { return null; }
 }
 
-async function saveStoredData(id, payload) {
+async function saveStoredData(id, payload, catalogComplete = true) {
   try {
     const db = await openDB();
     if (!db) return;
     // Salva o catálogo COMPLETO em disco (IndexedDB) para restauração instantânea sem rede
     const full = {
       sourceGroupsVersion: 1,
+      catalogComplete: catalogComplete,
       LIVE: (payload.LIVE || []).map(slimItem),
       MOVIE: (payload.MOVIE || []).map(slimItem),
       SERIES: (payload.SERIES || []).map(slimItem)
     };
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put({ id, payload: full, updatedAt: Date.now() });
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error || new Error('Falha ao gravar catálogo em cache.'));
+      tx.onabort = () => reject(tx.error || new Error('Gravação do catálogo em cache cancelada.'));
+    });
   } catch (e) {
     console.warn('[MK21] save cache falhou', e);
   }
@@ -525,14 +552,14 @@ function closeSearchMode(clearText = false) {
        $('tabLive'));
   searchPreviousFocus = null;
   if (target) {
-    try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    try { target.focus(); mk21ScrollFocusedElement(target); } catch (e) {}
   } else {
     focusActiveElement();
   }
   const video = $('tvPlayer');
   if (video && searchWasPlaying) {
     searchWasPlaying = false;
-    try { video.play().catch(() => {}); } catch (e) {}
+    safeVideoPlay(video).catch(() => {});
   }
 }
 function scheduleSearchRender() {
@@ -1170,6 +1197,8 @@ async function loadServer(forceRefresh = false) {
   // Cache prioritário em memória/IndexedDB: restauração instantânea sem novo download
   let seededFromIndex = false;
   let cachedCatalogForFallback = null;
+  let usedPartialCache = false;
+  let stagedCacheWrite = Promise.resolve();
   if (!forceRefresh) {
     const cached = await getStoredData(srv.id);
     if (loadId !== serverLoadGeneration) return;
@@ -1194,29 +1223,52 @@ async function loadServer(forceRefresh = false) {
       }
       buildCurrentCategories();
       renderCategoriesList();
-      selectCategory('ALL');
+      selectCategory('ALL', false);
       hideSplash();
       updateServerSyncBadge(100, true);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
       if (!cachedSourceMatch && pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) {
         showChannelBanner('Lista local sem correspondência; atualizando este servidor...');
-      } else {
-        if (!cachedSourceMatch) setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+      } else if (cached.catalogComplete !== false) {
+        if (!cachedSourceMatch) {
+          setTimeout(() => {
+            const resumed = resumeLastChannelIfPossible();
+            if (!resumed && currentContentType === 'LIVE' && allCatalog.LIVE.length) {
+              playStream(allCatalog.LIVE[0]);
+            }
+          }, 350);
+        }
         isLoadingServerPlaylist = false;
         return;
+      } else {
+        usedPartialCache = true;
+        if (!cachedSourceMatch) {
+          setTimeout(() => {
+            const resumed = resumeLastChannelIfPossible();
+            if (!resumed && !pendingServerSourceSwitch && currentContentType === 'LIVE' && allCatalog.LIVE.length) {
+              playStream(allCatalog.LIVE[0]);
+            }
+          }, 350);
+        }
+        showChannelBanner('Catálogo em cache disponível; atualizando a lista em segundo plano...');
       }
     }
   }
 
-  $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
-  updateSplash(35, 'Baixando grade de canais ao vivo...');
-  if (hud) {
-    if ($('hudProgressBar')) $('hudProgressBar').style.width = '35%';
-    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '35%';
+  if (!usedPartialCache) {
+    $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
+    updateSplash(35, 'Baixando grade de canais ao vivo...');
+    if (hud) {
+      if ($('hudProgressBar')) $('hudProgressBar').style.width = '35%';
+      if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '35%';
+    }
+  } else {
+    $('txtCurrentCategoryTitle').textContent = 'Atualizando catálogo de ' + cleanServerName(srv.name) + '...';
+    if (hud) hud.classList.add('hidden');
   }
 
   try {
-    allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    if (!usedPartialCache) allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
     const catalogGroupers = {
@@ -1224,33 +1276,50 @@ async function loadServer(forceRefresh = false) {
       MOVIE: MK21AlternativeSources.createGrouper(),
       SERIES: MK21AlternativeSources.createGrouper()
     };
+    if (usedPartialCache) {
+      Object.keys(catalogGroupers).forEach(type => {
+        allCatalog[type].forEach(item => {
+          const grouped = catalogGroupers[type].add(item);
+          if (grouped.isNew) indexWriter.add(grouped.item);
+        });
+      });
+    }
     const loadingProfile = localStorage.getItem('mk21_staged_loading') || 'balanced';
     const liveRevealThreshold = loadingProfile === 'fast' ? 4 : (loadingProfile === 'stable' ? 20 : 8);
-    let liveVisible = false;
+    const loadFilters = {
+      LIVE: localStorage.getItem('mk21_filter_load_live') !== 'false',
+      MOVIE: localStorage.getItem('mk21_filter_load_movies') !== 'false',
+      SERIES: localStorage.getItem('mk21_filter_load_series') !== 'false'
+    };
+    let liveVisible = usedPartialCache;
     let lastProgressUi = 0;
+    let renderedCatalogItemCount = usedPartialCache
+      ? allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length
+      : 0;
+    let hadLiveAtFirstRender = usedPartialCache && allCatalog.LIVE.length > 0;
 
     const revealLive = () => {
       const totalItems = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
       if (liveVisible || loadId !== serverLoadGeneration || totalItems === 0) return;
       liveVisible = true;
+      renderedCatalogItemCount = totalItems;
+      hadLiveAtFirstRender = allCatalog.LIVE.length > 0;
+      stagedCacheWrite = saveStoredData(srv.id, allCatalog, false);
       updateSplash(80, allCatalog.LIVE.length
         ? 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')'
         : 'Catálogo disponível — carregando listas em etapas...');
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
-      renderItemsList();
-      if (!activeItem && !pendingServerSourceSwitch &&
-          currentContentType === 'LIVE' && allCatalog.LIVE.length > 0) {
-        playStream(allCatalog.LIVE[0]);
-      }
       hideSplash();
 
       // LIBERAÇÃO IMEDIATA DA TELA DO APLICATIVO
       if (hud) {
         hud.classList.add('hidden');
       }
-      showChannelBanner('📺 Ao Vivo liberado! Baixando catálogo completo em segundo plano...');
+      showChannelBanner(allCatalog.LIVE.length
+        ? '📺 Ao Vivo liberado! Baixando catálogo completo em segundo plano...'
+        : '📺 Catálogo parcial liberado; canais ao vivo continuam carregando...');
     };
 
     await streamPlaylistContent(
@@ -1262,12 +1331,7 @@ async function loadServer(forceRefresh = false) {
         const type = slim.contentType;
 
         // Filtro de conteúdo configurável pelo usuário
-        const loadLive = localStorage.getItem('mk21_filter_load_live') !== 'false';
-        const loadMovies = localStorage.getItem('mk21_filter_load_movies') !== 'false';
-        const loadSeries = localStorage.getItem('mk21_filter_load_series') !== 'false';
-        if (type === 'LIVE' && !loadLive) return;
-        if (type === 'MOVIE' && !loadMovies) return;
-        if (type === 'SERIES' && !loadSeries) return;
+        if (!loadFilters[type]) return;
 
         // Bloqueio 18+ reversível: preserva no catálogo e indexador, filtrando via UI
         const adultItem = slim.isAdult || isAdult(slim.name) || isAdult(slim.group);
@@ -1337,6 +1401,12 @@ async function loadServer(forceRefresh = false) {
     renderCategoriesList();
     if (!liveVisible) selectCategory('ALL');
     const totalLoaded = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
+    if (currentContentType === 'LIVE' &&
+        (usedPartialCache || totalLoaded > renderedCatalogItemCount)) {
+      buildCurrentCategories();
+      renderCategoriesList();
+      selectCategory(activeCategoryKey, !hadLiveAtFirstRender);
+    }
     updateSplash(100, 'Lista completa carregada (' + totalLoaded.toLocaleString('pt-BR') + ' itens)');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
@@ -1345,6 +1415,7 @@ async function loadServer(forceRefresh = false) {
     }
     updateServerSyncBadge(100, true);
     await indexWriter.finish();
+    await stagedCacheWrite;
     // Salva o catálogo 100% completo no IndexedDB para não precisar baixar novamente ao reabrir o app
     await saveStoredData(srv.id, allCatalog);
     localStorage.setItem(`mk21_last_sync_${srv.id}`, String(Date.now()));
@@ -1362,20 +1433,20 @@ async function loadServer(forceRefresh = false) {
     if (loadId === serverLoadGeneration) isLoadingServerPlaylist = false;
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
+    addDevLog(`[Servidor] Falha ao carregar lista: ${err && err.message ? err.message : err}`, 'error');
     const partialLive = allCatalog && Array.isArray(allCatalog.LIVE) ? allCatalog.LIVE.length : 0;
     if (partialLive > 0) {
       buildCurrentCategories();
       renderCategoriesList();
-      selectCategory('ALL');
-      renderItemsList();
+      selectCategory('ALL', !pendingServerSourceSwitch);
       hideSplash();
       const sourceSwitchMatched = finishPendingServerSourceSwitch();
       const sourceSwitchStillPending = pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id;
-      if (!sourceSwitchMatched && !sourceSwitchStillPending && !activeItem) playStream(allCatalog.LIVE[0]);
       if (!sourceSwitchMatched && sourceSwitchStillPending) {
         pendingServerSourceSwitch = null;
-        showChannelBanner('A lista parcial não contém o conteúdo procurado. Tente sincronizar novamente.');
+        if (!activeItem && allCatalog.LIVE.length) playStream(allCatalog.LIVE[0]);
       }
+      if (!sourceSwitchMatched && sourceSwitchStillPending) showChannelBanner('A lista parcial não contém o conteúdo procurado. Tente sincronizar novamente.');
       showChannelBanner(`⚠️ Lista parcial: ${partialLive} canais carregados. Tente atualizar novamente.`);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = `📺 ${partialLive} canais disponíveis (parcial)`;
       if (hud) hud.classList.add('hidden');
@@ -1389,8 +1460,7 @@ async function loadServer(forceRefresh = false) {
       if (cachedCount > 0) {
         buildCurrentCategories();
         renderCategoriesList();
-        selectCategory('ALL');
-        renderItemsList();
+        selectCategory('ALL', false);
         hideSplash();
         if (hud) hud.classList.add('hidden');
         updateServerSyncBadge(100, true);
@@ -1405,7 +1475,14 @@ async function loadServer(forceRefresh = false) {
               ? 'Sem conexão. Usando o catálogo salvo.'
               : 'Sem conexão. Atualize a lista quando estiver online para habilitar fontes alternativas.'
           );
-          if (!sourceSwitchMatched) setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+          if (!sourceSwitchMatched) {
+            setTimeout(() => {
+              const resumed = resumeLastChannelIfPossible();
+              if (!resumed && currentContentType === 'LIVE' && allCatalog.LIVE.length) {
+                playStream(allCatalog.LIVE[0]);
+              }
+            }, 350);
+          }
         }
         if ($('txtCurrentCategoryTitle')) {
           $('txtCurrentCategoryTitle').textContent = `📺 Catálogo salvo: ${cachedCount.toLocaleString('pt-BR')} itens`;
@@ -1532,7 +1609,7 @@ function renderCategoriesList() {
   ul.appendChild(fragment);
 }
 
-function selectCategory(catKey) {
+function selectCategory(catKey, autoPlay = true) {
   activeCategoryKey = catKey;
 
   const btns = $('listCategories').querySelectorAll('.cat-item-btn');
@@ -1547,11 +1624,15 @@ function selectCategory(catKey) {
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')))
   ) : '📁 ' + catKey;
   $('inputSearch').value = '';
-  itemsDisplayLimit = 80;
+  itemsDisplayLimit = 40;
   renderItemsList();
+  if (autoPlay && !activeItem && !pendingServerSourceSwitch && !isSwitchingServerSource &&
+      currentContentType === 'LIVE' && currentFilteredItems.length > 0) {
+    playStream(currentFilteredItems[0]);
+  }
 }
 
-let itemsDisplayLimit = 80;
+let itemsDisplayLimit = 40;
 
 // 8. RENDERIZAÇÃO DA LISTA DE ITENS COM SÉRIES AGRUPADAS E ORDENAÇÃO
 function renderItemsList() {
@@ -1775,11 +1856,6 @@ function renderItemsList() {
 
   ul.appendChild(fragment);
 
-  // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
-  if (!activeItem && !pendingServerSourceSwitch && !isSwitchingServerSource &&
-      currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
-    playStream(currentFilteredItems[0]);
-  }
 }
 
 // MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO
@@ -2967,7 +3043,10 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
       hidePlayerReconnectBadge();
     });
     video.addEventListener('error', (e) => {
-      console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
+      const mediaError = video.error;
+      const code = mediaError ? mediaError.code : 'desconhecido';
+      const detail = mediaError && mediaError.message ? mediaError.message : 'sem detalhe do navegador';
+      addDevLog(`[Player] Erro de mídia nativo (código ${code}): ${detail}`, 'error');
       triggerAutoReconnect('Erro nativo de reprodução');
     });
   }
@@ -2993,6 +3072,7 @@ let sessionDevLogs = [];
 const MAX_DEV_LOGS = 300;
 
 function addDevLog(msg, type = 'info') {
+  msg = redactDiagnosticLog(msg);
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
   const entry = { time, msg, type };
   sessionDevLogs.push(entry);
@@ -3091,7 +3171,15 @@ function redactDiagnosticLog(value) {
   return String(value)
     .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, '$1[REDACTED]@')
     .replace(/([?&](?:username|user|password|pass|token|auth|api[_-]?key)=)[^&#\s]*/gi, '$1[REDACTED]')
-    .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]');
+    .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]')
+    .replace(/https?:\/\/[^\s"'<>]+/gi, value => {
+      try {
+        const url = new URL(value);
+        return `${url.protocol}//${url.host}/[REDACTED]`;
+      } catch (e) {
+        return '[URL REDACTED]';
+      }
+    });
 }
 
 let mpegtsPlayer = null;
@@ -3179,6 +3267,7 @@ function openQualityPicker() {
   const modal = $('modalQuality');
   const list = $('qualityOptionsList');
   if (!modal || !list) return;
+  addDevLog('[UI] Abrindo qualidade, super resolução e buffer', 'info');
   const groups = [
     {
       title: 'Qualidade',
@@ -3213,6 +3302,7 @@ function openQualityPicker() {
       button.onclick = () => {
         localStorage.setItem(group.key, value);
         applyPlaybackPreferences();
+        addDevLog(`[Playback] ${group.title}: ${label}`, 'success');
         openQualityPicker();
       };
       list.appendChild(button);
@@ -3356,11 +3446,14 @@ function safeVideoPlay(video) {
           console.debug('[Player] Play request interrupted cleanly by zapping.');
           return;
         }
-        console.warn('[Player Play Error]:', err && err.message);
+        const message = err && err.message ? err.message : String(err || 'Falha ao iniciar vídeo');
+        addDevLog(`[Player] Falha ao iniciar reprodução: ${message}`, 'error');
+        return Promise.reject(err);
       });
     }
   } catch (e) {
-    console.warn('[Player Exception]:', e);
+    addDevLog(`[Player] Exceção ao iniciar reprodução: ${e && e.message ? e.message : e}`, 'error');
+    return Promise.reject(e);
   }
   return Promise.resolve();
 }
@@ -3415,7 +3508,9 @@ function fallbackToHls(item, sourceUrl = item && item.url) {
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Fallback HLS reproduzindo com sucesso!', 'success');
       try { video.preservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-      safeVideoPlay(video);
+      safeVideoPlay(video).catch(err => {
+        addDevLog(`[Player] HLS não iniciou: ${err && err.message ? err.message : err}`, 'error');
+      });
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
@@ -3590,7 +3685,9 @@ function playStream(
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Manifesto HLS decodificado com sucesso!', 'success');
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-      safeVideoPlay(video);
+      safeVideoPlay(video).catch(err => {
+        addDevLog(`[Player] HLS não iniciou: ${err && err.message ? err.message : err}`, 'error');
+      });
       hidePlayerReconnectBadge();
       if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
       if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
@@ -3636,7 +3733,7 @@ function playStream(
       });
       mpegtsPlayer.attachMediaElement(video);
       mpegtsPlayer.load();
-      mpegtsPlayer.play().then(() => {
+      Promise.resolve(mpegtsPlayer.play()).then(() => {
         addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
         hidePlayerReconnectBadge();
         if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
@@ -3920,7 +4017,7 @@ function togglePlayPause() {
   const v = $('tvPlayer');
   if (!v) return;
   if (v.paused) {
-    v.play().catch(() => {});
+    safeVideoPlay(v).catch(() => {});
     if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
     if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
     showChannelBanner('▶ Reproduzindo');
@@ -4165,7 +4262,7 @@ function switchContentType(type) {
     const activeCat = $('listCategories') ? $('listCategories').querySelector('.cat-item-btn.active') : null;
     const target = firstItem || activeCat || safeTabTarget;
     if (target) {
-      try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      try { target.focus(); mk21ScrollFocusedElement(target); } catch (e) {}
     }
   }, 30);
 }
@@ -4177,12 +4274,19 @@ CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
   if (b) {
     b.onclick = () => {
+      addDevLog(`[UI] Abrindo configuração: ${b.textContent.trim()}`, 'info');
       CFG_BUTTONS.forEach(id => {
         const el = $(id);
         if (el) el.classList.remove('active');
       });
       b.classList.add('active');
       renderSettings(bId.replace('cfgBtn', '').toLowerCase());
+      const settingsBox = $('settingsDetailBox');
+      const firstControl = settingsBox && settingsBox.querySelector('button, input, select, [tabindex="0"]');
+      if (firstControl) {
+        firstControl.focus();
+        mk21ScrollFocusedElement(firstControl);
+      }
     };
   }
 });
@@ -4358,13 +4462,16 @@ function renderPlaybackSettingsPanel() {
   $('selectPlaybackQuality').onchange = event => {
     localStorage.setItem('mk21_playback_quality', event.target.value);
     applyPlaybackPreferences();
+    addDevLog(`[Playback] Qualidade configurada: ${event.target.value}`, 'success');
   };
   $('selectSuperResolution').onchange = event => {
     localStorage.setItem('mk21_super_resolution', event.target.value);
     applyPlaybackPreferences();
+    addDevLog(`[Playback] Efeito visual configurado: ${event.target.value}`, 'success');
   };
   $('selectBufferProfile').onchange = event => {
     localStorage.setItem('mk21_buffer_profile', event.target.value);
+    addDevLog(`[Playback] Perfil de buffer configurado: ${event.target.value}`, 'success');
     showChannelBanner('Buffer atualizado para as próximas reproduções.');
   };
   $('toggleAmoledMode').onchange = event => {
@@ -5377,7 +5484,7 @@ function togglePlayPause() {
   const v = $('tvPlayer');
   if (!v) return;
   if (v.paused) {
-    v.play().catch(() => {});
+    safeVideoPlay(v).catch(() => {});
     if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏸ Pausar';
     showChannelBanner('▶ Reproduzindo');
   } else {
@@ -5399,6 +5506,41 @@ function mk21IsVisible(el) {
   return el.offsetParent !== null || el === document.activeElement;
 }
 
+function mk21ScrollFocusedElement(el) {
+  if (!el) return;
+  let parent = el.parentElement;
+  while (parent && parent !== document.body) {
+    let canScroll = parent.classList.contains('pane-scroll') ||
+      parent.classList.contains('settings-left-menu') ||
+      parent.classList.contains('settings-detail-panel') ||
+      parent.classList.contains('source-options-list') ||
+      parent.classList.contains('server-manager-body') ||
+      parent.classList.contains('servers-manager-list');
+    if (!canScroll) {
+      try {
+        const overflowY = window.getComputedStyle(parent).overflowY;
+        canScroll = (overflowY === 'auto' || overflowY === 'scroll') &&
+          parent.scrollHeight > parent.clientHeight;
+      } catch (e) {}
+    }
+
+    if (canScroll && parent.scrollHeight > parent.clientHeight) {
+      const containerRect = parent.getBoundingClientRect();
+      const elementRect = el.getBoundingClientRect();
+      const margin = 12;
+      if (elementRect.top < containerRect.top + margin) {
+        parent.scrollTop -= containerRect.top + margin - elementRect.top;
+      } else if (elementRect.bottom > containerRect.bottom - margin) {
+        parent.scrollTop += elementRect.bottom - containerRect.bottom + margin;
+      }
+      return;
+    }
+    parent = parent.parentElement;
+  }
+
+  try { el.scrollIntoView(false); } catch (e) {}
+}
+
 function mk21GetOpenModal() {
   const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalSources', 'modalQuality', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
@@ -5411,17 +5553,26 @@ function mk21GetOpenModal() {
   return null;
 }
 
-document.querySelectorAll('.pane-scroll, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list').forEach(scrollArea => {
-  scrollArea.addEventListener('wheel', event => {
-    if (!event.deltaY) return;
+function mk21HandleScrollInput(scrollArea, event) {
+    const delta = event.deltaY || (event.wheelDelta ? -event.wheelDelta : (event.detail ? event.detail * 40 : 0));
+    if (!delta) return;
     const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
     if (maxScroll <= 0) return;
-    const nextScrollTop = Math.max(0, Math.min(maxScroll, scrollArea.scrollTop + event.deltaY));
+    const nextScrollTop = Math.max(0, Math.min(maxScroll, scrollArea.scrollTop + delta));
     if (nextScrollTop !== scrollArea.scrollTop) {
       scrollArea.scrollTop = nextScrollTop;
-      event.preventDefault();
+      if (event.preventDefault) event.preventDefault();
     }
-  }, { passive: false });
+}
+
+document.querySelectorAll('.pane-scroll, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list').forEach(scrollArea => {
+  if ('onwheel' in document) {
+    scrollArea.addEventListener('wheel', event => mk21HandleScrollInput(scrollArea, event), { passive: false });
+  } else {
+    const legacyScroll = event => mk21HandleScrollInput(scrollArea, event);
+    scrollArea.addEventListener('mousewheel', legacyScroll, false);
+    scrollArea.addEventListener('DOMMouseScroll', legacyScroll, false);
+  }
 });
 function mk21GetFocusables() {
   const activeModal = mk21GetOpenModal();
@@ -5461,7 +5612,7 @@ function mk21MoveFocus(direction) {
   let current = document.activeElement;
   if (!current || items.indexOf(current) === -1) {
     items[0].focus();
-    try { items[0].scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    mk21ScrollFocusedElement(items[0]);
     return;
   }
   const cur = mk21RectCenter(current);
@@ -5506,7 +5657,7 @@ function mk21MoveFocus(direction) {
 
   if (best) {
     best.focus();
-    try { best.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+    mk21ScrollFocusedElement(best);
     // mantém índices legados sincronizados
     try {
       if (best.id && typeof headerElements !== 'undefined' && headerElements.indexOf(best.id) !== -1) {
@@ -5548,7 +5699,7 @@ function focusActiveElement() {
     if (!el || !mk21IsVisible(el)) el = items[0];
     if (el) {
       el.focus();
-      try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      mk21ScrollFocusedElement(el);
     }
   } catch (err) {
     console.warn('[MK21] focusActiveElement', err);

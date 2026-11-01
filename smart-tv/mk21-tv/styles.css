@@ -290,17 +290,19 @@ body {
 
 /* Barra de Rolagem Visível e Otimizada para Smart TV */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 12px;
   display: block !important;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 152, 0, 0.5);
-  border-radius: 10px;
+  background: rgba(242, 196, 92, 0.72);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 12px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -319,8 +321,11 @@ body {
   list-style: none;
   margin: 0;
   padding: 8px;
-  overflow-y: auto;
-  flex: 1;
+  min-height: 0;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  flex: 1 1 0%;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pane-scroll li {
@@ -659,6 +664,8 @@ video {
   grid-template-columns: 32% 68%;
   gap: 20px;
   padding: 20px 35px;
+  min-height: 0;
+  min-width: 0;
 }
 
 .settings-left-menu {
@@ -669,6 +676,9 @@ video {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
 }
 
 .cfg-menu-item {
@@ -710,6 +720,8 @@ video {
   border-radius: 12px;
   padding: 26px;
   overflow-y: auto;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ================= 5. BARRA DO CONTROLE REMOTO LG ================= */
@@ -2654,12 +2666,15 @@ body.is-fullscreen .app-sidebar {
 }
 
 .settings-left-menu {
-  overflow-y: auto;
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
 }
 
 .settings-detail-panel {
   overflow-x: hidden;
+  overflow-y: auto;
   overflow-wrap: anywhere;
+  -webkit-overflow-scrolling: touch;
 }
 
 .settings-detail-panel button,
