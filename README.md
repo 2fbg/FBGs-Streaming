@@ -14,12 +14,12 @@
 
 ---
 
-## 📦 Downloads Oficiais & Pacotes da Release v2.3.7
+## 📦 Downloads Oficiais & Pacotes
 
 | Plataforma | Pacote / Binário | SHA-256 |
 |---|---|---|
-| **Android APK** | [`mk21.apk`](mk21.apk) | `3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce` |
-| **LG webOS Smart TV** | [`mk21.ipk`](smart-tv/mk21play_2.3.7_all.ipk) | `3303ded24f2a830f509e270d91bffc31ec715ccc04efa2a8079de4a9b7c55917` |
+| **Android APK v2.3.7** | [`mk21.apk`](mk21.apk) | `3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce` |
+| **LG webOS Smart TV v2.3.11** | [`mk21play_2.3.11_all.ipk`](smart-tv/mk21play_2.3.11_all.ipk) | `4e2ba87d854c63973e5f50f625d68bf949b7d3eea4e5724c6e0aae5e93d7b4d0` |
 | **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---
@@ -48,6 +48,7 @@
 
 ### Smart TV (`/smart-tv`)
 - **LG webOS**: Pacote empacotado `.ipk` otimizado para webOS 3.0+ a webOS 24 via `package_ipk.py`.
+- **Fontes alternativas (Smart TV):** agrupa URLs equivalentes da M3U, permite selecionar a fonte e tenta as alternativas automaticamente após falhas, preservando a posição de filmes e episódios.
 - **Samsung Tizen**: Compatível com Tizen WGT 3.0+.
 - **Navegação 10-foot UI**: Suporte total ao D-Pad do controle remoto com focus visual claro.
 

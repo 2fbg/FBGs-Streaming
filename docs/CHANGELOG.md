@@ -2,6 +2,27 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.3.11] - 2026-11-01
+
+- **Smart TV/webOS:** permite trocar a fonte do conteúdo procurando o mesmo item em outro servidor e restaura o controle de ordenação.
+- **Smart TV/webOS:** corrige a rolagem pelo Magic Remote, melhora legibilidade sem transbordar os painéis e remove rótulos duplicados no rodapé.
+- **Smart TV/webOS:** adiciona sincronização opcional de todas as listas, frequência, etapas de carregamento, modo AMOLED e opções de qualidade/buffer com limitações do player nativo explicitadas.
+- **Smart TV/webOS:** adiciona controle adulto protegido por PIN, fallback de capas TMDB, logotipo MK21 e atualiza os controles/modal do player e gerenciador de servidores.
+
+## [2.3.10] - 2026-10-31
+
+- **Smart TV/webOS:** usa o player nativo da TV para evitar dependência de CORS em streams de vídeo.
+
+## [2.3.9] - 2026-10-31
+
+- **Smart TV/webOS:** reorganiza a interface do IPK com navegação lateral, cabeçalho simplificado e cartões de catálogo para filmes e séries.
+- **Smart TV/webOS:** preserva a lista compacta para canais ao vivo e mantém a navegação por controle remoto.
+
+## [2.3.8] - 2026-10-31
+
+- **Smart TV/webOS:** porta o agrupamento de fontes alternativas M3U, a seleção manual e o fallback automático disponíveis no Android.
+- **Smart TV/webOS:** preserva a posição de filmes e episódios ao alternar de fonte e migra o catálogo salvo para agrupar fontes após a próxima carga online.
+
 ## [2.3.7] - 2026-10-30
 
 - **Android:** agrupa URLs alternativas do mesmo canal/conteúdo M3U por `tvg-id` ou, sem ID, por nome, categoria e tipo normalizados.

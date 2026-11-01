@@ -4,33 +4,44 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.5">
+  <link rel="stylesheet" href="styles.css?v=2.3.11">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
   <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+  <script src="core/AlternativeSources.js"></script>
 </head>
 <body>
 
   <!-- Abertura instantânea direta no canal (sem tela de espera) -->
 
-  <!-- ================= 1. CABEÇALHO SUPERIOR COM ABAS ================= -->
+  <aside class="app-sidebar">
+    <div id="btnLogo" class="logo-box" tabindex="0">
+      <img class="logo-badge" src="mk21-logo.png" alt="MK21 Play">
+      <span class="logo-title">MK21 <span>PLAY</span></span>
+    </div>
+    <span class="sidebar-section-label">MENU PRINCIPAL</span>
+    <nav class="main-tabs" id="headerTabsNav" aria-label="Navegação principal">
+      <button id="tabLive" class="tab-btn active header-focusable" tabindex="0"><i class="fa-solid fa-tv"></i> TV AO VIVO</button>
+      <button id="tabMovies" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-film"></i> FILMES</button>
+      <button id="tabSeries" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clapperboard"></i> SÉRIES</button>
+      <button id="tabContinue" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clock-rotate-left"></i> CONTINUAR</button>
+      <button id="tabFavs" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-star"></i> FAVORITOS</button>
+      <button id="tabSettings" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-gear"></i> CONFIGURAÇÕES</button>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="sidebar-status-dot"></span>
+      <span>MK21 Play</span>
+    </div>
+  </aside>
+
+  <!-- ================= 1. CABEÇALHO SUPERIOR ================= -->
   <header class="app-header">
     <div class="header-left">
-      <div id="btnLogo" class="logo-box" tabindex="0">
-        <span class="logo-badge">MK21</span>
-        <span class="logo-title">PLAY <span>OTT</span></span>
+      <div class="header-context">
+        <span class="header-kicker">CENTRAL DE ENTRETENIMENTO</span>
+        <span id="headerSectionTitle" class="header-section-title">TV AO VIVO</span>
       </div>
-
-      <!-- ABAS DE CONTEÚDO COM ÍCONES FONTAWESOME -->
-      <nav class="main-tabs" id="headerTabsNav">
-        <button id="tabLive" class="tab-btn active header-focusable" tabindex="0"><i class="fa-solid fa-tv"></i> TV AO VIVO</button>
-        <button id="tabMovies" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-film"></i> FILMES</button>
-        <button id="tabSeries" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clapperboard"></i> SÉRIES</button>
-        <button id="tabContinue" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clock-rotate-left"></i> CONTINUAR</button>
-        <button id="tabFavs" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-star"></i> FAVORITOS</button>
-        <button id="tabSettings" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-gear"></i> CONFIGURAÇÕES</button>
-      </nav>
     </div>
 
     <div class="header-right" id="headerActionsNav">
@@ -70,6 +81,7 @@
       <div class="col-pane col-channels">
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
+          <button id="btnSortOrder" class="sort-order-btn" type="button" tabindex="0" aria-label="Ordenar lista">↕️ Padrão</button>
         </div>
         <div class="pane-header">
           <span id="txtCurrentCategoryTitle">📺 Todos os Canais</span>
@@ -117,7 +129,9 @@
               <button type="button" id="fsBtnPlay" class="ctrl-btn hud-ctrl-btn" tabindex="0">⏯️ Pausar</button>
               <button type="button" id="fsBtnNext" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Próximo canal / Avançar 10s">⏭ Próximo</button>
               <button type="button" id="fsBtnSpeed" class="ctrl-btn primary hud-ctrl-btn" tabindex="0">⚡ 1x</button>
+              <button type="button" id="fsBtnQuality" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Qualidade e imagem">🎞️ Qualidade</button>
               <button type="button" id="fsBtnFav" class="ctrl-btn hud-ctrl-btn" tabindex="0">⭐ Favoritar</button>
+              <button type="button" id="fsBtnSources" class="ctrl-btn hud-ctrl-btn hidden" tabindex="0" title="Selecionar fonte">🌐 Fontes</button>
               <button type="button" id="fsBtnAudio" class="ctrl-btn hud-ctrl-btn" tabindex="0">🔊 Áudio & Legendas</button>
               <button type="button" id="fsBtnBack" class="ctrl-btn hud-ctrl-btn" tabindex="0">↩️ Sair</button>
             </div>
@@ -148,24 +162,29 @@
           <button id="btnPlayPause" class="ctrl-btn" tabindex="0" title="Pausar / Reproduzir"><svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
           <button id="btnFavorite" class="ctrl-btn" tabindex="0" title="Favoritar"><svg style="width:22px;height:22px;fill:#ffd54f;" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
           <button id="btnSpeed" class="ctrl-btn" tabindex="0" title="Velocidade (1x a 4x)"><svg style="width:22px;height:22px;fill:#ffd54f;" viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg></button>
+          <button id="btnQuality" class="ctrl-btn" tabindex="0" title="Qualidade e imagem" aria-label="Qualidade e imagem">🎞️</button>
+          <button id="btnSources" class="ctrl-btn hidden" tabindex="0" title="Selecionar fonte" aria-label="Selecionar fonte">🌐</button>
           <button id="btnAudioTrack" class="ctrl-btn" tabindex="0" title="Áudio & Legendas"><svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>
         </div>
       </div>
 
     </section>
 
-    <!-- SEÇÃO CONFIGURAÇÕES (CLONE VIZZION PLAY DAS FOTOS) -->
+    <!-- SEÇÃO DE CONFIGURAÇÕES -->
     <section id="sectionSettings" class="content-section hidden">
       <div class="settings-left-menu">
         <button id="cfgBtnInfo" class="cfg-menu-item active" tabindex="0">⚙️ Informação geral</button>
         <button id="cfgBtnFonte" class="cfg-menu-item" tabindex="0">🔤 Tamanho da fonte</button>
         <button id="cfgBtnFiltro" class="cfg-menu-item" tabindex="0">📦 Filtrar conteúdo</button>
+        <button id="cfgBtnSync" class="cfg-menu-item" tabindex="0">🔄 Sincronizar listas</button>
+        <button id="cfgBtnPlayback" class="cfg-menu-item" tabindex="0">🎞️ Qualidade e buffer</button>
         <button id="cfgBtnSpeedTest" class="cfg-menu-item" tabindex="0">🚀 Teste de velocidade</button>
         <button id="cfgBtnLimpar" class="cfg-menu-item" tabindex="0">🗑️ Limpar armazenamento</button>
         <button id="cfgBtnTempo" class="cfg-menu-item" tabindex="0">⏱️ Configurações de tempo</button>
         <button id="cfgBtnCategorias" class="cfg-menu-item" tabindex="0">📁 Gerenciar categorias</button>
         <button id="cfgBtnFluxo" class="cfg-menu-item" tabindex="0">📺 Alterar formato de fluxo</button>
         <button id="cfgBtnPin" class="cfg-menu-item" tabindex="0">🔒 Alterar código pin</button>
+        <button id="cfgBtnAdult" class="cfg-menu-item" tabindex="0">🔞 Controle adulto</button>
         <div class="cfg-tmdb-toggle">
           <span>🎬 Usar API TMDB</span>
           <input type="checkbox" id="cfgToggleTmdb" checked style="width:22px; height:22px;">
@@ -198,6 +217,28 @@
     </div>
   </div>
 
+  <div id="modalSources" class="app-modal hidden">
+    <div class="modal-content source-picker-modal">
+      <div class="modal-header">
+        <span id="sourcePickerTitle">🌐 Fontes disponíveis</span>
+        <button id="btnCloseSources" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕ Fechar</button>
+      </div>
+      <div id="sourceOptionsList" class="source-options-list"></div>
+      <div id="serverOptionsList" class="source-options-list server-source-options"></div>
+    </div>
+  </div>
+
+  <div id="modalQuality" class="app-modal hidden">
+    <div class="modal-content quality-picker-modal">
+      <div class="modal-header">
+        <span>🎞️ Qualidade e imagem</span>
+        <button id="btnCloseQuality" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕ Fechar</button>
+      </div>
+      <div id="qualityOptionsList" class="source-options-list"></div>
+      <p class="quality-note">A qualidade máxima depende do fluxo e dos recursos de reprodução da TV. A super resolução aplica apenas ajustes visuais; não cria pixels adicionais.</p>
+    </div>
+  </div>
+
   <!-- Modal Gerenciador de Servidores & Manutenção de Listas -->
   <div id="modalServerPicker" class="app-modal hidden">
     <div class="modal-content server-manager-modal">
@@ -207,13 +248,13 @@
       </div>
 
       <div class="server-manager-body">
-        <h4 style="margin: 0; color: #cbd5e1; font-size: 18px;">Servidores e Listas Cadastrados:</h4>
+        <h4 style="margin: 0; color: #cbd5e1; font-size: 18px;">Servidores e listas cadastrados</h4>
         <!-- Lista de Servidores com Conectar, Editar e Excluir -->
         <div id="serverItemsGrid" class="servers-manager-list"></div>
 
         <!-- Formulário de Inclusão e Edição Manual -->
         <div class="add-server-card">
-          <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
+          <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">Adicionar servidor ou lista manual</h4>
           <input type="hidden" id="inputEditServerIndex" value="-1">
           <div style="display: flex; gap: 12px; margin-bottom: 12px;">
             <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
@@ -237,7 +278,7 @@
         <span>🔒 Bloqueio Parental (18+)</span>
         <button id="btnClosePin" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
       </div>
-      <p style="color:#aaa; font-size:17px; margin: 0 0 10px;">Digite a senha de 4 dígitos no controle remoto (Padrão: 0000):</p>
+      <p style="color:#aaa; font-size:17px; margin: 0 0 10px;">Digite o PIN de 4 dígitos no controle remoto (padrão inicial: 0000):</p>
       <div id="pinScreen" class="pin-display-box">----</div>
       <div class="pin-pad-grid">
         <button class="pin-key" data-k="1" tabindex="0">1</button>
@@ -381,19 +422,19 @@
   <footer id="remoteColorBar" class="remote-color-bar">
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-red"></span>
-      <span>🔴 Mudo</span>
+      <span>Mudo</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-green"></span>
-      <span>🟢 Favoritos</span>
+      <span>Favoritos</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-yellow"></span>
-      <span>🟡 Proporção</span>
+      <span>Proporção</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-blue"></span>
-      <span>🔵 Logs / Diag</span>
+      <span>Logs / diagnóstico</span>
     </div>
     <div class="color-shortcut-item">
       <span>↩️ <strong>Voltar:</strong> Navegar (2x Sair)</span>
@@ -511,7 +552,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=1.0.5';
+              fallback.src = 'app.js?v=2.3.11';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -528,7 +569,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=1.0.5';
+      s.src = 'app.js?v=2.3.11';
       document.body.appendChild(s);
     })();
   </script>

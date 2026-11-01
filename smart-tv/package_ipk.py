@@ -132,6 +132,6 @@ if __name__ == "__main__":
         shutil.copy2(dst, os.path.join(web_dir, f"mk21play_{app_version}_all.ipk"))
         shutil.copy2(dst, os.path.join(web_dir, "mk21.ipk"))
     shutil.copy2(dst, os.path.join(root_dir, "mk21.ipk"))
+    shutil.copy2(dst, os.path.join(script_dir, "mk21.ipk"))
     shutil.copy2(dst, os.path.join(script_dir, "mk21-tv.ipk"))
     shutil.copy2(dst, os.path.join(script_dir, "com.fbg2.mk21streaming_1.1.0_all.ipk"))
-

@@ -152,6 +152,7 @@ async function saveStoredData(id, payload) {
     if (!db) return;
     // Salva o catálogo COMPLETO em disco (IndexedDB) para restauração instantânea sem rede
     const full = {
+      sourceGroupsVersion: 1,
       LIVE: (payload.LIVE || []).map(slimItem),
       MOVIE: (payload.MOVIE || []).map(slimItem),
       SERIES: (payload.SERIES || []).map(slimItem)
@@ -213,20 +214,32 @@ async function createCatalogIndexWriter(serverId) {
       try {
         const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
         const store = tx.objectStore(CATALOG_INDEX_STORE);
-        toWrite.forEach(item => store.put({
-          key: serverId + ':' + item.contentType + ':' + position++,
-          serverId, contentType: item.contentType, name: item.name || 'Item',
-          normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
-          group: item.group || 'Geral', logo: item.logo || '', tvgId: item.tvgId || '',
-          tvgName: item.tvgName || '', url: item.url, isAdult: !!item.isAdult,
-          position: position - 1
-        }));
+        toWrite.forEach(entry => {
+          const item = entry.item;
+          store.put({
+            key: entry.key,
+            serverId, contentType: item.contentType, name: item.name || 'Item',
+            normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
+            group: item.group || 'Geral', logo: item.logo || '', tvgId: item.tvgId || '',
+            tvgName: item.tvgName || '', url: item.url,
+            alternateUrls: Array.isArray(item.alternateUrls) ? item.alternateUrls : [],
+            isAdult: !!item.isAdult, position: entry.position
+          });
+        });
         tx.oncomplete = resolve; tx.onerror = resolve;
       } catch (e) { resolve(); }
     }));
   };
   return {
-    add(item) { batch.push(item); if (batch.length >= 500) flush(); },
+    add(item, existingKey) {
+      const itemPosition = existingKey ? item._catalogIndexPosition : position++;
+      const key = existingKey || serverId + ':' + item.contentType + ':' + itemPosition;
+      item._catalogIndexKey = key;
+      item._catalogIndexPosition = itemPosition;
+      batch.push({ item, key, position: itemPosition });
+      if (batch.length >= 500) flush();
+      return key;
+    },
     async finish() {
       flush(); await pending;
       try {
@@ -393,8 +406,11 @@ function slimItem(it) {
     name: it.name,
     group: it.group,
     url: it.url,
+    alternateUrls: Array.isArray(it.alternateUrls) ? it.alternateUrls.slice() : [],
     contentType: it.contentType,
+    isAdult: !!it.isAdult,
     logo: it.logo ? String(it.logo).slice(0, 200) : '',
+    poster: it.poster ? String(it.poster).slice(0, 300) : '',
     tvgId: it.tvgId || '',
     tvgName: it.tvgName || ''
   };
@@ -404,8 +420,13 @@ function slimItem(it) {
 let currentServerIndex = 0;
 let serverLoadGeneration = 0;
 let activePlaylistController = null;
+let isLoadingServerPlaylist = false;
+let pendingServerSourceSwitch = null;
+let isSwitchingServerSource = false;
+let isSyncingAllServers = false;
 let currentContentType = 'LIVE'; // 'LIVE', 'MOVIE', 'SERIES', 'FAVORITES', 'CONTINUE', 'SETTINGS'
 let allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+const categoryMapCache = new Map();
 let favoriteUrls = new Set();
 
 // Fluidez: preferências leves do usuário
@@ -544,7 +565,7 @@ function pokeFsHud() {
 
 let continueWatchingList = [];
 let isAdultUnlocked = false;
-let currentPin = '0000';
+let currentPin = localStorage.getItem('mk21_adult_pin') || '0000';
 let enteredPin = '';
 let activeItem = null;
 let hlsInstance = null;
@@ -561,6 +582,23 @@ let currentGroupedSeries = []; // Agrupamento de séries para a aba SÉRIES
 
 // Gerenciador de Navegação do Controle Remoto LG
 let activeZone = 'channels'; // 'header', 'categories', 'channels', 'player', 'settings', 'modalServerPicker', 'modalSeries', 'modalPin'
+
+function canShowAdultContent() {
+  return localStorage.getItem('mk21_adult_content_enabled') !== 'false' && isAdultUnlocked;
+}
+
+function lockAdultContent() {
+  isAdultUnlocked = false;
+  if ($('txtLockIcon')) $('txtLockIcon').textContent = '🔒';
+  if ($('txtLockText')) $('txtLockText').textContent = 'Adulto (Bloqueado)';
+  if (activeItem && (activeItem.isAdult || isAdult(activeItem.name) || isAdult(activeItem.group))) {
+    stopCurrentPlayer();
+    activeItem = null;
+    updateSourceButtons(null);
+    if ($('epgTitle')) $('epgTitle').textContent = 'Conteúdo adulto bloqueado';
+    if ($('previewEpgNow')) $('previewEpgNow').textContent = 'NO AR: conteúdo protegido';
+  }
+}
 let focusedHeaderIdx = 0;
 let focusedCatIdx = 0;
 let focusedItemIdx = 0;
@@ -868,13 +906,20 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
       let meta = null;
       for (const raw of lines) {
         const line = raw.trim();
-        if (line.startsWith('#EXTINF:')) {
+        if (line.toUpperCase().startsWith('#EXTINF:')) {
           const comma = line.lastIndexOf(',');
-          const gm = line.match(/group-title="([^"]*)"/i);
-          const lm = line.match(/tvg-logo="([^"]*)"/i);
-          const im = line.match(/tvg-id="([^"]*)"/i);
-          const nm = line.match(/tvg-name="([^"]*)"/i);
-          meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
+          const readAttr = key => {
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = line.match(new RegExp('(?:^|\\s)' + escapedKey + '="([^"]*)"', 'i'));
+            return match ? match[1].trim() : '';
+          };
+          meta = {
+            name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item',
+            group: readAttr('group-title') || 'Geral',
+            logo: readAttr('tvg-logo'),
+            tvgId: readAttr('tvg-id'),
+            tvgName: readAttr('tvg-name')
+          };
         } else if (meta && /^https?:\/\//i.test(line)) {
           const type = determineType(meta.name, meta.group, line);
           onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
@@ -890,19 +935,16 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     let received = 0;
     const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
     const quickAttr = (str, key) => {
-      const k = key + '="';
-      const idx = str.indexOf(k);
-      if (idx === -1) return '';
-      const start = idx + k.length;
-      const end = str.indexOf('"', start);
-      return end !== -1 ? str.slice(start, end).trim() : '';
-    };
+        const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const match = str.match(new RegExp('(?:^|\\s)' + escapedKey + '="([^"]*)"', 'i'));
+        return match ? match[1].trim() : '';
+      };
 
     const consume = (raw) => {
       const line = raw.trim();
       if (!line) return;
       if (line.charCodeAt(0) === 35) {
-        if (line.startsWith('#EXTINF:')) {
+        if (line.toUpperCase().startsWith('#EXTINF:')) {
           const comma = line.lastIndexOf(',');
           const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
           meta = {
@@ -912,7 +954,7 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
             tvgId: quickAttr(line, 'tvg-id'),
             tvgName: quickAttr(line, 'tvg-name')
           };
-        } else if (line.startsWith('#EXTM3U')) {
+        } else if (line.toUpperCase().startsWith('#EXTM3U')) {
           const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
           if (xm) window.serverXmltvUrl = xm;
         }
@@ -937,6 +979,83 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+function getPlaylistSyncInterval() {
+  const frequency = localStorage.getItem('mk21_sync_frequency') || '24h';
+  if (frequency === '6h') return 6 * 60 * 60 * 1000;
+  if (frequency === '7d') return 7 * 24 * 60 * 60 * 1000;
+  if (frequency === 'manual') return Infinity;
+  return 24 * 60 * 60 * 1000;
+}
+
+async function syncServerCatalog(server) {
+  const catalog = { LIVE: [], MOVIE: [], SERIES: [] };
+  const groupers = {
+    LIVE: MK21AlternativeSources.createGrouper(),
+    MOVIE: MK21AlternativeSources.createGrouper(),
+    SERIES: MK21AlternativeSources.createGrouper()
+  };
+  await streamPlaylistContent(server.url, null, item => {
+    const slim = slimItem(item);
+    if (!catalog[slim.contentType]) return;
+    slim.isAdult = !!(slim.isAdult || isAdult(slim.name) || isAdult(slim.group));
+    const grouped = groupers[slim.contentType].add(slim);
+    if (grouped.isNew) catalog[slim.contentType].push(grouped.item);
+  });
+  const count = catalog.LIVE.length + catalog.MOVIE.length + catalog.SERIES.length;
+  if (!count) throw new Error('A lista sincronizada não contém itens válidos.');
+  await saveStoredData(server.id, catalog);
+  localStorage.setItem(`mk21_last_sync_${server.id}`, String(Date.now()));
+  return count;
+}
+
+async function syncAllServerLists(force = true) {
+  if (isSyncingAllServers) return { synced: 0, skipped: true, failed: [] };
+  isSyncingAllServers = true;
+  const failed = [];
+  let synced = 0;
+  const interval = getPlaylistSyncInterval();
+  try {
+    for (const server of SERVERS) {
+      if (!force && interval !== Infinity) {
+        const lastSync = Number(localStorage.getItem(`mk21_last_sync_${server.id}`) || 0);
+        if (lastSync && Date.now() - lastSync < interval) continue;
+      } else if (!force) {
+        continue;
+      }
+      try {
+        await syncServerCatalog(server);
+        synced++;
+      } catch (error) {
+        console.warn(`[MK21] Falha ao sincronizar ${cleanServerName(server.name)}:`, error);
+        failed.push(cleanServerName(server.name));
+      }
+      if (server !== SERVERS[SERVERS.length - 1]) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+    return { synced, skipped: false, failed };
+  } finally {
+    isSyncingAllServers = false;
+  }
+}
+
+function scheduleBackgroundListSync() {
+  if (localStorage.getItem('mk21_sync_all_lists') !== 'true') return;
+  const startWhenIdle = () => {
+    if (localStorage.getItem('mk21_sync_all_lists') !== 'true') return;
+    if (isLoadingServerPlaylist || isSyncingAllServers) {
+      setTimeout(startWhenIdle, 5000);
+      return;
+    }
+    const start = () => syncAllServerLists(false).catch(error => {
+      console.error('[MK21] Sincronização automática falhou:', error);
+    });
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(start, { timeout: 5000 });
+    else start();
+  };
+  setTimeout(startWhenIdle, 7000);
 }
 
 // ATUALIZAÇÃO DA PORCENTAGEM DE SINCRONIZAÇÃO AO LADO DO SERVIDOR
@@ -1013,6 +1132,7 @@ function showLoadingFailure(error, serverName) {
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
   const loadId = ++serverLoadGeneration;
+  isLoadingServerPlaylist = true;
   if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
   activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
   if (SERVERS.length === 0) SERVERS = [...DEFAULT_SERVERS];
@@ -1043,22 +1163,28 @@ async function loadServer(forceRefresh = false) {
     try { hlsInstance.destroy(); hlsInstance = null; } catch(e) {}
   }
   activeItem = null;
+  activePlaybackSourceIndex = 0;
+  attemptedPlaybackSourceIndexes = new Set();
+  updateSourceButtons(null, 0);
 
   // Cache prioritário em memória/IndexedDB: restauração instantânea sem novo download
   let seededFromIndex = false;
+  let cachedCatalogForFallback = null;
   if (!forceRefresh) {
     const cached = await getStoredData(srv.id);
     if (loadId !== serverLoadGeneration) return;
+    cachedCatalogForFallback = cached;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
     const totalCached = liveN + movN + serN;
-    if (cached && totalCached > 0) {
+    if (cached && totalCached > 0 && cached.sourceGroupsVersion === 1) {
       allCatalog = {
         LIVE: cached.LIVE || [],
         MOVIE: cached.MOVIE || [],
         SERIES: cached.SERIES || []
       };
+      const cachedSourceMatch = finishPendingServerSourceSwitch();
       updateSplash(90, 'Restaurando lista em memória (' + totalCached.toLocaleString('pt-BR') + ' itens)...');
       if (hud) {
         if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando lista em memória local — sem novo download';
@@ -1072,8 +1198,13 @@ async function loadServer(forceRefresh = false) {
       hideSplash();
       updateServerSyncBadge(100, true);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
-      setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
-      return;
+      if (!cachedSourceMatch && pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) {
+        showChannelBanner('Lista local sem correspondência; atualizando este servidor...');
+      } else {
+        if (!cachedSourceMatch) setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+        isLoadingServerPlaylist = false;
+        return;
+      }
     }
   }
 
@@ -1088,18 +1219,29 @@ async function loadServer(forceRefresh = false) {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
+    const catalogGroupers = {
+      LIVE: MK21AlternativeSources.createGrouper(),
+      MOVIE: MK21AlternativeSources.createGrouper(),
+      SERIES: MK21AlternativeSources.createGrouper()
+    };
+    const loadingProfile = localStorage.getItem('mk21_staged_loading') || 'balanced';
+    const liveRevealThreshold = loadingProfile === 'fast' ? 4 : (loadingProfile === 'stable' ? 20 : 8);
     let liveVisible = false;
     let lastProgressUi = 0;
 
     const revealLive = () => {
-      if (liveVisible || loadId !== serverLoadGeneration || allCatalog.LIVE.length === 0) return;
+      const totalItems = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
+      if (liveVisible || loadId !== serverLoadGeneration || totalItems === 0) return;
       liveVisible = true;
-      updateSplash(80, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
+      updateSplash(80, allCatalog.LIVE.length
+        ? 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')'
+        : 'Catálogo disponível — carregando listas em etapas...');
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
       renderItemsList();
-      if (!activeItem && allCatalog.LIVE.length > 0) {
+      if (!activeItem && !pendingServerSourceSwitch &&
+          currentContentType === 'LIVE' && allCatalog.LIVE.length > 0) {
         playStream(allCatalog.LIVE[0]);
       }
       hideSplash();
@@ -1131,15 +1273,25 @@ async function loadServer(forceRefresh = false) {
         const adultItem = slim.isAdult || isAdult(slim.name) || isAdult(slim.group);
         slim.isAdult = !!adultItem;
 
-        indexWriter.add(slim);
         if (allCatalog[type]) {
-          allCatalog[type].push(slim);
+          const grouped = catalogGroupers[type].add(slim);
+          if (grouped.isNew) {
+            indexWriter.add(grouped.item);
+            allCatalog[type].push(grouped.item);
+          } else {
+            indexWriter.add(grouped.item, grouped.item._catalogIndexKey);
+            if (activeItem && activeItem.url === grouped.item.url) updateSourceButtons();
+          }
+          if (pendingServerSourceSwitch &&
+              pendingServerSourceSwitch.serverId === srv.id &&
+              MK21AlternativeSources.matchesAcrossServers(pendingServerSourceSwitch.item, grouped.item)) {
+            pendingServerSourceSwitch.matchedItem = grouped.item;
+            finishPendingServerSourceSwitch();
+          }
         }
 
-        // Assim que os primeiros canais chegam (>= 8), libera a tela imediatamente!
-        if (type !== 'LIVE' && allCatalog.LIVE.length > 0 && !liveVisible) {
-          revealLive();
-        } else if (type === 'LIVE' && allCatalog.LIVE.length >= 8 && !liveVisible) {
+        const totalItems = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
+        if (totalItems >= liveRevealThreshold && !liveVisible) {
           revealLive();
         }
       },
@@ -1176,8 +1328,10 @@ async function loadServer(forceRefresh = false) {
         }
       }
     );
+    if (loadId === serverLoadGeneration) isLoadingServerPlaylist = false;
 
     if (loadId !== serverLoadGeneration) return;
+    Object.keys(catalogGroupers).forEach(type => catalogGroupers[type].clear());
     revealLive();
     buildCurrentCategories();
     renderCategoriesList();
@@ -1192,7 +1346,12 @@ async function loadServer(forceRefresh = false) {
     updateServerSyncBadge(100, true);
     await indexWriter.finish();
     // Salva o catálogo 100% completo no IndexedDB para não precisar baixar novamente ao reabrir o app
-    saveStoredData(srv.id, allCatalog);
+    await saveStoredData(srv.id, allCatalog);
+    localStorage.setItem(`mk21_last_sync_${srv.id}`, String(Date.now()));
+    if (!finishPendingServerSourceSwitch() && pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) {
+      pendingServerSourceSwitch = null;
+      showChannelBanner('Este conteúdo não foi encontrado no servidor selecionado.');
+    }
     if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') {
       renderItemsList();
     }
@@ -1200,6 +1359,7 @@ async function loadServer(forceRefresh = false) {
       $('txtCurrentCategoryTitle').textContent = '📺 Catálogo Completo: ' + totalLoaded.toLocaleString('pt-BR') + ' itens';
     }
   } catch (err) {
+    if (loadId === serverLoadGeneration) isLoadingServerPlaylist = false;
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
     const partialLive = allCatalog && Array.isArray(allCatalog.LIVE) ? allCatalog.LIVE.length : 0;
@@ -1209,11 +1369,53 @@ async function loadServer(forceRefresh = false) {
       selectCategory('ALL');
       renderItemsList();
       hideSplash();
-      if (!activeItem) playStream(allCatalog.LIVE[0]);
+      const sourceSwitchMatched = finishPendingServerSourceSwitch();
+      const sourceSwitchStillPending = pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id;
+      if (!sourceSwitchMatched && !sourceSwitchStillPending && !activeItem) playStream(allCatalog.LIVE[0]);
+      if (!sourceSwitchMatched && sourceSwitchStillPending) {
+        pendingServerSourceSwitch = null;
+        showChannelBanner('A lista parcial não contém o conteúdo procurado. Tente sincronizar novamente.');
+      }
       showChannelBanner(`⚠️ Lista parcial: ${partialLive} canais carregados. Tente atualizar novamente.`);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = `📺 ${partialLive} canais disponíveis (parcial)`;
       if (hud) hud.classList.add('hidden');
+    } else if (cachedCatalogForFallback) {
+      allCatalog = {
+        LIVE: cachedCatalogForFallback.LIVE || [],
+        MOVIE: cachedCatalogForFallback.MOVIE || [],
+        SERIES: cachedCatalogForFallback.SERIES || []
+      };
+      const cachedCount = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
+      if (cachedCount > 0) {
+        buildCurrentCategories();
+        renderCategoriesList();
+        selectCategory('ALL');
+        renderItemsList();
+        hideSplash();
+        if (hud) hud.classList.add('hidden');
+        updateServerSyncBadge(100, true);
+        const sourceSwitchMatched = finishPendingServerSourceSwitch();
+        const sourceSwitchStillPending = pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id;
+        if (sourceSwitchStillPending && !sourceSwitchMatched) {
+          pendingServerSourceSwitch = null;
+          showChannelBanner('Sem conexão e sem conteúdo correspondente no catálogo salvo.');
+        } else {
+          showChannelBanner(
+            cachedCatalogForFallback.sourceGroupsVersion === 1
+              ? 'Sem conexão. Usando o catálogo salvo.'
+              : 'Sem conexão. Atualize a lista quando estiver online para habilitar fontes alternativas.'
+          );
+          if (!sourceSwitchMatched) setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+        }
+        if ($('txtCurrentCategoryTitle')) {
+          $('txtCurrentCategoryTitle').textContent = `📺 Catálogo salvo: ${cachedCount.toLocaleString('pt-BR')} itens`;
+        }
+      } else {
+        if (pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) pendingServerSourceSwitch = null;
+        showLoadingFailure(err, srv.name);
+      }
     } else {
+      if (pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) pendingServerSourceSwitch = null;
       showLoadingFailure(err, srv.name);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = 'Aguardando conexão com o servidor';
       if ($('txtServerSyncBadge')) {
@@ -1228,6 +1430,20 @@ async function loadServer(forceRefresh = false) {
 
 // 7. AGRUPAMENTO DE CATEGORIAS DA ABA ATIVA
 function buildCurrentCategories() {
+  const serverId = (SERVERS[currentServerIndex] || {}).id || '';
+  const isCacheable = !isLoadingServerPlaylist && ['LIVE', 'MOVIE', 'SERIES'].includes(currentContentType);
+  let hiddenCats = [];
+  try {
+    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
+  } catch (e) {}
+  const cacheKey = `${currentContentType}|${serverId}|${canShowAdultContent()}|${JSON.stringify(hiddenCats)}`;
+  if (isCacheable && categoryMapCache.has(cacheKey)) {
+    const cached = categoryMapCache.get(cacheKey);
+    currentCategoriesMap = cached.map;
+    currentCategoryKeys = cached.keys;
+    return;
+  }
+
   currentCategoriesMap = { 'ALL': [] };
   currentCategoryKeys = ['ALL'];
 
@@ -1249,15 +1465,10 @@ function buildCurrentCategories() {
     }
   }
 
-  let hiddenCats = [];
-  try {
-    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
-  } catch (e) {}
-
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
     const grp = item.group || 'Geral';
-    if (!isAdultUnlocked && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
+    if (!canShowAdultContent() && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
     if (hiddenCats.includes(grp)) continue;
 
     currentCategoriesMap['ALL'].push(item);
@@ -1266,6 +1477,14 @@ function buildCurrentCategories() {
       currentCategoryKeys.push(grp);
     }
     currentCategoriesMap[grp].push(item);
+  }
+
+  if (isCacheable) {
+    const typePrefix = `${currentContentType}|`;
+    Array.from(categoryMapCache.keys()).forEach(key => {
+      if (key.startsWith(typePrefix)) categoryMapCache.delete(key);
+    });
+    categoryMapCache.set(cacheKey, { map: currentCategoriesMap, keys: currentCategoryKeys });
   }
 }
 
@@ -1282,7 +1501,7 @@ function renderCategoriesList() {
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')));
 
   currentCategoryKeys.forEach((k, idx) => {
-    if (!isAdultUnlocked && isAdult(k)) return;
+    if (!canShowAdultContent() && isAdult(k)) return;
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
@@ -1336,6 +1555,10 @@ let itemsDisplayLimit = 80;
 
 // 8. RENDERIZAÇÃO DA LISTA DE ITENS COM SÉRIES AGRUPADAS E ORDENAÇÃO
 function renderItemsList() {
+  document.body.classList.toggle(
+    'vod-layout',
+    currentContentType === 'MOVIE' || currentContentType === 'SERIES'
+  );
   const query = $('inputSearch') ? $('inputSearch').value.toLowerCase().trim() : '';
   const base = currentCategoriesMap[activeCategoryKey] || [];
   const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
@@ -1345,7 +1568,7 @@ function renderItemsList() {
   // Em listas com centenas de milhares de itens isso reduz um pico de memória
   // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
   let items = query ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query))) : base;
-  if (!isAdultUnlocked) {
+  if (!canShowAdultContent()) {
     items = items.filter(c => !c.isAdult && !isAdult(c.name) && !isAdult(c.group));
   }
 
@@ -1400,7 +1623,25 @@ function renderItemsList() {
       btn.className = 'list-item-btn series-card-btn';
       btn.setAttribute('tabindex', '0');
       btn.setAttribute('data-idx', i);
+      const representativeEpisode = seriesObj.episodes[0];
+      if (representativeEpisode) btn.dataset.catalogUrl = representativeEpisode.url;
 
+      const poster = document.createElement('img');
+      poster.className = 'series-poster';
+      poster.alt = `${seriesObj.title} — capa`;
+      poster.loading = 'lazy';
+      poster.decoding = 'async';
+      if (representativeEpisode) poster.dataset.catalogUrl = representativeEpisode.url;
+      poster.src = (representativeEpisode && (representativeEpisode.poster || representativeEpisode.logo)) ||
+        generateSvgLogoPlaceholder(seriesObj.title);
+      poster.onerror = () => {
+        poster.onerror = null;
+        poster.src = generateSvgLogoPlaceholder(seriesObj.title);
+        if (representativeEpisode && localStorage.getItem('mk21_use_tmdb') !== 'false') {
+          fetchTmdbMetadata(representativeEpisode);
+        }
+      };
+      btn.appendChild(poster);
       const spanTitle = document.createElement('span');
       spanTitle.textContent = '🍿 ' + seriesObj.title;
 
@@ -1445,15 +1686,18 @@ function renderItemsList() {
       logoWrap.className = 'channel-logo-wrap';
       const img = document.createElement('img');
       img.className = 'channel-logo';
-      img.referrerPolicy = 'no-referrer';
       const fallbackSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52"><rect width="52" height="52" rx="8" fill="#1e1f26"/><circle cx="26" cy="26" r="16" fill="#141828"/><polygon points="23,19 33,26 23,33" fill="#ffd54f"/></svg>');
-      img.src = item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg;
+      img.dataset.catalogUrl = item.url;
+      img.src = item.poster || (item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg);
       img.alt = item.name;
       img.loading = 'lazy';
       img.decoding = 'async';
       img.onerror = function() {
         this.onerror = null;
         this.src = fallbackSvg;
+        if (item.contentType !== 'LIVE' && localStorage.getItem('mk21_use_tmdb') !== 'false') {
+          fetchTmdbMetadata(item);
+        }
       };
       logoWrap.appendChild(img);
       btn.appendChild(logoWrap);
@@ -1532,7 +1776,8 @@ function renderItemsList() {
   ul.appendChild(fragment);
 
   // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
-  if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
+  if (!activeItem && !pendingServerSourceSwitch && !isSwitchingServerSource &&
+      currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
     playStream(currentFilteredItems[0]);
   }
 }
@@ -1995,16 +2240,40 @@ async function fetchTmdbMetadata(item) {
     if (res.ok) {
       const data = await res.json();
       if (data && data.results && data.results.length > 0) {
-        const best = data.results[0];
+        const best = data.results
+          .filter(result => result && (result.media_type === 'movie' || result.media_type === 'tv'))
+          .sort((a, b) => {
+            const score = result => {
+              const title = String(result.title || result.name || '').toLocaleLowerCase('pt-BR');
+              const query = cleanName.toLocaleLowerCase('pt-BR');
+              return (title === query ? 3 : (title.includes(query) || query.includes(title) ? 1 : 0)) +
+                (result.poster_path ? 1 : 0) + (result.overview ? 0.1 : 0);
+            };
+            return score(b) - score(a);
+          })[0];
+        if (!best) return;
         tmdbCache.set(cleanName, best);
-        if (activeItem === item) applyTmdbData(item, best);
+        applyTmdbData(item, best);
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[MK21] Não foi possível consultar a capa no TMDB:', e);
+  }
 }
 
 function applyTmdbData(item, data) {
-  if (!data || activeItem !== item) return;
+  if (!data || !item) return;
+  const posterPath = data.poster_path || data.backdrop_path;
+  if (posterPath) {
+    item.poster = `https://image.tmdb.org/t/p/w500${posterPath}`;
+    const list = $('listItems');
+    if (list) {
+      Array.from(list.querySelectorAll('.channel-logo, .series-poster')).forEach(image => {
+        if (image.dataset.catalogUrl === item.url) image.src = item.poster;
+      });
+    }
+  }
+  if (activeItem !== item) return;
   const overview = data.overview || (data.title || data.name);
   if ($('epgNext') && overview) {
     $('epgNext').textContent = 'Sinopse: ' + (overview.length > 120 ? overview.substring(0, 120) + '...' : overview);
@@ -2346,7 +2615,7 @@ async function executeOmnisearch(query) {
 
   const filterFn = item => {
     if (!item) return false;
-    if (!isAdultUnlocked && (item.isAdult || isAdult(item.name) || isAdult(item.group))) return false;
+    if (!canShowAdultContent() && (item.isAdult || isAdult(item.name) || isAdult(item.group))) return false;
     const nameMatch = item.name && item.name.toLowerCase().includes(q);
     const normMatch = item.normalizedName && item.normalizedName.includes(q);
     const groupMatch = item.group && item.group.toLowerCase().includes(q);
@@ -2616,19 +2885,38 @@ function triggerAutoReconnect(cause) {
   autoReconnectAttempts++;
 
   if (autoReconnectAttempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
+    const sources = MK21AlternativeSources.sourceUrls(activeItem);
+    const nextSourceIndex = sources.findIndex((url, index) =>
+      url && !attemptedPlaybackSourceIndexes.has(index)
+    );
+    if (nextSourceIndex !== -1) {
+      const resumePosition = getCurrentPlaybackPosition(activeItem);
+      attemptedPlaybackSourceIndexes.add(nextSourceIndex);
+      autoReconnectAttempts = 0;
+      isAutoReconnecting = false;
+      showChannelBanner(`🔄 Tentando fonte alternativa ${nextSourceIndex + 1}/${sources.length}`);
+      addDevLog(`[Player] Alternando automaticamente para a fonte ${nextSourceIndex + 1}`, 'warn');
+      playStream(activeItem, nextSourceIndex, resumePosition, true);
+      return;
+    }
     console.error('[SmartPlayer Watchdog] Limite máximo de reconexão atingido:', cause);
     showPlayerReconnectBadge('Falha de conexão. Tente outro canal.');
-    if ($('epgStatus')) $('epgStatus').textContent = '⚠️ FORA DO AR';
+    if ($('epgStatus')) $('epgStatus').textContent = sources.length > 1
+      ? '⚠️ Todas as fontes falharam'
+      : '⚠️ FORA DO AR';
     isAutoReconnecting = false;
     return;
   }
 
   const delay = Math.min(1000 * Math.pow(1.5, autoReconnectAttempts - 1), 6000);
+  const reconnectItem = activeItem;
+  const reconnectSourceIndex = activePlaybackSourceIndex;
+  const reconnectGeneration = playbackGeneration;
   showPlayerReconnectBadge(`Reconectando (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`);
   if ($('epgStatus')) $('epgStatus').textContent = `🔄 RECONECTANDO (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`;
 
   setTimeout(() => {
-    if (!activeItem) {
+    if (!activeItem || activeItem !== reconnectItem || playbackGeneration !== reconnectGeneration) {
       isAutoReconnecting = false;
       return;
     }
@@ -2637,20 +2925,24 @@ function triggerAutoReconnect(cause) {
       try {
         hlsInstance.recoverMediaError();
       } catch (e) {
-        if (typeof playStream === 'function') playStream(activeItem);
+        if (typeof playStream === 'function') {
+          playStream(activeItem, reconnectSourceIndex, getCurrentPlaybackPosition(activeItem), true, true);
+        }
       }
     } else {
-      if (typeof playStream === 'function') playStream(activeItem);
+      if (typeof playStream === 'function') {
+        playStream(activeItem, reconnectSourceIndex, getCurrentPlaybackPosition(activeItem), true, true);
+      }
     }
     isAutoReconnecting = false;
   }, delay);
 }
 
-function startStallWatchdog() {
+function startStallWatchdog(preserveReconnectAttempts = false) {
   stopStallWatchdog();
   lastVideoCurrentTime = -1;
   stallCount = 0;
-  autoReconnectAttempts = 0;
+  if (!preserveReconnectAttempts) autoReconnectAttempts = 0;
   isAutoReconnecting = false;
   hidePlayerReconnectBadge();
 
@@ -2670,6 +2962,7 @@ function startStallWatchdog() {
     video.addEventListener('playing', () => {
       stallCount = 0;
       autoReconnectAttempts = 0;
+      attemptedPlaybackSourceIndexes = new Set([activePlaybackSourceIndex]);
       isAutoReconnecting = false;
       hidePlayerReconnectBadge();
     });
@@ -2804,6 +3097,254 @@ function redactDiagnosticLog(value) {
 let mpegtsPlayer = null;
 
 let playAbortController = null;
+let activePlaybackSourceIndex = 0;
+let attemptedPlaybackSourceIndexes = new Set();
+let playbackGeneration = 0;
+
+function shouldUseNativeWebOsPlayback() {
+  const userAgent = navigator.userAgent || '';
+  return !!window.webOS || /web0s|webos/i.test(userAgent);
+}
+
+function getCurrentPlaybackPosition(item) {
+  if (!item || item.contentType === 'LIVE') return null;
+  const video = $('tvPlayer');
+  return video && Number.isFinite(video.currentTime) ? video.currentTime : null;
+}
+
+function getSourceHostLabel(url) {
+  try {
+    return new URL(url).hostname || 'Fonte';
+  } catch (e) {
+    return 'Fonte';
+  }
+}
+
+function updateSourceButtons(item = activeItem, selectedIndex = activePlaybackSourceIndex) {
+  const count = item ? MK21AlternativeSources.sourceUrls(item).length : 0;
+  const serverCount = SERVERS.length;
+  const selectedLabel = item && count > 0
+    ? getSourceHostLabel(MK21AlternativeSources.sourceUrls(item)[selectedIndex] || item.url)
+    : '';
+  [
+    { button: $('btnSources'), fullScreen: false },
+    { button: $('fsBtnSources'), fullScreen: true }
+  ].forEach(({ button, fullScreen }) => {
+    if (!button) return;
+    button.classList.toggle('hidden', count < 2 && serverCount < 2);
+    button.textContent = fullScreen
+      ? `🌐 Fontes${count > 1 ? ` ${selectedIndex + 1}/${count}` : ''}`
+      : '🌐';
+    button.title = count > 1
+      ? `Selecionar fonte (${count} URLs). Atual: ${selectedLabel}; também é possível trocar de servidor`
+      : 'Selecionar outra lista/servidor para este conteúdo';
+  });
+}
+
+function getHlsBufferOptions() {
+  const profile = localStorage.getItem('mk21_buffer_profile') || 'fast';
+  if (profile === 'stable') {
+    return { lowLatencyMode: false, startFragPrefetch: false, backBufferLength: 20, maxBufferLength: 40, maxMaxBufferLength: 60, maxBufferSize: 50 * 1000 * 1000 };
+  }
+  if (profile === 'balanced') {
+    return { lowLatencyMode: true, startFragPrefetch: true, backBufferLength: 12, maxBufferLength: 25, maxMaxBufferLength: 40, maxBufferSize: 35 * 1000 * 1000 };
+  }
+  return { lowLatencyMode: true, startFragPrefetch: true, backBufferLength: 10, maxBufferLength: 20, maxMaxBufferLength: 30, maxBufferSize: 30 * 1000 * 1000 };
+}
+
+function applyPlaybackPreferences() {
+  const video = $('tvPlayer');
+  if (!video) return;
+  const effect = localStorage.getItem('mk21_super_resolution') || 'off';
+  video.style.filter = effect === 'hd'
+    ? 'contrast(1.05) saturate(1.06)'
+    : (effect === '4k' ? 'contrast(1.09) saturate(1.12) brightness(1.01)' : '');
+
+  const quality = localStorage.getItem('mk21_playback_quality') || 'auto';
+  if (hlsInstance && Array.isArray(hlsInstance.levels) && hlsInstance.levels.length) {
+    if (quality === 'auto') {
+      hlsInstance.autoLevelCapping = -1;
+    } else {
+      let cap = -1;
+      hlsInstance.levels.forEach((level, index) => {
+        if (level.height && level.height <= 1080 &&
+            (cap < 0 || level.height > hlsInstance.levels[cap].height)) cap = index;
+      });
+      hlsInstance.autoLevelCapping = cap;
+    }
+  }
+}
+
+function openQualityPicker() {
+  const modal = $('modalQuality');
+  const list = $('qualityOptionsList');
+  if (!modal || !list) return;
+  const groups = [
+    {
+      title: 'Qualidade',
+      key: 'mk21_playback_quality',
+      options: [['auto', 'Automática'], ['1080p', 'Até 1080p']]
+    },
+    {
+      title: 'Super resolução (efeito visual)',
+      key: 'mk21_super_resolution',
+      options: [['off', 'Desativada'], ['hd', 'HD'], ['4k', '4K']]
+    },
+    {
+      title: 'Buffer para as próximas reproduções',
+      key: 'mk21_buffer_profile',
+      options: [['fast', 'Rápido'], ['balanced', 'Equilibrado'], ['stable', 'Estável']]
+    }
+  ];
+  list.replaceChildren();
+  groups.forEach(group => {
+    const heading = document.createElement('h3');
+    heading.className = 'source-section-title';
+    heading.textContent = group.title;
+    list.appendChild(heading);
+    group.options.forEach(([value, label]) => {
+      const selected = (localStorage.getItem(group.key) || (group.key === 'mk21_super_resolution' ? 'off' : group.key === 'mk21_buffer_profile' ? 'fast' : 'auto')) === value;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'track-item-btn source-option-btn';
+      button.tabIndex = 0;
+      button.textContent = `${selected ? '✓ ' : ''}${label}`;
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      button.onclick = () => {
+        localStorage.setItem(group.key, value);
+        applyPlaybackPreferences();
+        openQualityPicker();
+      };
+      list.appendChild(button);
+    });
+  });
+  modal.classList.remove('hidden');
+  activeZone = 'modalQuality';
+  const firstOption = list.querySelector('.source-option-btn');
+  if (firstOption) firstOption.focus();
+}
+
+if ($('btnQuality')) $('btnQuality').onclick = openQualityPicker;
+if ($('fsBtnQuality')) $('fsBtnQuality').onclick = openQualityPicker;
+if ($('btnCloseQuality')) $('btnCloseQuality').onclick = () => {
+  $('modalQuality').classList.add('hidden');
+  activeZone = 'player';
+  const target = isAppFullscreen() ? $('fsBtnQuality') : $('btnQuality');
+  if (target) target.focus();
+};
+
+function findMatchingItemInCatalog(sourceItem, catalog = allCatalog) {
+  const type = sourceItem && sourceItem.contentType;
+  const items = type && Array.isArray(catalog[type]) ? catalog[type] : [];
+  return items.find(item => MK21AlternativeSources.matchesAcrossServers(sourceItem, item)) || null;
+}
+
+function finishPendingServerSourceSwitch() {
+  const pending = pendingServerSourceSwitch;
+  if (!pending || pending.serverId !== (SERVERS[currentServerIndex] || {}).id) return false;
+  if (pending.resolved) return true;
+  const target = pending.matchedItem || findMatchingItemInCatalog(pending.item);
+  if (!target) return false;
+
+  pending.matchedItem = target;
+  pending.resolved = true;
+  isSwitchingServerSource = true;
+  try {
+    switchContentType(target.contentType);
+    playStream(target, 0, pending.resumePosition);
+  } finally {
+    isSwitchingServerSource = false;
+  }
+  showChannelBanner(`Fonte alterada: ${cleanServerName(SERVERS[currentServerIndex].name)}`);
+  return true;
+}
+
+function openSourcePicker() {
+  const item = activeItem;
+  const modal = $('modalSources');
+  const list = $('sourceOptionsList');
+  if (!item || !modal || !list) return;
+
+  const sources = MK21AlternativeSources.sourceUrls(item);
+  $('sourcePickerTitle').textContent = `🌐 Fontes disponíveis — ${item.name}`;
+  list.innerHTML = '';
+  const serverList = $('serverOptionsList');
+  if (serverList) serverList.replaceChildren();
+
+  sources.forEach((url, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'track-item-btn source-option-btn';
+    button.setAttribute('tabindex', '0');
+    button.textContent = `Fonte ${index + 1} — ${getSourceHostLabel(url)}${index === activePlaybackSourceIndex ? ' (em uso)' : ''}`;
+    button.setAttribute('aria-pressed', index === activePlaybackSourceIndex ? 'true' : 'false');
+    button.onclick = () => {
+      const resumePosition = getCurrentPlaybackPosition(item);
+      modal.classList.add('hidden');
+      activeZone = 'player';
+      if (index !== activePlaybackSourceIndex) {
+        playStream(item, index, resumePosition);
+      } else {
+        const focusTarget = isAppFullscreen() ? $('fsBtnSources') : $('btnSources');
+        if (focusTarget) focusTarget.focus();
+      }
+    };
+    list.appendChild(button);
+  });
+
+  if (serverList) {
+    const heading = document.createElement('h3');
+    heading.className = 'source-section-title';
+    heading.textContent = 'Abrir este conteúdo em outro servidor';
+    serverList.appendChild(heading);
+    SERVERS.forEach((server, index) => {
+      if (index === currentServerIndex) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'track-item-btn source-option-btn';
+      button.setAttribute('tabindex', '0');
+      button.textContent = `${cleanServerName(server.name)} — localizar ${item.contentType === 'LIVE' ? 'canal' : 'título'} correspondente`;
+      button.onclick = () => {
+        pendingServerSourceSwitch = {
+          item: slimItem(item),
+          serverId: server.id,
+          resumePosition: getCurrentPlaybackPosition(item),
+          matchedItem: null
+        };
+        currentServerIndex = index;
+        try { localStorage.setItem('mk21_last_server', index); } catch (e) {}
+        modal.classList.add('hidden');
+        activeZone = 'channels';
+        activeItem = null;
+        showChannelBanner(`Procurando ${item.name} em ${cleanServerName(server.name)}...`);
+        loadServer(false);
+      };
+      serverList.appendChild(button);
+    });
+  }
+
+  const noSources = sources.length === 0;
+  if (noSources) {
+    const empty = document.createElement('p');
+    empty.className = 'quality-note';
+    empty.textContent = 'Não há URLs alternativas cadastradas para este item.';
+    list.appendChild(empty);
+  }
+
+  modal.classList.remove('hidden');
+  activeZone = 'modalSources';
+  const firstOption = list.querySelector('.source-option-btn') ||
+    (serverList && serverList.querySelector('.source-option-btn'));
+  if (firstOption) firstOption.focus();
+}
+
+function closeSourcePicker() {
+  const modal = $('modalSources');
+  if (modal) modal.classList.add('hidden');
+  activeZone = 'player';
+  const focusTarget = isAppFullscreen() ? $('fsBtnSources') : $('btnSources');
+  if (focusTarget) focusTarget.focus();
+}
 
 function safeVideoPlay(video) {
   if (!video) return Promise.resolve();
@@ -2824,8 +3365,8 @@ function safeVideoPlay(video) {
   return Promise.resolve();
 }
 
-function stopCurrentPlayer() {
-  if (playAbortController) {
+function stopCurrentPlayer(preservePendingRequest = false) {
+  if (playAbortController && !preservePendingRequest) {
     try { playAbortController.abort(); } catch (e) {}
     playAbortController = null;
   }
@@ -2852,12 +3393,13 @@ function stopCurrentPlayer() {
       video.load();
     } catch (e) {}
   }
+  if (video) video.preload = (localStorage.getItem('mk21_buffer_profile') || 'fast') === 'stable' ? 'auto' : 'metadata';
 }
 
-function fallbackToHls(item) {
-  if (!item || !item.url) return;
-  const hlsUrl = item.url.replace(/\.ts($|\?)/i, '.m3u8$1');
-  addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${hlsUrl}`, 'info');
+function fallbackToHls(item, sourceUrl = item && item.url) {
+  if (!item || !sourceUrl) return;
+  const hlsUrl = sourceUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
+  addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${getSourceHostLabel(hlsUrl)}`, 'info');
   stopCurrentPlayer();
   const video = $('tvPlayer');
   if (!video) return;
@@ -2865,13 +3407,8 @@ function fallbackToHls(item) {
   if (window.Hls && Hls.isSupported()) {
     hlsInstance = new Hls({
       enableWorker: true,
-      lowLatencyMode: true,
-      startFragPrefetch: true,
-      backBufferLength: 10,
-      maxBufferLength: 15,
-      maxMaxBufferLength: 30,
-      liveSyncDurationCount: 3,
-      maxBufferSize: 25 * 1000 * 1000
+      ...getHlsBufferOptions(),
+      liveSyncDurationCount: 3
     });
     hlsInstance.loadSource(hlsUrl);
     hlsInstance.attachMedia(video);
@@ -2909,9 +3446,20 @@ function fallbackToHls(item) {
 let zappingLockPromise = Promise.resolve();
 
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
-function playStream(item) {
+function playStream(
+  item,
+  requestedSourceIndex = 0,
+  requestedResumePosition = null,
+  preserveAttemptedSources = false,
+  preserveReconnectAttempts = false
+) {
   if (!item || !item.url) return;
+  if (!isSwitchingServerSource) pendingServerSourceSwitch = null;
 
+  const sources = MK21AlternativeSources.sourceUrls(item);
+  const sourceIndex = Math.max(0, Math.min(requestedSourceIndex, sources.length - 1));
+  const selectedUrl = sources[sourceIndex] || item.url;
+  const requestGeneration = ++playbackGeneration;
   if (playAbortController) {
     try { playAbortController.abort(); } catch (e) {}
   }
@@ -2920,7 +3468,7 @@ function playStream(item) {
 
   zappingLockPromise = zappingLockPromise.catch(() => {}).then(async () => {
     if (currentSignal.aborted) return;
-    stopCurrentPlayer();
+    stopCurrentPlayer(true);
     const video = $('tvPlayer');
     if (video) {
       try {
@@ -2937,23 +3485,40 @@ function playStream(item) {
     if (currentSignal.aborted) return;
 
     activeItem = item;
+    if (pendingServerSourceSwitch && pendingServerSourceSwitch.resolved &&
+        pendingServerSourceSwitch.matchedItem && pendingServerSourceSwitch.matchedItem.url === item.url) {
+      pendingServerSourceSwitch = null;
+    }
+    activePlaybackSourceIndex = sourceIndex;
+    if (!preserveAttemptedSources || !attemptedPlaybackSourceIndexes.size) {
+      attemptedPlaybackSourceIndexes = new Set([sourceIndex]);
+    } else {
+      attemptedPlaybackSourceIndexes.add(sourceIndex);
+    }
+    updateSourceButtons(item, sourceIndex);
+    applyPlaybackPreferences();
     recordWatchedItem(item);
     saveLastChannel(item);
     prefetchAdjacentChannels(item);
     startProgressTracker(item);
-    startStallWatchdog();
+    startStallWatchdog(preserveReconnectAttempts);
 
     if (!video) return;
 
     const streamFormatPref = localStorage.getItem('mk21_stream_format') || 'auto';
     addDevLog(`[Player] Iniciando carregamento: "${item.name}" (Modo: ${currentContentType})`, 'info');
-    addDevLog(`[Player] URL: ${item.url}`, 'info');
+    addDevLog(`[Player] Fonte selecionada: ${getSourceHostLabel(selectedUrl)}`, 'info');
     addDevLog(`[Player] Formato preferido: ${streamFormatPref}`, 'debug');
 
-  if (item.currentTime && item.currentTime > 5 && (item.contentType === 'MOVIE' || item.contentType === 'SERIES' || currentContentType === 'MOVIE' || currentContentType === 'SERIES')) {
-    const resumeAt = item.currentTime;
+  const isVod = item.contentType === 'MOVIE' || item.contentType === 'SERIES' ||
+    currentContentType === 'MOVIE' || currentContentType === 'SERIES';
+  const resumeAt = typeof requestedResumePosition === 'number' && Number.isFinite(requestedResumePosition)
+    ? requestedResumePosition
+    : Number(item.currentTime) || 0;
+  if (isVod && resumeAt > 0.5) {
     const onLoaded = function () {
       video.removeEventListener('loadedmetadata', onLoaded);
+      if (requestGeneration !== playbackGeneration) return;
       try {
         video.currentTime = resumeAt;
         showChannelBanner('▶ Continuando em ' + formatTimeSec(resumeAt));
@@ -2993,26 +3558,21 @@ function playStream(item) {
 
   showChannelBanner(item.name);
 
-  let streamUrl = item.url;
+  let streamUrl = selectedUrl;
   if (streamFormatPref === 'hls' && streamUrl.toLowerCase().includes('.ts')) {
     streamUrl = streamUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
-    addDevLog(`[Player] Preferência HLS forçada: ${streamUrl}`, 'info');
+    addDevLog(`[Player] Preferência HLS forçada para ${getSourceHostLabel(streamUrl)}`, 'info');
   }
 
   const isM3U8 = streamUrl.toLowerCase().includes('.m3u8');
   const isTS = streamUrl.toLowerCase().includes('.ts');
 
-  if (isM3U8 && window.Hls && Hls.isSupported()) {
+  if (isM3U8 && !shouldUseNativeWebOsPlayback() && window.Hls && Hls.isSupported()) {
     addDevLog('[Player Engine] Usando decodificador Hls.js Low-Latency...', 'info');
     hlsInstance = new Hls({
       enableWorker: true,
-      lowLatencyMode: true,
-      startFragPrefetch: true,
-      backBufferLength: 10,
-      maxBufferLength: 15,
-      maxMaxBufferLength: 30,
+      ...getHlsBufferOptions(),
       liveSyncDurationCount: 3,
-      maxBufferSize: 25 * 1000 * 1000,
       startLevel: -1,
       fragLoadingTimeOut: 15000,
       manifestLoadingTimeOut: 15000,
@@ -3025,6 +3585,7 @@ function playStream(item) {
     });
     hlsInstance.loadSource(streamUrl);
     hlsInstance.attachMedia(video);
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, applyPlaybackPreferences);
     if ($('epgStatus')) $('epgStatus').textContent = '⏳ CARREGANDO...';
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Manifesto HLS decodificado com sucesso!', 'success');
@@ -3059,7 +3620,7 @@ function playStream(item) {
         }
       }
     });
-  } else if (isTS && window.mpegts && mpegts.isSupported()) {
+  } else if (isTS && !shouldUseNativeWebOsPlayback() && window.mpegts && mpegts.isSupported()) {
     addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
     try {
       mpegtsPlayer = mpegts.createPlayer({
@@ -3084,19 +3645,24 @@ function playStream(item) {
         updateRealResolution(item);
       }).catch(err => {
         addDevLog(`[MPEGTS Error] ${err && err.message}. Rotacionando para HLS fallback...`, 'warn');
-        fallbackToHls(item);
+        fallbackToHls(item, streamUrl);
       });
       mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
         addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
-        fallbackToHls(item);
+        fallbackToHls(item, streamUrl);
       });
     } catch (eMpeg) {
       addDevLog(`[MPEGTS Exception] ${eMpeg.message}. Fallback HLS...`, 'warn');
-      fallbackToHls(item);
+      fallbackToHls(item, streamUrl);
     }
   } else {
-    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas
-    addDevLog('[Player Engine] Usando decodificação nativa acelerada por hardware...', 'info');
+    // webOS plays streams natively without requiring JavaScript access to cross-origin media.
+    addDevLog(
+      shouldUseNativeWebOsPlayback()
+        ? '[Player Engine] Usando decodificação nativa webOS para evitar dependência de CORS.'
+        : '[Player Engine] Usando decodificação nativa acelerada por hardware...',
+      'info'
+    );
     video.innerHTML = '';
     const src = document.createElement('source');
     src.src = streamUrl;
@@ -3115,7 +3681,7 @@ function playStream(item) {
       updateRealResolution(item);
     }).catch(err => {
       addDevLog(`[Player Fallback] Falha no playback nativo (${err && err.message}). Tentando fallback HLS...`, 'warn');
-      fallbackToHls(item);
+      fallbackToHls(item, streamUrl);
     });
   }
   });
@@ -3341,6 +3907,7 @@ function bindFsHudButtons() {
   if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); pokeFsHud(); };
   if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); pokeFsHud(); };
   if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); pokeFsHud(); };
+  if ($('fsBtnSources')) $('fsBtnSources').onclick = function () { openSourcePicker(); pokeFsHud(); };
   if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function () { if (typeof openAudioSubsModal === 'function') openAudioSubsModal(); };
   if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
 }
@@ -3525,6 +4092,8 @@ $('btnCloseAudioSubs').onclick = () => {
 
 if ($('btnAudioTrack')) $('btnAudioTrack').onclick = openAudioSubsModal;
 if ($('btnSubtitles')) $('btnSubtitles').onclick = openAudioSubsModal;
+if ($('btnSources')) $('btnSources').onclick = openSourcePicker;
+if ($('btnCloseSources')) $('btnCloseSources').onclick = closeSourcePicker;
 
 // 11. TROCA DE ABAS DO TOPO
 $('tabLive').onclick = () => switchContentType('LIVE');
@@ -3536,6 +4105,15 @@ $('tabSettings').onclick = () => switchContentType('SETTINGS');
 
 function switchContentType(type) {
   currentContentType = type;
+  const sectionTitles = {
+    LIVE: 'TV AO VIVO',
+    MOVIE: 'FILMES',
+    SERIES: 'SÉRIES',
+    CONTINUE: 'CONTINUAR ASSISTINDO',
+    FAVORITES: 'FAVORITOS',
+    SETTINGS: 'CONFIGURAÇÕES'
+  };
+  if ($('headerSectionTitle')) $('headerSectionTitle').textContent = sectionTitles[type] || 'MK21 PLAY';
   // Feedback visual imediato ao trocar de aba
   try {
     const labels = { LIVE: '📺 Ao Vivo', MOVIE: '🎬 Filmes', SERIES: '🍿 Séries', CONTINUE: '▶ Continuar', FAVORITES: '⭐ Favoritos', SETTINGS: '⚙️ Config' };
@@ -3592,8 +4170,8 @@ function switchContentType(type) {
   }, 30);
 }
 
-// 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
-const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin'];
+// 12. CONFIGURAÇÕES DA SMART TV
+const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSync', 'cfgBtnPlayback', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin', 'cfgBtnAdult'];
 
 CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
@@ -3658,6 +4236,10 @@ function renderSettings(sec) {
     renderFontSizePanel();
   } else if (sec === 'filtro') {
     renderLoadFilterPanel();
+  } else if (sec === 'sync') {
+    renderSyncSettingsPanel();
+  } else if (sec === 'playback') {
+    renderPlaybackSettingsPanel();
   } else if (sec === 'limpar') {
     renderClearStoragePanel();
   } else if (sec === 'tempo') {
@@ -3668,7 +4250,161 @@ function renderSettings(sec) {
     renderStreamFormatPanel();
   } else if (sec === 'pin') {
     renderPinSettingsPanel();
+  } else if (sec === 'adult') {
+    renderAdultSettingsPanel();
   }
+}
+
+function renderSyncSettingsPanel() {
+  const box = $('settingsDetailBox');
+  const syncEnabled = localStorage.getItem('mk21_sync_all_lists') === 'true';
+  const frequency = localStorage.getItem('mk21_sync_frequency') || '24h';
+  const loadingMode = localStorage.getItem('mk21_staged_loading') || 'balanced';
+  box.innerHTML = `
+    <h3 style="margin:0 0 16px 0;">🔄 Sincronização e carregamento em etapas</h3>
+    <p class="settings-description">A TV abre primeiro com o catálogo local. A sincronização das demais listas roda depois, sem bloquear a navegação.</p>
+    <label class="settings-control-row">
+      <span><strong>Sincronizar todas as listas em segundo plano</strong><small>Usa a rede e o armazenamento da TV quando ativado.</small></span>
+      <input id="toggleSyncAllLists" type="checkbox" ${syncEnabled ? 'checked' : ''}>
+    </label>
+    <label class="settings-control-row">
+      <span><strong>Frequência da sincronização automática</strong><small>A opção manual desativa a sincronização automática.</small></span>
+      <select id="selectSyncFrequency">
+        <option value="6h" ${frequency === '6h' ? 'selected' : ''}>A cada 6 horas</option>
+        <option value="24h" ${frequency === '24h' ? 'selected' : ''}>A cada 24 horas</option>
+        <option value="7d" ${frequency === '7d' ? 'selected' : ''}>A cada 7 dias</option>
+        <option value="manual" ${frequency === 'manual' ? 'selected' : ''}>Somente manual</option>
+      </select>
+    </label>
+    <label class="settings-control-row">
+      <span><strong>Etapas de abertura do catálogo</strong><small>Ao Vivo aparece antes da lista completa.</small></span>
+      <select id="selectStagedLoading">
+        <option value="fast" ${loadingMode === 'fast' ? 'selected' : ''}>Rápida — mostrar após 4 itens</option>
+        <option value="balanced" ${loadingMode === 'balanced' ? 'selected' : ''}>Equilibrada — mostrar após 8 itens</option>
+        <option value="stable" ${loadingMode === 'stable' ? 'selected' : ''}>Estável — mostrar após 20 itens</option>
+      </select>
+    </label>
+    <button id="btnSyncAllLists" class="ctrl-btn primary settings-action" type="button">🔄 Sincronizar todas agora</button>
+    <p id="syncAllListsStatus" class="settings-status" role="status">A lista ativa também é atualizada ao usar “Atualizar”.</p>
+  `;
+  $('toggleSyncAllLists').onchange = event => {
+    localStorage.setItem('mk21_sync_all_lists', event.target.checked ? 'true' : 'false');
+    if (event.target.checked) scheduleBackgroundListSync();
+  };
+  $('selectSyncFrequency').onchange = event => {
+    localStorage.setItem('mk21_sync_frequency', event.target.value);
+  };
+  $('selectStagedLoading').onchange = event => {
+    localStorage.setItem('mk21_staged_loading', event.target.value);
+  };
+  $('btnSyncAllLists').onclick = async () => {
+    const button = $('btnSyncAllLists');
+    const status = $('syncAllListsStatus');
+    button.disabled = true;
+    button.textContent = 'Sincronizando listas...';
+    status.textContent = 'A sincronização pode levar alguns minutos, conforme o tamanho das listas.';
+    try {
+      const result = await syncAllServerLists(true);
+      status.textContent = result.failed.length
+        ? `${result.synced} lista(s) sincronizada(s); falha em: ${result.failed.join(', ')}.`
+        : `${result.synced} lista(s) sincronizada(s) com sucesso.`;
+    } catch (error) {
+      status.textContent = `Não foi possível concluir a sincronização: ${error.message || 'erro desconhecido'}.`;
+      console.error('[MK21] Sincronização manual falhou:', error);
+    } finally {
+      button.disabled = false;
+      button.textContent = '🔄 Sincronizar todas agora';
+    }
+  };
+}
+
+function renderPlaybackSettingsPanel() {
+  const box = $('settingsDetailBox');
+  const quality = localStorage.getItem('mk21_playback_quality') || 'auto';
+  const superResolution = localStorage.getItem('mk21_super_resolution') || 'off';
+  const buffer = localStorage.getItem('mk21_buffer_profile') || 'fast';
+  const amoled = localStorage.getItem('mk21_amoled_mode') === 'true';
+  box.innerHTML = `
+    <h3 style="margin:0 0 16px 0;">🎞️ Qualidade, buffer e imagem</h3>
+    <p class="settings-description">A escolha de resolução é aplicada quando o mecanismo da TV permite. A super resolução nesta versão é um ajuste visual, não um upscaler de hardware.</p>
+    <label class="settings-control-row">
+      <span><strong>Qualidade de reprodução</strong><small>Resolução máxima solicitada para HLS.js quando compatível.</small></span>
+      <select id="selectPlaybackQuality">
+        <option value="auto" ${quality === 'auto' ? 'selected' : ''}>Automática</option>
+        <option value="1080p" ${quality === '1080p' ? 'selected' : ''}>Até 1080p</option>
+      </select>
+    </label>
+    <label class="settings-control-row">
+      <span><strong>Super resolução (efeito visual)</strong><small>Aplica nitidez/contraste; não aumenta a resolução real.</small></span>
+      <select id="selectSuperResolution">
+        <option value="off" ${superResolution === 'off' ? 'selected' : ''}>Desativada</option>
+        <option value="hd" ${superResolution === 'hd' ? 'selected' : ''}>HD — ajuste leve</option>
+        <option value="4k" ${superResolution === '4k' ? 'selected' : ''}>4K — ajuste intenso</option>
+      </select>
+    </label>
+    <label class="settings-control-row">
+      <span><strong>Buffer</strong><small>Perfis ajustam HLS.js quando compatível; no player nativo da TV, o buffer é gerenciado pelo webOS.</small></span>
+      <select id="selectBufferProfile">
+        <option value="fast" ${buffer === 'fast' ? 'selected' : ''}>Rápido</option>
+        <option value="balanced" ${buffer === 'balanced' ? 'selected' : ''}>Equilibrado</option>
+        <option value="stable" ${buffer === 'stable' ? 'selected' : ''}>Estável</option>
+      </select>
+    </label>
+    <label class="settings-control-row">
+      <span><strong>Modo AMOLED</strong><small>Usa fundo preto nas áreas principais da interface.</small></span>
+      <input id="toggleAmoledMode" type="checkbox" ${amoled ? 'checked' : ''}>
+    </label>
+  `;
+  $('selectPlaybackQuality').onchange = event => {
+    localStorage.setItem('mk21_playback_quality', event.target.value);
+    applyPlaybackPreferences();
+  };
+  $('selectSuperResolution').onchange = event => {
+    localStorage.setItem('mk21_super_resolution', event.target.value);
+    applyPlaybackPreferences();
+  };
+  $('selectBufferProfile').onchange = event => {
+    localStorage.setItem('mk21_buffer_profile', event.target.value);
+    showChannelBanner('Buffer atualizado para as próximas reproduções.');
+  };
+  $('toggleAmoledMode').onchange = event => {
+    localStorage.setItem('mk21_amoled_mode', event.target.checked ? 'true' : 'false');
+    document.body.classList.toggle('amoled-mode', event.target.checked);
+  };
+}
+
+function renderAdultSettingsPanel() {
+  const box = $('settingsDetailBox');
+  const enabled = localStorage.getItem('mk21_adult_content_enabled') !== 'false';
+  box.innerHTML = `
+    <h3 style="margin:0 0 16px 0;">🔞 Controle de conteúdo adulto</h3>
+    <p class="settings-description">O conteúdo classificado como adulto permanece oculto até a autorização pelo PIN. Desativar a opção abaixo mantém esses itens ocultos mesmo após desbloquear.</p>
+    <label class="settings-control-row">
+      <span><strong>Permitir conteúdo adulto protegido por PIN</strong><small>O bloqueio é aplicado a canais, filmes e categorias.</small></span>
+      <input id="toggleAdultContent" type="checkbox" ${enabled ? 'checked' : ''}>
+    </label>
+    <div class="adult-control-actions">
+      <button id="btnAdultUnlock" class="ctrl-btn primary" type="button">${isAdultUnlocked ? '🔒 Bloquear conteúdo adulto' : '🔓 Desbloquear com PIN'}</button>
+      <button id="btnOpenAdultPinSettings" class="ctrl-btn" type="button">Alterar PIN</button>
+    </div>
+    <p class="settings-status">${isAdultUnlocked ? 'Conteúdo autorizado nesta sessão.' : 'Conteúdo bloqueado nesta sessão.'}</p>
+  `;
+  $('toggleAdultContent').onchange = event => {
+    localStorage.setItem('mk21_adult_content_enabled', event.target.checked ? 'true' : 'false');
+    if (!event.target.checked) {
+      lockAdultContent();
+    }
+    buildCurrentCategories();
+    renderCategoriesList();
+    selectCategory('ALL');
+    renderAdultSettingsPanel();
+  };
+  $('btnAdultUnlock').onclick = openPinModal;
+  $('btnOpenAdultPinSettings').onclick = () => {
+    CFG_BUTTONS.forEach(id => $(id) && $(id).classList.remove('active'));
+    if ($('cfgBtnPin')) $('cfgBtnPin').classList.add('active');
+    renderPinSettingsPanel();
+  };
 }
 
 // PAINEL DE FILTRAGEM DE CARREGAMENTO (ECONOMIA DE MEMÓRIA E ULTRA VELOCIDADE)
@@ -3760,7 +4496,7 @@ function renderPinSettingsPanel() {
   const box = $('settingsDetailBox');
   box.innerHTML = `
     <h3 style="margin:0 0 16px 0; font-size:24px;">🔒 Alterar Senha PIN de Adultos</h3>
-    <p style="color:#aaa;">Senha atual: <strong style="color:#ffd54f; font-size:18px;">${currentPin}</strong></p>
+    <p style="color:#aaa;">O PIN atual não é exibido. Digite o novo código de 4 dígitos:</p>
     <div style="background:#1a1e2d; border-radius:12px; padding:20px; max-width:440px; margin-top:16px; text-align:center;">
       <div style="font-size:16px; color:#cbd5e1; margin-bottom:8px;">Digite o Novo PIN de 4 Dígitos:</div>
       <div id="newPinDisplay" class="pin-display-box" style="margin:8px auto; width:220px; font-size:32px;">----</div>
@@ -3794,7 +4530,7 @@ function renderPinSettingsPanel() {
           localStorage.setItem('mk21_adult_pin', currentPin);
           const msg = $('msgPinSaved');
           if (msg) {
-            msg.textContent = '✅ Novo PIN salvo com sucesso: ' + currentPin;
+            msg.textContent = '✅ Novo PIN salvo com sucesso.';
             msg.style.display = 'block';
           }
           tempNewPin = '';
@@ -3812,7 +4548,7 @@ function renderPinSettingsPanel() {
             localStorage.setItem('mk21_adult_pin', currentPin);
             const msg = $('msgPinSaved');
             if (msg) {
-              msg.textContent = '✅ Novo PIN salvo com sucesso: ' + currentPin;
+              msg.textContent = '✅ Novo PIN salvo com sucesso.';
               msg.style.display = 'block';
             }
           }
@@ -3902,19 +4638,19 @@ function renderFontSizePanel() {
         1. Padrão (Normal 1080p)
       </button>
       <button id="btnFontLarge" class="list-item-btn ${cur === 'large' ? 'active' : ''}" style="padding:16px 20px; font-size:21px;" tabindex="0">
-        2. Grande (+25% Visibilidade)
+        2. Grande (+20% Visibilidade)
       </button>
       <button id="btnFontXLarge" class="list-item-btn ${cur === 'xlarge' ? 'active' : ''}" style="padding:18px 22px; font-size:25px;" tabindex="0">
-        3. Muito Grande (+50% Sofá Distante)
+        3. Muito Grande (+25% Sofá Distante)
       </button>
       <button id="btnFontXXLarge" class="list-item-btn ${cur === 'xxlarge' ? 'active' : ''}" style="padding:20px 24px; font-size:29px;" tabindex="0">
-        4. Gigante (+75% Máxima Legibilidade)
+        4. Gigante (+30% Máxima Legibilidade)
       </button>
       <button id="btnFontHuge" class="list-item-btn ${cur === 'huge' ? 'active' : ''}" style="padding:22px 26px; font-size:33px;" tabindex="0">
-        5. Extra Gigante (+100% Super Visível)
+        5. Extra Gigante (+40% Super Visível)
       </button>
       <button id="btnFontUltra" class="list-item-btn ${cur === 'ultra' ? 'active' : ''}" style="padding:24px 28px; font-size:37px;" tabindex="0">
-        6. Máxima Sofá Distante (+125% TV Grande)
+        6. Máxima Sofá Distante (+50% TV Grande)
       </button>
     </div>
   `;
@@ -4403,7 +5139,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '1.4.1';
+const BASE_PACKAGE_VERSION = '2.3.11';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -4455,14 +5191,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.1
-    if (!data || compareSemver(data.version, '1.4.1') < 0) {
+    // Se os endpoints remotos estiverem indisponíveis, usa a versão deste pacote.
+    if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
-        version: '1.4.1',
-        versionCode: 141,
-        title: 'MK21 Play v1.4.1',
-        releaseNotes: '• Sinergia APK-to-IPK: Phased loading, DNS failover e Omnisearch na Smart TV\n• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.1_all.ipk',
+        version: BASE_PACKAGE_VERSION,
+        versionCode: 2310,
+        title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
+        releaseNotes: '• Layout Smart TV reorganizado com navegação lateral e cartões para filmes e séries.\n• Fontes alternativas M3U agrupadas, seleção manual, fallback automático e retomada da reprodução.',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.11_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -4664,15 +5400,29 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalSources', 'modalQuality', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
   }
+
   const dynamic = document.querySelector('.app-modal:not(.hidden), .modal-overlay:not(.hidden), [role="dialog"]:not(.hidden), .modal-container:not(.hidden)');
   if (dynamic && mk21IsVisible(dynamic)) return dynamic;
   return null;
 }
+
+document.querySelectorAll('.pane-scroll, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list').forEach(scrollArea => {
+  scrollArea.addEventListener('wheel', event => {
+    if (!event.deltaY) return;
+    const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
+    if (maxScroll <= 0) return;
+    const nextScrollTop = Math.max(0, Math.min(maxScroll, scrollArea.scrollTop + event.deltaY));
+    if (nextScrollTop !== scrollArea.scrollTop) {
+      scrollArea.scrollTop = nextScrollTop;
+      event.preventDefault();
+    }
+  }, { passive: false });
+});
 function mk21GetFocusables() {
   const activeModal = mk21GetOpenModal();
   const root = activeModal || document;
@@ -4832,9 +5582,22 @@ document.addEventListener('keydown', function (e) {
       if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
         e.preventDefault();
         e.stopPropagation();
-        activeModal.classList.add('hidden');
-        activeZone = 'channels';
-        focusActiveElement();
+        if (activeModal.id === 'modalSources') {
+          closeSourcePicker();
+        } else {
+          activeModal.classList.add('hidden');
+          if (activeModal.id === 'modalQuality') {
+            activeZone = 'player';
+            const target = isAppFullscreen() ? $('fsBtnQuality') : $('btnQuality');
+            if (target) target.focus();
+          } else if (activeModal.id === 'modalSortPicker') {
+            activeZone = 'channels';
+            if ($('btnSortOrder')) $('btnSortOrder').focus();
+          } else {
+            activeZone = currentContentType === 'SETTINGS' ? 'settings' : 'channels';
+            focusActiveElement();
+          }
+        }
         return;
       }
 
@@ -5219,15 +5982,21 @@ $('btnRefreshList').onclick = () => loadServer(true);
 // $('btnHeaderAdult') removido do cabeçalho;
 
 function openPinModal() {
+  if (localStorage.getItem('mk21_adult_content_enabled') === 'false') {
+    showChannelBanner('Ative o controle de conteúdo adulto nas Configurações para liberar.');
+    return;
+  }
   if (isAdultUnlocked) {
-    isAdultUnlocked = false;
-    if ($('txtLockIcon')) $('txtLockIcon').textContent = '🔒';
-    if ($('txtLockText')) $('txtLockText').textContent = 'Adulto (Bloqueado)';
+    const settingsWasOpen = currentContentType === 'SETTINGS';
+    lockAdultContent();
     
-    buildCurrentCategories();
-    renderCategoriesList();
-    selectCategory('ALL');
+    if (!settingsWasOpen) {
+      buildCurrentCategories();
+      renderCategoriesList();
+      selectCategory('ALL');
+    }
     alert('Canais adultos foram bloqueados com sucesso.');
+    if (settingsWasOpen) renderAdultSettingsPanel();
   } else {
     enteredPin = '';
     $('pinScreen').textContent = '----';
@@ -5257,18 +6026,24 @@ document.querySelectorAll('.pin-key').forEach(kBtn => {
 });
 
 function verifyPin() {
-  if (enteredPin === currentPin || enteredPin === '0000' || enteredPin === '8208') {
+  if (enteredPin === currentPin) {
+    const settingsWasOpen = currentContentType === 'SETTINGS';
     isAdultUnlocked = true;
     if ($('txtLockIcon')) $('txtLockIcon').textContent = '🔓';
     if ($('txtLockText')) $('txtLockText').textContent = 'Adulto (Liberado)';
     
     $('modalPin').classList.add('hidden');
-    activeZone = 'channels';
-    buildCurrentCategories();
-    renderCategoriesList();
-    const adultCat = currentCategoryKeys.find(c => isAdult(c));
-    selectCategory(adultCat || 'ALL');
+    if (settingsWasOpen) {
+      activeZone = 'settings';
+    } else {
+      activeZone = 'channels';
+      buildCurrentCategories();
+      renderCategoriesList();
+      const adultCat = currentCategoryKeys.find(c => isAdult(c));
+      selectCategory(adultCat || 'ALL');
+    }
     alert('Canais adultos liberados com sucesso!');
+    if (settingsWasOpen) renderAdultSettingsPanel();
   } else {
     alert('Senha incorreta! Digite novamente.');
     enteredPin = '';
@@ -5361,6 +6136,9 @@ if (typeof document !== 'undefined') {
 
 window.addEventListener('load', () => {
   ensureSharedCredentialsStored();
+  document.body.classList.toggle('amoled-mode', localStorage.getItem('mk21_amoled_mode') === 'true');
+  const player = $('tvPlayer');
+  if (player) player.preload = (localStorage.getItem('mk21_buffer_profile') || 'fast') === 'stable' ? 'auto' : 'metadata';
   // OTA ativo preservado na TV para manter atualizações persistentes
 
   try {
@@ -5389,6 +6167,7 @@ window.addEventListener('load', () => {
     } catch (e) {}
 
   loadServer();
+  scheduleBackgroundListSync();
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
