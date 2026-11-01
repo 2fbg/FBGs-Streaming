@@ -2,6 +2,15 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.3.12] - 2026-11-01
+
+- **Smart TV/webOS:** inicia a aplicação e o carregamento da lista sem aguardar imagens e bibliotecas externas do player.
+- **Smart TV/webOS:** evita recalcular ordenação e agrupamento de séries em cada renderização, melhora o carregamento tardio das capas e reduz renderizações duplicadas da busca.
+- **Smart TV/webOS:** invalida corretamente as categorias após atualizar o catálogo e escapa dados externos exibidos na busca e no EPG.
+- **Smart TV/webOS:** evita consultas ao índice quando a busca já encontra resultados carregados, exibe resultados indexados que ainda não estavam no catálogo e escapa nomes externos no gerenciador de categorias.
+- **Smart TV/webOS:** carrega HLS/MPEG-TS sob demanda e evita expor URLs autenticadas nos logs.
+- **Empacotamento:** sincroniza o tamanho instalado e deixa de sobrescrever um alias de pacote obsoleto.
+
 ## [2.3.11] - 2026-11-01
 
 - **Smart TV/webOS:** permite trocar a fonte do conteúdo procurando o mesmo item em outro servidor e restaura o controle de ordenação.

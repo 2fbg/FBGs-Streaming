@@ -19,7 +19,7 @@
 | Plataforma | Pacote / Binário | SHA-256 |
 |---|---|---|
 | **Android APK v2.3.7** | [`mk21.apk`](mk21.apk) | `3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce` |
-| **LG webOS Smart TV v2.3.11** | [`mk21play_2.3.11_all.ipk`](smart-tv/mk21play_2.3.11_all.ipk) | `4e2ba87d854c63973e5f50f625d68bf949b7d3eea4e5724c6e0aae5e93d7b4d0` |
+| **LG webOS Smart TV v2.3.12** | [`mk21play_2.3.12_all.ipk`](smart-tv/mk21play_2.3.12_all.ipk) | `75af8ce9ff01b7ee11f983f36c97d95f9da5d6a348521dfbba4d12981bc2310e` |
 | **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---

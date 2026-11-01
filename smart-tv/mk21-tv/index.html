@@ -4,11 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.3.11">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css?v=2.3.12">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
   <style id="mk21-ota-override-css"></style>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
   <script src="core/AlternativeSources.js"></script>
 </head>
 <body>
@@ -552,7 +550,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.3.11';
+              fallback.src = 'app.js?v=2.3.12';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -569,7 +567,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.3.11';
+      s.src = 'app.js?v=2.3.12';
       document.body.appendChild(s);
     })();
   </script>

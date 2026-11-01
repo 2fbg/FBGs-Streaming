@@ -9,6 +9,8 @@ import os
 import sys
 import io
 import json
+import math
+import shutil
 import time
 import tarfile
 
@@ -24,6 +26,11 @@ def build_ipk(src_dir, output_ipk_path):
     version = appinfo.get("version", "1.0.0")
     title = appinfo.get("title", "MK21 Streaming")
     vendor = appinfo.get("vendor", "FBG2")
+    installed_size = math.ceil(sum(
+        os.path.getsize(os.path.join(root, filename))
+        for root, _, files in os.walk(src_dir)
+        for filename in files
+    ) / 1024)
 
     print(f"[*] Packaging webOS app: {title} ({app_id} v{version})...")
 
@@ -38,7 +45,7 @@ Priority: optional
 Architecture: all
 Maintainer: {vendor} <support@mk21.app>
 Description: {title} IPTV and Streaming Application for LG Smart TV webOS
-Installed-Size: 1024
+Installed-Size: {installed_size}
 """.encode("utf-8")
 
     control_tar_io = io.BytesIO()
@@ -60,6 +67,8 @@ Installed-Size: 1024
 
         # Add all files from src_dir
         for root, dirs, files in os.walk(src_dir):
+            dirs.sort()
+            files.sort()
             rel_dir = os.path.relpath(root, src_dir)
             target_base = app_target_dir if rel_dir == "." else f"{app_target_dir}/{rel_dir}"
 
@@ -112,26 +121,24 @@ if __name__ == "__main__":
     app_version = "1.0.0"
     appinfo_file = os.path.join(src, "appinfo.json")
     if os.path.exists(appinfo_file):
-        try:
-            with open(appinfo_file, "r") as f:
-                data = json.load(f)
-                if "version" in data:
-                    app_version = data["version"]
-        except Exception:
-            pass
+        with open(appinfo_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        app_version = data.get("version", app_version)
 
     default_ipk = os.path.join(script_dir, f"mk21play_{app_version}_all.ipk")
     dst = sys.argv[2] if len(sys.argv) > 2 else default_ipk
     build_ipk(src, dst)
     
     # Also generate mirrors for web and compatibility links
-    import shutil
     web_dir = os.path.join(os.path.dirname(script_dir), "web")
     root_dir = os.path.dirname(script_dir)
+    def copy_mirror(destination):
+        if os.path.abspath(dst) != os.path.abspath(destination):
+            shutil.copy2(dst, destination)
+
     if os.path.exists(web_dir):
-        shutil.copy2(dst, os.path.join(web_dir, f"mk21play_{app_version}_all.ipk"))
-        shutil.copy2(dst, os.path.join(web_dir, "mk21.ipk"))
-    shutil.copy2(dst, os.path.join(root_dir, "mk21.ipk"))
-    shutil.copy2(dst, os.path.join(script_dir, "mk21.ipk"))
-    shutil.copy2(dst, os.path.join(script_dir, "mk21-tv.ipk"))
-    shutil.copy2(dst, os.path.join(script_dir, "com.fbg2.mk21streaming_1.1.0_all.ipk"))
+        copy_mirror(os.path.join(web_dir, f"mk21play_{app_version}_all.ipk"))
+        copy_mirror(os.path.join(web_dir, "mk21.ipk"))
+    copy_mirror(os.path.join(root_dir, "mk21.ipk"))
+    copy_mirror(os.path.join(script_dir, "mk21.ipk"))
+    copy_mirror(os.path.join(script_dir, "mk21-tv.ipk"))

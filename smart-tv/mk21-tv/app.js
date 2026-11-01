@@ -19,6 +19,53 @@ const Mk21DnsResolver = {
 // MK21 PLAY v1.4.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
+const playerLibraryPromises = Object.create(null);
+
+function loadPlayerLibrary(globalName, src) {
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  if (playerLibraryPromises[globalName]) return playerLibraryPromises[globalName];
+
+  playerLibraryPromises[globalName] = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const timeout = setTimeout(() => {
+      script.onload = null;
+      script.onerror = null;
+      script.remove();
+      reject(new Error(`${globalName} indisponível após 8 segundos.`));
+    }, 8000);
+    script.async = true;
+    script.src = src;
+    script.onload = () => {
+      clearTimeout(timeout);
+      if (window[globalName]) resolve(window[globalName]);
+      else reject(new Error(`${globalName} não foi inicializado pelo script.`));
+    };
+    script.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error(`Falha ao carregar ${globalName}.`));
+    };
+    document.head.appendChild(script);
+  }).catch(error => {
+    delete playerLibraryPromises[globalName];
+    throw error;
+  });
+
+  return playerLibraryPromises[globalName];
+}
+
+async function loadPlayerLibraryForPlayback(globalName, src, signal) {
+  let onAbort;
+  const aborted = new Promise(resolve => {
+    onAbort = () => resolve(null);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([loadPlayerLibrary(globalName, src), aborted]);
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
 
 window.addEventListener('error', function (event) {
   const target = event && event.target;
@@ -342,12 +389,24 @@ async function searchFromIndexedCatalog(query) {
   if (!srv) return;
   const group = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
   const found = await searchCatalogIndex(srv.id, type, query, group, 240);
-  if (generation !== searchIndexGeneration) return;
+  const activeServer = SERVERS[currentServerIndex];
+  const activeGroup = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
+  if (generation !== searchIndexGeneration || type !== currentContentType ||
+      !activeServer || activeServer.id !== srv.id || group !== activeGroup) return;
   const inputVal = ($('inputSearch') && $('inputSearch').value || '').toLowerCase().trim();
   if (inputVal !== query) return;
-  currentFilteredItems = found;
+  const catalog = allCatalog[type] || (allCatalog[type] = []);
+  const knownUrls = new Set(catalog.map(item => item.url));
+  found.forEach(item => {
+    if (!knownUrls.has(item.url)) {
+      catalog.push(item);
+      knownUrls.add(item.url);
+    }
+  });
+  categoryMapCache.clear();
+  buildCurrentCategories();
+  renderCategoriesList();
   itemsDisplayLimit = 240;
-  $('badgeItemsCount').textContent = currentFilteredItems.length;
   renderItemsList();
 }
 
@@ -418,6 +477,7 @@ async function loadMoreIndexedItems() {
       const known = new Set(arr.map(it => it.url));
       page.forEach(item => { if (!known.has(item.url)) arr.push(item); });
       itemsDisplayLimit += 60;
+      categoryMapCache.clear();
       buildCurrentCategories();
       renderCategoriesList();
       renderItemsList();
@@ -568,9 +628,9 @@ function scheduleSearchRender() {
     const input = $('inputSearch');
     const query = input ? input.value.toLowerCase().trim() : '';
     currentSearchQuery = query;
-    renderItemsList();
     if (query) {
-      searchFromIndexedCatalog(query);
+      renderItemsList();
+      if (currentFilteredItems.length === 0) searchFromIndexedCatalog(query);
     } else {
       buildCurrentCategories();
       renderCategoriesList();
@@ -601,11 +661,56 @@ let currentPlaybackSpeed = 1;
 const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 // Categorias e Itens da Aba Ativa
-let currentCategoriesMap = {};
+let currentCategoriesMap = Object.create(null);
 let currentCategoryKeys = [];
 let activeCategoryKey = 'ALL';
 let currentFilteredItems = [];
 let currentGroupedSeries = []; // Agrupamento de séries para a aba SÉRIES
+const sortedCatalogCache = new WeakMap();
+const groupedSeriesCache = new WeakMap();
+const catalogNameCollator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+
+function getSortedCatalogItems(items, order, cacheResult) {
+  if (order === 'DEFAULT') return items;
+
+  let orderCache = cacheResult ? sortedCatalogCache.get(items) : null;
+  if (orderCache && orderCache.has(order)) return orderCache.get(order);
+
+  const sorted = items.slice();
+  if (order === 'RECENT') {
+    sorted.reverse();
+  } else if (order === 'AZ') {
+    sorted.sort((a, b) => catalogNameCollator.compare(a.name || '', b.name || ''));
+  } else if (order === 'ZA') {
+    sorted.sort((a, b) => catalogNameCollator.compare(b.name || '', a.name || ''));
+  } else if (order === 'YEAR') {
+    const years = new Map();
+    const yearFor = item => {
+      if (!years.has(item)) {
+        const match = String(item.name || '').match(/\b((?:19|20)\d{2})\b/);
+        years.set(item, match ? parseInt(match[1], 10) : 0);
+      }
+      return years.get(item);
+    };
+    sorted.sort((a, b) => {
+      const yearA = yearFor(a);
+      const yearB = yearFor(b);
+      if (yearA && yearB && yearA !== yearB) return yearB - yearA;
+      if (yearA && !yearB) return -1;
+      if (!yearA && yearB) return 1;
+      return catalogNameCollator.compare(a.name || '', b.name || '');
+    });
+  }
+
+  if (cacheResult) {
+    if (!orderCache) {
+      orderCache = new Map();
+      sortedCatalogCache.set(items, orderCache);
+    }
+    orderCache.set(order, sorted);
+  }
+  return sorted;
+}
 
 // Gerenciador de Navegação do Controle Remoto LG
 let activeZone = 'channels'; // 'header', 'categories', 'channels', 'player', 'settings', 'modalServerPicker', 'modalSeries', 'modalPin'
@@ -879,7 +984,7 @@ function determineType(name, category, url) {
 const SERIES_CLEAN_REGEX = /(?:\s*[-–:]?\s*(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\s*[-–:]?\s*\b\d{1,3}x\d{1,4}\b|\s*[-–:]?\s*\bs\d{1,3}e\d{1,4}\b|\s*[-–:]?\s*\bt\d{1,3}e\d{1,4}\b|\s*[-–:]?\s*\btemp\.\s*\d+\s*ep\.\s*\d+\b|\s*[-–:]?\s*\btemporada\s*\d+\b.*)/i;
 
 function groupSeriesItems(items) {
-  const map = {};
+  const map = Object.create(null);
 
   items.forEach(it => {
     let seriesTitle = it.name;
@@ -918,7 +1023,7 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   if (!targetUrl.includes('get.php') && !targetUrl.includes('.m3u') && !targetUrl.includes('.ts') && !targetUrl.includes('.m3u8')) {
     targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(savedUser)}&password=${encodeURIComponent(savedPass)}&type=m3u_plus&output=ts`;
   }
-  console.log('[MK21] Streaming da lista:', targetUrl.replace(savedPass, '***'));
+  console.log('[MK21] Streaming da lista:', getSourceHostLabel(targetUrl));
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
   try {
@@ -1159,6 +1264,7 @@ function showLoadingFailure(error, serverName) {
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
   const loadId = ++serverLoadGeneration;
+  categoryMapCache.clear();
   isLoadingServerPlaylist = true;
   if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
   activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -1509,11 +1615,12 @@ async function loadServer(forceRefresh = false) {
 function buildCurrentCategories() {
   const serverId = (SERVERS[currentServerIndex] || {}).id || '';
   const isCacheable = !isLoadingServerPlaylist && ['LIVE', 'MOVIE', 'SERIES'].includes(currentContentType);
+  const showAdultContent = canShowAdultContent();
   let hiddenCats = [];
   try {
     hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
   } catch (e) {}
-  const cacheKey = `${currentContentType}|${serverId}|${canShowAdultContent()}|${JSON.stringify(hiddenCats)}`;
+  const cacheKey = `${currentContentType}|${serverId}|${showAdultContent}|${JSON.stringify(hiddenCats)}`;
   if (isCacheable && categoryMapCache.has(cacheKey)) {
     const cached = categoryMapCache.get(cacheKey);
     currentCategoriesMap = cached.map;
@@ -1521,12 +1628,22 @@ function buildCurrentCategories() {
     return;
   }
 
-  currentCategoriesMap = { 'ALL': [] };
+  currentCategoriesMap = Object.create(null);
+  currentCategoriesMap['ALL'] = [];
   currentCategoryKeys = ['ALL'];
 
   let sourceItems = [];
   if (currentContentType === 'FAVORITES') {
-    sourceItems = indexedFavoriteResults.length ? indexedFavoriteResults : [...allCatalog.LIVE, ...allCatalog.MOVIE, ...allCatalog.SERIES].filter(i => favoriteUrls.has(i.url));
+    if (indexedFavoriteResults.length) {
+      sourceItems = indexedFavoriteResults;
+    } else {
+      sourceItems = [];
+      [allCatalog.LIVE, allCatalog.MOVIE, allCatalog.SERIES].forEach(items => {
+        items.forEach(item => {
+          if (favoriteUrls.has(item.url)) sourceItems.push(item);
+        });
+      });
+    }
   } else if (currentContentType === 'CONTINUE') {
     sourceItems = continueWatchingList;
   } else {
@@ -1545,7 +1662,7 @@ function buildCurrentCategories() {
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
     const grp = item.group || 'Geral';
-    if (!canShowAdultContent() && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
+    if (!showAdultContent && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
     if (hiddenCats.includes(grp)) continue;
 
     currentCategoriesMap['ALL'].push(item);
@@ -1577,8 +1694,9 @@ function renderCategoriesList() {
     (currentContentType === 'SERIES' ? '🍿 Gêneros Séries' :
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')));
 
+  const showAdultContent = canShowAdultContent();
   currentCategoryKeys.forEach((k, idx) => {
-    if (!canShowAdultContent() && isAdult(k)) return;
+    if (!showAdultContent && isAdult(k)) return;
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
@@ -1645,38 +1763,11 @@ function renderItemsList() {
   const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
   const indexedMoreAvailable = Object.prototype.hasOwnProperty.call(indexedOffsets, indexedPageKey);
 
-  // Evita duplicar o array inteiro quando a categoria está na ordem padrão.
-  // Em listas com centenas de milhares de itens isso reduz um pico de memória
-  // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
-  let items = query ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query))) : base;
-  if (!canShowAdultContent()) {
-    items = items.filter(c => !c.isAdult && !isAdult(c.name) && !isAdult(c.group));
-  }
-
-  // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
-  function mk21ExtractYear(name) {
-    const m = String(name || '').match(/\b((?:19|20)\d{2})\b/);
-    return m ? parseInt(m[1], 10) : 0;
-  }
-  if (currentSortOrder === 'AZ') {
-    items = items.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
-  } else if (currentSortOrder === 'ZA') {
-    items = items.slice().sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
-  } else if (currentSortOrder === 'RECENT') {
-    // Ordem da lista invertida (últimos da playlist primeiro)
-    items = items.slice().reverse();
-  } else if (currentSortOrder === 'YEAR') {
-    // Por ano no título (mais recente primeiro); sem ano no fim
-    items = items.slice().sort((a, b) => {
-      const ya = mk21ExtractYear(a.name);
-      const yb = mk21ExtractYear(b.name);
-      if (ya && yb && ya !== yb) return yb - ya;
-      if (ya && !yb) return -1;
-      if (!ya && yb) return 1;
-      return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
-    });
-  }
-  // DEFAULT: mantém ordem original da categoria
+  const items = query
+    ? getSortedCatalogItems(base.filter(c =>
+      (c.name && c.name.toLowerCase().includes(query)) ||
+      (c.normalizedName && c.normalizedName.includes(query))), currentSortOrder, false)
+    : getSortedCatalogItems(base, currentSortOrder, true);
 
   currentFilteredItems = items;
   $('badgeItemsCount').textContent = currentFilteredItems.length;
@@ -1693,7 +1784,11 @@ function renderItemsList() {
 
   // Se for a aba SÉRIES (e não for busca avulsa), exibir agrupado por série estilo Netflix!
   if (currentContentType === 'SERIES' && query.length === 0) {
-    currentGroupedSeries = groupSeriesItems(currentFilteredItems);
+    currentGroupedSeries = groupedSeriesCache.get(currentFilteredItems);
+    if (!currentGroupedSeries) {
+      currentGroupedSeries = groupSeriesItems(currentFilteredItems);
+      groupedSeriesCache.set(currentFilteredItems, currentGroupedSeries);
+    }
     $('badgeItemsCount').textContent = currentGroupedSeries.length + ' séries';
 
     const limit = Math.min(currentGroupedSeries.length, itemsDisplayLimit);
@@ -1713,8 +1808,6 @@ function renderItemsList() {
       poster.loading = 'lazy';
       poster.decoding = 'async';
       if (representativeEpisode) poster.dataset.catalogUrl = representativeEpisode.url;
-      poster.src = (representativeEpisode && (representativeEpisode.poster || representativeEpisode.logo)) ||
-        generateSvgLogoPlaceholder(seriesObj.title);
       poster.onerror = () => {
         poster.onerror = null;
         poster.src = generateSvgLogoPlaceholder(seriesObj.title);
@@ -1722,6 +1815,8 @@ function renderItemsList() {
           fetchTmdbMetadata(representativeEpisode);
         }
       };
+      poster.src = (representativeEpisode && (representativeEpisode.poster || representativeEpisode.logo)) ||
+        generateSvgLogoPlaceholder(seriesObj.title);
       btn.appendChild(poster);
       const spanTitle = document.createElement('span');
       spanTitle.textContent = '🍿 ' + seriesObj.title;
@@ -1745,7 +1840,7 @@ function renderItemsList() {
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Séries (+150 de ${currentGroupedSeries.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Séries (+60 de ${currentGroupedSeries.length - limit} restantes)...`;
       moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
@@ -1769,10 +1864,10 @@ function renderItemsList() {
       img.className = 'channel-logo';
       const fallbackSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52"><rect width="52" height="52" rx="8" fill="#1e1f26"/><circle cx="26" cy="26" r="16" fill="#141828"/><polygon points="23,19 33,26 23,33" fill="#ffd54f"/></svg>');
       img.dataset.catalogUrl = item.url;
-      img.src = item.poster || (item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg);
       img.alt = item.name;
       img.loading = 'lazy';
       img.decoding = 'async';
+      img.src = item.poster || (item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg);
       img.onerror = function() {
         this.onerror = null;
         this.src = fallbackSvg;
@@ -1847,7 +1942,7 @@ function renderItemsList() {
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Itens (+150 de ${currentFilteredItems.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Itens (+60 de ${currentFilteredItems.length - limit} restantes)...`;
       moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
@@ -2157,7 +2252,7 @@ async function updateSmartTvEpg(item) {
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${sim.timeStr}`;
   if ($('previewEpgNow')) $('previewEpgNow').textContent = `NO AR: ${sim.title}`;
   if ($('previewEpgNext')) $('previewEpgNext').textContent = `A SEGUIR: ${sim.nextTitle}`;
-  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${sim.title}</b>`;
+  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${escapeHtml(sim.title)}</b>`;
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${sim.progressPercent}%`;
   if ($('epgNext')) $('epgNext').textContent = `A seguir: ${sim.nextTitle}`;
@@ -2279,13 +2374,13 @@ function applyRealSmartTvEpg(item, listings) {
 
   if ($('epgTitle')) $('epgTitle').textContent = `▶ ${item.name}`;
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${startH} - ${stopH}`;
-  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${current.title}</b>`;
+  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${escapeHtml(current.title)}</b>`;
   if ($('previewEpgNext')) {
     const nextH = next ? new Date(next.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '--:--';
     $('previewEpgNext').textContent = `A SEGUIR (${nextH}): ${next ? next.title : 'Programação Normal'}`;
   }
   if ($('epgStatus')) {
-    $('epgStatus').innerHTML = `🔴 NO AR: <b>${current.title}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
+    $('epgStatus').innerHTML = `🔴 NO AR: <b>${escapeHtml(current.title)}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
   }
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${pct}%`;
@@ -2768,8 +2863,8 @@ function renderOmnisearchResults() {
         <span class="omnisearch-type-badge ${typeBadgeClass}">${typeLabel}</span>
         <span style="font-size:12px; color:#ffd54f;">${item.isAdult ? '+18' : ''}</span>
       </div>
-      <div class="omnisearch-item-name">${item.name}</div>
-      <div class="omnisearch-item-group">${item.group || 'Geral'}</div>
+      <div class="omnisearch-item-name">${escapeHtml(item.name)}</div>
+      <div class="omnisearch-item-group">${escapeHtml(item.group || 'Geral')}</div>
     `;
 
     btn.onclick = () => {
@@ -2822,8 +2917,8 @@ function openEpgGuideModal() {
         <div class="epg-schedule-row ${isNow ? 'active-now' : ''}">
           <div class="epg-time-col">${startH} - ${stopH} ${isNow ? '<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span>' : ''}</div>
           <div class="epg-details-col">
-            <div class="epg-sched-title">${l.title}</div>
-            <div class="epg-sched-desc">${l.desc || 'Sem sinopse disponível.'}</div>
+            <div class="epg-sched-title">${escapeHtml(l.title)}</div>
+            <div class="epg-sched-desc">${escapeHtml(l.desc || 'Sem sinopse disponível.')}</div>
           </div>
         </div>
       `;
@@ -2841,8 +2936,8 @@ function openEpgGuideModal() {
       <div class="epg-schedule-row active-now">
         <div class="epg-time-col">${h1} - ${h2}<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span></div>
         <div class="epg-details-col">
-          <div class="epg-sched-title">${activeItem.name} - Ao Vivo</div>
-          <div class="epg-sched-desc">Transmissão em tempo real da categoria ${activeItem.group || 'Geral'}.</div>
+          <div class="epg-sched-title">${escapeHtml(activeItem.name)} - Ao Vivo</div>
+          <div class="epg-sched-desc">Transmissão em tempo real da categoria ${escapeHtml(activeItem.group || 'Geral')}.</div>
         </div>
       </div>
       <div class="epg-schedule-row">
@@ -3666,8 +3761,33 @@ function playStream(
 
   const isM3U8 = streamUrl.toLowerCase().includes('.m3u8');
   const isTS = streamUrl.toLowerCase().includes('.ts');
+  const useNativePlayback = shouldUseNativeWebOsPlayback();
 
-  if (isM3U8 && !shouldUseNativeWebOsPlayback() && window.Hls && Hls.isSupported()) {
+  if (isM3U8 && !useNativePlayback && !window.Hls) {
+    try {
+      await loadPlayerLibraryForPlayback(
+        'Hls',
+        'https://cdn.jsdelivr.net/npm/hls.js@1.5.20',
+        currentSignal
+      );
+    } catch (error) {
+      addDevLog(`[Player] HLS.js indisponível; tentando player nativo: ${error.message}`, 'warn');
+    }
+    if (currentSignal.aborted || requestGeneration !== playbackGeneration) return;
+  } else if (isTS && !useNativePlayback && !window.mpegts) {
+    try {
+      await loadPlayerLibraryForPlayback(
+        'mpegts',
+        'https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js',
+        currentSignal
+      );
+    } catch (error) {
+      addDevLog(`[Player] MPEG-TS indisponível; tentando player nativo: ${error.message}`, 'warn');
+    }
+    if (currentSignal.aborted || requestGeneration !== playbackGeneration) return;
+  }
+
+  if (isM3U8 && !useNativePlayback && window.Hls && Hls.isSupported()) {
     addDevLog('[Player Engine] Usando decodificador Hls.js Low-Latency...', 'info');
     hlsInstance = new Hls({
       enableWorker: true,
@@ -3722,7 +3842,7 @@ function playStream(
         }
       }
     });
-  } else if (isTS && !shouldUseNativeWebOsPlayback() && window.mpegts && mpegts.isSupported()) {
+  } else if (isTS && !useNativePlayback && window.mpegts && mpegts.isSupported()) {
     addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
     try {
       mpegtsPlayer = mpegts.createPlayer({
@@ -4989,7 +5109,7 @@ function renderCategoriesManagerPanel() {
         const count = (currentCategoriesMap[c] || []).length;
         return `
           <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:12px 18px; border-radius:8px;">
-            <span style="font-size:16px; color:#fff;">${c} <span style="color:#ffd54f; font-size:13px;">(${count} canais)</span></span>
+            <span style="font-size:16px; color:#fff;">${escapeHtml(c)} <span style="color:#ffd54f; font-size:13px;">(${count} canais)</span></span>
             <input type="checkbox" class="chk-cat-toggle" data-cat="${encodeURIComponent(c)}" ${isVisible ? 'checked' : ''} style="width:22px; height:22px;">
           </div>
         `;
@@ -5251,7 +5371,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.3.11';
+const BASE_PACKAGE_VERSION = '2.3.12';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5307,10 +5427,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2310,
+        versionCode: 2312,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
-        releaseNotes: '• Layout Smart TV reorganizado com navegação lateral e cartões para filmes e séries.\n• Fontes alternativas M3U agrupadas, seleção manual, fallback automático e retomada da reprodução.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.11_all.ipk',
+        releaseNotes: '• Inicialização mais rápida, carregando o catálogo antes dos módulos de reprodução externos.\n• Reduz trabalho repetido na lista, melhora carregamento de imagens e corrige atualização do catálogo em cache.',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.12_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6090,11 +6210,12 @@ function startNativeVoiceSearch() {
     if (input) {
       input.value = text;
       try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {
-        currentCategoriesMap = { ALL: [] };
-      currentFilteredItems = [];
-      currentGroupedSeries = [];
-      if (typeof buildCurrentCategories === 'function') buildCurrentCategories();
-      if (typeof renderItemsList === 'function') renderItemsList();
+        currentCategoriesMap = Object.create(null);
+        currentCategoriesMap.ALL = [];
+        currentFilteredItems = [];
+        currentGroupedSeries = [];
+        if (typeof buildCurrentCategories === 'function') buildCurrentCategories();
+        if (typeof renderItemsList === 'function') renderItemsList();
       }
     }
     if (typeof showChannelBanner === 'function') showChannelBanner('Busca: ' + text);
@@ -6290,7 +6411,7 @@ if (typeof document !== 'undefined') {
   }, false);
 }
 
-window.addEventListener('load', () => {
+function initializeMk21App() {
   ensureSharedCredentialsStored();
   document.body.classList.toggle('amoled-mode', localStorage.getItem('mk21_amoled_mode') === 'true');
   const player = $('tvPlayer');
@@ -6332,7 +6453,13 @@ window.addEventListener('load', () => {
     if ($('tabLive')) $('tabLive').focus();
     else focusActiveElement();
   });
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeMk21App, { once: true });
+} else {
+  initializeMk21App();
+}
 
 /** v1.4.1 - Phased Loading & Omnisearch Synergy **/
 function showSyncStatus(percent, isSyncing) {
