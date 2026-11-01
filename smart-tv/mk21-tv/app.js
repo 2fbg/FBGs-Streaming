@@ -3147,6 +3147,14 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
       const code = mediaError ? mediaError.code : 'desconhecido';
       const detail = mediaError && mediaError.message ? mediaError.message : 'sem detalhe do navegador';
       addDevLog(`[Player] Erro de mídia nativo (código ${code}): ${detail}`, 'error');
+      const sourceUrl = activePlaybackUrl;
+      if (shouldUseNativeWebOsPlayback() && sourceUrl &&
+          getHlsFallbackUrl(sourceUrl) !== sourceUrl && nativeHlsFallbackSource !== sourceUrl) {
+        nativeHlsFallbackSource = sourceUrl;
+        addDevLog('[Player] Stream TS não suportado nativamente; tentando a versão HLS.', 'warn');
+        fallbackToHls(activeItem, sourceUrl);
+        return;
+      }
       triggerAutoReconnect('Erro nativo de reprodução');
     });
   }
@@ -3288,6 +3296,8 @@ let playAbortController = null;
 let activePlaybackSourceIndex = 0;
 let attemptedPlaybackSourceIndexes = new Set();
 let playbackGeneration = 0;
+let nativeHlsFallbackSource = null;
+let activePlaybackUrl = null;
 
 function shouldUseNativeWebOsPlayback() {
   const userAgent = navigator.userAgent || '';
@@ -3558,6 +3568,14 @@ function safeVideoPlay(video) {
   return Promise.resolve();
 }
 
+function getHlsFallbackUrl(sourceUrl) {
+  const suffixIndex = sourceUrl.search(/[?#]/);
+  const path = suffixIndex < 0 ? sourceUrl : sourceUrl.slice(0, suffixIndex);
+  const suffix = suffixIndex < 0 ? '' : sourceUrl.slice(suffixIndex);
+  if (!/\.ts$/i.test(path)) return sourceUrl;
+  return path.replace(/\.ts$/i, '.m3u8') + suffix;
+}
+
 function stopCurrentPlayer(preservePendingRequest = false) {
   if (playAbortController && !preservePendingRequest) {
     try { playAbortController.abort(); } catch (e) {}
@@ -3591,7 +3609,8 @@ function stopCurrentPlayer(preservePendingRequest = false) {
 
 function fallbackToHls(item, sourceUrl = item && item.url) {
   if (!item || !sourceUrl) return;
-  const hlsUrl = sourceUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
+  const hlsUrl = getHlsFallbackUrl(sourceUrl);
+  activePlaybackUrl = hlsUrl;
   addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${getSourceHostLabel(hlsUrl)}`, 'info');
   stopCurrentPlayer();
   const video = $('tvPlayer');
@@ -3649,6 +3668,7 @@ function playStream(
   preserveReconnectAttempts = false
 ) {
   if (!item || !item.url) return;
+  if (!preserveReconnectAttempts) nativeHlsFallbackSource = null;
   if (!isSwitchingServerSource) pendingServerSourceSwitch = null;
 
   const sources = MK21AlternativeSources.sourceUrls(item);
@@ -3754,10 +3774,11 @@ function playStream(
   showChannelBanner(item.name);
 
   let streamUrl = selectedUrl;
-  if (streamFormatPref === 'hls' && streamUrl.toLowerCase().includes('.ts')) {
-    streamUrl = streamUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
+  if (streamFormatPref === 'hls' && getHlsFallbackUrl(streamUrl) !== streamUrl) {
+    streamUrl = getHlsFallbackUrl(streamUrl);
     addDevLog(`[Player] Preferência HLS forçada para ${getSourceHostLabel(streamUrl)}`, 'info');
   }
+  activePlaybackUrl = streamUrl;
 
   const isM3U8 = streamUrl.toLowerCase().includes('.m3u8');
   const isTS = streamUrl.toLowerCase().includes('.ts');
@@ -5371,7 +5392,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.3.12';
+const BASE_PACKAGE_VERSION = '2.3.13';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5427,10 +5448,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2312,
+        versionCode: 2313,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Inicialização mais rápida, carregando o catálogo antes dos módulos de reprodução externos.\n• Reduz trabalho repetido na lista, melhora carregamento de imagens e corrige atualização do catálogo em cache.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.12_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.13_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };

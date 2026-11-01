@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.3.12">
+  <link rel="stylesheet" href="styles.css?v=2.3.13">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
   <style id="mk21-ota-override-css"></style>
   <script src="core/AlternativeSources.js"></script>
@@ -538,11 +538,22 @@
         var otaCode = localStorage.getItem('mk21_ota_app_js');
         var otaVer = localStorage.getItem('mk21_ota_app_version');
         var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        if (otaCss) {
-          var el = document.getElementById('mk21-ota-override-css');
-          if (el) el.textContent = otaCss;
-        }
-        if (otaCode && otaVer && otaCode.length > 5000) {
+        var currentPackageVersion = '2.3.13';
+        var compareVersions = function(a, b) {
+          var left = String(a || '0.0.0').replace(/[^0-9.]/g, '').split('.');
+          var right = String(b || '0.0.0').replace(/[^0-9.]/g, '').split('.');
+          for (var i = 0; i < 3; i++) {
+            var leftPart = parseInt(left[i], 10) || 0;
+            var rightPart = parseInt(right[i], 10) || 0;
+            if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
+          }
+          return 0;
+        };
+        if (otaCode && otaVer && compareVersions(otaVer, currentPackageVersion) > 0 && otaCode.length > 5000) {
+          if (otaCss) {
+            var el = document.getElementById('mk21-ota-override-css');
+            if (el) el.textContent = otaCss;
+          }
           try {
             var blob = new Blob([otaCode], { type: 'application/javascript' });
             var blobUrl = URL.createObjectURL(blob);
@@ -550,7 +561,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.3.12';
+              fallback.src = 'app.js?v=2.3.13';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -567,7 +578,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.3.12';
+      s.src = 'app.js?v=2.3.13';
       document.body.appendChild(s);
     })();
   </script>

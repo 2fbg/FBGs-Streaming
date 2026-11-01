@@ -1,12 +1,12 @@
 {
-  "version": "2.3.12",
-  "versionCode": 2312,
-  "tagName": "v2.3.12",
-  "name": "MK21 MultiServidor v2.3.12",
-  "title": "MK21 Play v2.3.12",
-  "releaseNotes": "• IPK: inicia o carregamento do catálogo sem esperar imagens e bibliotecas externas do player.\n• IPK: evita reordenar e reagrupar listas em cada renderização e reduz requisições de imagens fora da tela.\n• IPK: corrige a atualização das categorias após sincronizar e protege textos externos exibidos no EPG e na busca.",
-  "body": "• IPK: inicia o carregamento do catálogo sem esperar imagens e bibliotecas externas do player.\n• IPK: evita reordenar e reagrupar listas em cada renderização e reduz requisições de imagens fora da tela.\n• IPK: corrige a atualização das categorias após sincronizar e protege textos externos exibidos no EPG e na busca.",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.12_all.ipk",
+  "version": "2.3.13",
+  "versionCode": 2313,
+  "tagName": "v2.3.13",
+  "name": "MK21 MultiServidor v2.3.13",
+  "title": "MK21 Play v2.3.13",
+  "releaseNotes": "• Smart TV: tenta HLS automaticamente quando o player nativo da webOS falha ao abrir um fluxo TS.\n• Smart TV: melhora a visibilidade das barras de rolagem em listas e painéis.\n• Smart TV: descarta código OTA em cache mais antigo que a versão instalada para aplicar as correções do pacote.",
+  "body": "• Smart TV: tenta HLS automaticamente quando o player nativo da webOS falha ao abrir um fluxo TS.\n• Smart TV: melhora a visibilidade das barras de rolagem em listas e painéis.\n• Smart TV: descarta código OTA em cache mais antigo que a versão instalada para aplicar as correções do pacote.",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.13_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "apkSha256": "3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce",
@@ -16,6 +16,6 @@
   "updatedAt": "2026-11-01",
   "sha256": "3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce",
   "breakingChanges": "",
-  "versionName": "2.3.12",
-  "changelog": "• IPK: inicia o carregamento do catálogo sem esperar imagens e bibliotecas externas do player.\n• IPK: evita reordenar e reagrupar listas em cada renderização e reduz requisições de imagens fora da tela.\n• IPK: corrige a atualização das categorias após sincronizar e protege textos externos exibidos no EPG e na busca."
+  "versionName": "2.3.13",
+  "changelog": "• Smart TV: tenta HLS automaticamente quando o player nativo da webOS falha ao abrir um fluxo TS.\n• Smart TV: melhora a visibilidade das barras de rolagem em listas e painéis.\n• Smart TV: descarta código OTA em cache mais antigo que a versão instalada para aplicar as correções do pacote."
 }

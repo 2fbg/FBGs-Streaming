@@ -2,6 +2,12 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.3.13] - 2026-11-01
+
+- **Smart TV/webOS:** tenta automaticamente a URL HLS equivalente quando o player nativo falha ao abrir um fluxo `.ts`.
+- **Smart TV:** reforça a visibilidade das barras de rolagem nos painéis de canais, categorias e configurações.
+- **Smart TV/webOS:** ignora código e CSS OTA em cache mais antigos que a versão instalada, evitando que substituam correções recentes.
+
 ## [2.3.12] - 2026-11-01
 
 - **Smart TV/webOS:** inicia a aplicação e o carregamento da lista sem aguardar imagens e bibliotecas externas do player.

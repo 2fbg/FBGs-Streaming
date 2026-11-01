@@ -290,23 +290,27 @@ body {
 
 /* Barra de Rolagem Visível e Otimizada para Smart TV */
 ::-webkit-scrollbar {
-  width: 12px;
+  width: 14px;
+  height: 14px;
   display: block !important;
+  -webkit-appearance: none;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(242, 196, 92, 0.72);
+  min-height: 40px;
+  background-color: rgba(242, 196, 92, 0.85);
   border: 3px solid transparent;
   background-clip: padding-box;
   border-radius: 12px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 152, 0, 0.85);
+  background-color: rgba(255, 152, 0, 0.85);
 }
 
 .col-categories,
@@ -2099,6 +2103,20 @@ body {
   background:
     radial-gradient(ellipse at 75% 0%, rgba(35, 75, 110, 0.18), transparent 42%),
     var(--tv-bg);
+}
+
+html {
+    scrollbar-color: rgba(242, 196, 92, 0.85) rgba(255, 255, 255, 0.08);
+    scrollbar-width: thin;
+}
+
+.pane-scroll,
+.col-player,
+.settings-left-menu,
+.settings-detail-panel {
+    scrollbar-color: rgba(242, 196, 92, 0.85) rgba(255, 255, 255, 0.08);
+    scrollbar-width: thin;
+    scrollbar-gutter: stable;
 }
 
 .app-sidebar {
