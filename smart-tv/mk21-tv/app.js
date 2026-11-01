@@ -2923,6 +2923,7 @@ let stallWatchdogInterval = null;
 let lastVideoCurrentTime = -1;
 let stallCount = 0;
 let isAutoReconnecting = false;
+let autoReconnectExhausted = false;
 let autoReconnectAttempts = 0;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
 
@@ -2956,7 +2957,7 @@ function stopStallWatchdog() {
 }
 
 function triggerAutoReconnect(cause) {
-  if (isAutoReconnecting || !activeItem) return;
+  if (isAutoReconnecting || autoReconnectExhausted || !activeItem) return;
   isAutoReconnecting = true;
   autoReconnectAttempts++;
 
@@ -2980,6 +2981,8 @@ function triggerAutoReconnect(cause) {
     if ($('epgStatus')) $('epgStatus').textContent = sources.length > 1
       ? '⚠️ Todas as fontes falharam'
       : '⚠️ FORA DO AR';
+    autoReconnectExhausted = true;
+    stopStallWatchdog();
     isAutoReconnecting = false;
     return;
   }
@@ -3020,6 +3023,7 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
   stallCount = 0;
   if (!preserveReconnectAttempts) autoReconnectAttempts = 0;
   isAutoReconnecting = false;
+  autoReconnectExhausted = false;
   hidePlayerReconnectBadge();
 
   const video = $('tvPlayer');
@@ -3040,6 +3044,7 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
       autoReconnectAttempts = 0;
       attemptedPlaybackSourceIndexes = new Set([activePlaybackSourceIndex]);
       isAutoReconnecting = false;
+      autoReconnectExhausted = false;
       hidePlayerReconnectBadge();
     });
     video.addEventListener('error', (e) => {
