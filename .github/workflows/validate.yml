@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Permite reexecutar o workflow com os secrets atuais (ex.: apos cadastrar a keystore).
+  workflow_dispatch:
 
 permissions:
   contents: read
