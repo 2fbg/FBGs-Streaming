@@ -1,11 +1,11 @@
-# FBGs-Streaming (MK21 MultiServidor) — v2.3.7
+# FBGs-Streaming (MK21 MultiServidor) — v2.3.13
 
 <div align="center">
   <img src="web/icon-192.png" alt="MK21 Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v2.3.7-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.3.13-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -18,8 +18,8 @@
 
 | Plataforma | Pacote / Binário | SHA-256 |
 |---|---|---|
-| **Android APK v2.3.7** | [`mk21.apk`](mk21.apk) | `3d74531ee39f2ae7b53c9105bd3e2091d01136a10af04229b8d675aec5cc5fce` |
-| **LG webOS Smart TV v2.3.13** | [`mk21play_2.3.13_all.ipk`](smart-tv/mk21play_2.3.13_all.ipk) | `11d87924f0e6960a4e8761f4c1b5dff73b183476ef74c3e9e174f5ee523d5e21` |
+| **Android APK v2.3.13** | [`mk21.apk`](mk21.apk) | `195c7b9746a1c25ec72ee252a84c35547e1bf3d90bad84bae2279d4c4fafc0ae` |
+| **LG webOS Smart TV v2.3.13** | [`mk21play_2.3.13_all.ipk`](smart-tv/mk21play_2.3.13_all.ipk) | `dd4a31d397da74f4fe602ed2d518ce62cf63ad929791c9a5c2950dbb59722983` |
 | **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---
@@ -55,3 +55,52 @@
 ### Web PWA (`/web` e `/`)
 - **Single Page Application**: HTML5 + Vanilla JS moderno com suporte PWA, Service Worker (`sw.js`) e IndexedDB.
 - **Proxy Anti-CORS**: `/api/proxy.js` com streaming chunked e cabeçalhos CORS completos.
+
+---
+
+## 🔐 Assinatura do APK e Secrets do CI
+
+O workflow [`.github/workflows/validate.yml`](.github/workflows/validate.yml) roda os testes, compila o Android, empacota o `.ipk` e carimba os hashes. Com os secrets abaixo cadastrados em **Settings → Secrets and variables → Actions**, o APK publicado no artifact sai como **release assinado**. Sem eles (por exemplo, em PRs vindos de forks, onde secrets não são expostos), o job continua verde e publica um APK **debug**, com o resumo identificando isso explicitamente.
+
+| Secret | Obrigatório | Conteúdo |
+|---|---|---|
+| `ANDROID_KEYSTORE_BASE64` | sim | keystore de upload codificada em base64 |
+| `STORE_PASSWORD` | sim | senha do keystore |
+| `KEY_PASSWORD` | não | senha da chave; se vazia, assume `STORE_PASSWORD` |
+| `KEY_ALIAS` | não | alias da chave de upload; padrão `upload` |
+
+### Como gerar o base64 da keystore
+
+```bash
+# Linux
+base64 -w0 my-upload-key.jks > my-upload-key.jks.b64
+
+# macOS
+base64 -i my-upload-key.jks -o my-upload-key.jks.b64
+```
+
+Abra o `.b64`, copie todo o conteúdo e cole no valor do secret `ANDROID_KEYSTORE_BASE64`. Quebras de linha no meio do texto não atrapalham — o CI decodifica com `base64 --decode`. A keystore e o `.b64` **nunca** devem ser versionados; mantenha-os fora do repositório e guarde um backup seguro da chave.
+
+### Conferir o caminho de assinatura localmente
+
+```bash
+STORE_PASSWORD='sua-senha' \
+KEY_PASSWORD='sua-senha' \
+KEY_ALIAS=upload \
+KEYSTORE_PATH="$PWD/my-upload-key.jks" \
+./gradlew assembleRelease
+```
+
+O APK resultante fica em `app/build/outputs/apk/release/app-release.apk`. Para conferir o certificado:
+
+```bash
+"$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+
+### O que o CI valida
+
+- A keystore é decodificada para um arquivo temporário (`chmod 600`) e testada com `keytool -list` **antes** do build: senha ou alias errados falham de imediato, em vez de gerar um APK assinado com uma chave nova a cada execução.
+- Depois do carimbo, `apksigner` confere o certificado; se o APK sair com `CN=Android Debug` mesmo com os secrets configurados, o job falha.
+- O resumo do job informa se o APK é `release assinado com a keystore de upload` ou `debug (sem keystore nos secrets)`.
+
+> **Atualizações por cima:** use a **mesma keystore que assinou as versões anteriores** (até 2.3.7). Trocar a chave muda a assinatura e obriga o usuário a desinstalar o app antigo antes de instalar o novo.
