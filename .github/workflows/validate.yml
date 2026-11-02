@@ -23,7 +23,39 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Prepare release keystore
+        id: release-keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${STORE_PASSWORD:-}" ]; then
+            echo "::warning::Secrets ANDROID_KEYSTORE_BASE64/STORE_PASSWORD ausentes: o APK do artifact sairá assinado com a chave de debug."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          KS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-upload.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KS"
+          chmod 600 "$KS"
+          # Valida senha e alias antes de gastar o build: erro aqui aponta secret errado,
+          # em vez de gerar um APK assinado com uma chave nova a cada run.
+          keytool -list -keystore "$KS" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null
+          echo "Keystore validado: alias $KEY_ALIAS, $(stat -c%s "$KS") bytes."
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          echo "path=$KS" >> "$GITHUB_OUTPUT"
+
       - name: Android tests and build
+        id: android-build
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          KEYSTORE_PATH: ${{ steps.release-keystore.outputs.path }}
+          SIGNED: ${{ steps.release-keystore.outputs.signed }}
         run: |
           chmod +x gradlew
           if [ ! -f "app/google-services.json" ]; then
@@ -62,14 +94,104 @@ jobs:
           EOF
           fi
           ./gradlew testDebugUnitTest --no-daemon || (echo "Retrying tests due to socket/network hiccup..." && ./gradlew testDebugUnitTest --no-daemon)
-          ./gradlew assembleDebug --no-daemon
+          if [ "$SIGNED" = "true" ]; then
+            # Sem KEY_PASSWORD próprio, assume a senha do keystore (caso comum).
+            if [ -z "${KEY_PASSWORD:-}" ]; then export KEY_PASSWORD="$STORE_PASSWORD"; fi
+            ./gradlew assembleRelease --no-daemon
+            APK=app/build/outputs/apk/release/app-release.apk
+            test -f "$APK" || APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          else
+            ./gradlew assembleDebug --no-daemon
+            APK=app/build/outputs/apk/debug/app-debug.apk
+          fi
+          test -f "$APK" || { echo "APK não encontrado: $APK"; exit 1; }
+          echo "apk_source=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Package IPK and stamp build hashes
+        id: package-and-stamp
+        env:
+          APK_SOURCE: ${{ steps.android-build.outputs.apk_source }}
+          SIGNED: ${{ steps.release-keystore.outputs.signed }}
+        run: |
+          # O empacotador publica apkSha256/sizeBytes e ipkSha256/ipkSizeBytes nos manifestos,
+          # então ele roda logo depois do build do APK, com o artefato recém-gerado.
+          test -n "${APK_SOURCE:-}" || { echo "apk_source vazio: o passo de build não publicou a saída"; exit 1; }
+          test -f "$APK_SOURCE" || { echo "APK do build não encontrado: $APK_SOURCE"; exit 1; }
+          cp "$APK_SOURCE" mk21.apk
+          python3 smart-tv/package_ipk.py
+
+          if [ "$SIGNED" = "true" ]; then
+            # Garante que o carimbo foi feito sobre o APK de release, não sobre um fallback de debug.
+            APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+            test -n "$APKSIGNER" || { echo "apksigner não encontrado para validar a assinatura"; exit 1; }
+            CERTS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-certs.txt"
+            # Guarda a saída em arquivo: ler de pipe com head/grep -q pode gerar SIGPIPE e
+            # derrubar o passo por causa do pipefail do shell do Actions.
+            "$APKSIGNER" verify --print-certs mk21.apk > "$CERTS"
+            sed -n '1,6p' "$CERTS"
+            if grep -q "CN=Android Debug" "$CERTS"; then
+              echo "APK saiu com a chave de debug mesmo com os secrets configurados";
+              exit 1
+            fi
+          fi
+
+          python3 - <<'PY'
+          import hashlib, json, os, sys
+
+          def sha256(path):
+              digest = hashlib.sha256()
+              with open(path, "rb") as file:
+                  for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          apk_sha256 = sha256("mk21.apk")
+          apk_size = os.path.getsize("mk21.apk")
+          failures = []
+          manifests = (
+              "version.json",
+              "api/version.json",
+              "web/version.json",
+              "web/api/version.json",
+              "public/version.json",
+              "smart-tv/version.json",
+              "smart-tv/mk21-tv/version.json",
+          )
+          for name in manifests:
+              data = json.load(open(name, encoding="utf-8"))
+              ipk_path = f"smart-tv/mk21play_{data['version']}_all.ipk"
+              ipk_sha256 = sha256(ipk_path)
+              if data["apkSha256"] != apk_sha256 or data["sizeBytes"] != apk_size:
+                  failures.append(f"{name}: apkSha256/sizeBytes não batem com mk21.apk")
+              # O manifesto embutido no pacote não pode carregar o hash do próprio IPK.
+              if name != "smart-tv/mk21-tv/version.json":
+                  if data["ipkSha256"] != ipk_sha256 or data["ipkSizeBytes"] != os.path.getsize(ipk_path):
+                      failures.append(f"{name}: ipkSha256/ipkSizeBytes não batem com {ipk_path}")
+              print(f"{name}: v{data['version']} apk={data['apkSha256'][:12]} ipk={ipk_sha256[:12]}")
+          if failures:
+              print("\n".join(failures))
+              sys.exit(1)
+          PY
+
+          VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
+          IPK="smart-tv/mk21play_${VER}_all.ipk"
+          {
+            echo "### Pacotes gerados e carimbados"
+            echo ""
+            if [ "$SIGNED" = "true" ]; then
+              APK_KIND="release assinado com a keystore de upload"
+            else
+              APK_KIND="debug (sem keystore nos secrets)"
+            fi
+            echo "- APK ($APK_KIND): \`$(sha256sum mk21.apk | cut -d' ' -f1)\` ($(stat -c%s mk21.apk) bytes)"
+            echo "- IPK v${VER}: \`$(sha256sum "$IPK" | cut -d' ' -f1)\` ($(stat -c%s "$IPK") bytes)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smart TV validation
         id: smart-tv-validation
         run: |
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
-          python3 smart-tv/package_ipk.py
 
           TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
           echo "Validando sincronismo de versões multiplataforma (Alvo: $TV_VER)..."
@@ -89,22 +211,49 @@ jobs:
           echo "Smart TV IPK $TV_VER validado com sucesso."
           echo "tv_version=$TV_VER" >> "$GITHUB_OUTPUT"
 
+      - name: Write artifact checksums
+        run: |
+          VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
+          IPK="smart-tv/mk21play_${VER}_all.ipk"
+          # Ordem fixa e caminhos relativos à raiz: "sha256sum -c SHA256SUMS"
+          # funciona direto no artifact extraído.
+          sha256sum \
+            mk21.apk \
+            "$IPK" \
+            version.json \
+            api/version.json \
+            web/version.json \
+            web/api/version.json \
+            public/version.json \
+            smart-tv/version.json \
+            smart-tv/mk21-tv/version.json \
+            > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Upload generated apps
         uses: actions/upload-artifact@v4
         with:
           name: generated-apps
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
+            mk21.apk
             smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk
+            version.json
+            api/version.json
+            web/version.json
+            web/api/version.json
+            public/version.json
+            smart-tv/version.json
+            smart-tv/mk21-tv/version.json
+            SHA256SUMS
           if-no-files-found: error
 
       - name: List generated apps
         run: |
           echo "## Aplicativos gerados" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Android APK: \`app/build/outputs/apk/debug/app-debug.apk\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Android APK: \`mk21.apk\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Smart TV IPK: \`smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk\`" >> "$GITHUB_STEP_SUMMARY"
           echo ""
           echo "Aplicativos gerados:"
-          echo "  Android APK: app/build/outputs/apk/debug/app-debug.apk"
+          echo "  Android APK: mk21.apk"
           echo "  Smart TV IPK: smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk"
