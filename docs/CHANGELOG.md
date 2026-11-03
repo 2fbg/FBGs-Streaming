@@ -2,6 +2,15 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.4.0] - 2026-11-02
+
+- **Android:** remove regras R8 que mantinham bibliotecas inteiras, preservando as proteções necessárias para Room e Retrofit.
+- **Smart TV:** solicita login IPTV antes de conectar, como no Android, e permite entrar, trocar credenciais, gerenciar servidores ou abrir o cache offline.
+- **Smart TV:** não inicia mais com credenciais padrão embutidas; as credenciais informadas ficam salvas no dispositivo para reutilização.
+- **Smart TV/webOS:** exibe indicadores de rolagem mesmo quando a TV oculta as barras nativas.
+- **Smart TV/webOS e Tizen:** usa tela cheia CSS para manter os modais de qualidade e fontes sobre o player.
+- **Smart TV:** carrega listas e fluxos HLS/MPEG-TS processados por JavaScript pelo proxy HTTPS próprio para evitar CORS; endereços de rede local permanecem diretos. O proxy não armazena playlists nem conteúdo associado a contas em cache.
+
 ## [2.3.13] - 2026-11-01
 
 - **Smart TV/webOS:** tenta automaticamente a URL HLS equivalente quando o player nativo falha ao abrir um fluxo `.ts`.

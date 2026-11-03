@@ -22,13 +22,13 @@ Todas as Smart TVs modernas (Samsung 2017+, LG 2016+, Philips, TCL, Roku) possue
 Os aplicativos da LG Smart TV usam a tecnologia oficial **webOS TV SDK** (baseada em HTML5/JS).
 
 ### Arquivos prontos no repositório:
-- `smart-tv/mk21play_2.3.13_all.ipk`: pacote webOS com fallback de reprodução para HLS, barras de rolagem mais visíveis e proteção contra código OTA desatualizado.
+- `smart-tv/mk21play_2.4.0_all.ipk`: pacote webOS com login inicial IPTV, indicadores de rolagem próprios e modais de qualidade/fontes sobre o player em tela cheia.
 - `smart-tv/mk21.ipk`: Link canônico para a versão estável mais recente.
 - `smart-tv/mk21-tv/`: Código fonte completo otimizado para webOS e Tizen.
-- `smart-tv/webos/appinfo.json` e `smart-tv/mk21-tv/appinfo.json`: manifestos webOS v2.3.13.
+- `smart-tv/webos/appinfo.json` e `smart-tv/mk21-tv/appinfo.json`: manifestos webOS v2.4.0.
 
 ### Instalação via Homebrew Channel (Recomendado):
-1. Caso sua TV possua o **webOS Homebrew Channel**, transfira e instale diretamente o arquivo `mk21play_2.3.13_all.ipk` ou use o instalador OTA integrado no menu Configurações > Atualização de Sistema.
+1. Caso sua TV possua o **webOS Homebrew Channel**, transfira e instale diretamente o arquivo `mk21play_2.4.0_all.ipk` ou use o instalador OTA integrado no menu Configurações > Atualização de Sistema.
 
 ### Instalação via Modo Desenvolvedor oficial:
 1. **Ative o Modo Desenvolvedor na sua TV LG:**
@@ -38,9 +38,15 @@ Os aplicativos da LG Smart TV usam a tecnologia oficial **webOS TV SDK** (basead
    - Baixe o pacote oficial [webOS TV CLI (ares-cli)](https://webostv.developer.lge.com/develop/tools/cli-installation).
    - Instale na sua TV com o comando:
      ```bash
-     ares-install smart-tv/mk21play_2.3.13_all.ipk -d <NomeDaSuaTV>
+     ares-install smart-tv/mk21play_2.4.0_all.ipk -d <NomeDaSuaTV>
      ```
 3. O ícone **MK21 Play** aparecerá na barra principal de aplicativos da sua LG TV!
+
+### Primeiro acesso
+1. Informe o usuário e a senha IPTV na tela de login, como no aplicativo Android.
+2. As credenciais ficam salvas localmente para as próximas aberturas; use **🔐 Login** no cabeçalho para trocá-las.
+3. **Gerenciar Servidores & Ajustes** abre a configuração de listas; **Prosseguir para Home (Modo Offline / Cache)** tenta abrir um catálogo já salvo sem conectar aos servidores.
+4. As listas e os fluxos HLS/MPEG-TS processados por HLS.js/MPEG-TS.js usam o proxy HTTPS próprio para evitar bloqueios CORS; endereços de rede local continuam sendo acessados diretamente. A reprodução webOS usa o player nativo da TV, sem encaminhar o vídeo por proxy.
 
 ---
 

@@ -313,6 +313,28 @@ body {
   background-color: rgba(255, 152, 0, 0.85);
 }
 
+.tv-scrollbar-indicator {
+  position: fixed;
+  z-index: 999998;
+  width: 10px;
+  min-height: 32px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.tv-scrollbar-indicator-thumb {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  border-radius: 999px;
+  background: #f2c45c;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+}
+
 .col-categories,
 .col-channels,
 .col-player {
@@ -798,7 +820,7 @@ video {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 1000001;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
@@ -2888,5 +2910,192 @@ body[class*="font-"] .settings-control-row select {
   body.vod-layout #listItems {
     grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
     gap: 10px;
+  }
+}
+
+.startup-login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 32px;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(227, 77, 86, 0.18), transparent 55%),
+    rgba(5, 9, 16, 0.98);
+}
+
+.startup-login-screen.hidden,
+html.authenticated-session .startup-login-screen {
+  display: none !important;
+}
+
+.startup-login-card {
+  width: min(100%, 560px);
+  padding: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: linear-gradient(145deg, #171d2b, #0d111b);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.startup-login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 30px;
+  text-align: left;
+}
+
+.startup-login-logo {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #e34d56, #9e2535);
+  color: #fff;
+  font-size: 23px;
+  font-weight: 900;
+  box-shadow: 0 8px 26px rgba(227, 77, 86, 0.28);
+}
+
+.startup-login-brand h1,
+.startup-login-brand p,
+.startup-login-form h2,
+.startup-login-description,
+.startup-login-footer {
+  margin: 0;
+}
+
+.startup-login-brand h1 {
+  color: #fff;
+  font-size: 28px;
+}
+
+.startup-login-brand p {
+  margin-top: 5px;
+  color: #f2c45c;
+  font-weight: 700;
+}
+
+.startup-login-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.startup-login-form h2 {
+  color: #fff;
+  font-size: 21px;
+  text-align: center;
+}
+
+.startup-login-description {
+  margin: 7px 0 24px;
+  color: #aeb8c8;
+  text-align: center;
+}
+
+.startup-login-form label {
+  margin: 0 0 7px;
+  color: #d7deea;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.startup-login-form input {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  outline: none;
+  background: #0f1420;
+  color: #fff;
+  font-size: 17px;
+}
+
+.startup-login-form input:focus {
+  border-color: #e34d56;
+  box-shadow: 0 0 0 3px rgba(227, 77, 86, 0.2);
+}
+
+.startup-password-field {
+  display: flex;
+  gap: 8px;
+}
+
+.startup-password-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.startup-password-toggle,
+.startup-login-primary,
+.startup-login-secondary {
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: #20283a;
+  color: #e8edf5;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.startup-password-toggle {
+  min-width: 92px;
+  padding: 0 12px;
+}
+
+.startup-login-primary {
+  min-height: 54px;
+  margin-top: 22px;
+  border-color: #e34d56;
+  background: linear-gradient(135deg, #e34d56, #b52e42);
+  color: #fff;
+  font-size: 17px;
+}
+
+.startup-login-secondary {
+  margin-top: 10px;
+  padding: 8px 12px;
+}
+
+.startup-password-toggle:focus,
+.startup-login-primary:focus,
+.startup-login-secondary:focus {
+  outline: 3px solid #ffd54f;
+  outline-offset: 2px;
+}
+
+.startup-login-error {
+  min-height: 0;
+  margin-top: 8px;
+  color: #ff8a8a;
+  font-size: 14px;
+}
+
+.startup-login-error:empty {
+  display: none;
+}
+
+.startup-login-footer {
+  margin-top: 22px;
+  color: #8190a4;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .startup-login-screen {
+    padding: 16px;
+  }
+
+  .startup-login-card {
+    padding: 24px 20px;
   }
 }

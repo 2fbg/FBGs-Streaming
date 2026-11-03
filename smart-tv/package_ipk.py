@@ -46,7 +46,7 @@ def validate_appinfo(src_dir, appinfo):
 
     version = appinfo.get("version")
     if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        errors.append(f'"version" must be a semantic version like 2.3.13 (got {version!r})')
+        errors.append(f'"version" must be a semantic version like 2.4.0 (got {version!r})')
 
     required_fields = ("title", "vendor", "type", "main", "icon", "largeIcon", "splashBackground")
     for field in required_fields:
@@ -113,7 +113,7 @@ def _add_file(tar, path, arcname, timestamp):
     info = tarfile.TarInfo(name=arcname)
     info.size = os.path.getsize(path)
     info.mtime = timestamp
-    info.mode = 0o755 if os.access(path, os.X_OK) else 0o644
+    info.mode = 0o755 if os.stat(path).st_mode & 0o111 else 0o644
     info.uid = info.gid = 0
     info.uname = info.gname = "root"
     info.type = tarfile.REGTYPE

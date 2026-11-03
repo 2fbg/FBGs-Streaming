@@ -1,11 +1,11 @@
-# FBGs-Streaming (MK21 MultiServidor) — v2.3.13
+# FBGs-Streaming (MK21 MultiServidor) — v2.4.0
 
 <div align="center">
   <img src="web/icon-192.png" alt="MK21 Streaming Logo" width="120" height="120" style="border-radius: 20%;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v2.3.13-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.4.0-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -18,8 +18,8 @@
 
 | Plataforma | Pacote / Binário | SHA-256 |
 |---|---|---|
-| **Android APK v2.3.13** | [`mk21.apk`](mk21.apk) | `195c7b9746a1c25ec72ee252a84c35547e1bf3d90bad84bae2279d4c4fafc0ae` |
-| **LG webOS Smart TV v2.3.13** | [`mk21play_2.3.13_all.ipk`](smart-tv/mk21play_2.3.13_all.ipk) | `dd4a31d397da74f4fe602ed2d518ce62cf63ad929791c9a5c2950dbb59722983` |
+| **Android APK v2.4.0** | [`mk21.apk`](mk21.apk) | Build de release pendente |
+| **LG webOS Smart TV v2.4.0** | [`mk21play_2.4.0_all.ipk`](smart-tv/mk21play_2.4.0_all.ipk) | Build local antes da publicação |
 | **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---
@@ -28,9 +28,9 @@
 
 ### 1. API Xtream Codes (Recomendado)
 1. Abra o aplicativo (Android, Web ou Smart TV).
-2. Na tela de login, selecione o servidor predefinido no combo ou digite o código/URL.
-3. Digite seu **Usuário** e **Senha**.
-4. Toque em **Entrar no MK21**. O catálogo será baixado em segundo plano e indexado no cache local de alta velocidade.
+2. Na tela de login, digite seu **Usuário** e **Senha** IPTV e escolha **Entrar no MK21**. Na Smart TV, as credenciais ficam salvas localmente para as próximas aberturas e são usadas nos servidores configurados.
+3. Use **Gerenciar Servidores & Ajustes** para cadastrar ou revisar servidores. Depois do login, **🔐 Login** no cabeçalho permite trocar as credenciais.
+4. O catálogo é carregado e indexado no cache local. Sem credenciais ou conexão, escolha **Prosseguir para Home (Modo Offline / Cache)** para abrir um catálogo já armazenado.
 
 ### 2. Modo Offline / Cache
 - Se estiver sem conexão ou quiser navegar diretamente sem requisição de rede, clique em **Prosseguir para Home (Modo Offline / Cache)** na tela inicial.
@@ -48,6 +48,7 @@
 
 ### Smart TV (`/smart-tv`)
 - **LG webOS**: Pacote empacotado `.ipk` otimizado para webOS 3.0+ a webOS 24 via `package_ipk.py`.
+- **CORS na Smart TV:** listas e fluxos HLS/MPEG-TS processados por JavaScript usam o proxy HTTPS próprio; servidores de rede local são acessados diretamente. No webOS, a reprodução continua no player nativo da TV.
 - **Fontes alternativas (Smart TV):** agrupa URLs equivalentes da M3U, permite selecionar a fonte e tenta as alternativas automaticamente após falhas, preservando a posição de filmes e episódios.
 - **Samsung Tizen**: Compatível com Tizen WGT 3.0+.
 - **Navegação 10-foot UI**: Suporte total ao D-Pad do controle remoto com focus visual claro.

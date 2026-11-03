@@ -102,7 +102,7 @@ module.exports = function handler(req, res) {
 
     let decodedUrl;
     try {
-        decodedUrl = decodeURIComponent(targetUrlStr);
+        decodedUrl = targetUrlStr;
         const parsedTarget = new URL(decodedUrl);
 
         if (parsedTarget.protocol !== 'http:' && parsedTarget.protocol !== 'https:') {
@@ -194,18 +194,19 @@ module.exports = function handler(req, res) {
                     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
                     'Access-Control-Allow-Headers': '*',
                     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Content-Encoding',
+                    'Vary': 'Origin',
                     'X-Content-Type-Options': 'nosniff'
                 };
 
-                // Smart Caching Headers:
-                // 1. Playlists (M3U / JSON): Cache on Edge CDN so reload is instant (under 50ms)
-                // 2. VOD media chunks (MP4/MKV): Cache for up to 7 days
                 const isPlaylist = /get\.php|\.m3u8?|player_api\.php/i.test(decodedUrl);
                 const isStaticVod = /\.(mp4|mkv|avi|mov)(\?|$)/i.test(decodedUrl) || /\/(movie|series)\//i.test(decodedUrl);
-                if (isStaticVod) {
+                const hasAccountData = /get\.php|player_api\.php|[?&](?:username|password)=|\/(?:live|movie|series)\//i.test(decodedUrl);
+                if (hasAccountData || isPlaylist) {
+                    responseHeaders['Cache-Control'] = 'private, no-store, no-cache, must-revalidate';
+                    responseHeaders['Pragma'] = 'no-cache';
+                    responseHeaders['Expires'] = '0';
+                } else if (isStaticVod) {
                     responseHeaders['Cache-Control'] = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
-                } else if (isPlaylist) {
-                    responseHeaders['Cache-Control'] = 'public, max-age=600, s-maxage=1800, stale-while-revalidate=7200';
                 } else {
                     responseHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate';
                     responseHeaders['Pragma'] = 'no-cache';

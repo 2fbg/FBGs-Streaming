@@ -4,14 +4,55 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.3.13">
+  <link rel="stylesheet" href="styles.css?v=2.4.0-cors1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+  <script>
+    try {
+      var hasSavedLogin = localStorage.getItem('mk21_credentials_configured') === 'true' &&
+        !!localStorage.getItem('mk21_username') &&
+        !!localStorage.getItem('mk21_password');
+      if (hasSavedLogin) {
+        document.documentElement.classList.add('authenticated-session');
+      } else {
+        document.documentElement.classList.add('login-required');
+      }
+    } catch (error) {
+      document.documentElement.classList.add('login-required');
+    }
+  </script>
   <style id="mk21-ota-override-css"></style>
   <script src="core/AlternativeSources.js"></script>
 </head>
 <body>
 
-  <!-- Abertura instantânea direta no canal (sem tela de espera) -->
+  <section id="startupLoginScreen" class="startup-login-screen" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="startup-login-card">
+      <div class="startup-login-brand">
+        <div class="startup-login-logo">MK21</div>
+        <div>
+          <h1 id="loginTitle">MK21 Player</h1>
+          <p>Login Único Multi-Servidor</p>
+        </div>
+      </div>
+      <div class="startup-login-form">
+        <h2>Acesso Universal</h2>
+        <p class="startup-login-description">Entre uma vez para sincronizar seus servidores IPTV.</p>
+        <label for="inputLoginUsername">Usuário IPTV</label>
+        <input id="inputLoginUsername" type="text" autocomplete="username" placeholder="Digite seu usuário" tabindex="0">
+        <label for="inputLoginPassword">Senha IPTV</label>
+        <div class="startup-password-field">
+          <input id="inputLoginPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha" tabindex="0">
+          <button id="btnToggleLoginPassword" type="button" class="startup-password-toggle" aria-label="Mostrar senha" tabindex="0">Mostrar</button>
+        </div>
+        <div id="startupLoginError" class="startup-login-error" role="alert" aria-live="polite"></div>
+        <button id="btnSubmitLogin" type="button" class="startup-login-primary" tabindex="0">Entrar no MK21</button>
+        <button id="btnLoginSettings" type="button" class="startup-login-secondary" tabindex="0">⚙️ Gerenciar Servidores &amp; Ajustes</button>
+        <button id="btnLoginOffline" type="button" class="startup-login-secondary" tabindex="0">📂 Prosseguir para Home (Modo Offline / Cache)</button>
+        <button id="btnCancelLogin" type="button" class="startup-login-secondary hidden" tabindex="0">Voltar</button>
+      </div>
+      <p class="startup-login-footer">Suas credenciais são usadas nos servidores configurados neste dispositivo.</p>
+    </div>
+  </section>
 
   <aside class="app-sidebar">
     <div id="btnLogo" class="logo-box" tabindex="0">
@@ -48,6 +89,7 @@
         <span id="txtServerSyncBadge" class="server-sync-badge hidden">55%</span>
         <span style="font-size: 12px; opacity:0.7;">▼</span>
       </button>
+      <button id="btnHeaderLogin" class="action-btn header-focusable" title="Entrar ou trocar credenciais IPTV" tabindex="0">🔐 Login</button>
 
       <button id="btnHeaderLogs" class="action-btn header-focusable" title="Console de Logs (Dev / Homologação)" tabindex="0" style="background:#1e293b; border-color:#3b82f6;">
         <i class="fa-solid fa-terminal text-blue-400"></i> Logs
@@ -538,7 +580,7 @@
         var otaCode = localStorage.getItem('mk21_ota_app_js');
         var otaVer = localStorage.getItem('mk21_ota_app_version');
         var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        var currentPackageVersion = '2.3.13';
+        var currentPackageVersion = '2.4.0';
         var compareVersions = function(a, b) {
           var left = String(a || '0.0.0').replace(/[^0-9.]/g, '').split('.');
           var right = String(b || '0.0.0').replace(/[^0-9.]/g, '').split('.');
@@ -561,7 +603,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.3.13';
+              fallback.src = 'app.js?v=2.4.0-cors1';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -578,7 +620,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.3.13';
+      s.src = 'app.js?v=2.4.0-cors1';
       document.body.appendChild(s);
     })();
   </script>

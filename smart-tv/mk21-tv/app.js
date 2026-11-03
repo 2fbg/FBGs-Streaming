@@ -124,6 +124,7 @@ if (!Element.prototype.replaceChildren) {
 }
 
 // 3. CONFIGURAÇÃO DOS SERVIDORES MK21 (NOMES LIMPOS SEM ÍCONES)
+const MK21_CORS_PROXY_ENDPOINT = 'https://bgstreaming.vercel.app/api/proxy';
 const DEFAULT_SERVERS = [
   { id: 'vlog', name: 'VLOG', url: 'http://myopbx.beer' },
   { id: 'tannix', name: 'TANNIX', url: 'http://poptvcdn.online' },
@@ -148,31 +149,103 @@ try {
 } catch (e) {}
 
 
-// Credenciais compartilhadas (Xtream) — válidas para TODOS os servidores
-const SHARED_IPTV_USER = '601334065';
-const SHARED_IPTV_PASS = '820866576';
-
 function getSharedCredentials() {
   try {
+    if (localStorage.getItem('mk21_credentials_configured') !== 'true') {
+      return { user: '', pass: '' };
+    }
     const u = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || localStorage.getItem('iptv_user');
     const p = localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || localStorage.getItem('iptv_pass');
-    // Se vazio, demo ou inválido, usa as credenciais oficiais compartilhadas
-    const user = (u && u !== 'demo' && String(u).length > 2) ? u : SHARED_IPTV_USER;
-    const pass = (p && p !== 'demo' && String(p).length > 2) ? p : SHARED_IPTV_PASS;
-    return { user, pass };
+    return { user: String(u || '').trim(), pass: String(p || '').trim() };
   } catch (e) {
-    return { user: SHARED_IPTV_USER, pass: SHARED_IPTV_PASS };
+    return { user: '', pass: '' };
   }
 }
 
 function ensureSharedCredentialsStored() {
   try {
     const c = getSharedCredentials();
+    if (!c.user || !c.pass) return false;
     localStorage.setItem('mk21_username', c.user);
     localStorage.setItem('mk21_password', c.pass);
     localStorage.setItem('mk21_user', c.user);
     localStorage.setItem('mk21_pass', c.pass);
-  } catch (e) {}
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function hasConfiguredSharedCredentials() {
+  const credentials = getSharedCredentials();
+  return !!(credentials.user && credentials.pass);
+}
+
+function getProxyRequestUrl(url) {
+  const target = new URL(url);
+  const hostname = target.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  const isLocalHost = hostname === 'localhost' || hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') || hostname === '::1' || hostname === '0.0.0.0' ||
+    /^(?:fc|fd)[0-9a-f]{2}:/i.test(hostname) || /^fe[89ab][0-9a-f]:/i.test(hostname) ||
+    /^127\./.test(hostname) || /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) || /^169\.254\./.test(hostname) ||
+    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname);
+  if (isLocalHost) return url;
+  return `${MK21_CORS_PROXY_ENDPOINT}?url=${encodeURIComponent(url)}`;
+}
+
+function showStartupLogin(message = '', allowCancel = hasConfiguredSharedCredentials()) {
+  const screen = $('startupLoginScreen');
+  if (!screen) return;
+  document.documentElement.classList.remove('authenticated-session');
+  document.documentElement.classList.add('login-required');
+  screen.classList.remove('hidden');
+  const credentials = getSharedCredentials();
+  $('inputLoginUsername').value = credentials.user;
+  $('inputLoginPassword').value = credentials.pass;
+  $('startupLoginError').textContent = message;
+  $('btnCancelLogin').classList.toggle('hidden', !allowCancel);
+  setTimeout(() => {
+    const target = credentials.user ? $('inputLoginPassword') : $('inputLoginUsername');
+    if (target) target.focus();
+  }, 0);
+}
+
+function hideStartupLogin() {
+  const screen = $('startupLoginScreen');
+  if (screen) screen.classList.add('hidden');
+  document.documentElement.classList.remove('login-required');
+  document.documentElement.classList.add('authenticated-session');
+}
+
+function submitStartupLogin() {
+  const user = $('inputLoginUsername').value.trim();
+  const pass = $('inputLoginPassword').value.trim();
+  if (!user || !pass) {
+    $('startupLoginError').textContent = 'Informe o usuário e a senha IPTV.';
+    return;
+  }
+
+  try {
+    localStorage.setItem('mk21_username', user);
+    localStorage.setItem('mk21_password', pass);
+    localStorage.setItem('mk21_user', user);
+    localStorage.setItem('mk21_pass', pass);
+    localStorage.setItem('mk21_credentials_configured', 'true');
+  } catch (error) {
+    $('startupLoginError').textContent = 'Não foi possível salvar as credenciais neste dispositivo.';
+    addDevLog(`[Login] Falha ao salvar credenciais: ${error.message}`, 'error');
+    return;
+  }
+
+  if (!ensureSharedCredentialsStored()) {
+    $('startupLoginError').textContent = 'Não foi possível preparar as credenciais para conexão.';
+    return;
+  }
+
+  hideStartupLogin();
+  loadServer(true);
+  scheduleBackgroundListSync();
 }
 
 const ADULT_KEYWORDS = [
@@ -741,7 +814,7 @@ let activeModalSeriesData = null;
 
 const headerElements = [
   'tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings',
-  'btnHeaderServer', 'btnRefreshList'
+  'btnHeaderServer', 'btnHeaderLogin', 'btnRefreshList'
 ];
 
 // RELÓGIO
@@ -1029,7 +1102,9 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   try {
     const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
     if (signal) options.signal = signal;
-    const res = await fetch(targetUrl, options);
+    const fetchUrl = getProxyRequestUrl(targetUrl);
+    console.log(`[MK21] Buscando lista de ${getSourceHostLabel(targetUrl)} pelo proxy HTTPS MK21.`);
+    const res = await fetch(fetchUrl, options);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
       const text = await res.text();
@@ -1263,6 +1338,11 @@ function showLoadingFailure(error, serverName) {
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
+  if (!hasConfiguredSharedCredentials()) {
+    showStartupLogin('', false);
+    return;
+  }
+
   const loadId = ++serverLoadGeneration;
   categoryMapCache.clear();
   isLoadingServerPlaylist = true;
@@ -3620,7 +3700,11 @@ function fallbackToHls(item, sourceUrl = item && item.url) {
     hlsInstance = new Hls({
       enableWorker: true,
       ...getHlsBufferOptions(),
-      liveSyncDurationCount: 3
+      liveSyncDurationCount: 3,
+      xhrSetup: (xhr, url) => {
+        const proxyUrl = getProxyRequestUrl(url);
+        if (proxyUrl !== url) xhr.open('GET', proxyUrl, true);
+      }
     });
     hlsInstance.loadSource(hlsUrl);
     hlsInstance.attachMedia(video);
@@ -3822,7 +3906,11 @@ function playStream(
       manifestLoadingMaxRetry: 4,
       levelLoadingMaxRetry: 4,
       fragLoadingRetryDelay: 1000,
-      manifestLoadingRetryDelay: 1000
+      manifestLoadingRetryDelay: 1000,
+      xhrSetup: (xhr, url) => {
+        const proxyUrl = getProxyRequestUrl(url);
+        if (proxyUrl !== url) xhr.open('GET', proxyUrl, true);
+      }
     });
     hlsInstance.loadSource(streamUrl);
     hlsInstance.attachMedia(video);
@@ -3869,7 +3957,7 @@ function playStream(
       mpegtsPlayer = mpegts.createPlayer({
         type: 'mse',
         isLive: (currentContentType === 'LIVE'),
-        url: streamUrl
+        url: getProxyRequestUrl(streamUrl)
       }, {
         enableWorker: true,
         lazyLoad: false,
@@ -4053,6 +4141,12 @@ function isAppFullscreen() {
     !!(document.fullscreenElement || document.webkitFullscreenElement);
 }
 
+// Keep TV fullscreen in CSS so sibling modals stay above the player.
+function shouldUseNativeFullscreenApi() {
+  const userAgent = navigator.userAgent || '';
+  return !window.webOS && !/web0s|webos|tizen/i.test(userAgent);
+}
+
 function showFsHud(show) {
   const hud = $('fsHudBar');
   if (!hud) return;
@@ -4095,16 +4189,18 @@ function toggleFullscreen(force) {
     showFsHud(true);
     pokeFsHud();
     addDevLog('[Player] Modo Tela Cheia ATIVADO', 'info');
-    try {
-      if (box.requestFullscreen) {
-        box.requestFullscreen().catch(() => {});
-      } else if (box.webkitRequestFullscreen) {
-        box.webkitRequestFullscreen();
-      } else if (v && v.webkitRequestFullscreen) {
-        v.webkitRequestFullscreen();
+    if (shouldUseNativeFullscreenApi()) {
+      try {
+        if (box.requestFullscreen) {
+          box.requestFullscreen().catch(() => {});
+        } else if (box.webkitRequestFullscreen) {
+          box.webkitRequestFullscreen();
+        } else if (v && v.webkitRequestFullscreen) {
+          v.webkitRequestFullscreen();
+        }
+      } catch (e) {
+        addDevLog('[Player] Fullscreen API fallback ativo (CSS is-fullscreen aplicado): ' + e.message, 'debug');
       }
-    } catch (e) {
-      addDevLog('[Player] Fullscreen API fallback ativo (CSS is-fullscreen aplicado): ' + e.message, 'debug');
     }
     setTimeout(function () {
       if ($('fsBtnPlay')) $('fsBtnPlay').focus();
@@ -5374,6 +5470,39 @@ if ($('btnLoadOfflineCache')) {
 }
 
 $('btnHeaderServer').onclick = openServerPicker;
+$('btnHeaderLogin').onclick = () => {
+  if (isAppFullscreen()) toggleFullscreen(false);
+  showStartupLogin('', true);
+};
+$('btnSubmitLogin').onclick = submitStartupLogin;
+$('inputLoginPassword').addEventListener('keydown', event => {
+  if (event.key === 'Enter' || event.keyCode === 13) {
+    event.preventDefault();
+    submitStartupLogin();
+  }
+});
+$('btnToggleLoginPassword').onclick = () => {
+  const password = $('inputLoginPassword');
+  const show = password.type === 'password';
+  password.type = show ? 'text' : 'password';
+  $('btnToggleLoginPassword').textContent = show ? 'Ocultar' : 'Mostrar';
+  $('btnToggleLoginPassword').setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+};
+$('btnLoginSettings').onclick = () => {
+  hideStartupLogin();
+  openServerPicker();
+};
+$('btnLoginOffline').onclick = () => {
+  hideStartupLogin();
+  openServerPicker();
+  $('btnLoadOfflineCache').click();
+};
+$('btnCancelLogin').onclick = () => {
+  if (!hasConfiguredSharedCredentials()) return;
+  hideStartupLogin();
+  const focusTarget = $('btnHeaderLogin');
+  if (focusTarget) focusTarget.focus();
+};
 $('btnCloseServerPicker').onclick = () => {
   $('modalServerPicker').classList.add('hidden');
   activeZone = 'channels';
@@ -5392,7 +5521,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.3.13';
+const BASE_PACKAGE_VERSION = '2.4.0';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5448,10 +5577,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2313,
+        versionCode: 2400,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
-        releaseNotes: '• Inicialização mais rápida, carregando o catálogo antes dos módulos de reprodução externos.\n• Reduz trabalho repetido na lista, melhora carregamento de imagens e corrige atualização do catálogo em cache.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.3.13_all.ipk',
+        releaseNotes: '• Android: regras R8 mais específicas para reduzir o tamanho do APK.\n• Smart TV: barras de rolagem visíveis mesmo quando ocultadas pelo sistema da TV.\n• Smart TV: modais de qualidade e fontes aparecem acima do player em tela cheia.',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.0_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -5648,6 +5777,10 @@ function mk21IsVisible(el) {
   try {
     const s = window.getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+    if (s.position === 'fixed') {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    }
   } catch (e) {}
   return el.offsetParent !== null || el === document.activeElement;
 }
@@ -5688,7 +5821,7 @@ function mk21ScrollFocusedElement(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalSources', 'modalQuality', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['startupLoginScreen', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalSources', 'modalQuality', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -5711,7 +5844,63 @@ function mk21HandleScrollInput(scrollArea, event) {
     }
 }
 
-document.querySelectorAll('.pane-scroll, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list').forEach(scrollArea => {
+let mk21ScrollbarFrame = 0;
+const mk21ScrollableAreas = '.pane-scroll, .col-player, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list, .audio-subs-modal-body, .modal-content-scroll, .modal-body, #epgScheduleList, #devLogsContainer';
+
+function mk21UpdateVisibleScrollbars() {
+  document.querySelectorAll('.tv-scrollbar-indicator').forEach(track => {
+    const scrollArea = track._mk21ScrollArea;
+    if (!scrollArea || !document.body.contains(scrollArea)) {
+      if (track.parentNode) track.parentNode.removeChild(track);
+      return;
+    }
+
+    const rect = scrollArea.getBoundingClientRect();
+    const visible = window.getComputedStyle(scrollArea).display !== 'none' &&
+      rect.width > 0 && rect.height > 0 &&
+      scrollArea.scrollHeight > scrollArea.clientHeight + 1;
+    if (!visible) {
+      track.style.visibility = 'hidden';
+      return;
+    }
+
+    const trackHeight = Math.max(32, rect.height);
+    const thumb = track.firstElementChild;
+    const thumbHeight = Math.min(trackHeight, Math.max(28, trackHeight * scrollArea.clientHeight / scrollArea.scrollHeight));
+    const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
+    const thumbOffset = (trackHeight - thumbHeight) * scrollArea.scrollTop / maxScroll;
+    track.style.top = rect.top + 'px';
+    track.style.left = (rect.right - 12) + 'px';
+    track.style.height = trackHeight + 'px';
+    let parent = scrollArea.parentElement;
+    while (parent && !parent.classList.contains('app-modal')) parent = parent.parentElement;
+    track.style.zIndex = parent ? '1000002' : '999998';
+    thumb.style.height = thumbHeight + 'px';
+    thumb.style.transform = `translateY(${thumbOffset}px)`;
+    track.style.visibility = 'visible';
+  });
+}
+
+function mk21ScheduleVisibleScrollbars() {
+  if (mk21ScrollbarFrame) return;
+  mk21ScrollbarFrame = window.requestAnimationFrame(() => {
+    mk21ScrollbarFrame = 0;
+    document.querySelectorAll(mk21ScrollableAreas).forEach(scrollArea => {
+      if (scrollArea._mk21ScrollbarIndicator) return;
+      const track = document.createElement('div');
+      track.className = 'tv-scrollbar-indicator';
+      track.setAttribute('aria-hidden', 'true');
+      track.innerHTML = '<span class="tv-scrollbar-indicator-thumb"></span>';
+      track._mk21ScrollArea = scrollArea;
+      scrollArea._mk21ScrollbarIndicator = track;
+      document.body.appendChild(track);
+      scrollArea.addEventListener('scroll', mk21ScheduleVisibleScrollbars, { passive: true });
+    });
+    mk21UpdateVisibleScrollbars();
+  });
+}
+
+document.querySelectorAll(mk21ScrollableAreas).forEach(scrollArea => {
   if ('onwheel' in document) {
     scrollArea.addEventListener('wheel', event => mk21HandleScrollInput(scrollArea, event), { passive: false });
   } else {
@@ -5720,6 +5909,13 @@ document.querySelectorAll('.pane-scroll, .settings-left-menu, .settings-detail-p
     scrollArea.addEventListener('DOMMouseScroll', legacyScroll, false);
   }
 });
+window.addEventListener('resize', mk21ScheduleVisibleScrollbars);
+window.addEventListener('orientationchange', mk21ScheduleVisibleScrollbars);
+if (typeof MutationObserver !== 'undefined') {
+  const scrollbarObserver = new MutationObserver(mk21ScheduleVisibleScrollbars);
+  scrollbarObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+}
+mk21ScheduleVisibleScrollbars();
 function mk21GetFocusables() {
   const activeModal = mk21GetOpenModal();
   const root = activeModal || document;
@@ -5879,7 +6075,9 @@ document.addEventListener('keydown', function (e) {
       if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
         e.preventDefault();
         e.stopPropagation();
-        if (activeModal.id === 'modalSources') {
+        if (activeModal.id === 'startupLoginScreen') {
+          return;
+        } else if (activeModal.id === 'modalSources') {
           closeSourcePicker();
         } else {
           activeModal.classList.add('hidden');
@@ -6433,7 +6631,8 @@ if (typeof document !== 'undefined') {
 }
 
 function initializeMk21App() {
-  ensureSharedCredentialsStored();
+  const hasLogin = hasConfiguredSharedCredentials();
+  if (hasLogin) ensureSharedCredentialsStored();
   document.body.classList.toggle('amoled-mode', localStorage.getItem('mk21_amoled_mode') === 'true');
   const player = $('tvPlayer');
   if (player) player.preload = (localStorage.getItem('mk21_buffer_profile') || 'fast') === 'stable' ? 'auto' : 'metadata';
@@ -6464,11 +6663,18 @@ function initializeMk21App() {
       addDevLog('[App] MK21 Play inicializado com sucesso', 'success');
     } catch (e) {}
 
-  loadServer();
-  scheduleBackgroundListSync();
+  if (hasLogin) {
+    hideStartupLogin();
+    loadServer();
+    scheduleBackgroundListSync();
+  } else {
+    showStartupLogin('', false);
+    hideSplash();
+  }
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
+    if (!hasLogin) return;
     activeZone = 'header';
     focusedHeaderIdx = 0;
     if ($('tabLive')) $('tabLive').focus();
