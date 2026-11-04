@@ -13,7 +13,12 @@ import unittest
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from package_ipk import build_ipk, stamp_apk_manifests, stamp_version_manifests
+from package_ipk import (
+    DEFAULT_BUILD_TIMESTAMP,
+    build_ipk,
+    stamp_apk_manifests,
+    stamp_version_manifests,
+)
 
 
 def write_png(path, width, height):
@@ -139,10 +144,24 @@ class PackageIpkTests(unittest.TestCase):
             data = gzip.decompress(members["data.tar.gz"])
             with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as tar:
                 info = tar.getmember("usr/palm/applications/com.example.mk21/index.html")
-            self.assertEqual(info.mtime, 0)
+                data_mtimes = [member.mtime for member in tar.getmembers()]
+            self.assertEqual(info.mtime, DEFAULT_BUILD_TIMESTAMP)
             self.assertEqual((info.uid, info.gid), (0, 0))
             self.assertEqual((info.uname, info.gname), ("root", "root"))
             self.assertEqual(info.mode, 0o644)
+
+            # A zero mtime makes the TV's tar abort the extraction and webOS report
+            # "-5: ipk verified failed", so no member may carry one.
+            self.assertTrue(all(mtime > 0 for mtime in data_mtimes))
+            control = gzip.decompress(members["control.tar.gz"])
+            with tarfile.open(fileobj=io.BytesIO(control), mode="r:") as tar:
+                control_mtimes = [member.mtime for member in tar.getmembers()]
+            self.assertTrue(all(mtime > 0 for mtime in control_mtimes))
+            # The gzip header must carry the same fixed mtime, never "no timestamp".
+            self.assertEqual(
+                int.from_bytes(members["data.tar.gz"][4:8], "little"),
+                DEFAULT_BUILD_TIMESTAMP,
+            )
 
     def test_stamps_built_package_hash_into_matching_version_manifests(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -86,23 +86,39 @@ def validate_appinfo(src_dir, appinfo):
         raise ValueError(f"Invalid appinfo.json in {src_dir}:\n{details}")
 
 
+# The TV's pkgverifier extracts control.tar.gz/data.tar.gz with its own tar. A member
+# with an epoch-zero mtime makes that tar print "implausibly old time stamp 1969-12-31",
+# which the verifier treats as a fatal extraction error and reports to the installer as
+# "-5: ipk verified failed". Keep a fixed yet realistic timestamp so builds stay
+# byte-for-byte reproducible without tripping that check.
+DEFAULT_BUILD_TIMESTAMP = 1735689600  # 2025-01-01T00:00:00Z
+
+
 def _build_timestamp():
     """Fixed timestamp for every archive member, so the same sources give the same bytes."""
     source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
     if not source_date_epoch:
-        return 0
+        return DEFAULT_BUILD_TIMESTAMP
     try:
-        return int(source_date_epoch)
+        timestamp = int(source_date_epoch)
     except ValueError:
         raise ValueError(
             f"SOURCE_DATE_EPOCH must be an integer timestamp (got {source_date_epoch!r})"
         )
+    if timestamp <= 0:
+        raise ValueError(
+            "SOURCE_DATE_EPOCH must be positive: webOS rejects packages whose archive "
+            "members carry an epoch-zero mtime"
+        )
+    return timestamp
 
 
-def _write_tar_gz(add_members):
-    """Write a gzipped tar with a constant gzip header (no mtime, no original name)."""
+def _write_tar_gz(add_members, timestamp):
+    """Write a gzipped tar with a constant gzip header and the build's fixed mtime."""
     buffer = io.BytesIO()
-    with gzip.GzipFile(fileobj=buffer, mode="wb", compresslevel=9, mtime=0, filename="") as gz:
+    with gzip.GzipFile(
+        fileobj=buffer, mode="wb", compresslevel=9, mtime=timestamp, filename=""
+    ) as gz:
         with tarfile.open(fileobj=gz, mode="w") as tar:
             add_members(tar)
     return buffer.getvalue()
@@ -240,7 +256,7 @@ Installed-Size: {installed_size}
         ti.uname = ti.gname = "root"
         tar.addfile(ti, io.BytesIO(control_content))
 
-    control_tar_gz = _write_tar_gz(add_control)
+    control_tar_gz = _write_tar_gz(add_control, timestamp)
 
     # 3. data.tar.gz
     app_target_dir = f"usr/palm/applications/{app_id}"
@@ -275,7 +291,7 @@ Installed-Size: {installed_size}
         pkg_ti.uname = pkg_ti.gname = "root"
         tar.addfile(pkg_ti, io.BytesIO(pkg_bytes))
 
-    data_tar_gz = _write_tar_gz(add_data)
+    data_tar_gz = _write_tar_gz(add_data, timestamp)
 
     # 4. Assemble GNU AR archive (.ipk)
     members = [
