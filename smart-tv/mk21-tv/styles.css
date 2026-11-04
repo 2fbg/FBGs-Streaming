@@ -194,7 +194,7 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
-  height: calc(100vh - 128px);
+  height: auto;
   min-height: 0;
   background: #090b12;
 }
@@ -215,8 +215,9 @@ body {
   gap: 14px;
   padding: 12px 18px;
   background: #090b12;
-  height: calc(100vh - 75px);
-  max-height: calc(100vh - 75px);
+  height: 100%;
+  max-height: 100%;
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   box-sizing: border-box;
   width: 100%;
@@ -290,23 +291,26 @@ body {
 
 /* Barra de Rolagem Visível e Otimizada para Smart TV */
 ::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
-  display: block !important;
-  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 ::-webkit-scrollbar-track {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.14);
   border-radius: 12px;
 }
 
 ::-webkit-scrollbar-thumb {
-  min-height: 40px;
-  background-color: rgba(242, 196, 92, 0.85);
-  border: 3px solid transparent;
+  min-height: 48px;
+  background-color: #f2c45c;
+  border: 2px solid rgba(0, 0, 0, 0.55);
   background-clip: padding-box;
   border-radius: 12px;
+}
+
+::-webkit-scrollbar-thumb:vertical {
+  min-height: 48px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -390,11 +394,29 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  position: sticky;
+  position: relative;
   top: 0;
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   box-sizing: border-box;
+}
+
+/* O mini player nunca sai da tela: a coluna não rola, apenas o card de EPG rola. */
+.col-player > .video-box {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+}
+
+.col-player > .epg-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.col-player > .player-controls {
+  flex: 0 0 auto;
 }
 
 .video-box {
@@ -690,6 +712,9 @@ video {
   grid-template-columns: 32% 68%;
   gap: 20px;
   padding: 20px 35px;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
   min-height: 0;
   min-width: 0;
 }
@@ -813,16 +838,16 @@ video {
 }
 
 /* ================= 7. MODAIS (MODERN FOCUS TRAP & OVERFLOW FIX v1.1.0) ================= */
+/* Modais acima de qualquer camada do app (player em tela cheia, splash e login). */
 .app-modal, .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(0, 0, 0, 0.94);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000001;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  z-index: 2147483000;
+  isolation: isolate;
 }
 
 .modal-container, .modal-content, .modal-card {
@@ -1814,10 +1839,11 @@ body.is-fullscreen .col-player {
 
 /* Barra de Atalhos Coloridos do Controle Remoto (Footer) */
 .remote-color-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  flex-shrink: 0;
   height: 38px;
   background: rgba(10, 12, 18, 0.94);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -2128,17 +2154,35 @@ body {
 }
 
 html {
-    scrollbar-color: rgba(242, 196, 92, 0.85) rgba(255, 255, 255, 0.08);
-    scrollbar-width: thin;
+    scrollbar-color: #f2c45c rgba(255, 255, 255, 0.14);
+    scrollbar-width: auto;
+}
+
+/* scrollbar-width: auto é obrigatório: "thin" desliga o desenho do ::-webkit-scrollbar
+   em Chromium novo e deixa a barra invisível nas TVs. */
+.pane-scroll,
+.settings-left-menu,
+.settings-detail-panel,
+.modal-content-scroll,
+.modal-body,
+.audio-subs-modal-body,
+.server-manager-body,
+.servers-manager-list,
+.source-options-list,
+#epgScheduleList,
+#devLogsContainer,
+.omnisearch-body,
+.epg-card {
+    scrollbar-color: #f2c45c rgba(255, 255, 255, 0.14);
+    scrollbar-width: auto;
+    scrollbar-gutter: stable;
 }
 
 .pane-scroll,
-.col-player,
 .settings-left-menu,
 .settings-detail-panel {
-    scrollbar-color: rgba(242, 196, 92, 0.85) rgba(255, 255, 255, 0.08);
-    scrollbar-width: thin;
-    scrollbar-gutter: stable;
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
 }
 
 .app-sidebar {
@@ -3098,4 +3142,32 @@ html.authenticated-session .startup-login-screen {
   .startup-login-card {
     padding: 24px 20px;
   }
+}
+
+
+/* ==========================================================================
+   v2.4.1 — Camadas, rolagem e mini player em Smart TV
+   ========================================================================== */
+
+/* Indicador de rolagem desenhado pelo app (TVs que ocultam a barra nativa). */
+.tv-scrollbar-indicator {
+  width: 12px;
+  min-width: 12px;
+}
+
+/* O mini player fica sempre visível: a coluna do player não rola. */
+.col-player {
+  overflow: hidden;
+}
+
+/* Em tela cheia a TV pode compor o plano de vídeo acima do HTML. Enquanto um
+   modal está aberto, o vídeo e o HUD são ocultados para o modal aparecer. */
+body.mk21-modal-open #videoContainer,
+body.mk21-modal-open .video-box.is-fullscreen {
+  z-index: 60 !important;
+}
+
+body.mk21-modal-open .video-box.is-fullscreen video,
+body.mk21-modal-open .video-box.is-fullscreen .fs-hud-bar {
+  visibility: hidden !important;
 }

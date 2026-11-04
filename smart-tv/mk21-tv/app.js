@@ -3498,6 +3498,7 @@ function openQualityPicker() {
       list.appendChild(button);
     });
   });
+  mk21BringModalToFront(modal);
   modal.classList.remove('hidden');
   activeZone = 'modalQuality';
   const firstOption = list.querySelector('.source-option-btn');
@@ -3611,6 +3612,7 @@ function openSourcePicker() {
     list.appendChild(empty);
   }
 
+  mk21BringModalToFront(modal);
   modal.classList.remove('hidden');
   activeZone = 'modalSources';
   const firstOption = list.querySelector('.source-option-btn') ||
@@ -5521,7 +5523,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.0';
+const BASE_PACKAGE_VERSION = '2.4.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5577,10 +5579,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2400,
+        versionCode: 2401,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
-        releaseNotes: '• Android: regras R8 mais específicas para reduzir o tamanho do APK.\n• Smart TV: barras de rolagem visíveis mesmo quando ocultadas pelo sistema da TV.\n• Smart TV: modais de qualidade e fontes aparecem acima do player em tela cheia.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.0_all.ipk',
+        releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.1_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -5832,6 +5834,30 @@ function mk21GetOpenModal() {
   return null;
 }
 
+function mk21SyncModalOpenState() {
+  const hasModal = !!mk21GetOpenModal();
+  if (hasModal !== document.body.classList.contains('mk21-modal-open')) {
+    document.body.classList.toggle('mk21-modal-open', hasModal);
+  }
+}
+
+// Move o modal para o fim do <body>: nenhum ancestral com z-index/transform pode ficar à frente.
+function mk21BringModalToFront(modal) {
+  if (!modal) return;
+  if (modal.parentNode !== document.body) document.body.appendChild(modal);
+  document.body.classList.add('mk21-modal-open');
+}
+
+function mk21WatchModalState() {
+  mk21SyncModalOpenState();
+  if (typeof MutationObserver === 'undefined') return;
+  const observer = new MutationObserver(mk21SyncModalOpenState);
+  const modalNodes = document.querySelectorAll('.app-modal, .modal-overlay');
+  for (let i = 0; i < modalNodes.length; i++) {
+    observer.observe(modalNodes[i], { attributes: true, attributeFilter: ['class', 'style'] });
+  }
+}
+
 function mk21HandleScrollInput(scrollArea, event) {
     const delta = event.deltaY || (event.wheelDelta ? -event.wheelDelta : (event.detail ? event.detail * 40 : 0));
     if (!delta) return;
@@ -5847,46 +5873,59 @@ function mk21HandleScrollInput(scrollArea, event) {
 let mk21ScrollbarFrame = 0;
 const mk21ScrollableAreas = '.pane-scroll, .col-player, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list, .audio-subs-modal-body, .modal-content-scroll, .modal-body, #epgScheduleList, #devLogsContainer';
 
+function mk21ModalAncestor(el) {
+  let parent = el && el.parentElement;
+  while (parent) {
+    if (parent.classList && (parent.classList.contains('app-modal') || parent.classList.contains('modal-overlay'))) return parent;
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
 function mk21UpdateVisibleScrollbars() {
-  document.querySelectorAll('.tv-scrollbar-indicator').forEach(track => {
+  const tracks = document.querySelectorAll('.tv-scrollbar-indicator');
+  for (let i = 0; i < tracks.length; i++) {
+    const track = tracks[i];
     const scrollArea = track._mk21ScrollArea;
     if (!scrollArea || !document.body.contains(scrollArea)) {
       if (track.parentNode) track.parentNode.removeChild(track);
-      return;
+      continue;
     }
 
     const rect = scrollArea.getBoundingClientRect();
+    const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
     const visible = window.getComputedStyle(scrollArea).display !== 'none' &&
-      rect.width > 0 && rect.height > 0 &&
-      scrollArea.scrollHeight > scrollArea.clientHeight + 1;
+      rect.width > 0 && rect.height > 0 && maxScroll > 1 &&
+      rect.bottom > 0 && rect.top < window.innerHeight;
     if (!visible) {
       track.style.visibility = 'hidden';
-      return;
+      continue;
     }
 
     const trackHeight = Math.max(32, rect.height);
     const thumb = track.firstElementChild;
-    const thumbHeight = Math.min(trackHeight, Math.max(28, trackHeight * scrollArea.clientHeight / scrollArea.scrollHeight));
-    const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
-    const thumbOffset = (trackHeight - thumbHeight) * scrollArea.scrollTop / maxScroll;
+    const thumbHeight = Math.min(trackHeight, Math.max(32, trackHeight * scrollArea.clientHeight / scrollArea.scrollHeight));
+    const thumbOffset = (trackHeight - thumbHeight) * Math.min(1, Math.max(0, scrollArea.scrollTop / maxScroll));
     track.style.top = rect.top + 'px';
-    track.style.left = (rect.right - 12) + 'px';
+    track.style.left = Math.max(0, rect.right - 13) + 'px';
     track.style.height = trackHeight + 'px';
-    let parent = scrollArea.parentElement;
-    while (parent && !parent.classList.contains('app-modal')) parent = parent.parentElement;
-    track.style.zIndex = parent ? '1000002' : '999998';
-    thumb.style.height = thumbHeight + 'px';
-    thumb.style.transform = `translateY(${thumbOffset}px)`;
+    track.style.zIndex = mk21ModalAncestor(scrollArea) ? '2147483001' : '900';
+    if (thumb) {
+      thumb.style.height = thumbHeight + 'px';
+      thumb.style.transform = 'translateY(' + thumbOffset + 'px)';
+    }
     track.style.visibility = 'visible';
-  });
+  }
 }
 
 function mk21ScheduleVisibleScrollbars() {
   if (mk21ScrollbarFrame) return;
   mk21ScrollbarFrame = window.requestAnimationFrame(() => {
     mk21ScrollbarFrame = 0;
-    document.querySelectorAll(mk21ScrollableAreas).forEach(scrollArea => {
-      if (scrollArea._mk21ScrollbarIndicator) return;
+    const areas = document.querySelectorAll(mk21ScrollableAreas);
+    for (let i = 0; i < areas.length; i++) {
+      const scrollArea = areas[i];
+      if (scrollArea._mk21ScrollbarIndicator) continue;
       const track = document.createElement('div');
       track.className = 'tv-scrollbar-indicator';
       track.setAttribute('aria-hidden', 'true');
@@ -5894,21 +5933,30 @@ function mk21ScheduleVisibleScrollbars() {
       track._mk21ScrollArea = scrollArea;
       scrollArea._mk21ScrollbarIndicator = track;
       document.body.appendChild(track);
-      scrollArea.addEventListener('scroll', mk21ScheduleVisibleScrollbars, { passive: true });
-    });
+    }
     mk21UpdateVisibleScrollbars();
   });
 }
 
-document.querySelectorAll(mk21ScrollableAreas).forEach(scrollArea => {
-  if ('onwheel' in document) {
-    scrollArea.addEventListener('wheel', event => mk21HandleScrollInput(scrollArea, event), { passive: false });
-  } else {
-    const legacyScroll = event => mk21HandleScrollInput(scrollArea, event);
-    scrollArea.addEventListener('mousewheel', legacyScroll, false);
-    scrollArea.addEventListener('DOMMouseScroll', legacyScroll, false);
+function mk21FindScrollArea(node) {
+  while (node && node !== document.body) {
+    if (node.nodeType === 1 && node.matches && node.matches(mk21ScrollableAreas)) return node;
+    node = node.parentElement;
   }
-});
+  return null;
+}
+
+function mk21HandleWheel(event) {
+  if (event.ctrlKey) return;
+  const area = mk21FindScrollArea(event.target);
+  if (area) mk21HandleScrollInput(area, event);
+}
+window.addEventListener('wheel', mk21HandleWheel, { passive: false });
+window.addEventListener('mousewheel', mk21HandleWheel, false);
+window.addEventListener('DOMMouseScroll', mk21HandleWheel, false);
+
+// Fase de captura: qualquer rolagem (inclusive dentro de modais) reposiciona o indicador.
+window.addEventListener('scroll', mk21ScheduleVisibleScrollbars, true);
 window.addEventListener('resize', mk21ScheduleVisibleScrollbars);
 window.addEventListener('orientationchange', mk21ScheduleVisibleScrollbars);
 if (typeof MutationObserver !== 'undefined') {
@@ -5916,6 +5964,7 @@ if (typeof MutationObserver !== 'undefined') {
   scrollbarObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 }
 mk21ScheduleVisibleScrollbars();
+mk21WatchModalState();
 function mk21GetFocusables() {
   const activeModal = mk21GetOpenModal();
   const root = activeModal || document;
@@ -6269,6 +6318,16 @@ document.addEventListener('keydown', function (e) {
       if (typeof switchContentType === 'function') switchContentType('LIVE');
       return;
     }
+
+    // Back nunca escapa para o webOS/Tizen: na tela inicial pede confirmação antes de sair.
+    e.preventDefault();
+    e.stopPropagation();
+    if (isAppFullscreen()) {
+      if (typeof toggleFullscreen === 'function') toggleFullscreen(false);
+      return;
+    }
+    openExitConfirm();
+    return;
   }
 
   // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
@@ -6421,6 +6480,16 @@ document.addEventListener('keydown', function (e) {
   }
 }, true);
 
+// Back do controle: além do keydown, suprime o keyup para o webOS/Tizen não fecharem o app.
+document.addEventListener('keyup', function (e) {
+  const key = e.key || '';
+  const k = e.keyCode || e.which || 0;
+  if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
+
 // Busca por voz (opcional)
 function startNativeVoiceSearch() {
   function applyTranscript(text) {
@@ -6553,7 +6622,21 @@ $('btnClosePin').onclick = () => {
 };
 
 // MODAL SAÍDA
-$('btnExitCancel').onclick = () => $('modalExitConfirm').classList.add('hidden');
+function openExitConfirm() {
+  const modal = $('modalExitConfirm');
+  if (!modal) return;
+  mk21BringModalToFront(modal);
+  modal.classList.remove('hidden');
+  activeZone = 'modalExitConfirm';
+  const cancel = $('btnExitCancel');
+  if (cancel) { try { cancel.focus(); } catch (e) {} }
+}
+
+$('btnExitCancel').onclick = () => {
+  $('modalExitConfirm').classList.add('hidden');
+  activeZone = 'channels';
+  focusActiveElement();
+};
 $('btnExitConfirm').onclick = () => {
   if (window.webOS && webOS.platformBack) webOS.platformBack();
   else window.close();
