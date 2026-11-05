@@ -4129,3 +4129,23 @@ button:disabled,
   min-height: 56px !important;
 }
 .player-controls #btnSources .ctrl-ico { font-size: 20px; }
+
+/* 2.4.8 - estado do login visivel na propria tela (a TV nao tem devtools) */
+.startup-login-status {
+  min-height: 20px;
+  margin: 10px 2px 2px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffd166;
+  letter-spacing: .01em;
+}
+
+.startup-login-status:empty { display: none; }
+
+.startup-login-status.is-error { color: #ff8a8a; }
+
+.startup-login-error {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}

@@ -445,30 +445,70 @@ try {
 } catch (e) {}
 
 
+// Reserva em memoria: em TV com armazenamento cheio o setItem falha, mas o login
+// precisa funcionar ao menos nesta sessao.
+var MK21_MEMORY_CREDS = { user: '', pass: '' };
+
+function mk21StoreCreds(user, pass) {
+  MK21_MEMORY_CREDS = { user: String(user || ''), pass: String(pass || '') };
+  var pairs = [
+    ['mk21_username', user], ['mk21_password', pass],
+    ['mk21_user', user], ['mk21_pass', pass],
+    ['mk21_credentials_configured', 'true']
+  ];
+  var falhou = '';
+  for (var i = 0; i < pairs.length; i++) {
+    try {
+      localStorage.setItem(pairs[i][0], pairs[i][1]);
+    } catch (e) {
+      falhou = (e && e.name) || 'erro';
+      // Armazenamento cheio: descarta o que e' descartavel e tenta de novo.
+      ['mk21_diag_log_v1', 'mk21_diag_boot_v1'].forEach(function (k) {
+        try { localStorage.removeItem(k); } catch (e2) {}
+      });
+      try { localStorage.setItem(pairs[i][0], pairs[i][1]); }
+      catch (e3) { falhou = (e3 && e3.name) || falhou; }
+    }
+  }
+  return falhou;
+}
+
 function getSharedCredentials() {
   try {
+    var mem = MK21_MEMORY_CREDS || { user: '', pass: '' };
     if (localStorage.getItem('mk21_credentials_configured') !== 'true') {
+      if (mem.user && mem.pass) return { user: mem.user, pass: mem.pass };
       return { user: '', pass: '' };
     }
     const u = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || localStorage.getItem('iptv_user');
     const p = localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || localStorage.getItem('iptv_pass');
-    return { user: String(u || '').trim(), pass: String(p || '').trim() };
-  } catch (e) {
+    const user = String(u || '').trim();
+    const pass = String(p || '').trim();
+    if (user && pass) return { user: user, pass: pass };
+    if (mem.user && mem.pass) return { user: mem.user, pass: mem.pass };
     return { user: '', pass: '' };
+  } catch (e) {
+    var fallback = MK21_MEMORY_CREDS || { user: '', pass: '' };
+    return { user: fallback.user || '', pass: fallback.pass || '' };
   }
 }
 
 function ensureSharedCredentialsStored() {
+  const c = getSharedCredentials();
+  if (!c.user || !c.pass) return false;
+  // A copia em memoria vale para esta sessao; o storage pode estar cheio na TV.
+  MK21_MEMORY_CREDS = { user: c.user, pass: c.pass };
   try {
-    const c = getSharedCredentials();
-    if (!c.user || !c.pass) return false;
     localStorage.setItem('mk21_username', c.user);
     localStorage.setItem('mk21_password', c.pass);
     localStorage.setItem('mk21_user', c.user);
     localStorage.setItem('mk21_pass', c.pass);
     return true;
   } catch (e) {
-    return false;
+    if (typeof addDevLog === 'function') {
+      addDevLog('[Login] Storage da TV recusou as credenciais (' + ((e && e.name) || 'erro') + '). Seguindo em memoria nesta sessao.', 'warning');
+    }
+    return true;
   }
 }
 
@@ -514,34 +554,66 @@ function hideStartupLogin() {
   document.documentElement.classList.add('authenticated-session');
 }
 
+function mk21LoginStatus(text, isError) {
+  const el = $('startupLoginStatus');
+  if (el) {
+    el.textContent = text || '';
+    el.classList.toggle('is-error', !!isError);
+  }
+  if (text && typeof addDevLog === 'function') {
+    addDevLog('[Login] ' + text, isError ? 'error' : 'info');
+  }
+}
+
 function submitStartupLogin() {
-  const user = $('inputLoginUsername').value.trim();
-  const pass = $('inputLoginPassword').value.trim();
-  if (!user || !pass) {
-    $('startupLoginError').textContent = 'Informe o usuário e a senha IPTV.';
-    return;
-  }
-
   try {
-    localStorage.setItem('mk21_username', user);
-    localStorage.setItem('mk21_password', pass);
-    localStorage.setItem('mk21_user', user);
-    localStorage.setItem('mk21_pass', pass);
-    localStorage.setItem('mk21_credentials_configured', 'true');
+    mk21LoginStatus('Validando os dados...');
+    const userEl = $('inputLoginUsername');
+    const passEl = $('inputLoginPassword');
+    const user = (userEl && userEl.value ? userEl.value : '').trim();
+    const pass = (passEl && passEl.value ? passEl.value : '').trim();
+    if (!user || !pass) {
+      $('startupLoginError').textContent = 'Informe o usuário e a senha IPTV.';
+      mk21LoginStatus('Faltou usuário ou senha.', true);
+      return;
+    }
+
+    const falhaStorage = mk21StoreCreds(user, pass);
+    const guardadas = ensureSharedCredentialsStored();
+    if (!guardadas) {
+      $('startupLoginError').textContent = 'Não foi possível preparar as credenciais para conexão.';
+      mk21LoginStatus('Falha ao preparar as credenciais.', true);
+      return;
+    }
+    if (falhaStorage) {
+      addDevLog('[Login] Armazenamento da TV recusou salvar (' + falhaStorage + '). Seguindo com as credenciais em memória.', 'error');
+    }
+
+    $('startupLoginError').textContent = '';
+    mk21LoginStatus('Entrando...');
+    hideStartupLogin();
+
+    try {
+      loadServer(true);
+      scheduleBackgroundListSync();
+    } catch (error) {
+      addDevLog('[Login] Erro ao iniciar o carregamento: ' + ((error && error.message) || error), 'error');
+      mk21CatalogEmptyState('network', 'O login foi salvo, mas o carregamento falhou: ' + ((error && error.message) || 'erro desconhecido') + '.');
+      return;
+    }
+
+    // Se em 1,2s nada mudou na tela, algo travou antes de desenhar: avisa em vez de ficar mudo.
+    setTimeout(function () {
+      const tela = $('startupLoginScreen');
+      if (tela && !tela.classList.contains('hidden')) return;
+      const total = (allCatalog.LIVE || []).length + (allCatalog.MOVIE || []).length + (allCatalog.SERIES || []).length;
+      if (total === 0 && isLoadingServerPlaylist) mk21LoginStatus('Conectando ao servidor...');
+    }, 1200);
   } catch (error) {
-    $('startupLoginError').textContent = 'Não foi possível salvar as credenciais neste dispositivo.';
-    addDevLog(`[Login] Falha ao salvar credenciais: ${error.message}`, 'error');
-    return;
+    const msg = (error && error.message) || String(error);
+    if ($('startupLoginError')) $('startupLoginError').textContent = 'Erro no login: ' + msg;
+    mk21LoginStatus('Erro no login: ' + msg, true);
   }
-
-  if (!ensureSharedCredentialsStored()) {
-    $('startupLoginError').textContent = 'Não foi possível preparar as credenciais para conexão.';
-    return;
-  }
-
-  hideStartupLogin();
-  loadServer(true);
-  scheduleBackgroundListSync();
 }
 
 const ADULT_KEYWORDS = [
@@ -5976,9 +6048,9 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.7';
+const BASE_PACKAGE_VERSION = '2.4.8';
 // Tela (index.html) que este app.js espera. O bootloader recusa OTA que nao bata.
-const MK21_REQUIRED_HTML = '2.4.7';
+const MK21_REQUIRED_HTML = '2.4.8';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5989,7 +6061,7 @@ let CURRENT_APP_VERSION = (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAG
 
 // Fingerprint de build: permite confirmar na TV qual codigo esta rodando
 // (pacote instalado x atualizacao OTA aplicada).
-const MK21_BUILD_TAG = '2026-11-05.5';
+const MK21_BUILD_TAG = '2026-11-05.6';
 try {
   const buildTagEl = document.getElementById('mk21BuildTag');
   if (buildTagEl) buildTagEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
@@ -6042,10 +6114,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2407,
+        versionCode: 2408,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.7_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.8_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6672,6 +6744,18 @@ document.addEventListener('keydown', function (e) {
         return;
       }
 
+      // Tela de login: OK/Enter em qualquer campo envia o formulario, e OK em
+      // um campo de texto nao pode ser engolido pelo input.
+      if (activeModal.id === 'startupLoginScreen' && (k === 13 || key === 'Enter')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const atual = document.activeElement;
+        const emCampo = atual && atual.tagName === 'INPUT';
+        const secundario = atual && atual.id && atual.id.indexOf('btn') === 0 && atual.id !== 'btnSubmitLogin';
+        if (secundario && typeof atual.click === 'function') { atual.click(); return; }
+        if (emCampo || !atual || atual === document.body) { submitStartupLogin(); return; }
+      }
+
       // Navegação D-Pad espacial restrita estritamente ao modal ativo
       if (k === 37 || key === 'ArrowLeft') {
         e.preventDefault();
@@ -6734,7 +6818,8 @@ document.addEventListener('keydown', function (e) {
     }
   }
   const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-  if (isTextInput && ae.id !== 'inputSearch' && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
+  const loginAberto = $('startupLoginScreen') && !$('startupLoginScreen').classList.contains('hidden');
+  if (isTextInput && ae.id !== 'inputSearch' && !loginAberto && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
 
   // Voz nativa
   if (key === 'Voice' || key === 'VoiceCommand' || k === 1022 || k === 1016 || k === 166) {
@@ -7277,7 +7362,7 @@ if (typeof document !== 'undefined') {
   }, false);
 }
 
-// 2.4.7 — botoes do player com icone e rotulo separados (o texto continua vindo do JS)
+// 2.4.8 — botoes do player com icone e rotulo separados (o texto continua vindo do JS)
 function mk21SetCtrlText(el, text) {
   if (!el) return;
   const str = String(text == null ? '' : text).trim();

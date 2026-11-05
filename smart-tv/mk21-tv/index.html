@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.4.7-cors1">
+  <link rel="stylesheet" href="styles.css?v=2.4.8-cors1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
   <script>
     try {
@@ -62,6 +62,7 @@
         </div>
         <div id="startupLoginError" class="startup-login-error" role="alert" aria-live="polite"></div>
         <button id="btnSubmitLogin" type="button" class="startup-login-primary" tabindex="0">Entrar no MK21</button>
+        <div id="startupLoginStatus" class="startup-login-status" role="status" aria-live="polite"></div>
         <button id="btnLoginSettings" type="button" class="startup-login-secondary" tabindex="0">⚙️ Gerenciar Servidores &amp; Ajustes</button>
         <button id="btnLoginOffline" type="button" class="startup-login-secondary" tabindex="0">📂 Prosseguir para Home (Modo Offline / Cache)</button>
         <button id="btnCancelLogin" type="button" class="startup-login-secondary hidden" tabindex="0">Voltar</button>
@@ -96,7 +97,7 @@
       <div class="header-context">
         <span class="header-kicker">CENTRAL DE ENTRETENIMENTO</span>
         <span id="headerSectionTitle" class="header-section-title">TV AO VIVO</span>
-        <span id="appVersionBadge" class="app-version-badge">v2.4.7</span>
+        <span id="appVersionBadge" class="app-version-badge">v2.4.8</span>
       </div>
     </div>
 
@@ -602,13 +603,13 @@
       // Versao do index.html empacotado. O app.js remoto (OTA) so pode rodar se declarar
       // exatamente esta versao: HTML e JS precisam ser do mesmo build, senao a tela
       // quebra (foi o que aconteceu ao ativar um app.js novo sobre um index.html velho).
-      var htmlVer = '2.4.7';
+      var htmlVer = '2.4.8';
       window.MK21_HTML_VERSION = htmlVer;
       try {
         var otaCode = localStorage.getItem('mk21_ota_app_js');
         var otaVer = localStorage.getItem('mk21_ota_app_version');
         var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        var currentPackageVersion = '2.4.7';
+        var currentPackageVersion = '2.4.8';
         var compareVersions = function(a, b) {
           var left = String(a || '0.0.0').replace(/[^0-9.]/g, '').split('.');
           var right = String(b || '0.0.0').replace(/[^0-9.]/g, '').split('.');
@@ -642,7 +643,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.4.7-cors1';
+              fallback.src = 'app.js?v=2.4.8-cors1';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -659,7 +660,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.4.7-cors1';
+      s.src = 'app.js?v=2.4.8-cors1';
       document.body.appendChild(s);
     })();
   </script>
