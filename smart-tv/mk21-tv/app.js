@@ -392,7 +392,12 @@ function updateSplash(percent, text) {
   if (txt && text) txt.textContent = text;
 }
 
+// O splash (preto + logo) segura a cena enquanto o login nao termina, para a
+// interface da lista nunca aparecer atras da tela de login.
+var MK21_SPLASH_HOLD = false;
+
 function hideSplash() {
+  if (MK21_SPLASH_HOLD) return;
   const splash = $('startupSplashScreen');
   if (splash) {
     updateSplash(100, 'Tudo Pronto!');
@@ -409,7 +414,28 @@ function hideSplash() {
 }
 
 // Timeout de segurança absoluto: a tela de splash NUNCA trava mais de 3.5 segundos na TV
-setTimeout(hideSplash, 3500);
+setTimeout(function () { if (!MK21_SPLASH_HOLD) hideSplash(); }, 3500);
+
+function mk21HoldSplash() {
+  MK21_SPLASH_HOLD = true;
+  const splash = $('startupSplashScreen');
+  if (splash) {
+    splash.classList.remove('fade-out');
+    splash.classList.add('is-hold');
+    splash.style.display = 'flex';
+    splash.style.opacity = '1';
+    splash.style.pointerEvents = 'none';
+  }
+  document.documentElement.classList.add('mk21-splash-hold');
+}
+
+function mk21ReleaseSplash() {
+  MK21_SPLASH_HOLD = false;
+  document.documentElement.classList.remove('mk21-splash-hold');
+  const splash = $('startupSplashScreen');
+  if (splash) splash.classList.remove('is-hold');
+  hideSplash();
+}
 
 // 2. POLYFILLS PARA NAVEGADORES CHROMIUM WEBOS
 if (!Element.prototype.replaceChildren) {
@@ -530,9 +556,14 @@ function getProxyRequestUrl(url) {
   return `${MK21_CORS_PROXY_ENDPOINT}?url=${encodeURIComponent(url)}`;
 }
 
+var MK21_LOGIN_SHOWN = false;
+
 function showStartupLogin(message = '', allowCancel = hasConfiguredSharedCredentials()) {
   const screen = $('startupLoginScreen');
   if (!screen) return;
+  // Primeira exibicao: espera o logo. Reaberturas (header/config) entram na hora.
+  const primeiraExibicao = !MK21_LOGIN_SHOWN;
+  MK21_LOGIN_SHOWN = true;
   document.documentElement.classList.remove('authenticated-session');
   document.documentElement.classList.add('login-required');
   screen.classList.remove('hidden');
@@ -540,11 +571,17 @@ function showStartupLogin(message = '', allowCancel = hasConfiguredSharedCredent
   $('inputLoginUsername').value = credentials.user;
   $('inputLoginPassword').value = credentials.pass;
   $('startupLoginError').textContent = message;
+  mk21LoginStatus(message || '', !!message);
   $('btnCancelLogin').classList.toggle('hidden', !allowCancel);
-  setTimeout(() => {
+  // Etapa 1: tela toda preta com o logo. Etapa 2: o cartao de login entra por cima.
+  mk21HoldSplash();
+  const revelar = function () {
+    document.documentElement.classList.remove('mk21-splash-hold');
     const target = credentials.user ? $('inputLoginPassword') : $('inputLoginUsername');
     if (target) target.focus();
-  }, 0);
+    mk21EnsureFocusInside();
+  };
+  setTimeout(revelar, primeiraExibicao ? 1200 : 0);
 }
 
 function hideStartupLogin() {
@@ -552,6 +589,8 @@ function hideStartupLogin() {
   if (screen) screen.classList.add('hidden');
   document.documentElement.classList.remove('login-required');
   document.documentElement.classList.add('authenticated-session');
+  document.documentElement.classList.remove('mk21-splash-hold');
+  mk21ReleaseSplash();
 }
 
 function mk21LoginStatus(text, isError) {
@@ -6048,9 +6087,9 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.8';
+const BASE_PACKAGE_VERSION = '2.4.9';
 // Tela (index.html) que este app.js espera. O bootloader recusa OTA que nao bata.
-const MK21_REQUIRED_HTML = '2.4.8';
+const MK21_REQUIRED_HTML = '2.4.9';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6061,10 +6100,14 @@ let CURRENT_APP_VERSION = (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAG
 
 // Fingerprint de build: permite confirmar na TV qual codigo esta rodando
 // (pacote instalado x atualizacao OTA aplicada).
-const MK21_BUILD_TAG = '2026-11-05.6';
+const MK21_BUILD_TAG = '2026-11-05.8';
 try {
   const buildTagEl = document.getElementById('mk21BuildTag');
   if (buildTagEl) buildTagEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
+  const footerVerEl = document.getElementById('mk21FooterVersion');
+  if (footerVerEl) footerVerEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
+  const loginFooterVerEl = document.getElementById('loginFooterVersion');
+  if (loginFooterVerEl) loginFooterVerEl.textContent = 'v' + CURRENT_APP_VERSION;
 } catch (e) {}
 
 let latestRemoteUpdateData = null;
@@ -6114,10 +6157,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2408,
+        versionCode: 2409,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.8_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.9_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -7362,7 +7405,7 @@ if (typeof document !== 'undefined') {
   }, false);
 }
 
-// 2.4.8 — botoes do player com icone e rotulo separados (o texto continua vindo do JS)
+// 2.4.9 — botoes do player com icone e rotulo separados (o texto continua vindo do JS)
 function mk21SetCtrlText(el, text) {
   if (!el) return;
   const str = String(text == null ? '' : text).trim();
@@ -7488,7 +7531,6 @@ function initializeMk21App() {
     scheduleBackgroundListSync();
   } else {
     showStartupLogin('', false);
-    hideSplash();
     mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
   }
 
@@ -7602,3 +7644,167 @@ function globalSearch(query) {
   }
   return results;
 }
+
+/* ================= 2.4.9 · FOCO PRESO NO APP E TECLA OK UNIVERSAL =================
+   TVs entregam a tecla OK de formas diferentes (keyCode 13, 23, 66, 160, "Select",
+   "Accept", ou apenas um clique no ponteiro). Aqui todas viram Enter, e o foco do
+   controle nunca consegue sair da aplicacao (Tab, blur, troca de app e Voltar). */
+
+function mk21IsOkAlias(e) {
+  if (!e) return false;
+  const k = e.keyCode || e.which || 0;
+  const key = e.key || '';
+  const code = e.code || '';
+  if (k === 13 || key === 'Enter') return false; // ja tratado normalmente
+  return k === 23 || k === 66 || k === 160 || k === 57377 ||
+    key === 'Select' || key === 'Accept' || key === 'OK' || key === 'Execute' ||
+    code === 'Select' || code === 'NumpadEnter';
+}
+
+var MK21_LAST_OK_AT = 0;
+
+function mk21DispatchEnter(target) {
+  const host = (target && target.dispatchEvent) ? target : (document.activeElement || document.body);
+  try {
+    const ev = new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+      bubbles: true, cancelable: true
+    });
+    host.dispatchEvent(ev);
+  } catch (err) {
+    if (host && typeof host.click === 'function') host.click();
+  }
+}
+
+window.addEventListener('keydown', function (e) {
+  if (!mk21IsOkAlias(e)) return;
+  MK21_LAST_OK_AT = Date.now();
+  e.preventDefault();
+  e.stopPropagation();
+  mk21DispatchEnter(e.target || document.activeElement);
+}, true);
+
+// Controles que mandam somente o keyup do OK.
+window.addEventListener('keyup', function (e) {
+  if (!mk21IsOkAlias(e)) return;
+  if (Date.now() - MK21_LAST_OK_AT < 400) return;
+  MK21_LAST_OK_AT = Date.now();
+  e.preventDefault();
+  mk21DispatchEnter(e.target || document.activeElement);
+}, true);
+
+function mk21FocusableList(root) {
+  if (!root) return [];
+  const selector = 'button:not([disabled]), [href], input:not([disabled]),' +
+    ' select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  return Array.prototype.slice.call(root.querySelectorAll(selector)).filter(function (el) {
+    return typeof mk21IsVisible === 'function' ? mk21IsVisible(el) : !!(el.offsetWidth || el.offsetHeight);
+  });
+}
+
+// Garante que o foco esteja sempre em um controle do app (modal ativo tem prioridade).
+function mk21EnsureFocusInside() {
+  try {
+    const modal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
+    const root = modal || document.body;
+    const atual = document.activeElement;
+    if (atual && atual !== document.body && root.contains(atual)) return atual;
+    const lista = mk21FocusableList(root);
+    if (lista.length) {
+      lista[0].focus();
+      return lista[0];
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Tab nunca navega para fora do app.
+window.addEventListener('keydown', function (e) {
+  const isTab = e.key === 'Tab' || e.keyCode === 9;
+  if (!isTab) return;
+  e.preventDefault();
+  const atual = document.activeElement;
+  const modal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
+  const lista = mk21FocusableList(modal || document.body);
+  if (!lista.length) return;
+  const idx = lista.indexOf(atual);
+  const proximo = e.shiftKey
+    ? lista[(idx <= 0 ? lista.length : idx) - 1]
+    : lista[(idx + 1) % lista.length];
+  if (proximo) proximo.focus();
+}, true);
+
+var MK21_LAST_FOCUS = null;
+document.addEventListener('focusin', function (e) {
+  if (e.target && e.target !== document.body) MK21_LAST_FOCUS = e.target;
+}, true);
+
+// A TV tirou o foco do app (troca de janela, tecla HOME, popup do sistema): volta.
+window.addEventListener('blur', function () {
+  setTimeout(function () {
+    if (document.hidden) return;
+    mk21EnsureFocusInside();
+  }, 120);
+});
+
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) return;
+  setTimeout(mk21EnsureFocusInside, 150);
+});
+
+// Voltar no primeiro nivel nao pode fechar a aplicacao: consome o historico.
+(function mk21LockBackNavigation() {
+  try {
+    if (location.protocol === 'http:' || location.protocol === 'https:') {
+      history.pushState({ mk21FocusLock: 1 }, '', location.href);
+    }
+  } catch (e) {}
+  window.addEventListener('popstate', function () {
+    try { history.pushState({ mk21FocusLock: 1 }, '', location.href); } catch (e) {}
+    mk21EnsureFocusInside();
+  });
+})();
+
+// Eco da ultima tecla recebida na tela de login: permite diagnosticar por foto
+// quando o controle da TV manda um codigo diferente do esperado.
+window.addEventListener('keydown', function (e) {
+  const hint = document.getElementById('mk21LoginKeyHint');
+  if (!hint) return;
+  const screen = $('startupLoginScreen');
+  if (!screen || screen.classList.contains('hidden')) { hint.textContent = ''; return; }
+  const k = e.keyCode || e.which || 0;
+  const nome = (e.key && e.key !== 'Unidentified') ? e.key : (e.code || 'sem nome');
+  hint.textContent = 'tecla ' + k + ' · ' + nome;
+}, true);
+
+// OK do ponteiro/clique no fundo preto do login: aciona o cartao em vez de nao fazer nada.
+document.addEventListener('click', function (e) {
+  const screen = $('startupLoginScreen');
+  if (!screen || screen.classList.contains('hidden') || e.target !== screen) return;
+  const usuario = ($('inputLoginUsername') || {}).value || '';
+  const senha = ($('inputLoginPassword') || {}).value || '';
+  const submit = $('btnSubmitLogin');
+  if (usuario.trim() && senha.trim() && submit) {
+    submit.click();
+    return;
+  }
+  const alvo = $('inputLoginUsername');
+  if (alvo) alvo.focus();
+}, true);
+
+// Com o login aberto, o foco nao escapa nem por engano de layout.
+document.addEventListener('focusout', function (e) {
+  if (e.relatedTarget) return;
+  setTimeout(function () {
+    const modal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
+    if (!modal) return;
+    if (modal.contains(document.activeElement)) return;
+    mk21EnsureFocusInside();
+  }, 40);
+}, true);
+
+try {
+  setTimeout(mk21EnsureFocusInside, 900);
+} catch (e) {}

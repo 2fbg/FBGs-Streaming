@@ -4149,3 +4149,88 @@ button:disabled,
   font-weight: 600;
   line-height: 1.35;
 }
+
+/* ================== 2.4.9 · ENTRADA PRETA, LOGO E FOCO PRESO ================== */
+/* Tela preta + logo antes do login: o splash vira a "segunda tela". */
+.mk21-splash.is-hold .mk21-splash-progress,
+.mk21-splash.is-hold #splashStatusText,
+.mk21-splash.is-hold .mk21-splash-sub {
+  display: none !important;
+}
+
+.mk21-splash.is-hold {
+  opacity: 1 !important;
+  display: flex !important;
+  transition: opacity 320ms ease;
+}
+
+.mk21-splash.is-hold .mk21-splash-logo {
+  width: 168px;
+  height: 168px;
+  animation: mk21LogoPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes mk21LogoPulse {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+
+/* Login sobre preto absoluto, revelado depois do logo. */
+.startup-login-screen {
+  background: #000 !important;
+  opacity: 1;
+  transition: opacity 300ms ease;
+}
+
+html.mk21-splash-hold .startup-login-screen {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.startup-login-version {
+  display: block;
+  margin-top: 8px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: rgba(226, 232, 240, 0.62);
+}
+
+/* Versao no rodape da tela toda (splash, login e app). */
+.mk21-footer-version {
+  position: fixed;
+  right: 20px;
+  bottom: 10px;
+  z-index: 2000002;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.07em;
+  color: rgba(226, 232, 240, 0.72);
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+/* 2.4.9 · rotulos do login nao podem encostar no campo anterior */
+.startup-login-form label {
+  margin-top: 12px;
+}
+.startup-login-form label:first-of-type {
+  margin-top: 0;
+}
+
+/* Eco da tecla (diagnostico): discreto, so enquanto o login esta aberto */
+.mk21-login-keyhint {
+  display: none;
+  position: fixed;
+  left: 20px;
+  bottom: 10px;
+  z-index: 2000002;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: rgba(148, 163, 184, 0.7);
+  pointer-events: none;
+}
+
+html.login-required .mk21-login-keyhint {
+  display: block;
+}
