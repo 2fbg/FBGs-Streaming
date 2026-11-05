@@ -3776,3 +3776,25 @@ button:disabled,
 .cfg-menu-item {
   text-align: left !important;
 }
+
+/* ---------- Contagem por aba (Ao Vivo / Filmes / Series) ---------- */
+.tab-btn .tab-count {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  min-width: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.tab-btn.active .tab-count {
+  background: rgba(255, 255, 255, 0.30);
+}
+
+.tab-btn .tab-count.is-empty {
+  opacity: 0.5;
+}

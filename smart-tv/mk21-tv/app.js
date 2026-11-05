@@ -287,6 +287,10 @@ async function getStoredData(id) {
   } catch (e) { return null; }
 }
 
+// Esquema do catalogo salvo: sobe quando a classificacao muda, forcando resync
+// (caches antigos com a lista inteira em LIVE deixam de ser aceitos).
+const MK21_CATALOG_SCHEMA = 2;
+
 async function saveStoredData(id, payload, catalogComplete = true) {
   try {
     const db = await openDB();
@@ -294,6 +298,7 @@ async function saveStoredData(id, payload, catalogComplete = true) {
     // Salva o catálogo COMPLETO em disco (IndexedDB) para restauração instantânea sem rede
     const full = {
       sourceGroupsVersion: 1,
+      catalogSchema: MK21_CATALOG_SCHEMA,
       catalogComplete: catalogComplete,
       LIVE: (payload.LIVE || []).map(slimItem),
       MOVIE: (payload.MOVIE || []).map(slimItem),
@@ -1393,7 +1398,8 @@ async function loadServer(forceRefresh = false) {
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
     const totalCached = liveN + movN + serN;
-    if (cached && totalCached > 0 && cached.sourceGroupsVersion === 1) {
+    const cachedSchema = Number((cached && cached.catalogSchema) || 0);
+    if (cached && totalCached > 0 && cached.sourceGroupsVersion === 1 && cachedSchema >= MK21_CATALOG_SCHEMA) {
       allCatalog = {
         LIVE: cached.LIVE || [],
         MOVIE: cached.MOVIE || [],
@@ -1692,7 +1698,28 @@ async function loadServer(forceRefresh = false) {
 // Parser legado removido: o carregamento moderno classifica itens durante o streaming.
 
 // 7. AGRUPAMENTO DE CATEGORIAS DA ABA ATIVA
+// Contagem por aba: deixa a separacao Ao Vivo / Filmes / Series visivel na propria aba.
+function mk21UpdateTabCounts() {
+  const counts = {
+    tabLive: (allCatalog.LIVE || []).length,
+    tabMovies: (allCatalog.MOVIE || []).length,
+    tabSeries: (allCatalog.SERIES || []).length
+  };
+  Object.keys(counts).forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    let badge = el.querySelector('.tab-count');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'tab-count';
+      el.appendChild(badge);
+    }
+    badge.textContent = counts[id] ? counts[id].toLocaleString('pt-BR') : '0';
+  });
+}
+
 function buildCurrentCategories() {
+  mk21UpdateTabCounts();
   const serverId = (SERVERS[currentServerIndex] || {}).id || '';
   const isCacheable = !isLoadingServerPlaylist && ['LIVE', 'MOVIE', 'SERIES'].includes(currentContentType);
   const showAdultContent = canShowAdultContent();
@@ -5644,7 +5671,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.4';
+const BASE_PACKAGE_VERSION = '2.4.5';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5708,10 +5735,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2404,
+        versionCode: 2405,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.4_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.5_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6226,13 +6253,44 @@ function focusActiveElement() {
   }
 }
 
+// VOLTAR DO CONTROLE — cobre todas as plataformas em que o app roda: webOS 461,
+// Tizen 10009, Android TV/WebView 4 (KEYCODE_BACK), 166 (BrowserBack), 27/Escape e
+// Backspace como fallback no navegador. Era repetido em quatro pontos; virou helper.
+function mk21IsEditableTarget(el) {
+  if (!el) return false;
+  const tag = (el.tagName || '').toUpperCase();
+  return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
+}
+
+function mk21IsBackKey(e) {
+  if (!e) return false;
+  const k = e.keyCode || e.which || 0;
+  const key = e.key || '';
+  const code = e.code || '';
+  // Backspace apaga caractere ao digitar: so conta como Voltar fora de campo de texto.
+  const isBackspace = k === 8 || key === 'Backspace';
+  if (isBackspace && mk21IsEditableTarget(e.target || document.activeElement)) return false;
+  return isBackspace || k === 4 || k === 27 || k === 166 || k === 461 || k === 10009 ||
+    key === 'Back' || key === 'GoBack' || key === 'BrowserBack' ||
+    key === 'Escape' || key === 'Esc' || key === 'XF86Back' || key === 'Exit' ||
+    code === 'BrowserBack';
+}
+
+// Fase de captura, o mais cedo possivel: impede o fechamento nativo da TV antes que
+// qualquer outro handler (ou o proprio runtime) trate o Voltar.
+window.addEventListener('keydown', function (e) {
+  if (mk21IsBackKey(e)) {
+    e.preventDefault();
+  }
+}, true);
+
 document.addEventListener('keydown', function (e) {
   const key = e.key || '';
   const code = e.code || '';
   const keyCodes = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27, Backspace: 8, GoBack: 461 };
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
-  const isBackKey = k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back';
+  const isBackKey = mk21IsBackKey(e);
 
   // Qualquer outra tecla cancela a sequencia de saida pendente.
   if (!isBackKey) mk21ResetExitSequence();
@@ -6254,7 +6312,7 @@ document.addEventListener('keydown', function (e) {
       }
 
       // Interceptação de Voltar / Back (webOS 461, Tizen 10009, Escape 27, Backspace 8)
-      if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+      if (mk21IsBackKey(e)) {
         e.preventDefault();
         e.stopPropagation();
         if (activeModal.id === 'startupLoginScreen') {
@@ -6388,7 +6446,7 @@ document.addEventListener('keydown', function (e) {
   }
 
   // Back / Return (webOS 461, Tizen 10009)
-  if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+  if (mk21IsBackKey(e)) {
     // A pesquisa funciona como uma área modal: Voltar nunca alcança o player/tela atrás.
     if ((ae && ae.id === 'inputSearch') || activeZone === 'search') {
       e.preventDefault();
@@ -6619,7 +6677,7 @@ document.addEventListener('keydown', function (e) {
 document.addEventListener('keyup', function (e) {
   const key = e.key || '';
   const k = e.keyCode || e.which || 0;
-  if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+  if (mk21IsBackKey(e)) {
     e.preventDefault();
     e.stopPropagation();
   }
