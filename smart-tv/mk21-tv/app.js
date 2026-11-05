@@ -2199,6 +2199,62 @@ $('btnCloseSeriesModal').onclick = () => {
 // MOTOR EPG SMART TV: METADADOS REAIS DO SERVIDOR COM FALLBACK DINÂMICO
 // =====================================================================
 const smartTvEpgCache = new Map();
+const SMART_TV_EPG_TTL_MS = 5 * 60 * 1000;
+const SMART_TV_EPG_CACHE_VERSION = 2;
+
+// A grade so vale para o servidor/provedor + usuario que a gerou: stream_id iguais
+// em provedores diferentes nao podem reaproveitar o EPG um do outro.
+function mk21EpgServerScope() {
+  const srv = SERVERS[currentServerIndex] || DEFAULT_SERVERS[0];
+  const creds = getSharedCredentials();
+  const base = srv && srv.url ? String(srv.url).replace(/\/+$/, '').toLowerCase() : 'default';
+  return `${SMART_TV_EPG_CACHE_VERSION}|${base}|${creds.user || ''}`;
+}
+
+function invalidateSmartTvEpgCache(reason) {
+  smartTvEpgCache.clear();
+  currentEpgListings = [];
+  currentEpgItemUrl = '';
+  if (reason) console.log('[SmartTV EPG] Cache invalidado:', reason);
+}
+
+// Seleciona o programa pelo intervalo real de horario. Sem programa no ar, devolve
+// null em vez de cair no primeiro item da grade (era o que gerava titulo "de outro
+// programa" enquanto o canal exibia outra coisa).
+function pickEpgProgram(parsed, nowMs) {
+  const sorted = parsed.slice().sort((a, b) => a.start - b.start);
+  const index = sorted.findIndex(p => p.start <= nowMs && p.stop > nowMs);
+  if (index >= 0) return { current: sorted[index], next: sorted[index + 1] || null, sorted };
+  return { current: null, next: sorted.find(p => p.start > nowMs) || null, sorted };
+}
+
+// Rejeita grade que se identifica como sendo de outro canal.
+function epgListingsBelongToChannel(item, listings) {
+  if (!item || !Array.isArray(listings)) return false;
+  const cleanName = value => String(value || '').toLowerCase()
+    .replace(/\b(fhd|uhd|4k|hd|sd|h265|h264|hevc)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const chanStream = String(item.streamId || '').trim();
+  const chanTvg = String(item.tvgId || item['tvg-id'] || '').trim().toLowerCase();
+  const chanName = cleanName(item.name);
+  const identified = listings.filter(l => l && (l.channel_id || l.channel_name));
+  if (identified.length === 0) return true;
+
+  return identified.some(l => {
+    const id = String(l.channel_id || '').trim();
+    if (id) {
+      if (chanStream && id === chanStream) return true;
+      if (chanTvg && id.toLowerCase() === chanTvg) return true;
+    }
+    const name = cleanName(l.channel_name);
+    if (name && chanName) {
+      if (name === chanName) return true;
+      if (name.includes(chanName) || chanName.includes(name)) return true;
+    }
+    return false;
+  });
+}
 
 function decodeSmartTvEpgText(str) {
   if (!str || typeof str !== 'string') return '';
@@ -2323,8 +2379,33 @@ function matchEPG(channel, xmltvListings) {
   return null;
 }
 
-async function updateSmartTvEpg(item) {
+let mk21EpgRefreshTimer = null;
+let mk21EpgGuideRefreshing = false;
+
+// Reavalia a grade periodicamente: cobre virada de programa e dados que chegaram
+// defasados, sem depender de trocar de canal.
+function mk21StartEpgAutoRefresh() {
+  if (mk21EpgRefreshTimer) return;
+  mk21EpgRefreshTimer = setInterval(function () {
+    if (!activeItem || activeItem.contentType !== 'LIVE') return;
+    if (document.hidden) return;
+    const nowMs = Date.now();
+    const stillCurrent = Array.isArray(currentEpgListings) &&
+      currentEpgListings.some(p => p.start <= nowMs && p.stop > nowMs);
+    if (!stillCurrent) updateSmartTvEpg(activeItem, true);
+  }, 60000);
+}
+
+async function updateSmartTvEpg(item, forceRefresh) {
   if (!item) return;
+
+  // Troca de canal: a grade anterior nunca pode vazar para o novo canal.
+  if (currentEpgItemUrl !== item.url) {
+    currentEpgListings = [];
+    currentEpgItemUrl = item.url;
+  }
+
+  mk21StartEpgAutoRefresh();
 
   const sim = getSimulatedTvProgram(item.name);
   if ($('epgTitle')) $('epgTitle').textContent = (favoriteUrls.has(item.url) ? '⭐ ' : '▶ ') + item.name;
@@ -2366,29 +2447,44 @@ async function updateSmartTvEpg(item) {
     return;
   }
 
-  const cacheKey = `epg_${streamId}`;
-  if (smartTvEpgCache.has(cacheKey)) {
-    applyRealSmartTvEpg(item, smartTvEpgCache.get(cacheKey));
-    return;
+  const cacheKey = `${mk21EpgServerScope()}|${streamId}`;
+  const cached = smartTvEpgCache.get(cacheKey);
+  if (!forceRefresh && cached) {
+    if (Date.now() - cached.fetchedAt < SMART_TV_EPG_TTL_MS) {
+      if (applyRealSmartTvEpg(item, cached.listings)) return;
+      smartTvEpgCache.delete(cacheKey);
+    } else {
+      smartTvEpgCache.delete(cacheKey); // grade vencida nunca e reutilizada
+    }
   }
 
   try {
     const cleanBase = srv.url.replace(/\/+$/, '');
-    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=6`;
-    const res = await fetch(apiUrl);
+    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=8&_=${Date.now()}`;
+    const res = await fetch(apiUrl, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.epg_listings) && data.epg_listings.length > 0) {
-        smartTvEpgCache.set(cacheKey, data.epg_listings);
+        if (!epgListingsBelongToChannel(item, data.epg_listings)) {
+          console.warn('[SmartTV EPG] Grade ignorada: identificada como de outro canal', streamId);
+          return;
+        }
+        smartTvEpgCache.set(cacheKey, { listings: data.epg_listings, fetchedAt: Date.now() });
         if (activeItem === item) {
-          applyRealSmartTvEpg(item, data.epg_listings);
+          const applied = applyRealSmartTvEpg(item, data.epg_listings);
+          if (!applied && !forceRefresh) {
+            // Grade sem programa no horario atual: descarta e tenta uma unica vez do zero.
+            smartTvEpgCache.delete(cacheKey);
+            return updateSmartTvEpg(item, true);
+          }
         }
       }
     }
   } catch (err) {
-    console.debug('[SmartTV EPG] Falha ao carregar metadados reais, mantendo simulação:', err);
+    console.debug('[SmartTV EPG] Falha ao carregar metadados reais, mantendo simulacao:', err);
   }
 }
+
 
 function parseXmltvTimestamp(val) {
   if (!val) return NaN;
@@ -2425,26 +2521,34 @@ function parseXmltvTimestamp(val) {
 }
 
 function applyRealSmartTvEpg(item, listings) {
-  if (!listings || listings.length === 0 || activeItem !== item) return;
-  const nowMs = Date.now();
+  if (!listings || listings.length === 0 || activeItem !== item) return false;
 
   const parsed = listings.map(l => {
-    let start = parseXmltvTimestamp(l.start_timestamp || l.start);
-    let stop = parseXmltvTimestamp(l.stop_timestamp || l.end || l.stop);
+    const start = parseXmltvTimestamp(l.start_timestamp || l.start);
+    const stop = parseXmltvTimestamp(l.stop_timestamp || l.end || l.stop);
     return {
+      id: String(l.id || l.epg_id || '') || String(start),
       title: decodeSmartTvEpgText(l.title),
       desc: decodeSmartTvEpgText(l.description),
       start,
       stop
     };
-  }).filter(p => !isNaN(p.start) && !isNaN(p.stop));
+  }).filter(p => !isNaN(p.start) && !isNaN(p.stop) && p.stop > p.start);
 
-  if (parsed.length === 0) return;
-  currentEpgListings = parsed;
+  if (parsed.length === 0) return false;
 
-  let current = parsed.find(p => p.start <= nowMs && p.stop > nowMs) || parsed[0];
-  let curIdx = parsed.indexOf(current);
-  let next = (curIdx >= 0 && curIdx + 1 < parsed.length) ? parsed[curIdx + 1] : null;
+  const nowMs = Date.now();
+  const picked = pickEpgProgram(parsed, nowMs);
+  if (!picked.current) {
+    // Nada no ar segundo esta grade: melhor nao anunciar programa do que anunciar o errado.
+    currentEpgListings = [];
+    return false;
+  }
+
+  const current = picked.current;
+  const next = picked.next;
+  currentEpgListings = picked.sorted;
+  currentEpgItemUrl = item.url;
 
   const startH = new Date(current.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   const stopH = new Date(current.stop).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -2474,7 +2578,9 @@ function applyRealSmartTvEpg(item, listings) {
   if ($('fsEpgTimeBadge')) $('fsEpgTimeBadge').textContent = `${startH} - ${stopH}`;
   if ($('fsEpgFill')) $('fsEpgFill').style.width = `${pct}%`;
   if ($('fsEpgNextTitle')) $('fsEpgNextTitle').textContent = next ? next.title : 'Programação Normal';
+  return true;
 }
+
 
 // METADADOS TMDB ENRIQUECIDOS PARA FILMES E SÉRIES
 const tmdbCache = new Map();
@@ -2968,6 +3074,7 @@ function renderOmnisearchResults() {
 
 // 5. GUIA EPG COMPLETO (MODAL EPG)
 let currentEpgListings = [];
+let currentEpgItemUrl = '';
 
 function openEpgGuideModal() {
   if (!activeItem) {
@@ -2985,6 +3092,18 @@ function openEpgGuideModal() {
 
   const list = $('epgScheduleList');
   if (!list) return;
+
+  // Grade vazia ou de outro canal: busca antes de renderizar, sem loop de refresh.
+  if (!mk21EpgGuideRefreshing && (currentEpgItemUrl !== activeItem.url || !currentEpgListings.length)) {
+    mk21EpgGuideRefreshing = true;
+    list.innerHTML = '<div style="text-align:center; padding:30px; color:#aaa;">Atualizando grade de programação...</div>';
+    updateSmartTvEpg(activeItem, true).then(function () {
+      mk21EpgGuideRefreshing = false;
+      if ($('modalEpgGuide') && !$('modalEpgGuide').classList.contains('hidden')) openEpgGuideModal();
+    }).catch(function () {
+      mk21EpgGuideRefreshing = false;
+    });
+  }
 
   if (currentEpgListings && currentEpgListings.length > 0) {
     const nowMs = Date.now();
@@ -3594,6 +3713,7 @@ function openSourcePicker() {
         };
         currentServerIndex = index;
         try { localStorage.setItem('mk21_last_server', index); } catch (e) {}
+        invalidateSmartTvEpgCache('troca de servidor');
         modal.classList.add('hidden');
         activeZone = 'channels';
         activeItem = null;
@@ -5321,6 +5441,7 @@ function renderServerPickerList() {
     btnConnect.onclick = () => {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
+      invalidateSmartTvEpgCache('troca de servidor');
       
       // Exibe porcentagem no lugar do botão antes de fechar
       btnConnect.textContent = 'Carregando 25%...';
@@ -5523,7 +5644,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.1';
+const BASE_PACKAGE_VERSION = '2.4.2';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5579,10 +5700,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2401,
+        versionCode: 2402,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.1_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.2_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6103,6 +6224,10 @@ document.addEventListener('keydown', function (e) {
   const keyCodes = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27, Backspace: 8, GoBack: 461 };
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
+  const isBackKey = k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back';
+
+  // Qualquer outra tecla cancela a sequencia de saida pendente.
+  if (!isBackKey) mk21ResetExitSequence();
 
   // 1.1 Focus Trap & Gestão de Foco para Smart TVs (webOS, Tizen, Android TV)
   const activeModal = mk21GetOpenModal();
@@ -6295,7 +6420,8 @@ document.addEventListener('keydown', function (e) {
     if ($('modalExitConfirm') && !$('modalExitConfirm').classList.contains('hidden')) {
       e.preventDefault();
       $('modalExitConfirm').classList.add('hidden');
-      activeZone = 'settings';
+      mk21ResetExitSequence();
+      activeZone = 'channels';
       focusActiveElement();
       return;
     }
@@ -6319,14 +6445,15 @@ document.addEventListener('keydown', function (e) {
       return;
     }
 
-    // Back nunca escapa para o webOS/Tizen: na tela inicial pede confirmação antes de sair.
+    // Back nunca escapa para o webOS/Tizen: na tela raiz o app so sai depois de um
+    // segundo toque e da confirmacao explicita no modal.
     e.preventDefault();
     e.stopPropagation();
     if (isAppFullscreen()) {
       if (typeof toggleFullscreen === 'function') toggleFullscreen(false);
       return;
     }
-    openExitConfirm();
+    mk21HandleRootBack();
     return;
   }
 
@@ -6621,10 +6748,59 @@ $('btnClosePin').onclick = () => {
   activeZone = 'channels';
 };
 
-// MODAL SAÍDA
+// MODAL SAIDA + SEQUENCIA DO BOTAO VOLTAR
+// Regras: 1) dentro do app o Back so navega; 2) na tela raiz o primeiro toque avisa
+// (toast) e o segundo, dentro da janela, abre a confirmacao; 3) sair so com OK.
+const MK21_EXIT_TAP_WINDOW_MS = 2200;
+let mk21ExitConfirmDeadline = 0;
+
+function mk21ResetExitSequence() {
+  mk21ExitConfirmDeadline = 0;
+}
+
+function mk21HandleRootBack() {
+  const now = Date.now();
+  if (now <= mk21ExitConfirmDeadline) {
+    mk21ResetExitSequence();
+    openExitConfirm();
+    return;
+  }
+  mk21ExitConfirmDeadline = now + MK21_EXIT_TAP_WINDOW_MS;
+  showChannelBanner('Pressione Voltar novamente para sair');
+}
+
+// Encerra o app de verdade: webOS (platformBack / applicationManager), Tizen e fallback web.
+function mk21ExitApp() {
+  mk21ResetExitSequence();
+  try {
+    if (window.webOS && typeof webOS.platformBack === 'function') {
+      webOS.platformBack();
+      return;
+    }
+  } catch (e) {}
+  try {
+    if (window.webOS && webOS.service && typeof webOS.service.request === 'function') {
+      webOS.service.request('luna://com.webos.applicationManager', {
+        method: 'close',
+        parameters: { id: 'com.mk21.tv' },
+        onFailure: function () { try { window.close(); } catch (e) {} }
+      });
+      return;
+    }
+  } catch (e) {}
+  try {
+    if (window.tizen && tizen.application && tizen.application.getCurrentApplication) {
+      tizen.application.getCurrentApplication().exit();
+      return;
+    }
+  } catch (e) {}
+  try { window.close(); } catch (e) {}
+}
+
 function openExitConfirm() {
   const modal = $('modalExitConfirm');
   if (!modal) return;
+  mk21ResetExitSequence();
   mk21BringModalToFront(modal);
   modal.classList.remove('hidden');
   activeZone = 'modalExitConfirm';
@@ -6634,12 +6810,12 @@ function openExitConfirm() {
 
 $('btnExitCancel').onclick = () => {
   $('modalExitConfirm').classList.add('hidden');
+  mk21ResetExitSequence();
   activeZone = 'channels';
   focusActiveElement();
 };
 $('btnExitConfirm').onclick = () => {
-  if (window.webOS && webOS.platformBack) webOS.platformBack();
-  else window.close();
+  mk21ExitApp();
 };
 
 // MODAL OMNISEARCH & EPG GUIDE EVENT LISTENERS
@@ -6679,6 +6855,19 @@ if ($('inputOmnisearch')) {
     };
   }
 });
+
+if ($('btnRefreshEpgGuide')) $('btnRefreshEpgGuide').onclick = () => {
+  if (!activeItem) return;
+  invalidateSmartTvEpgCache('atualização manual');
+  const list = $('epgScheduleList');
+  if (list) list.innerHTML = '<div style="text-align:center; padding:30px; color:#aaa;">Atualizando grade de programação...</div>';
+  updateSmartTvEpg(activeItem, true).then(function () {
+    openEpgGuideModal();
+    showChannelBanner('Grade de programação atualizada');
+  }).catch(function () {
+    showChannelBanner('Não foi possível atualizar a grade');
+  });
+};
 
 if ($('btnCloseEpgGuide')) $('btnCloseEpgGuide').onclick = () => {
   const modal = $('modalEpgGuide');

@@ -3171,3 +3171,231 @@ body.mk21-modal-open .video-box.is-fullscreen video,
 body.mk21-modal-open .video-box.is-fullscreen .fs-hud-bar {
   visibility: hidden !important;
 }
+
+/* =====================================================================
+   MK21 — DESIGN SYSTEM DE BOTÕES (v2.4.2)
+   ---------------------------------------------------------------------
+   Regras de UI para TV (10-foot experience):
+   - alvo mínimo de 64px de altura (64x64 para botão só de ícone);
+   - :focus é o estado principal (D-Pad), com anel + glow + escala leve;
+   - transições curtas (160ms) só em transform/background/shadow;
+   - NADA de backdrop-filter: blur() (trava GPU de TV);
+   - contraste AA: texto claro sobre superfície escura, foco em âmbar.
+   ===================================================================== */
+:root {
+  /* Ritmo e alvo de toque/foco */
+  --btn-radius: 14px;
+  --btn-radius-sm: 12px;
+  --btn-radius-pill: 999px;
+  --btn-min-h: 64px;
+  --btn-min-size: 64px;
+  --btn-pad-y: 16px;
+  --btn-pad-x: 26px;
+  --btn-gap: 12px;
+  --btn-font: 24px;
+  --btn-font-compact: 18px;
+
+  /* Superfícies (dark theme) */
+  --btn-bg: linear-gradient(155deg, #262e42 0%, #171c2b 100%);
+  --btn-bg-hover: linear-gradient(155deg, #2f3850 0%, #1d2334 100%);
+  --btn-bg-pressed: linear-gradient(155deg, #1a2030 0%, #12161f 100%);
+  --btn-border: rgba(255, 255, 255, 0.14);
+  --btn-border-strong: rgba(255, 255, 255, 0.30);
+  --btn-fg: #f7f9ff;
+  --btn-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+
+  /* Acento e foco (mesmo amarelo do tema) */
+  --btn-accent: #ffd54f;
+  --btn-accent-soft: rgba(255, 213, 79, 0.16);
+  --btn-focus-shadow: 0 0 0 3px rgba(255, 213, 79, 0.95), 0 0 26px rgba(255, 213, 79, 0.45);
+  --btn-focus-scale: 1.05;
+
+  /* Ação principal e perigo */
+  --btn-primary-bg: linear-gradient(135deg, #ff3b46 0%, #c00d1b 100%);
+  --btn-primary-bg-hover: linear-gradient(135deg, #ff5560 0%, #d3121f 100%);
+
+  /* Movimento */
+  --btn-motion: 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ---------- Base ---------- */
+.ctrl-btn,
+.hud-ctrl-btn,
+.modal-btn,
+.modal-button,
+.tab-btn {
+  min-height: var(--btn-min-h);
+  padding: var(--btn-pad-y) var(--btn-pad-x);
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: var(--btn-font);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  box-shadow: var(--btn-shadow);
+  cursor: pointer;
+  transition:
+    transform var(--btn-motion),
+    background var(--btn-motion),
+    border-color var(--btn-motion),
+    box-shadow var(--btn-motion),
+    color var(--btn-motion);
+}
+
+/* ---------- Hover (mouse / ponteiro) ---------- */
+.ctrl-btn:hover,
+.hud-ctrl-btn:hover,
+.modal-btn:hover,
+.modal-button:hover {
+  background: var(--btn-bg-hover);
+  border-color: var(--btn-border-strong);
+  transform: translateY(-1px);
+}
+
+/* ---------- FOCUS: o estado que manda na TV ---------- */
+.ctrl-btn:focus,
+.modal-btn:focus,
+.modal-button:focus,
+.tab-btn:focus {
+  outline: none !important;
+  border-color: var(--btn-accent) !important;
+  background: var(--btn-accent-soft) !important;
+  color: #ffffff !important;
+  box-shadow: var(--btn-focus-shadow) !important;
+  transform: scale(var(--btn-focus-scale)) !important;
+  z-index: 3;
+}
+
+/* No HUD o botão fica sobre o vídeo: fundo sólido garante contraste AA. */
+.hud-ctrl-btn:focus {
+  outline: none !important;
+  background: var(--btn-accent) !important;
+  border-color: var(--btn-accent) !important;
+  color: #14161f !important;
+  box-shadow: var(--btn-focus-shadow) !important;
+  transform: scale(var(--btn-focus-scale)) !important;
+  z-index: 3;
+}
+
+/* ---------- Pressionado ---------- */
+.ctrl-btn:active,
+.hud-ctrl-btn:active,
+.modal-btn:active,
+.modal-button:active,
+.tab-btn:active {
+  background: var(--btn-bg-pressed) !important;
+  transform: scale(0.99) translateY(1px) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ---------- Desabilitado ---------- */
+.ctrl-btn:disabled,
+.hud-ctrl-btn:disabled,
+.modal-btn:disabled,
+.modal-button:disabled,
+.tab-btn:disabled {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  cursor: default;
+  box-shadow: none;
+  transform: none !important;
+}
+
+/* ---------- Variantes ---------- */
+.ctrl-btn.primary,
+.modal-btn.primary,
+.modal-button.primary {
+  background: var(--btn-primary-bg);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.ctrl-btn.primary:hover,
+.modal-btn.primary:hover,
+.modal-button.primary:hover {
+  background: var(--btn-primary-bg-hover);
+}
+.ctrl-btn.primary:focus,
+.modal-btn.primary:focus,
+.modal-button.primary:focus {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9), 0 0 26px rgba(255, 60, 70, 0.55) !important;
+}
+
+.hud-ctrl-btn.primary {
+  background: var(--btn-primary-bg);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Botão só de ícone: alvo quadrado de 64x64. */
+.ctrl-btn.icon-only,
+.hud-ctrl-btn.icon-only,
+.modal-btn.icon-only {
+  min-width: var(--btn-min-size);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ---------- Barra de controles do player ----------
+   10 botões dividindo ~1/3 da tela: 24px não cabe, então a barra usa a
+   escala compacta (18px) mantendo alvo de 56px. Os botões de ação e os
+   modais seguem com 24px. */
+.player-controls .ctrl-btn {
+  min-height: 56px;
+  padding: 12px 10px;
+  border-radius: var(--btn-radius-sm);
+  font-size: var(--btn-font-compact);
+}
+.player-controls .ctrl-btn:focus {
+  transform: scale(1.06) translateY(-2px) !important;
+}
+
+/* ---------- Navegação lateral (abas) ---------- */
+.tab-btn {
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 0 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.tab-btn:focus {
+  transform: translateX(3px) scale(1.02) !important;
+}
+
+/* ---------- Teclado numérico do PIN (alvo grande) ---------- */
+.pin-key {
+  min-height: var(--btn-min-size);
+  min-width: var(--btn-min-size);
+  border-radius: var(--btn-radius-sm);
+  font-size: var(--btn-font);
+  font-weight: 800;
+  transition: transform var(--btn-motion), background var(--btn-motion), box-shadow var(--btn-motion);
+}
+.pin-key:focus {
+  outline: none !important;
+  background: var(--btn-accent) !important;
+  color: #14161f !important;
+  box-shadow: var(--btn-focus-shadow) !important;
+  transform: scale(var(--btn-focus-scale)) !important;
+}
+
+/* ---------- Espaçamento entre botões vizinhos ---------- */
+.player-controls,
+.fs-hud-actions,
+.modal-footer {
+  gap: var(--btn-gap);
+}
+
+/* Respeita quem pediu menos animação (TVs fracas / acessibilidade). */
+@media (prefers-reduced-motion: reduce) {
+  .ctrl-btn,
+  .hud-ctrl-btn,
+  .modal-btn,
+  .modal-button,
+  .tab-btn,
+  .pin-key {
+    transition: none;
+  }
+}
