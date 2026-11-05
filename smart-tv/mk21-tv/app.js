@@ -73,7 +73,9 @@ window.addEventListener('error', function (event) {
     const resource = target.currentSrc || target.src || target.href || target.tagName || 'recurso';
     let resourceLabel = target.tagName || 'recurso';
     try { resourceLabel = getSourceHostLabel(resource); } catch (e) {}
-    addDevLog(`[Runtime] Falha ao carregar ${resourceLabel}`, 'error');
+    // Antes: uma linha por imagem com defeito (centenas). Agora: uma por host a cada
+    // 20s, com a contagem de repetições — o log deixa de afogar o resto.
+    mk21LogResourceFailure(resourceLabel, target.tagName || 'recurso');
     return;
   }
   const location = event && event.filename
@@ -81,6 +83,300 @@ window.addEventListener('error', function (event) {
     : '';
   addDevLog(`[JavaScript] ${event && event.message ? event.message : 'Erro não identificado'}${location}`, 'error');
 }, true);
+
+
+// ==================== DIAGNOSTICO PERSISTENTE (SOBREVIVE A REINICIO) ====================
+// A TV reiniciava o WebView sem aviso e o console da sessao era perdido. Agora cada
+// abertura grava um marcador + resumo do log no localStorage. Na abertura seguinte o
+// app compara os marcadores e diz se a sessao anterior terminou de forma limpa, quanto
+// durou e quanta memoria estava em uso — a evidencia que faltava para culpar (ou
+// inocentar) a falta de memoria.
+const MK21_DIAG = {
+  sessionId: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+  bootAt: Date.now(),
+  restarts: 0
+};
+const MK21_DIAG_BOOT_KEY = 'mk21_diag_boot_v1';
+const MK21_DIAG_LOG_KEY = 'mk21_diag_log_v1';
+const MK21_DIAG_BOOTS_KEY = 'mk21_diag_boots_v1';
+const mk21ResourceErrorWindow = Object.create(null);
+let mk21MemoryGuardTimer = null;
+let mk21LastMemoryLogAt = 0;
+let mk21PersistCounter = 0;
+
+function mk21AppVersion() {
+  try { return (typeof BASE_PACKAGE_VERSION === 'string') ? BASE_PACKAGE_VERSION : 'n/d'; } catch (e) { return 'n/d'; }
+}
+
+function mk21BuildTag() {
+  try { return (typeof MK21_BUILD_TAG === 'string') ? MK21_BUILD_TAG : 'n/d'; } catch (e) { return 'n/d'; }
+}
+
+function mk21UptimeLabel() {
+  const total = Math.max(0, Math.round((Date.now() - MK21_DIAG.bootAt) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}h${mm}m${ss}s` : `${mm}m${ss}s`;
+}
+
+// performance.memory existe no Chromium/WebView (e portanto no Android TV). Em webOS/Tizen
+// antigos pode faltar: nesse caso devolvemos null e o app nao inventa numero.
+function mk21HeapInfo() {
+  try {
+    const mem = performance && performance.memory;
+    if (!mem || !mem.usedJSHeapSize) return null;
+    const usedMB = Math.round(mem.usedJSHeapSize / 1048576);
+    const limitMB = Math.round(mem.jsHeapSizeLimit / 1048576);
+    return {
+      usedMB: usedMB,
+      totalMB: Math.round(mem.totalJSHeapSize / 1048576),
+      limitMB: limitMB,
+      pct: limitMB ? Math.round((usedMB / limitMB) * 100) : 0
+    };
+  } catch (e) { return null; }
+}
+
+function mk21PlatformLabel() {
+  const ua = navigator.userAgent || '';
+  if (window.webOS) return 'LG webOS';
+  if (window.tizen) return 'Samsung Tizen';
+  if (/android/i.test(ua)) return 'Android TV/WebView';
+  if (/iphone|ipad/i.test(ua)) return 'iOS';
+  return 'Navegador';
+}
+
+function mk21DeviceInfoLines() {
+  const heap = mk21HeapInfo();
+  const ua = navigator.userAgent || 'n/d';
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+  const video = $('tvPlayer');
+  const catalog = (typeof allCatalog === 'object' && allCatalog) ? allCatalog : {};
+  const screens = screen ? `${screen.width}x${screen.height} @${(window.devicePixelRatio || 1).toFixed(2)}x` : 'n/d';
+  return [
+    { type: 'system', msg: `Aparelho: ${mk21PlatformLabel()} · tela ${screens} · ${navigator.hardwareConcurrency || '?'} núcleos · 8-bit color ${screen && screen.colorDepth ? screen.colorDepth : '?'}` },
+    { type: 'system', msg: `RAM do aparelho: ${navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'n/d'} · heap JS ${heap ? `${heap.usedMB} MB de ${heap.limitMB} MB (${heap.pct}%)` : 'indisponível nesta TV'}` },
+    { type: 'system', msg: `Rede: ${navigator.onLine ? 'online' : 'offline'}${conn && conn.effectiveType ? ' · ' + conn.effectiveType : ''}${conn && conn.downlink ? ' · ' + conn.downlink + ' Mb/s' : ''}${conn && conn.rtt ? ' · ' + conn.rtt + ' ms' : ''}` },
+    { type: 'system', msg: `Versão ${mk21AppVersion()} · build ${mk21BuildTag()} · abertura nº ${MK21_DIAG.restarts + 1} · sessão ${MK21_DIAG.sessionId} · uptime ${mk21UptimeLabel()}` },
+    { type: 'system', msg: `Catálogo: ${(catalog.LIVE || []).length} ao vivo · ${(catalog.MOVIE || []).length} filmes · ${(catalog.SERIES || []).length} séries · ${sessionDevLogs.length} logs em memória` },
+    { type: 'system', msg: `Player: ${video && video.currentSrc ? 'com mídia' : 'sem mídia'}${video && video.videoWidth ? ` · ${video.videoWidth}x${video.videoHeight}` : ''}${(typeof activeItem === 'object' && activeItem) ? ' · ' + (activeItem.name || 'item ativo') : ''}${document.fullscreenElement || document.body.classList.contains('is-fullscreen') ? ' · tela cheia' : ''}` },
+    { type: 'system', msg: `Navegador: ${ua}` }
+  ];
+}
+
+function mk21PersistDiagLog(force) {
+  mk21PersistCounter += 1;
+  if (!force && mk21PersistCounter % 10 !== 0) return;
+  try {
+    const tail = sessionDevLogs.slice(-160).map(l => `[${l.time} +${l.uptime}] [${l.type.toUpperCase()}] ${l.msg}`);
+    localStorage.setItem(MK21_DIAG_LOG_KEY, JSON.stringify({
+      at: Date.now(),
+      sessionId: MK21_DIAG.sessionId,
+      version: mk21AppVersion(),
+      entries: tail
+    }));
+  } catch (e) {}
+}
+
+function mk21WriteBootMarker(cleanExit) {
+  try {
+    const heap = mk21HeapInfo();
+    localStorage.setItem(MK21_DIAG_BOOT_KEY, JSON.stringify({
+      sessionId: MK21_DIAG.sessionId,
+      bootAt: MK21_DIAG.bootAt,
+      endedAt: Date.now(),
+      version: mk21AppVersion(),
+      build: mk21BuildTag(),
+      heapMB: heap ? heap.usedMB : null,
+      heapLimitMB: heap ? heap.limitMB : null,
+      entries: sessionDevLogs.length,
+      cleanExit: !!cleanExit
+    }));
+  } catch (e) {}
+}
+
+// Reconstroi o que aconteceu antes do reinicio: e isso que diferencia "a TV fechou o
+// app por memoria" de "alguem apertou sair" ou "o app subiu de novo por OTA".
+function mk21DetectRestart() {
+  let prev = null;
+  let boots = 1;
+  // Lido ANTES de qualquer addDevLog: addDevLog persiste o log novo e apagaria o da
+  // sessao que caiu, que e' justamente a evidencia que queremos mostrar.
+  let previousLog = null;
+  try {
+    previousLog = JSON.parse(localStorage.getItem(MK21_DIAG_LOG_KEY) || 'null');
+    prev = JSON.parse(localStorage.getItem(MK21_DIAG_BOOT_KEY) || 'null');
+    boots = (parseInt(localStorage.getItem(MK21_DIAG_BOOTS_KEY) || '0', 10) || 0) + 1;
+    localStorage.setItem(MK21_DIAG_BOOTS_KEY, String(boots));
+  } catch (e) {}
+  MK21_DIAG.restarts = Math.max(0, boots - 1);
+  if (!prev) {
+    addDevLog('[Sistema] Primeira abertura registrada neste aparelho.', 'system');
+    return;
+  }
+  const endedAt = prev.endedAt || Date.now();
+  const durSec = Math.max(0, Math.round((endedAt - (prev.bootAt || endedAt)) / 1000));
+  const durLabel = durSec >= 60 ? `${Math.floor(durSec / 60)}m${String(durSec % 60).padStart(2, '0')}s` : `${durSec}s`;
+  const heapLabel = prev.heapMB != null ? `${prev.heapMB} MB${prev.heapLimitMB ? ' de ' + prev.heapLimitMB + ' MB' : ''}` : 'indisponível';
+  if (prev.cleanExit) {
+    addDevLog(`[Sistema] Reabertura normal. Sessão anterior durou ${durLabel} e saiu pelo menu.`, 'system');
+  } else {
+    addDevLog(`[Sistema] REINÍCIO SEM FECHAMENTO: a sessão anterior terminou sozinha após ${durLabel}, com heap ${heapLabel}. ${boots}ª abertura neste aparelho.`, 'error');
+    addDevLog('[Sistema] Esse padrão é típico de falta de memória (WebView encerrado) ou de queda do runtime — veja as últimas linhas da sessão anterior abaixo.', 'warn');
+  }
+  if (previousLog && Array.isArray(previousLog.entries) && previousLog.entries.length) {
+    addDevLog(`[Sessão anterior] Últimas ${Math.min(previousLog.entries.length, 12)} linhas antes do reinício:`, 'system');
+    previousLog.entries.slice(-12).forEach(line => addDevLog('[anterior] ' + line, 'debug'));
+    try { localStorage.removeItem(MK21_DIAG_LOG_KEY); } catch (e) {}
+  }
+}
+
+function mk21TrimMemory(reason) {
+  const freed = [];
+  try { if (logoCacheMap.size) { logoCacheMap.clear(); freed.push('logos'); } } catch (e) {}
+  try { if (tmdbCache.size) { tmdbCache.clear(); freed.push('TMDB'); } } catch (e) {}
+  try { if (prefetchManifestCache.size) { prefetchManifestCache.clear(); freed.push('manifests'); } } catch (e) {}
+  try { if (smartTvEpgCache.size) { smartTvEpgCache.clear(); freed.push('EPG'); } } catch (e) {}
+  try { if (categoryMapCache.size) { categoryMapCache.clear(); freed.push('categorias'); } } catch (e) {}
+  try { if (mk21ResourceErrorWindow) Object.keys(mk21ResourceErrorWindow).forEach(k => delete mk21ResourceErrorWindow[k]); } catch (e) {}
+  try {
+    // Lista longa mantem centenas de <img> vivos: volta ao tamanho de leitura confortavel.
+    if (itemsDisplayLimit > 40) { itemsDisplayLimit = 40; freed.push('lista reduzida para 40 itens'); }
+  } catch (e) {}
+  addDevLog(`[Memória] Limpeza aplicada (${reason}): ${freed.length ? freed.join(', ') : 'nada a liberar'}.`, 'warn');
+}
+
+function mk21MemoryGuardTick() {
+  const heap = mk21HeapInfo();
+  if (!heap) return;
+  const now = Date.now();
+  if (heap.pct >= 80 || heap.usedMB >= 320) {
+    addDevLog(`[Memória] CRÍTICO: heap em ${heap.usedMB} MB de ${heap.limitMB} MB (${heap.pct}%).`, 'error');
+    mk21TrimMemory('pressão de memória');
+    mk21LastMemoryLogAt = now;
+  } else if (now - mk21LastMemoryLogAt >= 60000) {
+    mk21LastMemoryLogAt = now;
+    addDevLog(`[Memória] heap ${heap.usedMB}/${heap.limitMB} MB (${heap.pct}%) · total ${heap.totalMB} MB · uptime ${mk21UptimeLabel()}`, 'debug');
+  }
+  mk21UpdateDiagBadge();
+}
+
+function mk21StartMemoryGuard() {
+  if (mk21MemoryGuardTimer) return;
+  const heap = mk21HeapInfo();
+  addDevLog(`[Memória] Monitor ativo${heap ? ` — heap inicial ${heap.usedMB} MB de ${heap.limitMB} MB` : ' (limite de heap indisponível nesta TV)'}.`, 'system');
+  mk21MemoryGuardTimer = setInterval(mk21MemoryGuardTick, 15000);
+}
+
+function mk21DiagHeaderText() {
+  const heap = mk21HeapInfo();
+  const parts = [
+    `v${mk21AppVersion()} · build ${mk21BuildTag()}`,
+    `${mk21PlatformLabel()} · ${screen ? screen.width + 'x' + screen.height : 'n/d'}`,
+    `heap ${heap ? heap.usedMB + '/' + heap.limitMB + ' MB (' + heap.pct + '%)' : 'n/d'}`,
+    `abertura nº ${MK21_DIAG.restarts + 1} · uptime ${mk21UptimeLabel()}`,
+    `erros ${sessionDevLogs.filter(l => l.type === 'error').length} · avisos ${sessionDevLogs.filter(l => l.type === 'warn').length}`
+  ];
+  return parts.join(' · ');
+}
+
+function mk21UpdateDiagBadge() {
+  const badge = $('devLogsCountBadge');
+  if (badge) {
+    const heap = mk21HeapInfo();
+    badge.textContent = `${sessionDevLogs.length} entradas${heap ? ` · ${heap.usedMB} MB` : ''}`;
+  }
+  const header = $('devDiagHeader');
+  if (header) header.textContent = mk21DiagHeaderText();
+}
+
+function mk21BuildDiagText() {
+  return [
+    'MK21 Smart TV — Diagnóstico',
+    `Data: ${new Date().toISOString()}`,
+    `Versão: ${mk21AppVersion()} · build ${mk21BuildTag()}`,
+    `Sessão: ${MK21_DIAG.sessionId} · abertura nº ${MK21_DIAG.restarts + 1} · uptime ${mk21UptimeLabel()}`,
+    '',
+    '--- APARELHO ---',
+    ...mk21DeviceInfoLines().map(l => l.msg),
+    '',
+    '--- LOG ---',
+    ...sessionDevLogs.map(l => `[${l.time} +${l.uptime}] [${l.type.toUpperCase()}] ${redactDiagnosticLog(l.msg)}`)
+  ].join('\n');
+}
+
+function mk21CopyTextFallback(text, onDone) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', 'readonly');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok && onDone) onDone();
+    return ok;
+  } catch (e) { return false; }
+}
+
+function mk21CopyDiagLogs() {
+  const text = mk21BuildDiagText();
+  const done = () => {
+    addDevLog('[Logs] Conteúdo copiado — cole no chat para validar sem precisar de arquivo.', 'success');
+    showChannelBanner('📋 Logs copiados');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => {
+      if (!mk21CopyTextFallback(text, done)) {
+        try { localStorage.setItem('mk21_last_exported_logs', text); } catch (e) {}
+        addDevLog('[Logs] Cópia direta indisponível nesta TV; conteúdo guardado em localStorage (mk21_last_exported_logs).', 'warn');
+      }
+    });
+    return;
+  }
+  if (!mk21CopyTextFallback(text, done)) {
+    try { localStorage.setItem('mk21_last_exported_logs', text); } catch (e) {}
+    addDevLog('[Logs] Cópia direta indisponível nesta TV; conteúdo guardado em localStorage (mk21_last_exported_logs).', 'warn');
+  }
+}
+
+function mk21LogResourceFailure(label, tag) {
+  const key = label + '|' + tag;
+  const now = Date.now();
+  const prev = mk21ResourceErrorWindow[key];
+  if (prev && now - prev.at < 20000) { prev.count += 1; return; }
+  const repeats = prev ? prev.count : 0;
+  mk21ResourceErrorWindow[key] = { at: now, count: 0 };
+  addDevLog(`[Runtime] Falha ao carregar ${label} (${tag})${repeats ? ` — ${repeats} repetições nos últimos 20s` : ''}`, 'error');
+}
+
+function mk21InitDiagnostics() {
+  try { mk21DetectRestart(); } catch (e) {}
+  try { mk21WriteBootMarker(false); } catch (e) {}
+  try { mk21StartMemoryGuard(); } catch (e) {}
+  try { mk21DeviceInfoLines().forEach(l => addDevLog(l.msg, l.type)); } catch (e) {}
+  addDevLog('[Sistema] Registro de sessão iniciado (o app detecta reinícios e mostra a causa provável).', 'system');
+}
+
+window.addEventListener('pagehide', function () {
+  mk21PersistDiagLog(true);
+  mk21WriteBootMarker(true);
+});
+
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) {
+    mk21PersistDiagLog(true);
+    addDevLog(`[Sistema] App enviado para segundo plano (heap ${(mk21HeapInfo() || {}).usedMB ?? 'n/d'} MB).`, 'debug');
+  } else {
+    addDevLog('[Sistema] App voltou ao primeiro plano.', 'debug');
+  }
+});
 
 window.addEventListener('unhandledrejection', function (event) {
   const reason = event && event.reason;
@@ -3408,7 +3704,7 @@ const MAX_DEV_LOGS = 300;
 function addDevLog(msg, type = 'info') {
   msg = redactDiagnosticLog(msg);
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-  const entry = { time, msg, type };
+  const entry = { time, uptime: mk21UptimeLabel(), msg, type };
   sessionDevLogs.push(entry);
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
 
@@ -3419,28 +3715,29 @@ function addDevLog(msg, type = 'info') {
         container.innerHTML = '';
       }
       const line = document.createElement('div');
-      line.style.marginBottom = '4px';
+      line.style.marginBottom = '3px';
       line.style.wordBreak = 'break-word';
-      
-      let color = '#cbd5e1';
-      if (type === 'error') color = '#ef4444';
-      else if (type === 'warn') color = '#eab308';
-      else if (type === 'success') color = '#22c55e';
-      else if (type === 'debug') color = '#94a3b8';
 
-      line.innerHTML = `<span style="color:#64748b;">[${time}]</span> <span style="color:${color}; font-weight:600;">${escapeHtml(msg)}</span>`;
+      let color = '#cbd5e1';
+      if (type === 'error') color = '#f87171';
+      else if (type === 'warn') color = '#facc15';
+      else if (type === 'success') color = '#34d399';
+      else if (type === 'debug') color = '#94a3b8';
+      else if (type === 'system') color = '#93c5fd';
+
+      line.innerHTML = `<span style="color:#475569;">[${time} +${entry.uptime}]</span> <span style="color:${color}; font-weight:${type === 'debug' ? 400 : 600};">${escapeHtml(msg)}</span>`;
       container.appendChild(line);
       container.scrollTop = container.scrollHeight;
     }
-    const badge = $('devLogsCountBadge');
-    if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
   } catch (e) {}
+
+  try { mk21PersistDiagLog(false); } catch (e) {}
+  try { mk21UpdateDiagBadge(); } catch (e) {}
 
   if (type === 'error') console.error('[MK21-TV]', msg);
   else if (type === 'warn') console.warn('[MK21-TV]', msg);
   else console.log('[MK21-TV]', msg);
 }
-
 function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, m => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -3470,19 +3767,19 @@ function initDevLogs() {
     sessionDevLogs = [];
     const container = $('devLogsContainer');
     if (container) container.innerHTML = '<div style="color:#64748b;">[Logs limpos com sucesso.]</div>';
-    const badge = $('devLogsCountBadge');
-    if (badge) badge.textContent = '0 entradas';
+    try { localStorage.removeItem(MK21_DIAG_LOG_KEY); } catch (e) {}
+    mk21UpdateDiagBadge();
+  };
+  if ($('btnCopyDevLogs')) $('btnCopyDevLogs').onclick = mk21CopyDiagLogs;
+  if ($('btnInfoDevLogs')) $('btnInfoDevLogs').onclick = () => {
+    mk21DeviceInfoLines().forEach(l => addDevLog(l.msg, l.type));
+    addDevLog('[Info] Snapshot solicitado pelo usuário.', 'system');
+    showChannelBanner('ℹ️ Diagnóstico adicionado ao console');
   };
   if ($('btnExportDevLogs')) $('btnExportDevLogs').onclick = () => {
     try {
-      const text = [
-        'MK21 Smart TV - Logs de diagnóstico',
-        `Data: ${new Date().toISOString()}`,
-        'Credenciais e caminhos autenticados foram mascarados.',
-        '',
-        ...sessionDevLogs.map(l => `[${l.time}] [${l.type.toUpperCase()}] ${redactDiagnosticLog(l.msg)}`)
-      ].join('\n');
-      localStorage.setItem('mk21_last_exported_logs', text);
+      const text = mk21BuildDiagText();
+      try { localStorage.setItem('mk21_last_exported_logs', text); } catch (e) {}
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -3490,8 +3787,9 @@ function initDevLogs() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      addDevLog('[Logs] Arquivo de log exportado e salvo com sucesso!', 'success');
-      showChannelBanner('✅ Logs exportados com sucesso!');
+      setTimeout(() => { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 4000);
+      addDevLog('[Logs] Arquivo de log gerado. Se a TV não salvar em arquivo, use Copiar.', 'success');
+      showChannelBanner('✅ Logs exportados');
     } catch (e) {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
@@ -3499,6 +3797,7 @@ function initDevLogs() {
   if ($('btnGitHubDevLogs')) $('btnGitHubDevLogs').onclick = () => {
     window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
   };
+  mk21UpdateDiagBadge();
 }
 
 function redactDiagnosticLog(value) {
@@ -3558,7 +3857,7 @@ function updateSourceButtons(item = activeItem, selectedIndex = activePlaybackSo
     button.classList.toggle('hidden', count < 2 && serverCount < 2);
     button.textContent = fullScreen
       ? `🌐 Fontes${count > 1 ? ` ${selectedIndex + 1}/${count}` : ''}`
-      : '🌐';
+      : '🌐 Fontes';
     button.title = count > 1
       ? `Selecionar fonte (${count} URLs). Atual: ${selectedLabel}; também é possível trocar de servidor`
       : 'Selecionar outra lista/servidor para este conteúdo';
@@ -5671,7 +5970,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.5';
+const BASE_PACKAGE_VERSION = '2.4.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5682,7 +5981,7 @@ let CURRENT_APP_VERSION = (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAG
 
 // Fingerprint de build: permite confirmar na TV qual codigo esta rodando
 // (pacote instalado x atualizacao OTA aplicada).
-const MK21_BUILD_TAG = '2026-11-05.1';
+const MK21_BUILD_TAG = '2026-11-05.3';
 try {
   const buildTagEl = document.getElementById('mk21BuildTag');
   if (buildTagEl) buildTagEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
@@ -5735,10 +6034,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2405,
+        versionCode: 2406,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.5_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.6_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6999,6 +7298,7 @@ function initializeMk21App() {
     try {
       initDevLogs();
       addDevLog('[App] MK21 Play inicializado com sucesso', 'success');
+      mk21InitDiagnostics();
     } catch (e) {}
 
   if (hasLogin) {

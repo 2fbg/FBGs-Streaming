@@ -3798,3 +3798,101 @@ button:disabled,
 .tab-btn .tab-count.is-empty {
   opacity: 0.5;
 }
+
+/* =====================================================================
+   MK21 — PLAYER 2.4.6 (botoes grandes e rotulados)
+   ---------------------------------------------------------------------
+   A barra antiga era um circulo de 50x50 com icone: a 3 metros ninguem
+   identifica o que e' "🎞️" ou "🌐", e o min-height da camada 2.4.4 ficava
+   brigando com o height fixo, gerando pastilhas cortadas. Agora cada botao
+   e' um cartao de 64 px com icone + rotulo, em grade de 4 colunas — sem
+   corte, sem texto truncado, e o foco ambar continua sendo o mais forte.
+   ===================================================================== */
+
+.player-controls {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  padding: 10px 2px 2px !important;
+  width: 100% !important;
+  align-items: stretch !important;
+}
+
+.player-controls .ctrl-btn {
+  width: auto !important;
+  height: 64px !important;
+  min-width: 0 !important;
+  min-height: 64px !important;
+  flex: 0 0 auto !important;
+  border-radius: 14px !important;
+  padding: 0 10px !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  background: #232838 !important;
+  border: 2px solid rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+
+.player-controls .ctrl-btn.primary {
+  background: var(--btn-primary-bg) !important;
+  border-color: rgba(255, 255, 255, 0.30) !important;
+}
+
+.player-controls .ctrl-btn.hidden,
+.player-controls .ctrl-btn[hidden] {
+  display: none !important;
+}
+
+/* Fullscreen HUD: mesmas regras, uma linha de 4 por vez */
+.fs-hud-actions {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  width: 100% !important;
+  align-items: stretch !important;
+}
+
+.hud-ctrl-btn,
+.fs-hud-actions .ctrl-btn {
+  height: 64px !important;
+  min-height: 64px !important;
+  padding: 0 14px !important;
+  font-size: 20px !important;
+  border-radius: 14px !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+}
+
+.hud-ctrl-btn.hidden,
+.fs-hud-actions .ctrl-btn.hidden {
+  display: none !important;
+}
+
+.fs-hud-title {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  margin-bottom: 8px !important;
+}
+
+/* Faixa de diagnostico do console de logs */
+#devDiagHeader {
+  display: block;
+  background: #0f1422;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cbd5e1;
+  font-family: monospace, Courier, sans-serif;
+  word-break: break-word;
+}
