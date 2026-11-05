@@ -1139,13 +1139,13 @@ function toggleFav(url) {
   if (!url) return;
   if (favoriteUrls.has(url)) {
     favoriteUrls.delete(url);
-    if ($('btnFavorite')) $('btnFavorite').textContent = '⭐ Favoritar';
-    if ($('fsBtnFav')) $('fsBtnFav').textContent = '⭐ Favoritar';
+    if ($('btnFavorite')) mk21SetCtrlText($('btnFavorite'), '⭐ Favorito');
+    if ($('fsBtnFav')) mk21SetCtrlText($('fsBtnFav'), '⭐ Favoritar');
     showChannelBanner('Removido dos Favoritos');
   } else {
     favoriteUrls.add(url);
-    if ($('btnFavorite')) $('btnFavorite').textContent = '★ Favoritado';
-    if ($('fsBtnFav')) $('fsBtnFav').textContent = '★ Favoritado';
+    if ($('btnFavorite')) mk21SetCtrlText($('btnFavorite'), '★ Favoritado');
+    if ($('fsBtnFav')) mk21SetCtrlText($('fsBtnFav'), '★ Favoritado');
     showChannelBanner('⭐ Adicionado aos Favoritos');
   }
   try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
@@ -1641,6 +1641,7 @@ function showLoadingFailure(error, serverName) {
 async function loadServer(forceRefresh = false) {
   if (!hasConfiguredSharedCredentials()) {
     showStartupLogin('', false);
+    mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
     return;
   }
 
@@ -1895,6 +1896,10 @@ async function loadServer(forceRefresh = false) {
       renderCategoriesList();
       selectCategory(activeCategoryKey, !hadLiveAtFirstRender);
     }
+    if (!totalLoaded) {
+      mk21CatalogEmptyState('empty', 'O servidor respondeu, mas nenhum canal, filme ou s\u00e9rie foi encontrado. Confira usu\u00e1rio, senha e o servidor selecionado.');
+      return;
+    }
     updateSplash(100, 'Lista completa carregada (' + totalLoaded.toLocaleString('pt-BR') + ' itens)');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
@@ -1978,11 +1983,12 @@ async function loadServer(forceRefresh = false) {
       } else {
         if (pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) pendingServerSourceSwitch = null;
         showLoadingFailure(err, srv.name);
+        mk21CatalogEmptyState('network', `Servidor ${srv.name}: ${err && err.message ? err.message : 'conex\u00e3o interrompida'}. Verifique a internet da TV e tente de novo.`);
       }
     } else {
       if (pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) pendingServerSourceSwitch = null;
       showLoadingFailure(err, srv.name);
-      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = 'Aguardando conexão com o servidor';
+      mk21CatalogEmptyState('network', `Servidor ${srv.name}: ${err && err.message ? err.message : 'conex\u00e3o interrompida'}. Verifique a internet da TV e tente de novo.`);
       if ($('txtServerSyncBadge')) {
         $('txtServerSyncBadge').textContent = 'erro';
         $('txtServerSyncBadge').classList.remove('hidden', 'done');
@@ -3855,9 +3861,9 @@ function updateSourceButtons(item = activeItem, selectedIndex = activePlaybackSo
   ].forEach(({ button, fullScreen }) => {
     if (!button) return;
     button.classList.toggle('hidden', count < 2 && serverCount < 2);
-    button.textContent = fullScreen
+    mk21SetCtrlText(button, fullScreen
       ? `🌐 Fontes${count > 1 ? ` ${selectedIndex + 1}/${count}` : ''}`
-      : '🌐 Fontes';
+      : '🌐 Fontes');
     button.title = count > 1
       ? `Selecionar fonte (${count} URLs). Atual: ${selectedLabel}; também é possível trocar de servidor`
       : 'Selecionar outra lista/servidor para este conteúdo';
@@ -4163,8 +4169,8 @@ function fallbackToHls(item, sourceUrl = item && item.url) {
         addDevLog(`[Player] HLS não iniciou: ${err && err.message ? err.message : err}`, 'error');
       });
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
+      if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -4298,9 +4304,9 @@ function playStream(
   updateRealResolution(item);
 
   if (favoriteUrls.has(item.url)) {
-    $('btnFavorite').textContent = '★ Favoritado';
+    mk21SetCtrlText($('btnFavorite'), '★ Favoritado');
   } else {
-    $('btnFavorite').textContent = '⭐ Favoritar';
+    mk21SetCtrlText($('btnFavorite'), '⭐ Favorito');
   }
 
   showChannelBanner(item.name);
@@ -4371,8 +4377,8 @@ function playStream(
         addDevLog(`[Player] HLS não iniciou: ${err && err.message ? err.message : err}`, 'error');
       });
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
+      if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -4418,8 +4424,8 @@ function playStream(
       Promise.resolve(mpegtsPlayer.play()).then(() => {
         addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
         hidePlayerReconnectBadge();
-        if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-        if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+        if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
+        if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
         if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
         updateRealResolution(item);
       }).catch(err => {
@@ -4454,8 +4460,8 @@ function playStream(
     safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
+      if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
@@ -4603,9 +4609,9 @@ function showFsHud(show) {
     if (activeItem && $('fsHudTitle')) {
       $('fsHudTitle').textContent = (favoriteUrls.has(activeItem.url) ? '⭐ ' : '') + activeItem.name;
     }
-    if ($('fsBtnSpeed')) $('fsBtnSpeed').textContent = '⚡ ' + currentPlaybackSpeed + 'x';
+    if ($('fsBtnSpeed')) mk21SetCtrlText($('fsBtnSpeed'), '⚡ ' + currentPlaybackSpeed + 'x');
     if ($('fsBtnFav') && activeItem) {
-      $('fsBtnFav').textContent = favoriteUrls.has(activeItem.url) ? '★ Favoritado' : '⭐ Favoritar';
+      mk21SetCtrlText($('fsBtnFav'), favoriteUrls.has(activeItem.url) ? '★ Favoritado' : '⭐ Favoritar');
     }
     const isVod = currentContentType === 'MOVIE' || currentContentType === 'SERIES' ||
       (activeItem && activeItem.contentType !== 'LIVE');
@@ -4708,13 +4714,13 @@ function togglePlayPause() {
   if (!v) return;
   if (v.paused) {
     safeVideoPlay(v).catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
+    if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
-    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '▶ Reproduzir';
+    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '▶ Reproduzir');
+    if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '▶ Reproduzir');
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -4732,8 +4738,8 @@ function applyPlaybackSpeed(rate) {
     if (video.defaultPlaybackRate !== undefined) video.defaultPlaybackRate = rate;
   } catch (e) {}
   const label = '⚡ ' + rate + 'x';
-  if ($('btnSpeed')) $('btnSpeed').textContent = label;
-  if ($('fsBtnSpeed')) $('fsBtnSpeed').textContent = label;
+  if ($('btnSpeed')) mk21SetCtrlText($('btnSpeed'), label);
+  if ($('fsBtnSpeed')) mk21SetCtrlText($('fsBtnSpeed'), label);
 }
 
 function cyclePlaybackSpeed() {
@@ -5970,7 +5976,9 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.6';
+const BASE_PACKAGE_VERSION = '2.4.7';
+// Tela (index.html) que este app.js espera. O bootloader recusa OTA que nao bata.
+const MK21_REQUIRED_HTML = '2.4.7';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5981,7 +5989,7 @@ let CURRENT_APP_VERSION = (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAG
 
 // Fingerprint de build: permite confirmar na TV qual codigo esta rodando
 // (pacote instalado x atualizacao OTA aplicada).
-const MK21_BUILD_TAG = '2026-11-05.3';
+const MK21_BUILD_TAG = '2026-11-05.5';
 try {
   const buildTagEl = document.getElementById('mk21BuildTag');
   if (buildTagEl) buildTagEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
@@ -6034,10 +6042,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2406,
+        versionCode: 2407,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.6_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.7_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6128,7 +6136,9 @@ async function startDirectUpdate() {
         const res = await fetch(u, { cache: 'no-store' });
         if (res.ok) {
           const txt = await res.text();
-          if (txt && txt.length > 5000 && txt.includes('CURRENT_APP_VERSION')) {
+          const declaredHtml = (txt.match(/MK21_REQUIRED_HTML\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
+          const htmlMatch = declaredHtml && declaredHtml === (window.MK21_HTML_VERSION || '');
+          if (txt && txt.length > 5000 && txt.includes('CURRENT_APP_VERSION') && htmlMatch) {
             newAppJs = txt;
             break;
           }
@@ -6180,7 +6190,7 @@ async function startDirectUpdate() {
     }
 
     // Caso não tenha conseguido obter o código remoto, orienta o usuário de forma clara
-    throw new Error(`Servidor de arquivos temporariamente indisponível. Conecte a TV à internet ou instale o pacote .ipk v${targetVer} pelo webOS Dev Manager.`);
+    throw new Error(`Atualização v${targetVer} exige a tela nova do app e não pode ser aplicada por OTA. Instale o pacote .ipk v${targetVer} pelo webOS Dev Manager (a TV está na tela v${window.MK21_HTML_VERSION || BASE_PACKAGE_VERSION}).`);
 
   } catch (err) {
     console.error('Update failed:', err);
@@ -6217,11 +6227,11 @@ function togglePlayPause() {
   if (!v) return;
   if (v.paused) {
     safeVideoPlay(v).catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏸ Pausar';
+    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏸ Pausar');
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
+    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '▶ Reproduzir');
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -7267,6 +7277,92 @@ if (typeof document !== 'undefined') {
   }, false);
 }
 
+// 2.4.7 — botoes do player com icone e rotulo separados (o texto continua vindo do JS)
+function mk21SetCtrlText(el, text) {
+  if (!el) return;
+  const str = String(text == null ? '' : text).trim();
+  const match = str.match(/^([^A-Za-z0-9\u00c0-\u00ff]+)\s*(.*)$/);
+  const icon = match ? match[1].trim() : '';
+  const label = (match ? match[2] : str) || icon;
+  let iconEl = el.querySelector('.ctrl-ico');
+  let labelEl = el.querySelector('.ctrl-label');
+  if (!iconEl || !labelEl) {
+    el.innerHTML = '<span class="ctrl-ico"></span><span class="ctrl-label"></span>';
+    iconEl = el.querySelector('.ctrl-ico');
+    labelEl = el.querySelector('.ctrl-label');
+  }
+  iconEl.textContent = icon;
+  labelEl.textContent = label;
+  if (label) el.setAttribute('aria-label', label);
+}
+
+// Estado explicito quando nao ha catalogo: a tela nunca fica muda e sem saida.
+function mk21CatalogEmptyState(kind, detail) {
+  const presets = {
+    auth: { icon: '\u{1f510}', title: 'Entre para carregar a lista', action: '\u{1f511} Entrar agora' },
+    network: { icon: '\u{1f4e1}', title: 'N\u00e3o foi poss\u00edvel carregar a lista', action: '\u{1f504} Tentar novamente' },
+    empty: { icon: '\u{1f4ed}', title: 'A lista chegou vazia', action: '\u{1f504} Sincronizar de novo' }
+  };
+  const preset = presets[kind] || presets.empty;
+
+  const mount = (host, withAction) => {
+    if (!host) return;
+    host.innerHTML = '';
+    const li = document.createElement('li');
+    li.className = 'catalog-empty-item';
+    const card = document.createElement('div');
+    card.className = 'catalog-empty-card';
+    const iconEl = document.createElement('span');
+    iconEl.className = 'catalog-empty-icon';
+    iconEl.textContent = preset.icon;
+    const titleEl = document.createElement('strong');
+    titleEl.className = 'catalog-empty-title';
+    titleEl.textContent = preset.title;
+    const detailEl = document.createElement('p');
+    detailEl.className = 'catalog-empty-detail';
+    detailEl.textContent = detail || '';
+    card.appendChild(iconEl);
+    card.appendChild(titleEl);
+    if (detail) card.appendChild(detailEl);
+    if (withAction) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'btnCatalogEmptyAction';
+      btn.className = 'list-item-btn catalog-empty-action';
+      btn.tabIndex = 0;
+      mk21SetCtrlText(btn, preset.action);
+      btn.onclick = () => {
+        if (kind === 'auth') {
+          showStartupLogin('', hasConfiguredSharedCredentials());
+          return;
+        }
+        hideStartupLogin();
+        loadServer(true);
+      };
+      card.appendChild(btn);
+    }
+    li.appendChild(card);
+    host.appendChild(li);
+  };
+
+  mount($('listItems'), true);
+  // A coluna de categorias e' estreita: so uma linha curta, sem repetir o cartao inteiro.
+  const catList = $('listCategories');
+  if (catList) {
+    catList.innerHTML = '';
+    const mini = document.createElement('li');
+    mini.className = 'catalog-empty-mini';
+    mini.textContent = preset.icon + ' ' + preset.title;
+    catList.appendChild(mini);
+  }
+  if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = preset.icon + ' ' + preset.title;
+  if ($('badgeItemsCount')) $('badgeItemsCount').textContent = '0';
+  if ($('badgeCatCount')) $('badgeCatCount').textContent = '0';
+  if ($('hudLoadingOverlay')) $('hudLoadingOverlay').classList.add('hidden');
+  hideSplash();
+  addDevLog('[Catálogo] ' + preset.title + (detail ? ' — ' + detail : ''), kind === 'auth' ? 'warn' : 'error');
+}
+
 function initializeMk21App() {
   const hasLogin = hasConfiguredSharedCredentials();
   if (hasLogin) ensureSharedCredentialsStored();
@@ -7308,7 +7404,16 @@ function initializeMk21App() {
   } else {
     showStartupLogin('', false);
     hideSplash();
+    mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
   }
+
+  try {
+    const versionBadge = $('appVersionBadge');
+    if (versionBadge) {
+      versionBadge.textContent = 'v' + mk21AppVersion();
+      versionBadge.title = 'Build ' + mk21BuildTag();
+    }
+  } catch (e) {}
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
