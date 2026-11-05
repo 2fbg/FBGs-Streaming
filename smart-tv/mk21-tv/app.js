@@ -5644,7 +5644,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.3';
+const BASE_PACKAGE_VERSION = '2.4.4';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5708,10 +5708,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2403,
+        versionCode: 2404,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.3_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.4_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };

@@ -3527,3 +3527,252 @@ body.mk21-modal-open .video-box.is-fullscreen .fs-hud-bar {
   border-color: rgba(16, 185, 129, 0.55);
   box-shadow: inset 3px 0 0 #10b981;
 }
+
+/* =====================================================================
+   MK21 — CAMADA FINAL DE BOTOES (2.4.4)
+   ---------------------------------------------------------------------
+   As regras antigas de foco usam seletores mais especificos
+   (.player-controls .ctrl-btn, .hud-ctrl-btn, button:focus) e !important,
+   entao elas venciam a camada do design system por especificidade, mesmo
+   estando antes no arquivo. Esta camada vem por ULTIMO e tambem usa
+   !important: e ela que vale.
+
+   Foco = botao preenchido de ambar com anel e glow. Nao existe estado
+   mais visivel que esse a 3 metros de distancia.
+   ===================================================================== */
+
+/* ---------- Superficie padrao de todo botao de acao ---------- */
+.ctrl-btn,
+.hud-ctrl-btn,
+.modal-btn,
+.modal-button,
+.action-btn,
+.cfg-menu-item,
+.list-item-btn,
+.sort-choice-btn,
+.omnisearch-tab-btn,
+.omnisearch-item-btn,
+.season-tab-btn,
+.sort-order-btn,
+.util-btn,
+.storage-action-btn,
+.startup-login-primary,
+.startup-login-secondary,
+.startup-password-toggle,
+.source-option-btn,
+.track-item-btn,
+.episode-item-btn,
+.cat-item-btn,
+.channel-row,
+.server-pill,
+.pin-key,
+.btn-server-connect,
+.btn-server-edit,
+.btn-server-delete {
+  border-radius: var(--btn-radius) !important;
+  border: 1px solid var(--btn-border) !important;
+  background: var(--btn-bg) !important;
+  color: var(--btn-fg) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.2px !important;
+  box-shadow: var(--btn-shadow) !important;
+  transition:
+    transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    background 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+}
+
+/* ---------- Alvos: 64px nas listas/HUD, 56px na barra do player ---------- */
+.tab-btn,
+.action-btn,
+.cfg-menu-item,
+.list-item-btn,
+.omnisearch-item-btn,
+.sort-choice-btn,
+.season-tab-btn,
+.source-option-btn,
+.track-item-btn,
+.episode-item-btn,
+.cat-item-btn,
+.channel-row,
+.modal-btn,
+.modal-button,
+.hud-ctrl-btn,
+.pin-key {
+  min-height: var(--btn-min-h) !important;
+}
+
+.player-controls .ctrl-btn {
+  min-height: 56px !important;
+  padding: 10px 14px !important;
+  font-size: var(--btn-font-compact) !important;
+  border-radius: 13px !important;
+}
+
+.hud-ctrl-btn,
+.fs-hud-actions .ctrl-btn {
+  font-size: 22px !important;
+  padding: 14px 20px !important;
+}
+
+.pin-key {
+  font-size: 26px !important;
+  min-width: 64px !important;
+}
+
+.tab-btn,
+.action-btn,
+.modal-btn,
+.modal-button,
+.startup-login-primary,
+.startup-login-secondary,
+.cfg-menu-item {
+  font-size: var(--btn-font) !important;
+}
+
+/* ---------- Acoes primarias continuam vermelhas ---------- */
+.startup-login-primary,
+.ctrl-btn.primary,
+.hud-ctrl-btn.primary,
+.modal-button.primary,
+.modal-btn.primary,
+.action-btn.primary,
+.btn-server-connect {
+  background: var(--btn-primary-bg) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+/* ---------- Aba ativa: vermelho chapado, sem competir com o foco ---------- */
+.tab-btn.active,
+.omnisearch-tab-btn.active,
+.season-tab-btn.active {
+  background: linear-gradient(135deg, #e50914 0%, #8b060d 100%) !important;
+  border-color: rgba(229, 9, 20, 0.85) !important;
+  color: #ffffff !important;
+}
+
+.list-item-btn.active,
+.cat-item-btn.active,
+.track-item-btn.active,
+.sort-choice-btn.active,
+.server-manager-row.active-server {
+  background: linear-gradient(100deg, rgba(229, 9, 20, 0.22), rgba(255, 255, 255, 0.03)) !important;
+  border-color: rgba(229, 9, 20, 0.6) !important;
+  box-shadow: inset 3px 0 0 var(--primary-red) !important;
+}
+
+/* ---------- Hover (ponteiro) ---------- */
+.ctrl-btn:hover,
+.hud-ctrl-btn:hover,
+.modal-btn:hover,
+.modal-button:hover,
+.action-btn:hover,
+.cfg-menu-item:hover,
+.list-item-btn:hover {
+  background: var(--btn-bg-hover) !important;
+  border-color: var(--btn-border-strong) !important;
+}
+
+/* ---------- FOCUS: o estado que manda na TV ---------- */
+.ctrl-btn:focus,
+.player-controls .ctrl-btn:focus,
+.fs-hud-actions .ctrl-btn:focus,
+.hud-ctrl-btn:focus,
+.fs-hud-bar .hud-ctrl-btn:focus,
+.modal-btn:focus,
+.modal-btn:focus-visible,
+.modal-button:focus,
+.modal-button:focus-visible,
+.tab-btn:focus,
+.action-btn:focus,
+.cfg-menu-item:focus,
+.pin-key:focus,
+.list-item-btn:focus,
+.cat-item-btn:focus,
+.episode-item-btn:focus,
+.track-item-btn:focus,
+.sort-choice-btn:focus,
+.omnisearch-tab-btn:focus,
+.omnisearch-item-btn:focus,
+.season-tab-btn:focus,
+.sort-order-btn:focus,
+.util-btn:focus,
+.storage-action-btn:focus,
+.startup-login-primary:focus,
+.startup-login-secondary:focus,
+.startup-password-toggle:focus,
+.source-option-btn:focus,
+.channel-row:focus,
+.server-pill:focus,
+.btn-server-connect:focus,
+.btn-server-edit:focus,
+.btn-server-delete:focus,
+.header-focusable:focus,
+button:focus,
+[tabindex="0"]:focus:not(input):not(textarea) {
+  outline: none !important;
+  outline-offset: 0 !important;
+  border-color: #fff3c4 !important;
+  background: var(--btn-accent) !important;
+  color: #12141c !important;
+  text-shadow: none !important;
+  box-shadow:
+    0 0 0 4px rgba(0, 0, 0, 0.55),
+    0 0 0 7px var(--btn-accent),
+    0 0 34px rgba(255, 213, 79, 0.75) !important;
+  transform: scale(var(--btn-focus-scale)) !important;
+  z-index: 60 !important;
+}
+
+/* Icones herdam a cor do botao focado (antes ficavam brancos no ambar) */
+.ctrl-btn:focus i,
+.hud-ctrl-btn:focus i,
+.tab-btn:focus i,
+.action-btn:focus i,
+.modal-btn:focus i,
+.modal-button:focus i,
+.pin-key:focus i {
+  color: #12141c !important;
+}
+
+/* ---------- Pressionado / desabilitado ---------- */
+.ctrl-btn:active,
+.hud-ctrl-btn:active,
+.modal-btn:active,
+.modal-button:active,
+.action-btn:active,
+.tab-btn:active,
+.list-item-btn:active,
+.pin-key:active {
+  transform: scale(0.97) !important;
+  background: var(--btn-bg-pressed) !important;
+}
+
+button:disabled,
+.ctrl-btn:disabled,
+.hud-ctrl-btn:disabled,
+.tab-btn:disabled,
+.modal-btn:disabled {
+  opacity: 0.45 !important;
+  filter: grayscale(0.5) !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ctrl-btn, .hud-ctrl-btn, .modal-btn, .modal-button, .tab-btn,
+  .action-btn, .list-item-btn, .pin-key, .cfg-menu-item {
+    transition: none !important;
+  }
+}
+
+/* ---------- Canais: linha da lista com foco alinhado a esquerda ---------- */
+.channel-row,
+.list-item-btn,
+.omnisearch-item-btn,
+.cfg-menu-item {
+  text-align: left !important;
+}
