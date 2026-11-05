@@ -122,8 +122,8 @@ android {
     applicationId = "com.aistudio.multiservidor.iptvmk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2402
-    versionName = "2.4.2"
+    versionCode = 2403
+    versionName = "2.4.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

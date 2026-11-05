@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.4.2-cors1">
+  <link rel="stylesheet" href="styles.css?v=2.4.3-cors1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
   <script>
     try {
@@ -24,6 +24,22 @@
   <script src="core/AlternativeSources.js"></script>
 </head>
 <body>
+
+  <!-- Splash de identidade: preto absoluto + logo centralizado -->
+  <section id="startupSplashScreen" class="mk21-splash" aria-label="Carregando MK21 Play">
+    <img class="mk21-splash-logo" src="assets/mk21-logo.svg" alt="MK21 Play">
+    <div class="mk21-splash-title">MK21 <span>PLAY</span></div>
+    <div class="mk21-splash-sub">MULTISERVIDOR IPTV</div>
+    <div class="mk21-splash-progress"><div id="splashProgressBar"></div></div>
+    <div id="splashStatusText">Iniciando...</div>
+  </section>
+  <script>
+    // Rede de seguranca: o splash nunca fica preso se o app.js falhar em carregar.
+    setTimeout(function () {
+      var s = document.getElementById('startupSplashScreen');
+      if (s) { s.classList.add('fade-out'); s.style.display = 'none'; }
+    }, 6000);
+  </script>
 
   <section id="startupLoginScreen" class="startup-login-screen" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
     <div class="startup-login-card">
@@ -56,7 +72,7 @@
 
   <aside class="app-sidebar">
     <div id="btnLogo" class="logo-box" tabindex="0">
-      <img class="logo-badge" src="mk21-logo.png" alt="MK21 Play">
+      <img class="logo-mark" src="assets/mk21-logo.svg" alt="MK21 Play">
       <span class="logo-title">MK21 <span>PLAY</span></span>
     </div>
     <span class="sidebar-section-label">MENU PRINCIPAL</span>
@@ -70,7 +86,7 @@
     </nav>
     <div class="sidebar-footer">
       <span class="sidebar-status-dot"></span>
-      <span>MK21 Play</span>
+      <span id="mk21BuildTag">MK21 Play</span>
     </div>
   </aside>
 
@@ -583,7 +599,7 @@
         var otaCode = localStorage.getItem('mk21_ota_app_js');
         var otaVer = localStorage.getItem('mk21_ota_app_version');
         var otaCss = localStorage.getItem('mk21_ota_styles_css');
-        var currentPackageVersion = '2.4.2';
+        var currentPackageVersion = '2.4.3';
         var compareVersions = function(a, b) {
           var left = String(a || '0.0.0').replace(/[^0-9.]/g, '').split('.');
           var right = String(b || '0.0.0').replace(/[^0-9.]/g, '').split('.');
@@ -606,7 +622,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.4.2-cors1';
+              fallback.src = 'app.js?v=2.4.3-cors1';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -623,7 +639,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.4.2-cors1';
+      s.src = 'app.js?v=2.4.3-cors1';
       document.body.appendChild(s);
     })();
   </script>

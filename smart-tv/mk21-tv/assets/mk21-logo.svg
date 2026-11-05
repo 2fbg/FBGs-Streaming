@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108" role="img" aria-label="MK21 Play">
+  <defs>
+    <linearGradient id="mk21Ring" gradientUnits="userSpaceOnUse" x1="17" y1="17" x2="91" y2="91">
+      <stop offset="0" stop-color="#ff334b"/><stop offset="0.45" stop-color="#e50914"/><stop offset="1" stop-color="#8b0007"/>
+    </linearGradient>
+    <linearGradient id="mk21SilverM" gradientUnits="userSpaceOnUse" x1="14" y1="36" x2="14" y2="68">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.35" stop-color="#ededed"/><stop offset="0.7" stop-color="#9e9e9e"/><stop offset="1" stop-color="#535353"/>
+    </linearGradient>
+    <linearGradient id="mk21SilverK" gradientUnits="userSpaceOnUse" x1="34" y1="36" x2="34" y2="68">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.35" stop-color="#ededed"/><stop offset="0.7" stop-color="#9e9e9e"/><stop offset="1" stop-color="#535353"/>
+    </linearGradient>
+    <linearGradient id="mk21SilverArms" gradientUnits="userSpaceOnUse" x1="41" y1="36" x2="41" y2="68">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.35" stop-color="#ededed"/><stop offset="0.7" stop-color="#9e9e9e"/><stop offset="1" stop-color="#535353"/>
+    </linearGradient>
+    <linearGradient id="mk21Red2" gradientUnits="userSpaceOnUse" x1="66" y1="36" x2="66" y2="69">
+      <stop offset="0" stop-color="#ff5252"/><stop offset="0.5" stop-color="#ff1e1e"/><stop offset="1" stop-color="#b30404"/>
+    </linearGradient>
+    <linearGradient id="mk21Red1" gradientUnits="userSpaceOnUse" x1="81" y1="40" x2="81" y2="69">
+      <stop offset="0" stop-color="#ff5252"/><stop offset="0.5" stop-color="#ff1e1e"/><stop offset="1" stop-color="#b30404"/>
+    </linearGradient>
+    <linearGradient id="mk21Horizon" gradientUnits="userSpaceOnUse" x1="18" y1="72.5" x2="90" y2="72.5">
+      <stop offset="0" stop-color="#ff1e1e" stop-opacity="0"/><stop offset="0.3" stop-color="#ff1e1e"/>
+      <stop offset="0.5" stop-color="#ffffff"/><stop offset="0.7" stop-color="#ff1e1e"/><stop offset="1" stop-color="#ff1e1e" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mk21FlareL" gradientUnits="userSpaceOnUse" x1="20" y1="78" x2="44" y2="78">
+      <stop offset="0" stop-color="#ff1e1e" stop-opacity="0"/><stop offset="1" stop-color="#ff1e1e"/>
+    </linearGradient>
+    <linearGradient id="mk21FlareR" gradientUnits="userSpaceOnUse" x1="64" y1="78" x2="88" y2="78">
+      <stop offset="0" stop-color="#ff1e1e"/><stop offset="1" stop-color="#ff1e1e" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="54" cy="54" r="37" fill="#151417"/>
+  <circle cx="54" cy="54" r="37" fill="none" stroke="url(#mk21Ring)" stroke-width="2"/>
+  <g transform="translate(1,1.5) translate(53,52.5) scale(0.74) translate(-53,-52.5)">
+    <path d="M 14,68 L 22,36 L 27.5,36 L 26,51 L 32,36 L 37.5,36 L 29.5,68 L 24.5,68 L 25,54 L 19,68 Z" fill="url(#mk21SilverM)"/>
+    <path d="M 34,68 L 42,36 L 47,36 L 39,68 Z" fill="url(#mk21SilverK)"/>
+    <path d="M 42,53 L 55,36 L 61,36 L 45,55 L 56,68 L 50,68 L 41,57 Z" fill="url(#mk21SilverArms)"/>
+    <path d="M 66,43 C 68,36, 81,36, 79,45 C 78,52, 67,56, 65,63 L 76,63 L 74,69 L 61,69 L 62,59 C 66,53, 71,50, 72,45 C 72,41, 68,41, 67,43 Z" fill="url(#mk21Red2)"/>
+    <path d="M 81,45 L 87,40 L 92,40 L 84,69 L 79,69 L 85,45 Z" fill="url(#mk21Red1)"/>
+    <path d="M 18,72.5 L 90,72.5" stroke="url(#mk21Horizon)" stroke-width="1.2"/>
+    <path d="M 20,78 L 44,78" stroke="url(#mk21FlareL)" stroke-width="1"/>
+    <path d="M 64,78 L 88,78" stroke="url(#mk21FlareR)" stroke-width="1"/>
+  </g>
+</svg>

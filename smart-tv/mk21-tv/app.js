@@ -5644,7 +5644,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.2';
+const BASE_PACKAGE_VERSION = '2.4.3';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5652,6 +5652,14 @@ try {
 
 // A versão atual é a versão OTA mais recente em cache ou a versão base do pacote
 let CURRENT_APP_VERSION = (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) > 0) ? savedOtaVer : BASE_PACKAGE_VERSION;
+
+// Fingerprint de build: permite confirmar na TV qual codigo esta rodando
+// (pacote instalado x atualizacao OTA aplicada).
+const MK21_BUILD_TAG = '2026-11-05.1';
+try {
+  const buildTagEl = document.getElementById('mk21BuildTag');
+  if (buildTagEl) buildTagEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
+} catch (e) {}
 
 let latestRemoteUpdateData = null;
 
@@ -5700,10 +5708,10 @@ async function openAppUpdateModal(manualCheck = true) {
     if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
       data = {
         version: BASE_PACKAGE_VERSION,
-        versionCode: 2402,
+        versionCode: 2403,
         title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
         releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.2_all.ipk',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.3_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };

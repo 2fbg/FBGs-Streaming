@@ -3394,3 +3394,136 @@ body.mk21-modal-open .video-box.is-fullscreen .fs-hud-bar {
     transition: none;
   }
 }
+
+/* =====================================================================
+   SPLASH DE IDENTIDADE — preto absoluto + logo do APK centralizado
+   ===================================================================== */
+.mk21-splash {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  transition: opacity 350ms ease, visibility 350ms ease;
+}
+.mk21-splash.fade-out {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.mk21-splash-logo {
+  width: 300px;
+  height: 300px;
+  display: block;
+  filter: drop-shadow(0 0 42px rgba(229, 9, 20, 0.45));
+}
+.mk21-splash-title {
+  margin-top: 26px;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 10px;
+  color: #fff;
+}
+.mk21-splash-title span { color: var(--primary-red); }
+.mk21-splash-sub {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  color: #7c8798;
+}
+.mk21-splash-progress {
+  margin-top: 34px;
+  width: 320px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+#splashProgressBar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #e50914, #ffd54f);
+  transition: width 300ms ease;
+}
+#splashStatusText {
+  margin-top: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #7c8798;
+}
+
+/* Logo vetorial do sidebar (mesmo desenho do APK) */
+.logo-mark {
+  width: 46px;
+  height: 46px;
+  display: block;
+}
+
+/* =====================================================================
+   LISTAS PADRONIZADAS COM O DESIGN SYSTEM DE BOTOES
+   Canais, categorias, episodios, faixas, servidores e fontes usam o
+   mesmo raio, superficie e anel de foco dos botoes de acao.
+   ===================================================================== */
+.list-item-btn,
+.cat-item-btn,
+.episode-item-btn,
+.track-item-btn,
+.source-option-btn,
+.server-manager-row {
+  min-height: var(--btn-min-h);
+  padding: 14px 18px;
+  border-radius: var(--btn-radius-sm);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: 20px;
+  font-weight: 700;
+  transition:
+    transform var(--btn-motion),
+    background var(--btn-motion),
+    border-color var(--btn-motion),
+    box-shadow var(--btn-motion);
+}
+
+.list-item-btn:focus,
+.cat-item-btn:focus,
+.episode-item-btn:focus,
+.track-item-btn:focus,
+.source-option-btn:focus,
+.server-manager-row:focus {
+  outline: none !important;
+  border-color: var(--btn-accent) !important;
+  background: var(--btn-accent-soft) !important;
+  color: #fff !important;
+  box-shadow: var(--btn-focus-shadow) !important;
+  transform: translateX(4px) !important;
+}
+
+.list-item-btn.active,
+.cat-item-btn.active,
+.track-item-btn.active,
+.server-manager-row.active-server {
+  background: linear-gradient(100deg, rgba(229, 9, 20, 0.22), rgba(255, 255, 255, 0.03));
+  border-color: rgba(229, 9, 20, 0.6);
+  box-shadow: inset 3px 0 0 var(--primary-red);
+  color: #fff;
+}
+
+/* Grade do guia EPG: card com o mesmo raio, sem ser focavel */
+.epg-schedule-row {
+  min-height: 72px;
+  padding: 14px 18px;
+  border-radius: var(--btn-radius-sm);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  margin-bottom: 10px;
+}
+.epg-schedule-row.active-now {
+  background: linear-gradient(100deg, rgba(16, 185, 129, 0.20), rgba(255, 255, 255, 0.03));
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow: inset 3px 0 0 #10b981;
+}
