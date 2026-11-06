@@ -448,12 +448,12 @@ if (!Element.prototype.replaceChildren) {
 // 3. CONFIGURAÇÃO DOS SERVIDORES MK21 (NOMES LIMPOS SEM ÍCONES)
 const MK21_CORS_PROXY_ENDPOINT = 'https://bgstreaming.vercel.app/api/proxy';
 const DEFAULT_SERVERS = [
-  { id: 'vlog', name: 'VLOG', url: 'http://myopbx.beer' },
-  { id: 'tannix', name: 'TANNIX', url: 'http://poptvcdn.online' },
+  { id: 'vlog', name: 'VLOG', url: 'http://lumixx21.org' },
+  { id: 'tannix', name: 'TANNIX', url: 'http://assist.new21vod.xyz' },
   { id: 'lubtv', name: 'LUB TV', url: 'http://pottermax.sbs' },
-  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
+  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://magmapuro.shop' },
   { id: 'cb6000', name: 'CB6000', url: 'http://cdn.caterlune.top' },
-  { id: 'cinelon', name: 'CINELON', url: 'http://coliseuop.site' },
+  { id: 'cinelon', name: 'CINELON', url: 'http://powerex.lat' },
   { id: 'multttv', name: 'MULTT TV', url: 'http://dali-as.skin' }
 ];
 
@@ -466,7 +466,23 @@ try {
   const custom = localStorage.getItem('mk21_servers_list');
   if (custom) {
     const parsed = JSON.parse(custom);
-    if (Array.isArray(parsed) && parsed.length > 0) SERVERS = parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const migratedUrls = {
+        'http://myopbx.beer': 'http://lumixx21.org',
+        'http://poptvcdn.online': 'http://assist.new21vod.xyz',
+        'http://app.vivoxi.xyz': 'http://magmapuro.shop',
+        'http://coliseuop.site': 'http://powerex.lat'
+      };
+      let migrated = false;
+      SERVERS = parsed.map(server => {
+        const oldUrl = String(server.url || '').replace(/\/+$/, '');
+        const newUrl = migratedUrls[oldUrl];
+        if (!newUrl) return server;
+        migrated = true;
+        return { ...server, url: newUrl };
+      });
+      if (migrated) localStorage.setItem('mk21_servers_list', JSON.stringify(SERVERS));
+    }
   }
 } catch (e) {}
 
@@ -502,8 +518,8 @@ function mk21StoreCreds(user, pass) {
 function getSharedCredentials() {
   try {
     var mem = MK21_MEMORY_CREDS || { user: '', pass: '' };
+    if (mem.user && mem.pass) return { user: mem.user, pass: mem.pass };
     if (localStorage.getItem('mk21_credentials_configured') !== 'true') {
-      if (mem.user && mem.pass) return { user: mem.user, pass: mem.pass };
       return { user: '', pass: '' };
     }
     const u = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || localStorage.getItem('iptv_user');
@@ -543,6 +559,8 @@ function hasConfiguredSharedCredentials() {
   return !!(credentials.user && credentials.pass);
 }
 
+var MK21_CREDENTIALS_VALIDATED = false;
+
 function getProxyRequestUrl(url) {
   const target = new URL(url);
   const hostname = target.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
@@ -557,6 +575,8 @@ function getProxyRequestUrl(url) {
 }
 
 var MK21_LOGIN_SHOWN = false;
+var MK21_LOGIN_REVEAL_TIMER = null;
+var MK21_LOGIN_SUBMITTING = false;
 
 function showStartupLogin(message = '', allowCancel = hasConfiguredSharedCredentials()) {
   const screen = $('startupLoginScreen');
@@ -572,20 +592,27 @@ function showStartupLogin(message = '', allowCancel = hasConfiguredSharedCredent
   $('inputLoginPassword').value = credentials.pass;
   $('startupLoginError').textContent = message;
   mk21LoginStatus(message || '', !!message);
-  $('btnCancelLogin').classList.toggle('hidden', !allowCancel);
+  $('btnCancelLogin').classList.toggle('hidden', !allowCancel || !MK21_CREDENTIALS_VALIDATED);
   // Etapa 1: tela toda preta com o logo. Etapa 2: o cartao de login entra por cima.
   mk21HoldSplash();
-  const revelar = function () {
+  if (MK21_LOGIN_REVEAL_TIMER) clearTimeout(MK21_LOGIN_REVEAL_TIMER);
+  MK21_LOGIN_REVEAL_TIMER = setTimeout(function () {
+    MK21_LOGIN_REVEAL_TIMER = null;
+    if (screen.classList.contains('hidden') || !document.documentElement.classList.contains('login-required')) return;
     document.documentElement.classList.remove('mk21-splash-hold');
     const target = credentials.user ? $('inputLoginPassword') : $('inputLoginUsername');
     if (target) target.focus();
     mk21EnsureFocusInside();
-  };
-  setTimeout(revelar, primeiraExibicao ? 1200 : 0);
+  }, primeiraExibicao ? 1200 : 0);
 }
 
 function hideStartupLogin() {
+  if (!MK21_CREDENTIALS_VALIDATED) return;
   const screen = $('startupLoginScreen');
+  if (MK21_LOGIN_REVEAL_TIMER) {
+    clearTimeout(MK21_LOGIN_REVEAL_TIMER);
+    MK21_LOGIN_REVEAL_TIMER = null;
+  }
   if (screen) screen.classList.add('hidden');
   document.documentElement.classList.remove('login-required');
   document.documentElement.classList.add('authenticated-session');
@@ -604,9 +631,44 @@ function mk21LoginStatus(text, isError) {
   }
 }
 
-function submitStartupLogin() {
+async function validateStartupCredentials(user, pass) {
+  const server = SERVERS[currentServerIndex];
+  if (!server || !server.url) throw new Error('Nenhum servidor IPTV está configurado.');
+
+  const apiUrl = `${server.url.replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  let response;
   try {
-    mk21LoginStatus('Validando os dados...');
+    response = await fetch(getProxyRequestUrl(apiUrl), controller
+      ? { cache: 'no-store', signal: controller.signal }
+      : { cache: 'no-store' });
+  } catch (error) {
+    if (controller && controller.signal.aborted) {
+      throw new Error('A validação excedeu o tempo limite. Tente novamente.');
+    }
+    throw new Error('Não foi possível conectar ao servidor para validar o login.');
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
+
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error('O servidor retornou uma resposta de autenticação inválida.');
+  }
+  const auth = result && result.user_info && result.user_info.auth;
+  if (!(auth === 1 || auth === true || auth === '1')) {
+    throw new Error('Usuário ou senha não reconhecidos pelo servidor selecionado.');
+  }
+}
+
+async function submitStartupLogin() {
+  if (MK21_LOGIN_SUBMITTING) return;
+  try {
     const userEl = $('inputLoginUsername');
     const passEl = $('inputLoginPassword');
     const user = (userEl && userEl.value ? userEl.value : '').trim();
@@ -616,6 +678,12 @@ function submitStartupLogin() {
       mk21LoginStatus('Faltou usuário ou senha.', true);
       return;
     }
+
+    MK21_LOGIN_SUBMITTING = true;
+    const submitButton = $('btnSubmitLogin');
+    if (submitButton) submitButton.disabled = true;
+    mk21LoginStatus('Validando usuário e senha no servidor...');
+    await validateStartupCredentials(user, pass);
 
     const falhaStorage = mk21StoreCreds(user, pass);
     const guardadas = ensureSharedCredentialsStored();
@@ -628,6 +696,7 @@ function submitStartupLogin() {
       addDevLog('[Login] Armazenamento da TV recusou salvar (' + falhaStorage + '). Seguindo com as credenciais em memória.', 'error');
     }
 
+    MK21_CREDENTIALS_VALIDATED = true;
     $('startupLoginError').textContent = '';
     mk21LoginStatus('Entrando...');
     hideStartupLogin();
@@ -650,8 +719,12 @@ function submitStartupLogin() {
     }, 1200);
   } catch (error) {
     const msg = (error && error.message) || String(error);
-    if ($('startupLoginError')) $('startupLoginError').textContent = 'Erro no login: ' + msg;
-    mk21LoginStatus('Erro no login: ' + msg, true);
+    if ($('startupLoginError')) $('startupLoginError').textContent = msg;
+    mk21LoginStatus(msg, true);
+  } finally {
+    MK21_LOGIN_SUBMITTING = false;
+    const submitButton = $('btnSubmitLogin');
+    if (submitButton) submitButton.disabled = false;
   }
 }
 
@@ -1750,6 +1823,10 @@ function showLoadingFailure(error, serverName) {
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
+  if (!MK21_CREDENTIALS_VALIDATED) {
+    showStartupLogin('', false);
+    return;
+  }
   if (!hasConfiguredSharedCredentials()) {
     showStartupLogin('', false);
     mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
@@ -3659,7 +3736,9 @@ let stallCount = 0;
 let isAutoReconnecting = false;
 let autoReconnectExhausted = false;
 let autoReconnectAttempts = 0;
+let playbackProgressSince = 0;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+const PLAYBACK_STABILITY_WINDOW_MS = 15000;
 
 function showPlayerReconnectBadge(msg) {
   let badge = $('playerReconnectBadge');
@@ -3755,9 +3834,12 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
   stopStallWatchdog();
   lastVideoCurrentTime = -1;
   stallCount = 0;
-  if (!preserveReconnectAttempts) autoReconnectAttempts = 0;
+  playbackProgressSince = 0;
+  if (!preserveReconnectAttempts) {
+    autoReconnectAttempts = 0;
+    autoReconnectExhausted = false;
+  }
   isAutoReconnecting = false;
-  autoReconnectExhausted = false;
   hidePlayerReconnectBadge();
 
   const video = $('tvPlayer');
@@ -3775,10 +3857,7 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
     });
     video.addEventListener('playing', () => {
       stallCount = 0;
-      autoReconnectAttempts = 0;
-      attemptedPlaybackSourceIndexes = new Set([activePlaybackSourceIndex]);
       isAutoReconnecting = false;
-      autoReconnectExhausted = false;
       hidePlayerReconnectBadge();
     });
     video.addEventListener('error', (e) => {
@@ -3801,7 +3880,14 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
   stallWatchdogInterval = setInterval(() => {
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
     const nowTime = video.currentTime;
+    if (!Number.isFinite(nowTime)) {
+      playbackProgressSince = 0;
+      stallCount++;
+      if (stallCount >= 4) triggerAutoReconnect('Tempo de reprodução inválido');
+      return;
+    }
     if (Math.abs(nowTime - lastVideoCurrentTime) < 0.2) {
+      playbackProgressSince = 0;
       stallCount++;
       if (stallCount >= 4) { // 4 segundos sem avanço no tempo
         console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
@@ -3809,6 +3895,19 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
       }
     } else {
       stallCount = 0;
+      if (lastVideoCurrentTime >= 0 && nowTime > lastVideoCurrentTime) {
+        if (!playbackProgressSince) playbackProgressSince = Date.now();
+        if (Date.now() - playbackProgressSince >= PLAYBACK_STABILITY_WINDOW_MS &&
+            (autoReconnectAttempts > 0 || attemptedPlaybackSourceIndexes.size > 1)) {
+          autoReconnectAttempts = 0;
+          autoReconnectExhausted = false;
+          attemptedPlaybackSourceIndexes = new Set([activePlaybackSourceIndex]);
+          addDevLog('[Player] Reprodução estável; contador de reconexão reiniciado.', 'success');
+          playbackProgressSince = Date.now();
+        }
+      } else {
+        playbackProgressSince = 0;
+      }
       lastVideoCurrentTime = nowTime;
     }
   }, 1000);
@@ -3910,9 +4009,6 @@ function initDevLogs() {
     } catch (e) {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
-  };
-  if ($('btnGitHubDevLogs')) $('btnGitHubDevLogs').onclick = () => {
-    window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
   };
   mk21UpdateDiagBadge();
 }
@@ -6054,17 +6150,8 @@ $('btnToggleLoginPassword').onclick = () => {
   $('btnToggleLoginPassword').textContent = show ? 'Ocultar' : 'Mostrar';
   $('btnToggleLoginPassword').setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
 };
-$('btnLoginSettings').onclick = () => {
-  hideStartupLogin();
-  openServerPicker();
-};
-$('btnLoginOffline').onclick = () => {
-  hideStartupLogin();
-  openServerPicker();
-  $('btnLoadOfflineCache').click();
-};
 $('btnCancelLogin').onclick = () => {
-  if (!hasConfiguredSharedCredentials()) return;
+  if (!MK21_CREDENTIALS_VALIDATED || !hasConfiguredSharedCredentials()) return;
   hideStartupLogin();
   const focusTarget = $('btnHeaderLogin');
   if (focusTarget) focusTarget.focus();
@@ -6406,6 +6493,9 @@ function mk21GetOpenModal() {
   const modalIds = ['startupLoginScreen', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalSources', 'modalQuality', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
+    if (modal && modal.id === 'startupLoginScreen' &&
+        document.documentElement.classList.contains('login-required') &&
+        !modal.classList.contains('hidden')) return modal;
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
   }
 
@@ -7526,9 +7616,8 @@ function initializeMk21App() {
     } catch (e) {}
 
   if (hasLogin) {
-    hideStartupLogin();
-    loadServer();
-    scheduleBackgroundListSync();
+    showStartupLogin('', false);
+    submitStartupLogin();
   } else {
     showStartupLogin('', false);
     mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
@@ -7544,7 +7633,7 @@ function initializeMk21App() {
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
-    if (!hasLogin) return;
+    if (!MK21_CREDENTIALS_VALIDATED || mk21GetOpenModal()) return;
     activeZone = 'header';
     focusedHeaderIdx = 0;
     if ($('tabLive')) $('tabLive').focus();
@@ -7677,6 +7766,24 @@ function mk21DispatchEnter(target) {
 }
 
 window.addEventListener('keydown', function (e) {
+  const loginScreen = $('startupLoginScreen');
+  const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13;
+  if (loginScreen && document.documentElement.classList.contains('login-required') &&
+      !loginScreen.classList.contains('hidden') && (isEnter || mk21IsOkAlias(e))) {
+    e.preventDefault();
+    e.stopPropagation();
+    let active = document.activeElement;
+    if (!loginScreen.contains(active)) {
+      mk21EnsureFocusInside();
+      active = document.activeElement;
+    }
+    if (active && active.tagName === 'INPUT') {
+      submitStartupLogin();
+    } else if (active && active.tagName === 'BUTTON') {
+      active.click();
+    }
+    return;
+  }
   if (!mk21IsOkAlias(e)) return;
   MK21_LAST_OK_AT = Date.now();
   e.preventDefault();

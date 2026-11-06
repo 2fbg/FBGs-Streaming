@@ -23,12 +23,12 @@ class ServerRepositoryImpl(
 ) : ServerRepository {
 
     private val staticDefaultServers = listOf(
-        ServerProfile("srv_1", "VLOG", "http://myopbx.beer"),
-        ServerProfile("srv_2", "TANNIX", "http://poptvcdn.online"),
+        ServerProfile("srv_1", "VLOG", "http://lumixx21.org"),
+        ServerProfile("srv_2", "TANNIX", "http://assist.new21vod.xyz"),
         ServerProfile("srv_3", "LUB TV", "http://pottermax.sbs"),
-        ServerProfile("srv_4", "MK21 PRÓ", "http://app.vivoxi.xyz"),
+        ServerProfile("srv_4", "MK21 PRÓ", "http://magmapuro.shop"),
         ServerProfile("srv_5", "CB6000", "http://cdn.caterlune.top"),
-        ServerProfile("srv_6", "CINELON", "http://coliseuop.site"),
+        ServerProfile("srv_6", "CINELON", "http://powerex.lat"),
         ServerProfile("srv_7", "MULTT TV", "http://dali-as.skin")
     )
 
@@ -103,9 +103,11 @@ class ServerRepositoryImpl(
                 val existing = serverDao.getAllServersList()
                 for (srv in existing) {
                     val updatedUrl = when {
+                        srv.baseUrl.contains("myopbx.beer") -> "http://lumixx21.org"
                         srv.name.equals("LUB TV", ignoreCase = true) || srv.baseUrl.contains("alfatecloan.sbs") || srv.baseUrl.contains("lubtv.fun") -> "http://pottermax.sbs"
-                        srv.name.equals("TANNIX", ignoreCase = true) || srv.baseUrl.contains("gip26.sbs") || srv.baseUrl.contains("tannix26.shop") -> "http://poptvcdn.online"
-                        srv.name.equals("MK21 PRÓ", ignoreCase = true) || srv.name.equals("MK21 TV", ignoreCase = true) || srv.baseUrl.contains("tigerouro.shop") || srv.baseUrl.contains("mk21.uk") -> "http://app.vivoxi.xyz"
+                        srv.baseUrl.contains("poptvcdn.online") || srv.baseUrl.contains("gip26.sbs") || srv.baseUrl.contains("tannix26.shop") -> "http://assist.new21vod.xyz"
+                        srv.baseUrl.contains("app.vivoxi.xyz") || srv.baseUrl.contains("tigerouro.shop") || srv.baseUrl.contains("mk21.uk") -> "http://magmapuro.shop"
+                        srv.baseUrl.contains("coliseuop.site") -> "http://powerex.lat"
                         srv.name.equals("MULTT TV", ignoreCase = true) || srv.baseUrl.contains("hll4.top") -> "http://dali-as.skin"
                         else -> null
                     }
@@ -153,7 +155,7 @@ class ServerRepositoryImpl(
                 val obj = array.getJSONObject(i)
                 val id = obj.optString("id", "srv_$i")
                 val name = obj.optString("name", "Servidor ${i + 1}")
-                val baseUrl = obj.optString("baseUrl", "")
+                val baseUrl = migrateLegacyServerUrl(obj.optString("baseUrl", ""))
                 val username = obj.optString("username", "").ifEmpty { null }
                 val password = obj.optString("password", "").ifEmpty { null }
                 val isActive = obj.optBoolean("isActive", true)
@@ -175,5 +177,13 @@ class ServerRepositoryImpl(
             Log.w("ServerRepositoryImpl", "Falha ao analisar JSON de servidores: ${e.message}")
         }
         return list
+    }
+
+    private fun migrateLegacyServerUrl(baseUrl: String): String = when (baseUrl.trimEnd('/').lowercase()) {
+        "http://myopbx.beer" -> "http://lumixx21.org"
+        "http://poptvcdn.online" -> "http://assist.new21vod.xyz"
+        "http://app.vivoxi.xyz" -> "http://magmapuro.shop"
+        "http://coliseuop.site" -> "http://powerex.lat"
+        else -> baseUrl
     }
 }

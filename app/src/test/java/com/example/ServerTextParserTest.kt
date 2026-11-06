@@ -10,9 +10,9 @@ class ServerTextParserTest {
     @Test
     fun testParseWhatsAppFormattedServers() {
         val sampleWhatsAppText = """
-🟢 *Link VLOG(M3U):* http://myopbx.beer/get.php?username=601334065&password=820866576&type=m3u_plus&output=mpegts
-⚪ *Link LUB TV (M3U):* http://alfatecloan.sbs/get.php?username=601334065&password=820866576&type=m3u_plus&output=mpegts
-🔴 *Link CINELON21 (M3U):* http://coliseuop.site/get.php?username=601334065&password=820866576&type=m3u_plus&output=mpegts
+🟢 *Link VLOG(M3U):* http://lumixx21.org/get.php?username=demo-user&password=demo-pass&type=m3u_plus&output=mpegts
+⚪ *Link LUB TV (M3U):* http://pottermax.sbs/get.php?username=demo-user&password=demo-pass&type=m3u_plus&output=mpegts
+🔴 *Link CINELON21 (M3U):* http://powerex.lat/get.php?username=demo-user&password=demo-pass&type=m3u_plus&output=mpegts
         """.trimIndent()
 
         val parsed = ServerTextParser.parse(sampleWhatsAppText)
@@ -21,21 +21,21 @@ class ServerTextParserTest {
 
         // Verificação Servidor 1 (VLOG)
         assertEquals("VLOG", parsed[0].name)
-        assertEquals("http://myopbx.beer", parsed[0].baseUrl)
-        assertEquals("601334065", parsed[0].username)
-        assertEquals("820866576", parsed[0].password)
+        assertEquals("http://lumixx21.org", parsed[0].baseUrl)
+        assertEquals("demo-user", parsed[0].username)
+        assertEquals("demo-pass", parsed[0].password)
 
         // Verificação Servidor 2 (LUB TV)
         assertEquals("LUB TV", parsed[1].name)
-        assertEquals("http://alfatecloan.sbs", parsed[1].baseUrl)
-        assertEquals("601334065", parsed[1].username)
-        assertEquals("820866576", parsed[1].password)
+        assertEquals("http://pottermax.sbs", parsed[1].baseUrl)
+        assertEquals("demo-user", parsed[1].username)
+        assertEquals("demo-pass", parsed[1].password)
 
         // Verificação Servidor 3 (CINELON21)
         assertEquals("CINELON21", parsed[2].name)
-        assertEquals("http://coliseuop.site", parsed[2].baseUrl)
-        assertEquals("601334065", parsed[2].username)
-        assertEquals("820866576", parsed[2].password)
+        assertEquals("http://powerex.lat", parsed[2].baseUrl)
+        assertEquals("demo-user", parsed[2].username)
+        assertEquals("demo-pass", parsed[2].password)
     }
 
     @Test
@@ -58,18 +58,18 @@ class ServerTextParserTest {
     fun testExtractsUsernameAndPasswordFromQueryString() {
         val message = """
             *🌐Bem vindo a MK21 Plataformas.*
-            *✅ Usuário:* 601334065
-            *✅ Senha:* 820866576
+            *✅ Usuário:* demo-user
+            *✅ Senha:* demo-pass
 
             *🆔URL XCIPTV SERVIDORES:*
-            *VLOG:* http://myopbx.beer/get.php?username=601334065&password=820866576
+            *VLOG:* http://lumixx21.org/get.php?username=demo-user&password=demo-pass
         """.trimIndent()
 
         val parsed = ServerTextParser.parse(message)
         assertEquals(1, parsed.size)
         assertEquals("VLOG", parsed[0].name)
-        assertEquals("601334065", parsed[0].username)
-        assertEquals("820866576", parsed[0].password)
+        assertEquals("demo-user", parsed[0].username)
+        assertEquals("demo-pass", parsed[0].password)
     }
 
     @Test
@@ -77,30 +77,30 @@ class ServerTextParserTest {
         val textWithIrrelevantLinks = """
 Baixe o app na Play Store: https://play.google.com/store/apps/details?id=com.app
 Entre no grupo: https://wa.me/5511999999999
-🟢 *Link VLOG:* http://myopbx.beer
+🟢 *Link VLOG:* http://lumixx21.org
         """.trimIndent()
 
         val parsed = ServerTextParser.parse(textWithIrrelevantLinks)
 
         assertEquals(1, parsed.size)
         assertEquals("VLOG", parsed[0].name)
-        assertEquals("http://myopbx.beer", parsed[0].baseUrl)
+        assertEquals("http://lumixx21.org", parsed[0].baseUrl)
     }
 
     @Test
     fun testParseFullWhatsAppMessageWithNewUrls() {
         val message = """
 *🌐Bem vindo a MK21 Plataformas.*
-*✅ Usuário:* 601334065
-*✅ Senha:* 820866576
+*✅ Usuário:* demo-user
+*✅ Senha:* demo-pass
 
 *🆔URL XCIPTV SERVIDORES:* 
-*VLOG:* http://myopbx.beer
-*TANNIX:*  http://poptvcdn.online
+*VLOG:* http://lumixx21.org
+*TANNIX:*  http://assist.new21vod.xyz
 *LUB TV:*  http://pottermax.sbs
-*MK21 PRÓ:*  http://app.vivoxi.xyz
+*MK21 PRÓ:*  http://magmapuro.shop
 *CB6000:*  http://cdn.caterlune.top
-*CINELON:*  http://coliseuop.site
+*CINELON:*  http://powerex.lat
 *MULTT TV:*  http://dali-as.skin
         """.trimIndent()
 
@@ -108,27 +108,41 @@ Entre no grupo: https://wa.me/5511999999999
         assertEquals(7, parsed.size)
 
         assertEquals("VLOG", parsed[0].name)
-        assertEquals("http://myopbx.beer", parsed[0].baseUrl)
-        assertEquals("601334065", parsed[0].username)
-        assertEquals("820866576", parsed[0].password)
+        assertEquals("http://lumixx21.org", parsed[0].baseUrl)
+        assertEquals("demo-user", parsed[0].username)
+        assertEquals("demo-pass", parsed[0].password)
 
         assertEquals("TANNIX", parsed[1].name)
-        assertEquals("http://poptvcdn.online", parsed[1].baseUrl)
+        assertEquals("http://assist.new21vod.xyz", parsed[1].baseUrl)
 
         assertEquals("LUB TV", parsed[2].name)
         assertEquals("http://pottermax.sbs", parsed[2].baseUrl)
 
         assertEquals("MK21 PRÓ", parsed[3].name)
-        assertEquals("http://app.vivoxi.xyz", parsed[3].baseUrl)
+        assertEquals("http://magmapuro.shop", parsed[3].baseUrl)
 
         assertEquals("CB6000", parsed[4].name)
         assertEquals("http://cdn.caterlune.top", parsed[4].baseUrl)
 
         assertEquals("CINELON21", parsed[5].name)
-        assertEquals("http://coliseuop.site", parsed[5].baseUrl)
+        assertEquals("http://powerex.lat", parsed[5].baseUrl)
 
         assertEquals("MULTT TV", parsed[6].name)
         assertEquals("http://dali-as.skin", parsed[6].baseUrl)
+    }
+
+    @Test
+    fun testInfersNamesFromUpdatedServerHosts() {
+        val text = """
+http://lumixx21.org/get.php
+http://assist.new21vod.xyz/get.php
+http://magmapuro.shop/get.php
+http://powerex.lat/get.php
+        """.trimIndent()
+
+        val parsed = ServerTextParser.parse(text)
+
+        assertEquals(listOf("VLOG", "TANNIX", "MK21 PRÓ", "CINELON21"), parsed.map { it.name })
     }
 
     @Test

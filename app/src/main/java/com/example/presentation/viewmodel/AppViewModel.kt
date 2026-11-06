@@ -362,7 +362,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             val server = servers.value.find { it.name.equals(serverName, ignoreCase = true) }
-            val baseUrl = server?.baseUrl ?: "http://myopbx.beer"
+            val baseUrl = server?.baseUrl ?: "http://lumixx21.org"
             val targetUser = server?.username ?: user
             val targetPass = server?.password ?: pass
 

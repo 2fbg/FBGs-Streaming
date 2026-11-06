@@ -45,7 +45,7 @@ Os aplicativos da LG Smart TV usam a tecnologia oficial **webOS TV SDK** (basead
 ### Primeiro acesso
 1. Informe o usuário e a senha IPTV na tela de login, como no aplicativo Android.
 2. As credenciais ficam salvas localmente para as próximas aberturas; use **🔐 Login** no cabeçalho para trocá-las.
-3. **Gerenciar Servidores & Ajustes** abre a configuração de listas; **Prosseguir para Home (Modo Offline / Cache)** tenta abrir um catálogo já salvo sem conectar aos servidores.
+3. O aplicativo valida as credenciais no servidor selecionado antes de abrir. O gerenciamento de servidores e o catálogo offline ficam disponíveis depois da autenticação.
 4. As listas e os fluxos HLS/MPEG-TS processados por HLS.js/MPEG-TS.js usam o proxy HTTPS próprio para evitar bloqueios CORS; endereços de rede local continuam sendo acessados diretamente. A reprodução webOS usa o player nativo da TV, sem encaminhar o vídeo por proxy.
 
 ---

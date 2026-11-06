@@ -136,12 +136,12 @@ object ServerTextParser {
 
         // Normalização de nomes conhecidos de servidores IPTV
         return when {
-            lowerCleaned.contains("vlog") || lowerBase.contains("myopbx") -> "VLOG"
+            lowerCleaned.contains("vlog") || lowerBase.contains("lumixx21") || lowerBase.contains("myopbx") -> "VLOG"
             lowerCleaned.contains("lub") || lowerBase.contains("pottermax") || lowerBase.contains("alfatecloan") -> "LUB TV"
-            lowerCleaned.contains("cinelon") || lowerBase.contains("coliseuop") -> "CINELON21"
-            lowerCleaned.contains("tannix") || lowerBase.contains("poptvcdn") || lowerBase.contains("gip26") -> "TANNIX"
+            lowerCleaned.contains("cinelon") || lowerBase.contains("powerex") || lowerBase.contains("coliseuop") -> "CINELON21"
+            lowerCleaned.contains("tannix") || lowerBase.contains("assist.new21vod") || lowerBase.contains("poptvcdn") || lowerBase.contains("gip26") -> "TANNIX"
             lowerCleaned.contains("cb6000") || lowerCleaned.contains("cb6") || lowerBase.contains("caterlune") -> "CB6000"
-            lowerCleaned.contains("mk21") || lowerBase.contains("vivoxi") || lowerBase.contains("tigerouro") -> "MK21 PRÓ"
+            lowerCleaned.contains("mk21") || lowerBase.contains("magmapuro") || lowerBase.contains("vivoxi") || lowerBase.contains("tigerouro") -> "MK21 PRÓ"
             lowerCleaned.contains("multt tv") || lowerBase.contains("dali-as") || lowerBase.contains("hll4") -> "MULTT TV"
             lowerCleaned.contains("new tv") || lowerBase.contains("cp2026") -> "NEW TV"
             lowerCleaned.contains("cinevo") || lowerBase.contains("antaresfusion") -> "CINEVO"

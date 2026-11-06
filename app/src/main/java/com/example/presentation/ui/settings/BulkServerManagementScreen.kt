@@ -140,9 +140,9 @@ fun BulkServerManagementScreen(
                         },
                         onPasteExample = {
                             pastedText = """
-🟢 *Link VLOG(M3U):* http://myopbx.beer/get.php?username=601334065&password=820866576&type=m3u_plus&output=mpegts
-⚪ *Link LUB TV (M3U):* http://alfatecloan.sbs/get.php?username=601334065&password=820866576&type=m3u_plus&output=mpegts
-🔴 *Link CINELON21 (M3U):* http://coliseuop.site/get.php?username=601334065&password=820866576&type=m3u_plus&output=mpegts
+🟢 *Link VLOG(M3U):* http://lumixx21.org/get.php?username=demo-user&password=demo-pass&type=m3u_plus&output=mpegts
+⚪ *Link LUB TV (M3U):* http://pottermax.sbs/get.php?username=demo-user&password=demo-pass&type=m3u_plus&output=mpegts
+🔴 *Link CINELON21 (M3U):* http://powerex.lat/get.php?username=demo-user&password=demo-pass&type=m3u_plus&output=mpegts
                             """.trimIndent()
                             parsedPreview = viewModel.previewServersFromText(pastedText)
                         }
@@ -270,7 +270,7 @@ private fun ImportTextSection(
                 value = pastedText,
                 onValueChange = onTextChanged,
                 label = { Text("Cole o texto dos servidores aqui") },
-                placeholder = { Text("Ex: 🟢 *Link VLOG(M3U):* http://myopbx.beer/get.php?...") },
+                placeholder = { Text("Ex: 🟢 *Link VLOG(M3U):* http://lumixx21.org/get.php?...") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)

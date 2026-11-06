@@ -68,12 +68,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val preferencesService = PreferencesService(application)
     
     private val staticDefaultServers = listOf(
-        ServerProfile("server_1", "VLOG", "http://myopbx.beer"),
-        ServerProfile("server_2", "TANNIX", "http://poptvcdn.online"),
+        ServerProfile("server_1", "VLOG", "http://lumixx21.org"),
+        ServerProfile("server_2", "TANNIX", "http://assist.new21vod.xyz"),
         ServerProfile("server_3", "LUB TV", "http://pottermax.sbs"),
-        ServerProfile("server_4", "MK21 PRÓ", "http://app.vivoxi.xyz"),
+        ServerProfile("server_4", "MK21 PRÓ", "http://magmapuro.shop"),
         ServerProfile("server_5", "CB6000", "http://cdn.caterlune.top"),
-        ServerProfile("server_6", "CINELON", "http://coliseuop.site"),
+        ServerProfile("server_6", "CINELON", "http://powerex.lat"),
         ServerProfile("server_7", "MULTT TV", "http://dali-as.skin")
     )
 
@@ -521,23 +521,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val lowercaseBaseUrl = baseUrl.lowercase()
 
                 // Normalization block for predefined premium lists to prevent duplicates and keep names matching
-                if (lowercaseBaseUrl.contains("new-link.shop") || lowercaseBaseUrl.contains("opbx-w.shop") || lowercaseBaseUrl.contains("somentevlog.xyz") || lowercaseBaseUrl.contains("vlogmk.de") || lowercaseBaseUrl.contains("newphase.sbs")) {
-                    targetBaseUrl = "http://new-link.shop"
+                if (lowercaseBaseUrl.contains("lumixx21.org") || lowercaseBaseUrl.contains("myopbx.beer") || lowercaseBaseUrl.contains("new-link.shop") || lowercaseBaseUrl.contains("opbx-w.shop") || lowercaseBaseUrl.contains("somentevlog.xyz") || lowercaseBaseUrl.contains("vlogmk.de") || lowercaseBaseUrl.contains("newphase.sbs")) {
+                    targetBaseUrl = "http://lumixx21.org"
                     targetName = "VLOG"
                 } else if (lowercaseBaseUrl.contains("alfatecloan.sbs") || lowercaseBaseUrl.contains("pitclear.sbs") || lowercaseBaseUrl.contains("triimundial.shop") || lowercaseBaseUrl.contains("lubtv.fun")) {
                     targetBaseUrl = "http://alfatecloan.sbs"
                     targetName = "LUB TV"
-                } else if (lowercaseBaseUrl.contains("connstar.xyz") || lowercaseBaseUrl.contains("infinixparcerias.site") || lowercaseBaseUrl.contains("cinelontv.work") || lowercaseBaseUrl.contains("cinelon")) {
-                    targetBaseUrl = "http://connstar.xyz"
+                } else if (lowercaseBaseUrl.contains("powerex.lat") || lowercaseBaseUrl.contains("coliseuop.site") || lowercaseBaseUrl.contains("connstar.xyz") || lowercaseBaseUrl.contains("infinixparcerias.site") || lowercaseBaseUrl.contains("cinelontv.work") || lowercaseBaseUrl.contains("cinelon")) {
+                    targetBaseUrl = "http://powerex.lat"
                     targetName = "CINELON21"
-                } else if (lowercaseBaseUrl.contains("poptvcdn.online") || lowercaseBaseUrl.contains("tannix26.shop") || lowercaseBaseUrl.contains("cdnassandplay.online") || lowercaseBaseUrl.contains("unituf.online") || lowercaseBaseUrl.contains("tannix")) {
-                    targetBaseUrl = "http://poptvcdn.online"
+                } else if (lowercaseBaseUrl.contains("assist.new21vod.xyz") || lowercaseBaseUrl.contains("poptvcdn.online") || lowercaseBaseUrl.contains("tannix26.shop") || lowercaseBaseUrl.contains("cdnassandplay.online") || lowercaseBaseUrl.contains("unituf.online") || lowercaseBaseUrl.contains("tannix")) {
+                    targetBaseUrl = "http://assist.new21vod.xyz"
                     targetName = "TANNIX"
                 } else if (lowercaseBaseUrl.contains("painelplyon.top") || lowercaseBaseUrl.contains("cb6.fun") || lowercaseBaseUrl.contains("cb6000")) {
                     targetBaseUrl = "http://cdn.caterlune.top"
                     targetName = "CB6000"
-                } else if (lowercaseBaseUrl.contains("app.vivoxi.xyz") || lowercaseBaseUrl.contains("vivoxi") || lowercaseBaseUrl.contains("mk21.uk") || lowercaseBaseUrl.contains("appsmk.org") || lowercaseBaseUrl.contains("mk21")) {
-                    targetBaseUrl = "http://app.vivoxi.xyz"
+                } else if (lowercaseBaseUrl.contains("magmapuro.shop") || lowercaseBaseUrl.contains("app.vivoxi.xyz") || lowercaseBaseUrl.contains("vivoxi") || lowercaseBaseUrl.contains("mk21.uk") || lowercaseBaseUrl.contains("appsmk.org") || lowercaseBaseUrl.contains("mk21")) {
+                    targetBaseUrl = "http://magmapuro.shop"
                     targetName = "MK21 PRÓ"
                 } else if (lowercaseBaseUrl.contains("dali-as.skin") || lowercaseBaseUrl.contains("hll4.top") || lowercaseBaseUrl.contains("multt tv")) {
                     targetBaseUrl = "http://dali-as.skin"

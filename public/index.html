@@ -322,12 +322,12 @@
                                 <i class="fa-solid fa-server"></i>
                             </span>
                             <select id="server-selector" class="w-full min-w-0 py-3 pr-9 bg-[#0f111d] text-white font-bold text-sm sm:text-base outline-none cursor-pointer" style="background-color: #0f111d !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; opacity: 1 !important;">
-                                <option value="http://myopbx.beer" style="background-color: #0f111d; color: #ffffff;">VLOG</option>
-                                <option value="http://poptvcdn.online" style="background-color: #0f111d; color: #ffffff;">TANNIX</option>
+                                <option value="http://lumixx21.org" style="background-color: #0f111d; color: #ffffff;">VLOG</option>
+                                <option value="http://assist.new21vod.xyz" style="background-color: #0f111d; color: #ffffff;">TANNIX</option>
                                 <option value="http://pottermax.sbs" style="background-color: #0f111d; color: #ffffff;">LUB TV</option>
-                                <option value="http://app.vivoxi.xyz" style="background-color: #0f111d; color: #ffffff;">MK21 PRÓ</option>
+                                <option value="http://magmapuro.shop" style="background-color: #0f111d; color: #ffffff;">MK21 PRÓ</option>
                                 <option value="http://cdn.caterlune.top" selected style="background-color: #0f111d; color: #ffffff;">CB6000</option>
-                                <option value="http://coliseuop.site" style="background-color: #0f111d; color: #ffffff;">CINELON</option>
+                                <option value="http://powerex.lat" style="background-color: #0f111d; color: #ffffff;">CINELON</option>
                                 <option value="http://dali-as.skin" style="background-color: #0f111d; color: #ffffff;">MULTT TV</option>
                             </select>
                             <span class="absolute right-3 pointer-events-none text-slate-400 text-xs">
@@ -1051,14 +1051,13 @@
                                                     <label class="block text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Console de Diagnóstico & Logs (Tempo Real)</label>
                                                     <div class="flex items-center gap-1">
                                                         <button type="button" onclick="downloadDiagnosticLogs()" class="text-[8.5px] text-slate-200 bg-slate-900 border border-slate-700 px-2 py-1 rounded hover:bg-slate-800 font-bold transition-colors outline-none">Salvar</button>
-                                                        <button type="button" onclick="openDiagnosticLogsOnGitHub()" class="text-[8.5px] text-blue-300 bg-blue-950/30 border border-blue-800/50 px-2 py-1 rounded hover:bg-blue-950/60 font-bold transition-colors outline-none">GitHub</button>
                                                         <button type="button" onclick="clearDiagnosticLogs()" class="text-[8.5px] text-[#E50914] bg-red-950/25 border border-red-900/30 px-2 py-1 rounded hover:bg-red-950/50 font-bold transition-colors outline-none">Limpar</button>
                                                     </div>
                                                 </div>
                                                 <div id="diagnostic-log-console" class="w-full h-40 bg-black border border-slate-900 rounded-lg p-2.5 overflow-y-auto text-[10px] font-mono leading-normal space-y-1 select-text scrollbar-thin scrollbar-thumb-slate-850 scrollbar-track-transparent">
                                                     <div class="text-slate-500 italic">[Sem logs de transmissão. Inicie uma reprodução para capturar eventos em tempo real]</div>
                                                 </div>
-                                                <span class="text-[8.5px] text-slate-500 block mt-1 leading-normal">Credenciais são mascaradas. Salve o arquivo e anexe-o manualmente no GitHub; nada é enviado sem sua ação.</span>
+                                                <span class="text-[8.5px] text-slate-500 block mt-1 leading-normal">Credenciais são mascaradas. O arquivo é salvo somente no seu dispositivo.</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1640,12 +1639,12 @@
 
         // Inline replica of servers.json to work flawlessly offline or context-free (avoid CORS issues when testing locally via file://)
         const PREDEFINED_SERVERS = [
-            { id: "server_1", name: "VLOG", baseUrl: "http://myopbx.beer", lotusCode: "21001", webCode: "303496" },
-            { id: "server_2", name: "TANNIX", baseUrl: "http://poptvcdn.online", lotusCode: "21002", webCode: "318246" },
+            { id: "server_1", name: "VLOG", baseUrl: "http://lumixx21.org", lotusCode: "21001", webCode: "303496" },
+            { id: "server_2", name: "TANNIX", baseUrl: "http://assist.new21vod.xyz", lotusCode: "21002", webCode: "318246" },
             { id: "server_3", name: "LUB TV", baseUrl: "http://pottermax.sbs", lotusCode: "21005", webCode: "827164" },
-            { id: "server_4", name: "MK21 PRÓ", baseUrl: "http://app.vivoxi.xyz", lotusCode: "21003", webCode: "739285" },
+            { id: "server_4", name: "MK21 PRÓ", baseUrl: "http://magmapuro.shop", lotusCode: "21003", webCode: "739285" },
             { id: "server_5", name: "CB6000", baseUrl: "http://cdn.caterlune.top", lotusCode: "21004", webCode: "938124" },
-            { id: "server_6", name: "CINELON", baseUrl: "http://coliseuop.site", lotusCode: "", webCode: "49375" },
+            { id: "server_6", name: "CINELON", baseUrl: "http://powerex.lat", lotusCode: "", webCode: "49375" },
             { id: "server_7", name: "MULTT TV", baseUrl: "http://dali-as.skin", lotusCode: "", webCode: "428143" }
         ];
 
@@ -2396,10 +2395,6 @@
             setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
         }
 
-        function openDiagnosticLogsOnGitHub() {
-            window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
-        }
-
         function showPlayerHud(status, substatus) {
             const spinner = document.getElementById('yt-buffer-spinner');
             const statusEl = document.getElementById('player-hud-status');
@@ -2947,6 +2942,16 @@
             });
 
             let savedUrl = (localStorage.getItem('mk21_baseUrl') || '').trim().replace(/\/+$/, '');
+            const migratedSavedUrl = {
+                'http://myopbx.beer': 'http://lumixx21.org',
+                'http://poptvcdn.online': 'http://assist.new21vod.xyz',
+                'http://app.vivoxi.xyz': 'http://magmapuro.shop',
+                'http://coliseuop.site': 'http://powerex.lat'
+            }[savedUrl];
+            if (migratedSavedUrl) {
+                savedUrl = migratedSavedUrl;
+                localStorage.setItem('mk21_baseUrl', savedUrl);
+            }
             let matched = false;
 
             if (savedUrl) {
