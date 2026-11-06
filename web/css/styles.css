@@ -304,3 +304,13 @@ body.smart-tv-device [data-stream-url]:focus-visible {
     box-shadow: 0 0 0 4px #E50914, 0 8px 30px rgba(229, 9, 20, 0.9) !important;
 }
 
+/* Restrição mandatória da task v2.5.0 */
+header .brand-logo,
+.navbar-brand img,
+.header-logo {
+  max-height: 50px !important;
+  width: auto;
+  object-fit: contain;
+}
+
+

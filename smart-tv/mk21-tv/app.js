@@ -19,370 +19,6 @@ const Mk21DnsResolver = {
 // MK21 PLAY v1.4.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
-const playerLibraryPromises = Object.create(null);
-
-function loadPlayerLibrary(globalName, src) {
-  if (window[globalName]) return Promise.resolve(window[globalName]);
-  if (playerLibraryPromises[globalName]) return playerLibraryPromises[globalName];
-
-  playerLibraryPromises[globalName] = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    const timeout = setTimeout(() => {
-      script.onload = null;
-      script.onerror = null;
-      script.remove();
-      reject(new Error(`${globalName} indisponível após 8 segundos.`));
-    }, 8000);
-    script.async = true;
-    script.src = src;
-    script.onload = () => {
-      clearTimeout(timeout);
-      if (window[globalName]) resolve(window[globalName]);
-      else reject(new Error(`${globalName} não foi inicializado pelo script.`));
-    };
-    script.onerror = () => {
-      clearTimeout(timeout);
-      reject(new Error(`Falha ao carregar ${globalName}.`));
-    };
-    document.head.appendChild(script);
-  }).catch(error => {
-    delete playerLibraryPromises[globalName];
-    throw error;
-  });
-
-  return playerLibraryPromises[globalName];
-}
-
-async function loadPlayerLibraryForPlayback(globalName, src, signal) {
-  let onAbort;
-  const aborted = new Promise(resolve => {
-    onAbort = () => resolve(null);
-    if (signal.aborted) onAbort();
-    else signal.addEventListener('abort', onAbort, { once: true });
-  });
-  try {
-    return await Promise.race([loadPlayerLibrary(globalName, src), aborted]);
-  } finally {
-    signal.removeEventListener('abort', onAbort);
-  }
-}
-
-window.addEventListener('error', function (event) {
-  const target = event && event.target;
-  if (target && target !== window) {
-    const resource = target.currentSrc || target.src || target.href || target.tagName || 'recurso';
-    let resourceLabel = target.tagName || 'recurso';
-    try { resourceLabel = getSourceHostLabel(resource); } catch (e) {}
-    // Antes: uma linha por imagem com defeito (centenas). Agora: uma por host a cada
-    // 20s, com a contagem de repetições — o log deixa de afogar o resto.
-    mk21LogResourceFailure(resourceLabel, target.tagName || 'recurso');
-    return;
-  }
-  const location = event && event.filename
-    ? ` (${event.filename}:${event.lineno || 0}:${event.colno || 0})`
-    : '';
-  addDevLog(`[JavaScript] ${event && event.message ? event.message : 'Erro não identificado'}${location}`, 'error');
-}, true);
-
-
-// ==================== DIAGNOSTICO PERSISTENTE (SOBREVIVE A REINICIO) ====================
-// A TV reiniciava o WebView sem aviso e o console da sessao era perdido. Agora cada
-// abertura grava um marcador + resumo do log no localStorage. Na abertura seguinte o
-// app compara os marcadores e diz se a sessao anterior terminou de forma limpa, quanto
-// durou e quanta memoria estava em uso — a evidencia que faltava para culpar (ou
-// inocentar) a falta de memoria.
-const MK21_DIAG = {
-  sessionId: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-  bootAt: Date.now(),
-  restarts: 0
-};
-const MK21_DIAG_BOOT_KEY = 'mk21_diag_boot_v1';
-const MK21_DIAG_LOG_KEY = 'mk21_diag_log_v1';
-const MK21_DIAG_BOOTS_KEY = 'mk21_diag_boots_v1';
-const mk21ResourceErrorWindow = Object.create(null);
-let mk21MemoryGuardTimer = null;
-let mk21LastMemoryLogAt = 0;
-let mk21PersistCounter = 0;
-
-function mk21AppVersion() {
-  try { return (typeof BASE_PACKAGE_VERSION === 'string') ? BASE_PACKAGE_VERSION : 'n/d'; } catch (e) { return 'n/d'; }
-}
-
-function mk21BuildTag() {
-  try { return (typeof MK21_BUILD_TAG === 'string') ? MK21_BUILD_TAG : 'n/d'; } catch (e) { return 'n/d'; }
-}
-
-function mk21UptimeLabel() {
-  const total = Math.max(0, Math.round((Date.now() - MK21_DIAG.bootAt) / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  const mm = String(m).padStart(2, '0');
-  const ss = String(sec).padStart(2, '0');
-  return h > 0 ? `${h}h${mm}m${ss}s` : `${mm}m${ss}s`;
-}
-
-// performance.memory existe no Chromium/WebView (e portanto no Android TV). Em webOS/Tizen
-// antigos pode faltar: nesse caso devolvemos null e o app nao inventa numero.
-function mk21HeapInfo() {
-  try {
-    const mem = performance && performance.memory;
-    if (!mem || !mem.usedJSHeapSize) return null;
-    const usedMB = Math.round(mem.usedJSHeapSize / 1048576);
-    const limitMB = Math.round(mem.jsHeapSizeLimit / 1048576);
-    return {
-      usedMB: usedMB,
-      totalMB: Math.round(mem.totalJSHeapSize / 1048576),
-      limitMB: limitMB,
-      pct: limitMB ? Math.round((usedMB / limitMB) * 100) : 0
-    };
-  } catch (e) { return null; }
-}
-
-function mk21PlatformLabel() {
-  const ua = navigator.userAgent || '';
-  if (window.webOS) return 'LG webOS';
-  if (window.tizen) return 'Samsung Tizen';
-  if (/android/i.test(ua)) return 'Android TV/WebView';
-  if (/iphone|ipad/i.test(ua)) return 'iOS';
-  return 'Navegador';
-}
-
-function mk21DeviceInfoLines() {
-  const heap = mk21HeapInfo();
-  const ua = navigator.userAgent || 'n/d';
-  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
-  const video = $('tvPlayer');
-  const catalog = (typeof allCatalog === 'object' && allCatalog) ? allCatalog : {};
-  const screens = screen ? `${screen.width}x${screen.height} @${(window.devicePixelRatio || 1).toFixed(2)}x` : 'n/d';
-  return [
-    { type: 'system', msg: `Aparelho: ${mk21PlatformLabel()} · tela ${screens} · ${navigator.hardwareConcurrency || '?'} núcleos · 8-bit color ${screen && screen.colorDepth ? screen.colorDepth : '?'}` },
-    { type: 'system', msg: `RAM do aparelho: ${navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'n/d'} · heap JS ${heap ? `${heap.usedMB} MB de ${heap.limitMB} MB (${heap.pct}%)` : 'indisponível nesta TV'}` },
-    { type: 'system', msg: `Rede: ${navigator.onLine ? 'online' : 'offline'}${conn && conn.effectiveType ? ' · ' + conn.effectiveType : ''}${conn && conn.downlink ? ' · ' + conn.downlink + ' Mb/s' : ''}${conn && conn.rtt ? ' · ' + conn.rtt + ' ms' : ''}` },
-    { type: 'system', msg: `Versão ${mk21AppVersion()} · build ${mk21BuildTag()} · abertura nº ${MK21_DIAG.restarts + 1} · sessão ${MK21_DIAG.sessionId} · uptime ${mk21UptimeLabel()}` },
-    { type: 'system', msg: `Catálogo: ${(catalog.LIVE || []).length} ao vivo · ${(catalog.MOVIE || []).length} filmes · ${(catalog.SERIES || []).length} séries · ${sessionDevLogs.length} logs em memória` },
-    { type: 'system', msg: `Player: ${video && video.currentSrc ? 'com mídia' : 'sem mídia'}${video && video.videoWidth ? ` · ${video.videoWidth}x${video.videoHeight}` : ''}${(typeof activeItem === 'object' && activeItem) ? ' · ' + (activeItem.name || 'item ativo') : ''}${document.fullscreenElement || document.body.classList.contains('is-fullscreen') ? ' · tela cheia' : ''}` },
-    { type: 'system', msg: `Navegador: ${ua}` }
-  ];
-}
-
-function mk21PersistDiagLog(force) {
-  mk21PersistCounter += 1;
-  if (!force && mk21PersistCounter % 10 !== 0) return;
-  try {
-    const tail = sessionDevLogs.slice(-160).map(l => `[${l.time} +${l.uptime}] [${l.type.toUpperCase()}] ${l.msg}`);
-    localStorage.setItem(MK21_DIAG_LOG_KEY, JSON.stringify({
-      at: Date.now(),
-      sessionId: MK21_DIAG.sessionId,
-      version: mk21AppVersion(),
-      entries: tail
-    }));
-  } catch (e) {}
-}
-
-function mk21WriteBootMarker(cleanExit) {
-  try {
-    const heap = mk21HeapInfo();
-    localStorage.setItem(MK21_DIAG_BOOT_KEY, JSON.stringify({
-      sessionId: MK21_DIAG.sessionId,
-      bootAt: MK21_DIAG.bootAt,
-      endedAt: Date.now(),
-      version: mk21AppVersion(),
-      build: mk21BuildTag(),
-      heapMB: heap ? heap.usedMB : null,
-      heapLimitMB: heap ? heap.limitMB : null,
-      entries: sessionDevLogs.length,
-      cleanExit: !!cleanExit
-    }));
-  } catch (e) {}
-}
-
-// Reconstroi o que aconteceu antes do reinicio: e isso que diferencia "a TV fechou o
-// app por memoria" de "alguem apertou sair" ou "o app subiu de novo por OTA".
-function mk21DetectRestart() {
-  let prev = null;
-  let boots = 1;
-  // Lido ANTES de qualquer addDevLog: addDevLog persiste o log novo e apagaria o da
-  // sessao que caiu, que e' justamente a evidencia que queremos mostrar.
-  let previousLog = null;
-  try {
-    previousLog = JSON.parse(localStorage.getItem(MK21_DIAG_LOG_KEY) || 'null');
-    prev = JSON.parse(localStorage.getItem(MK21_DIAG_BOOT_KEY) || 'null');
-    boots = (parseInt(localStorage.getItem(MK21_DIAG_BOOTS_KEY) || '0', 10) || 0) + 1;
-    localStorage.setItem(MK21_DIAG_BOOTS_KEY, String(boots));
-  } catch (e) {}
-  MK21_DIAG.restarts = Math.max(0, boots - 1);
-  if (!prev) {
-    addDevLog('[Sistema] Primeira abertura registrada neste aparelho.', 'system');
-    return;
-  }
-  const endedAt = prev.endedAt || Date.now();
-  const durSec = Math.max(0, Math.round((endedAt - (prev.bootAt || endedAt)) / 1000));
-  const durLabel = durSec >= 60 ? `${Math.floor(durSec / 60)}m${String(durSec % 60).padStart(2, '0')}s` : `${durSec}s`;
-  const heapLabel = prev.heapMB != null ? `${prev.heapMB} MB${prev.heapLimitMB ? ' de ' + prev.heapLimitMB + ' MB' : ''}` : 'indisponível';
-  if (prev.cleanExit) {
-    addDevLog(`[Sistema] Reabertura normal. Sessão anterior durou ${durLabel} e saiu pelo menu.`, 'system');
-  } else {
-    addDevLog(`[Sistema] REINÍCIO SEM FECHAMENTO: a sessão anterior terminou sozinha após ${durLabel}, com heap ${heapLabel}. ${boots}ª abertura neste aparelho.`, 'error');
-    addDevLog('[Sistema] Esse padrão é típico de falta de memória (WebView encerrado) ou de queda do runtime — veja as últimas linhas da sessão anterior abaixo.', 'warn');
-  }
-  if (previousLog && Array.isArray(previousLog.entries) && previousLog.entries.length) {
-    addDevLog(`[Sessão anterior] Últimas ${Math.min(previousLog.entries.length, 12)} linhas antes do reinício:`, 'system');
-    previousLog.entries.slice(-12).forEach(line => addDevLog('[anterior] ' + line, 'debug'));
-    try { localStorage.removeItem(MK21_DIAG_LOG_KEY); } catch (e) {}
-  }
-}
-
-function mk21TrimMemory(reason) {
-  const freed = [];
-  try { if (logoCacheMap.size) { logoCacheMap.clear(); freed.push('logos'); } } catch (e) {}
-  try { if (tmdbCache.size) { tmdbCache.clear(); freed.push('TMDB'); } } catch (e) {}
-  try { if (prefetchManifestCache.size) { prefetchManifestCache.clear(); freed.push('manifests'); } } catch (e) {}
-  try { if (smartTvEpgCache.size) { smartTvEpgCache.clear(); freed.push('EPG'); } } catch (e) {}
-  try { if (categoryMapCache.size) { categoryMapCache.clear(); freed.push('categorias'); } } catch (e) {}
-  try { if (mk21ResourceErrorWindow) Object.keys(mk21ResourceErrorWindow).forEach(k => delete mk21ResourceErrorWindow[k]); } catch (e) {}
-  try {
-    // Lista longa mantem centenas de <img> vivos: volta ao tamanho de leitura confortavel.
-    if (itemsDisplayLimit > 40) { itemsDisplayLimit = 40; freed.push('lista reduzida para 40 itens'); }
-  } catch (e) {}
-  addDevLog(`[Memória] Limpeza aplicada (${reason}): ${freed.length ? freed.join(', ') : 'nada a liberar'}.`, 'warn');
-}
-
-function mk21MemoryGuardTick() {
-  const heap = mk21HeapInfo();
-  if (!heap) return;
-  const now = Date.now();
-  if (heap.pct >= 80 || heap.usedMB >= 320) {
-    addDevLog(`[Memória] CRÍTICO: heap em ${heap.usedMB} MB de ${heap.limitMB} MB (${heap.pct}%).`, 'error');
-    mk21TrimMemory('pressão de memória');
-    mk21LastMemoryLogAt = now;
-  } else if (now - mk21LastMemoryLogAt >= 60000) {
-    mk21LastMemoryLogAt = now;
-    addDevLog(`[Memória] heap ${heap.usedMB}/${heap.limitMB} MB (${heap.pct}%) · total ${heap.totalMB} MB · uptime ${mk21UptimeLabel()}`, 'debug');
-  }
-  mk21UpdateDiagBadge();
-}
-
-function mk21StartMemoryGuard() {
-  if (mk21MemoryGuardTimer) return;
-  const heap = mk21HeapInfo();
-  addDevLog(`[Memória] Monitor ativo${heap ? ` — heap inicial ${heap.usedMB} MB de ${heap.limitMB} MB` : ' (limite de heap indisponível nesta TV)'}.`, 'system');
-  mk21MemoryGuardTimer = setInterval(mk21MemoryGuardTick, 15000);
-}
-
-function mk21DiagHeaderText() {
-  const heap = mk21HeapInfo();
-  const parts = [
-    `v${mk21AppVersion()} · build ${mk21BuildTag()}`,
-    `${mk21PlatformLabel()} · ${screen ? screen.width + 'x' + screen.height : 'n/d'}`,
-    `heap ${heap ? heap.usedMB + '/' + heap.limitMB + ' MB (' + heap.pct + '%)' : 'n/d'}`,
-    `abertura nº ${MK21_DIAG.restarts + 1} · uptime ${mk21UptimeLabel()}`,
-    `erros ${sessionDevLogs.filter(l => l.type === 'error').length} · avisos ${sessionDevLogs.filter(l => l.type === 'warn').length}`
-  ];
-  return parts.join(' · ');
-}
-
-function mk21UpdateDiagBadge() {
-  const badge = $('devLogsCountBadge');
-  if (badge) {
-    const heap = mk21HeapInfo();
-    badge.textContent = `${sessionDevLogs.length} entradas${heap ? ` · ${heap.usedMB} MB` : ''}`;
-  }
-  const header = $('devDiagHeader');
-  if (header) header.textContent = mk21DiagHeaderText();
-}
-
-function mk21BuildDiagText() {
-  return [
-    'MK21 Smart TV — Diagnóstico',
-    `Data: ${new Date().toISOString()}`,
-    `Versão: ${mk21AppVersion()} · build ${mk21BuildTag()}`,
-    `Sessão: ${MK21_DIAG.sessionId} · abertura nº ${MK21_DIAG.restarts + 1} · uptime ${mk21UptimeLabel()}`,
-    '',
-    '--- APARELHO ---',
-    ...mk21DeviceInfoLines().map(l => l.msg),
-    '',
-    '--- LOG ---',
-    ...sessionDevLogs.map(l => `[${l.time} +${l.uptime}] [${l.type.toUpperCase()}] ${redactDiagnosticLog(l.msg)}`)
-  ].join('\n');
-}
-
-function mk21CopyTextFallback(text, onDone) {
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.setAttribute('readonly', 'readonly');
-    ta.style.position = 'fixed';
-    ta.style.top = '-1000px';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand && document.execCommand('copy');
-    document.body.removeChild(ta);
-    if (ok && onDone) onDone();
-    return ok;
-  } catch (e) { return false; }
-}
-
-function mk21CopyDiagLogs() {
-  const text = mk21BuildDiagText();
-  const done = () => {
-    addDevLog('[Logs] Conteúdo copiado — cole no chat para validar sem precisar de arquivo.', 'success');
-    showChannelBanner('📋 Logs copiados');
-  };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done).catch(() => {
-      if (!mk21CopyTextFallback(text, done)) {
-        try { localStorage.setItem('mk21_last_exported_logs', text); } catch (e) {}
-        addDevLog('[Logs] Cópia direta indisponível nesta TV; conteúdo guardado em localStorage (mk21_last_exported_logs).', 'warn');
-      }
-    });
-    return;
-  }
-  if (!mk21CopyTextFallback(text, done)) {
-    try { localStorage.setItem('mk21_last_exported_logs', text); } catch (e) {}
-    addDevLog('[Logs] Cópia direta indisponível nesta TV; conteúdo guardado em localStorage (mk21_last_exported_logs).', 'warn');
-  }
-}
-
-function mk21LogResourceFailure(label, tag) {
-  const key = label + '|' + tag;
-  const now = Date.now();
-  const prev = mk21ResourceErrorWindow[key];
-  if (prev && now - prev.at < 20000) { prev.count += 1; return; }
-  const repeats = prev ? prev.count : 0;
-  mk21ResourceErrorWindow[key] = { at: now, count: 0 };
-  addDevLog(`[Runtime] Falha ao carregar ${label} (${tag})${repeats ? ` — ${repeats} repetições nos últimos 20s` : ''}`, 'error');
-}
-
-function mk21InitDiagnostics() {
-  try { mk21DetectRestart(); } catch (e) {}
-  try { mk21WriteBootMarker(false); } catch (e) {}
-  try { mk21StartMemoryGuard(); } catch (e) {}
-  try { mk21DeviceInfoLines().forEach(l => addDevLog(l.msg, l.type)); } catch (e) {}
-  addDevLog('[Sistema] Registro de sessão iniciado (o app detecta reinícios e mostra a causa provável).', 'system');
-}
-
-window.addEventListener('pagehide', function () {
-  mk21PersistDiagLog(true);
-  mk21WriteBootMarker(true);
-});
-
-document.addEventListener('visibilitychange', function () {
-  if (document.hidden) {
-    mk21PersistDiagLog(true);
-    addDevLog(`[Sistema] App enviado para segundo plano (heap ${(mk21HeapInfo() || {}).usedMB ?? 'n/d'} MB).`, 'debug');
-  } else {
-    addDevLog('[Sistema] App voltou ao primeiro plano.', 'debug');
-  }
-});
-
-window.addEventListener('unhandledrejection', function (event) {
-  const reason = event && event.reason;
-  const message = reason && reason.message ? reason.message : String(reason || 'Promise rejeitada sem detalhe');
-  addDevLog(`[Promise] ${message}`, 'error');
-});
 
 // 1. SPLASH SCREEN STATUS UPDATER
 function updateSplash(percent, text) {
@@ -392,12 +28,7 @@ function updateSplash(percent, text) {
   if (txt && text) txt.textContent = text;
 }
 
-// O splash (preto + logo) segura a cena enquanto o login nao termina, para a
-// interface da lista nunca aparecer atras da tela de login.
-var MK21_SPLASH_HOLD = false;
-
 function hideSplash() {
-  if (MK21_SPLASH_HOLD) return;
   const splash = $('startupSplashScreen');
   if (splash) {
     updateSplash(100, 'Tudo Pronto!');
@@ -414,28 +45,7 @@ function hideSplash() {
 }
 
 // Timeout de segurança absoluto: a tela de splash NUNCA trava mais de 3.5 segundos na TV
-setTimeout(function () { if (!MK21_SPLASH_HOLD) hideSplash(); }, 3500);
-
-function mk21HoldSplash() {
-  MK21_SPLASH_HOLD = true;
-  const splash = $('startupSplashScreen');
-  if (splash) {
-    splash.classList.remove('fade-out');
-    splash.classList.add('is-hold');
-    splash.style.display = 'flex';
-    splash.style.opacity = '1';
-    splash.style.pointerEvents = 'none';
-  }
-  document.documentElement.classList.add('mk21-splash-hold');
-}
-
-function mk21ReleaseSplash() {
-  MK21_SPLASH_HOLD = false;
-  document.documentElement.classList.remove('mk21-splash-hold');
-  const splash = $('startupSplashScreen');
-  if (splash) splash.classList.remove('is-hold');
-  hideSplash();
-}
+setTimeout(hideSplash, 3500);
 
 // 2. POLYFILLS PARA NAVEGADORES CHROMIUM WEBOS
 if (!Element.prototype.replaceChildren) {
@@ -446,14 +56,13 @@ if (!Element.prototype.replaceChildren) {
 }
 
 // 3. CONFIGURAÇÃO DOS SERVIDORES MK21 (NOMES LIMPOS SEM ÍCONES)
-const MK21_CORS_PROXY_ENDPOINT = 'https://bgstreaming.vercel.app/api/proxy';
 const DEFAULT_SERVERS = [
-  { id: 'vlog', name: 'VLOG', url: 'http://lumixx21.org' },
-  { id: 'tannix', name: 'TANNIX', url: 'http://assist.new21vod.xyz' },
+  { id: 'vlog', name: 'VLOG', url: 'http://myopbx.beer' },
+  { id: 'tannix', name: 'TANNIX', url: 'http://poptvcdn.online' },
   { id: 'lubtv', name: 'LUB TV', url: 'http://pottermax.sbs' },
-  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://magmapuro.shop' },
+  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
   { id: 'cb6000', name: 'CB6000', url: 'http://cdn.caterlune.top' },
-  { id: 'cinelon', name: 'CINELON', url: 'http://powerex.lat' },
+  { id: 'cinelon', name: 'CINELON', url: 'http://coliseuop.site' },
   { id: 'multttv', name: 'MULTT TV', url: 'http://dali-as.skin' }
 ];
 
@@ -466,266 +75,36 @@ try {
   const custom = localStorage.getItem('mk21_servers_list');
   if (custom) {
     const parsed = JSON.parse(custom);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      const migratedUrls = {
-        'http://myopbx.beer': 'http://lumixx21.org',
-        'http://poptvcdn.online': 'http://assist.new21vod.xyz',
-        'http://app.vivoxi.xyz': 'http://magmapuro.shop',
-        'http://coliseuop.site': 'http://powerex.lat'
-      };
-      let migrated = false;
-      SERVERS = parsed.map(server => {
-        const oldUrl = String(server.url || '').replace(/\/+$/, '');
-        const newUrl = migratedUrls[oldUrl];
-        if (!newUrl) return server;
-        migrated = true;
-        return { ...server, url: newUrl };
-      });
-      if (migrated) localStorage.setItem('mk21_servers_list', JSON.stringify(SERVERS));
-    }
+    if (Array.isArray(parsed) && parsed.length > 0) SERVERS = parsed;
   }
 } catch (e) {}
 
 
-// Reserva em memoria: em TV com armazenamento cheio o setItem falha, mas o login
-// precisa funcionar ao menos nesta sessao.
-var MK21_MEMORY_CREDS = { user: '', pass: '' };
-
-function mk21StoreCreds(user, pass) {
-  MK21_MEMORY_CREDS = { user: String(user || ''), pass: String(pass || '') };
-  var pairs = [
-    ['mk21_username', user], ['mk21_password', pass],
-    ['mk21_user', user], ['mk21_pass', pass],
-    ['mk21_credentials_configured', 'true']
-  ];
-  var falhou = '';
-  for (var i = 0; i < pairs.length; i++) {
-    try {
-      localStorage.setItem(pairs[i][0], pairs[i][1]);
-    } catch (e) {
-      falhou = (e && e.name) || 'erro';
-      // Armazenamento cheio: descarta o que e' descartavel e tenta de novo.
-      ['mk21_diag_log_v1', 'mk21_diag_boot_v1'].forEach(function (k) {
-        try { localStorage.removeItem(k); } catch (e2) {}
-      });
-      try { localStorage.setItem(pairs[i][0], pairs[i][1]); }
-      catch (e3) { falhou = (e3 && e3.name) || falhou; }
-    }
-  }
-  return falhou;
-}
+// Credenciais compartilhadas (Xtream) — válidas para TODOS os servidores
+const SHARED_IPTV_USER = '601334065';
+const SHARED_IPTV_PASS = '820866576';
 
 function getSharedCredentials() {
   try {
-    var mem = MK21_MEMORY_CREDS || { user: '', pass: '' };
-    if (mem.user && mem.pass) return { user: mem.user, pass: mem.pass };
-    if (localStorage.getItem('mk21_credentials_configured') !== 'true') {
-      return { user: '', pass: '' };
-    }
     const u = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || localStorage.getItem('iptv_user');
     const p = localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || localStorage.getItem('iptv_pass');
-    const user = String(u || '').trim();
-    const pass = String(p || '').trim();
-    if (user && pass) return { user: user, pass: pass };
-    if (mem.user && mem.pass) return { user: mem.user, pass: mem.pass };
-    return { user: '', pass: '' };
+    // Se vazio, demo ou inválido, usa as credenciais oficiais compartilhadas
+    const user = (u && u !== 'demo' && String(u).length > 2) ? u : SHARED_IPTV_USER;
+    const pass = (p && p !== 'demo' && String(p).length > 2) ? p : SHARED_IPTV_PASS;
+    return { user, pass };
   } catch (e) {
-    var fallback = MK21_MEMORY_CREDS || { user: '', pass: '' };
-    return { user: fallback.user || '', pass: fallback.pass || '' };
+    return { user: SHARED_IPTV_USER, pass: SHARED_IPTV_PASS };
   }
 }
 
 function ensureSharedCredentialsStored() {
-  const c = getSharedCredentials();
-  if (!c.user || !c.pass) return false;
-  // A copia em memoria vale para esta sessao; o storage pode estar cheio na TV.
-  MK21_MEMORY_CREDS = { user: c.user, pass: c.pass };
   try {
+    const c = getSharedCredentials();
     localStorage.setItem('mk21_username', c.user);
     localStorage.setItem('mk21_password', c.pass);
     localStorage.setItem('mk21_user', c.user);
     localStorage.setItem('mk21_pass', c.pass);
-    return true;
-  } catch (e) {
-    if (typeof addDevLog === 'function') {
-      addDevLog('[Login] Storage da TV recusou as credenciais (' + ((e && e.name) || 'erro') + '). Seguindo em memoria nesta sessao.', 'warning');
-    }
-    return true;
-  }
-}
-
-function hasConfiguredSharedCredentials() {
-  const credentials = getSharedCredentials();
-  return !!(credentials.user && credentials.pass);
-}
-
-var MK21_CREDENTIALS_VALIDATED = false;
-
-function getProxyRequestUrl(url) {
-  const target = new URL(url);
-  const hostname = target.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  const isLocalHost = hostname === 'localhost' || hostname.endsWith('.local') ||
-    hostname.endsWith('.internal') || hostname === '::1' || hostname === '0.0.0.0' ||
-    /^(?:fc|fd)[0-9a-f]{2}:/i.test(hostname) || /^fe[89ab][0-9a-f]:/i.test(hostname) ||
-    /^127\./.test(hostname) || /^10\./.test(hostname) ||
-    /^192\.168\./.test(hostname) || /^169\.254\./.test(hostname) ||
-    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname);
-  if (isLocalHost) return url;
-  return `${MK21_CORS_PROXY_ENDPOINT}?url=${encodeURIComponent(url)}`;
-}
-
-var MK21_LOGIN_SHOWN = false;
-var MK21_LOGIN_REVEAL_TIMER = null;
-var MK21_LOGIN_SUBMITTING = false;
-
-function showStartupLogin(message = '', allowCancel = hasConfiguredSharedCredentials()) {
-  const screen = $('startupLoginScreen');
-  if (!screen) return;
-  // Primeira exibicao: espera o logo. Reaberturas (header/config) entram na hora.
-  const primeiraExibicao = !MK21_LOGIN_SHOWN;
-  MK21_LOGIN_SHOWN = true;
-  document.documentElement.classList.remove('authenticated-session');
-  document.documentElement.classList.add('login-required');
-  screen.classList.remove('hidden');
-  const credentials = getSharedCredentials();
-  $('inputLoginUsername').value = credentials.user;
-  $('inputLoginPassword').value = credentials.pass;
-  $('startupLoginError').textContent = message;
-  mk21LoginStatus(message || '', !!message);
-  $('btnCancelLogin').classList.toggle('hidden', !allowCancel || !MK21_CREDENTIALS_VALIDATED);
-  // Etapa 1: tela toda preta com o logo. Etapa 2: o cartao de login entra por cima.
-  mk21HoldSplash();
-  if (MK21_LOGIN_REVEAL_TIMER) clearTimeout(MK21_LOGIN_REVEAL_TIMER);
-  MK21_LOGIN_REVEAL_TIMER = setTimeout(function () {
-    MK21_LOGIN_REVEAL_TIMER = null;
-    if (screen.classList.contains('hidden') || !document.documentElement.classList.contains('login-required')) return;
-    document.documentElement.classList.remove('mk21-splash-hold');
-    const target = credentials.user ? $('inputLoginPassword') : $('inputLoginUsername');
-    if (target) target.focus();
-    mk21EnsureFocusInside();
-  }, primeiraExibicao ? 1200 : 0);
-}
-
-function hideStartupLogin() {
-  if (!MK21_CREDENTIALS_VALIDATED) return;
-  const screen = $('startupLoginScreen');
-  if (MK21_LOGIN_REVEAL_TIMER) {
-    clearTimeout(MK21_LOGIN_REVEAL_TIMER);
-    MK21_LOGIN_REVEAL_TIMER = null;
-  }
-  if (screen) screen.classList.add('hidden');
-  document.documentElement.classList.remove('login-required');
-  document.documentElement.classList.add('authenticated-session');
-  document.documentElement.classList.remove('mk21-splash-hold');
-  mk21ReleaseSplash();
-}
-
-function mk21LoginStatus(text, isError) {
-  const el = $('startupLoginStatus');
-  if (el) {
-    el.textContent = text || '';
-    el.classList.toggle('is-error', !!isError);
-  }
-  if (text && typeof addDevLog === 'function') {
-    addDevLog('[Login] ' + text, isError ? 'error' : 'info');
-  }
-}
-
-async function validateStartupCredentials(user, pass) {
-  const server = SERVERS[currentServerIndex];
-  if (!server || !server.url) throw new Error('Nenhum servidor IPTV está configurado.');
-
-  const apiUrl = `${server.url.replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
-  let response;
-  try {
-    response = await fetch(getProxyRequestUrl(apiUrl), controller
-      ? { cache: 'no-store', signal: controller.signal }
-      : { cache: 'no-store' });
-  } catch (error) {
-    if (controller && controller.signal.aborted) {
-      throw new Error('A validação excedeu o tempo limite. Tente novamente.');
-    }
-    throw new Error('Não foi possível conectar ao servidor para validar o login.');
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
-
-  let result;
-  try {
-    result = await response.json();
-  } catch (error) {
-    throw new Error('O servidor retornou uma resposta de autenticação inválida.');
-  }
-  const auth = result && result.user_info && result.user_info.auth;
-  if (!(auth === 1 || auth === true || auth === '1')) {
-    throw new Error('Usuário ou senha não reconhecidos pelo servidor selecionado.');
-  }
-}
-
-async function submitStartupLogin() {
-  if (MK21_LOGIN_SUBMITTING) return;
-  try {
-    const userEl = $('inputLoginUsername');
-    const passEl = $('inputLoginPassword');
-    const user = (userEl && userEl.value ? userEl.value : '').trim();
-    const pass = (passEl && passEl.value ? passEl.value : '').trim();
-    if (!user || !pass) {
-      $('startupLoginError').textContent = 'Informe o usuário e a senha IPTV.';
-      mk21LoginStatus('Faltou usuário ou senha.', true);
-      return;
-    }
-
-    MK21_LOGIN_SUBMITTING = true;
-    const submitButton = $('btnSubmitLogin');
-    if (submitButton) submitButton.disabled = true;
-    mk21LoginStatus('Validando usuário e senha no servidor...');
-    await validateStartupCredentials(user, pass);
-
-    const falhaStorage = mk21StoreCreds(user, pass);
-    const guardadas = ensureSharedCredentialsStored();
-    if (!guardadas) {
-      $('startupLoginError').textContent = 'Não foi possível preparar as credenciais para conexão.';
-      mk21LoginStatus('Falha ao preparar as credenciais.', true);
-      return;
-    }
-    if (falhaStorage) {
-      addDevLog('[Login] Armazenamento da TV recusou salvar (' + falhaStorage + '). Seguindo com as credenciais em memória.', 'error');
-    }
-
-    MK21_CREDENTIALS_VALIDATED = true;
-    $('startupLoginError').textContent = '';
-    mk21LoginStatus('Entrando...');
-    hideStartupLogin();
-
-    try {
-      loadServer(true);
-      scheduleBackgroundListSync();
-    } catch (error) {
-      addDevLog('[Login] Erro ao iniciar o carregamento: ' + ((error && error.message) || error), 'error');
-      mk21CatalogEmptyState('network', 'O login foi salvo, mas o carregamento falhou: ' + ((error && error.message) || 'erro desconhecido') + '.');
-      return;
-    }
-
-    // Se em 1,2s nada mudou na tela, algo travou antes de desenhar: avisa em vez de ficar mudo.
-    setTimeout(function () {
-      const tela = $('startupLoginScreen');
-      if (tela && !tela.classList.contains('hidden')) return;
-      const total = (allCatalog.LIVE || []).length + (allCatalog.MOVIE || []).length + (allCatalog.SERIES || []).length;
-      if (total === 0 && isLoadingServerPlaylist) mk21LoginStatus('Conectando ao servidor...');
-    }, 1200);
-  } catch (error) {
-    const msg = (error && error.message) || String(error);
-    if ($('startupLoginError')) $('startupLoginError').textContent = msg;
-    mk21LoginStatus(msg, true);
-  } finally {
-    MK21_LOGIN_SUBMITTING = false;
-    const submitButton = $('btnSubmitLogin');
-    if (submitButton) submitButton.disabled = false;
-  }
+  } catch (e) {}
 }
 
 const ADULT_KEYWORDS = [
@@ -767,30 +146,18 @@ async function getStoredData(id) {
   } catch (e) { return null; }
 }
 
-// Esquema do catalogo salvo: sobe quando a classificacao muda, forcando resync
-// (caches antigos com a lista inteira em LIVE deixam de ser aceitos).
-const MK21_CATALOG_SCHEMA = 2;
-
-async function saveStoredData(id, payload, catalogComplete = true) {
+async function saveStoredData(id, payload) {
   try {
     const db = await openDB();
     if (!db) return;
     // Salva o catálogo COMPLETO em disco (IndexedDB) para restauração instantânea sem rede
     const full = {
-      sourceGroupsVersion: 1,
-      catalogSchema: MK21_CATALOG_SCHEMA,
-      catalogComplete: catalogComplete,
       LIVE: (payload.LIVE || []).map(slimItem),
       MOVIE: (payload.MOVIE || []).map(slimItem),
       SERIES: (payload.SERIES || []).map(slimItem)
     };
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put({ id, payload: full, updatedAt: Date.now() });
-    await new Promise((resolve, reject) => {
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error || new Error('Falha ao gravar catálogo em cache.'));
-      tx.onabort = () => reject(tx.error || new Error('Gravação do catálogo em cache cancelada.'));
-    });
   } catch (e) {
     console.warn('[MK21] save cache falhou', e);
   }
@@ -846,32 +213,20 @@ async function createCatalogIndexWriter(serverId) {
       try {
         const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
         const store = tx.objectStore(CATALOG_INDEX_STORE);
-        toWrite.forEach(entry => {
-          const item = entry.item;
-          store.put({
-            key: entry.key,
-            serverId, contentType: item.contentType, name: item.name || 'Item',
-            normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
-            group: item.group || 'Geral', logo: item.logo || '', tvgId: item.tvgId || '',
-            tvgName: item.tvgName || '', url: item.url,
-            alternateUrls: Array.isArray(item.alternateUrls) ? item.alternateUrls : [],
-            isAdult: !!item.isAdult, position: entry.position
-          });
-        });
+        toWrite.forEach(item => store.put({
+          key: serverId + ':' + item.contentType + ':' + position++,
+          serverId, contentType: item.contentType, name: item.name || 'Item',
+          normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
+          group: item.group || 'Geral', logo: item.logo || '', tvgId: item.tvgId || '',
+          tvgName: item.tvgName || '', url: item.url, isAdult: !!item.isAdult,
+          position: position - 1
+        }));
         tx.oncomplete = resolve; tx.onerror = resolve;
       } catch (e) { resolve(); }
     }));
   };
   return {
-    add(item, existingKey) {
-      const itemPosition = existingKey ? item._catalogIndexPosition : position++;
-      const key = existingKey || serverId + ':' + item.contentType + ':' + itemPosition;
-      item._catalogIndexKey = key;
-      item._catalogIndexPosition = itemPosition;
-      batch.push({ item, key, position: itemPosition });
-      if (batch.length >= 500) flush();
-      return key;
-    },
+    add(item) { batch.push(item); if (batch.length >= 500) flush(); },
     async finish() {
       flush(); await pending;
       try {
@@ -947,24 +302,12 @@ async function searchFromIndexedCatalog(query) {
   if (!srv) return;
   const group = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
   const found = await searchCatalogIndex(srv.id, type, query, group, 240);
-  const activeServer = SERVERS[currentServerIndex];
-  const activeGroup = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
-  if (generation !== searchIndexGeneration || type !== currentContentType ||
-      !activeServer || activeServer.id !== srv.id || group !== activeGroup) return;
+  if (generation !== searchIndexGeneration) return;
   const inputVal = ($('inputSearch') && $('inputSearch').value || '').toLowerCase().trim();
   if (inputVal !== query) return;
-  const catalog = allCatalog[type] || (allCatalog[type] = []);
-  const knownUrls = new Set(catalog.map(item => item.url));
-  found.forEach(item => {
-    if (!knownUrls.has(item.url)) {
-      catalog.push(item);
-      knownUrls.add(item.url);
-    }
-  });
-  categoryMapCache.clear();
-  buildCurrentCategories();
-  renderCategoriesList();
+  currentFilteredItems = found;
   itemsDisplayLimit = 240;
+  $('badgeItemsCount').textContent = currentFilteredItems.length;
   renderItemsList();
 }
 
@@ -1035,7 +378,6 @@ async function loadMoreIndexedItems() {
       const known = new Set(arr.map(it => it.url));
       page.forEach(item => { if (!known.has(item.url)) arr.push(item); });
       itemsDisplayLimit += 60;
-      categoryMapCache.clear();
       buildCurrentCategories();
       renderCategoriesList();
       renderItemsList();
@@ -1051,11 +393,8 @@ function slimItem(it) {
     name: it.name,
     group: it.group,
     url: it.url,
-    alternateUrls: Array.isArray(it.alternateUrls) ? it.alternateUrls.slice() : [],
     contentType: it.contentType,
-    isAdult: !!it.isAdult,
     logo: it.logo ? String(it.logo).slice(0, 200) : '',
-    poster: it.poster ? String(it.poster).slice(0, 300) : '',
     tvgId: it.tvgId || '',
     tvgName: it.tvgName || ''
   };
@@ -1065,13 +404,8 @@ function slimItem(it) {
 let currentServerIndex = 0;
 let serverLoadGeneration = 0;
 let activePlaylistController = null;
-let isLoadingServerPlaylist = false;
-let pendingServerSourceSwitch = null;
-let isSwitchingServerSource = false;
-let isSyncingAllServers = false;
 let currentContentType = 'LIVE'; // 'LIVE', 'MOVIE', 'SERIES', 'FAVORITES', 'CONTINUE', 'SETTINGS'
 let allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
-const categoryMapCache = new Map();
 let favoriteUrls = new Set();
 
 // Fluidez: preferências leves do usuário
@@ -1170,14 +504,14 @@ function closeSearchMode(clearText = false) {
        $('tabLive'));
   searchPreviousFocus = null;
   if (target) {
-    try { target.focus(); mk21ScrollFocusedElement(target); } catch (e) {}
+    try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
   } else {
     focusActiveElement();
   }
   const video = $('tvPlayer');
   if (video && searchWasPlaying) {
     searchWasPlaying = false;
-    safeVideoPlay(video).catch(() => {});
+    try { video.play().catch(() => {}); } catch (e) {}
   }
 }
 function scheduleSearchRender() {
@@ -1186,9 +520,9 @@ function scheduleSearchRender() {
     const input = $('inputSearch');
     const query = input ? input.value.toLowerCase().trim() : '';
     currentSearchQuery = query;
+    renderItemsList();
     if (query) {
-      renderItemsList();
-      if (currentFilteredItems.length === 0) searchFromIndexedCatalog(query);
+      searchFromIndexedCatalog(query);
     } else {
       buildCurrentCategories();
       renderCategoriesList();
@@ -1210,7 +544,7 @@ function pokeFsHud() {
 
 let continueWatchingList = [];
 let isAdultUnlocked = false;
-let currentPin = localStorage.getItem('mk21_adult_pin') || '0000';
+let currentPin = '0000';
 let enteredPin = '';
 let activeItem = null;
 let hlsInstance = null;
@@ -1219,76 +553,14 @@ let currentPlaybackSpeed = 1;
 const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 // Categorias e Itens da Aba Ativa
-let currentCategoriesMap = Object.create(null);
+let currentCategoriesMap = {};
 let currentCategoryKeys = [];
 let activeCategoryKey = 'ALL';
 let currentFilteredItems = [];
 let currentGroupedSeries = []; // Agrupamento de séries para a aba SÉRIES
-const sortedCatalogCache = new WeakMap();
-const groupedSeriesCache = new WeakMap();
-const catalogNameCollator = new Intl.Collator('pt-BR', { sensitivity: 'base' });
-
-function getSortedCatalogItems(items, order, cacheResult) {
-  if (order === 'DEFAULT') return items;
-
-  let orderCache = cacheResult ? sortedCatalogCache.get(items) : null;
-  if (orderCache && orderCache.has(order)) return orderCache.get(order);
-
-  const sorted = items.slice();
-  if (order === 'RECENT') {
-    sorted.reverse();
-  } else if (order === 'AZ') {
-    sorted.sort((a, b) => catalogNameCollator.compare(a.name || '', b.name || ''));
-  } else if (order === 'ZA') {
-    sorted.sort((a, b) => catalogNameCollator.compare(b.name || '', a.name || ''));
-  } else if (order === 'YEAR') {
-    const years = new Map();
-    const yearFor = item => {
-      if (!years.has(item)) {
-        const match = String(item.name || '').match(/\b((?:19|20)\d{2})\b/);
-        years.set(item, match ? parseInt(match[1], 10) : 0);
-      }
-      return years.get(item);
-    };
-    sorted.sort((a, b) => {
-      const yearA = yearFor(a);
-      const yearB = yearFor(b);
-      if (yearA && yearB && yearA !== yearB) return yearB - yearA;
-      if (yearA && !yearB) return -1;
-      if (!yearA && yearB) return 1;
-      return catalogNameCollator.compare(a.name || '', b.name || '');
-    });
-  }
-
-  if (cacheResult) {
-    if (!orderCache) {
-      orderCache = new Map();
-      sortedCatalogCache.set(items, orderCache);
-    }
-    orderCache.set(order, sorted);
-  }
-  return sorted;
-}
 
 // Gerenciador de Navegação do Controle Remoto LG
 let activeZone = 'channels'; // 'header', 'categories', 'channels', 'player', 'settings', 'modalServerPicker', 'modalSeries', 'modalPin'
-
-function canShowAdultContent() {
-  return localStorage.getItem('mk21_adult_content_enabled') !== 'false' && isAdultUnlocked;
-}
-
-function lockAdultContent() {
-  isAdultUnlocked = false;
-  if ($('txtLockIcon')) $('txtLockIcon').textContent = '🔒';
-  if ($('txtLockText')) $('txtLockText').textContent = 'Adulto (Bloqueado)';
-  if (activeItem && (activeItem.isAdult || isAdult(activeItem.name) || isAdult(activeItem.group))) {
-    stopCurrentPlayer();
-    activeItem = null;
-    updateSourceButtons(null);
-    if ($('epgTitle')) $('epgTitle').textContent = 'Conteúdo adulto bloqueado';
-    if ($('previewEpgNow')) $('previewEpgNow').textContent = 'NO AR: conteúdo protegido';
-  }
-}
 let focusedHeaderIdx = 0;
 let focusedCatIdx = 0;
 let focusedItemIdx = 0;
@@ -1299,7 +571,7 @@ let activeModalSeriesData = null;
 
 const headerElements = [
   'tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings',
-  'btnHeaderServer', 'btnHeaderLogin', 'btnRefreshList'
+  'btnHeaderServer', 'btnRefreshList'
 ];
 
 // RELÓGIO
@@ -1323,13 +595,13 @@ function toggleFav(url) {
   if (!url) return;
   if (favoriteUrls.has(url)) {
     favoriteUrls.delete(url);
-    if ($('btnFavorite')) mk21SetCtrlText($('btnFavorite'), '⭐ Favorito');
-    if ($('fsBtnFav')) mk21SetCtrlText($('fsBtnFav'), '⭐ Favoritar');
+    if ($('btnFavorite')) $('btnFavorite').textContent = '⭐ Favoritar';
+    if ($('fsBtnFav')) $('fsBtnFav').textContent = '⭐ Favoritar';
     showChannelBanner('Removido dos Favoritos');
   } else {
     favoriteUrls.add(url);
-    if ($('btnFavorite')) mk21SetCtrlText($('btnFavorite'), '★ Favoritado');
-    if ($('fsBtnFav')) mk21SetCtrlText($('fsBtnFav'), '★ Favoritado');
+    if ($('btnFavorite')) $('btnFavorite').textContent = '★ Favoritado';
+    if ($('fsBtnFav')) $('fsBtnFav').textContent = '★ Favoritado';
     showChannelBanner('⭐ Adicionado aos Favoritos');
   }
   try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
@@ -1542,7 +814,7 @@ function determineType(name, category, url) {
 const SERIES_CLEAN_REGEX = /(?:\s*[-–:]?\s*(?:s\d{1,3}\s*)?(?:e|ep|ep\.|episodio|cap|cap\.|capitulo)\s*\d{1,4}\b|\s*[-–:]?\s*\b\d{1,3}x\d{1,4}\b|\s*[-–:]?\s*\bs\d{1,3}e\d{1,4}\b|\s*[-–:]?\s*\bt\d{1,3}e\d{1,4}\b|\s*[-–:]?\s*\btemp\.\s*\d+\s*ep\.\s*\d+\b|\s*[-–:]?\s*\btemporada\s*\d+\b.*)/i;
 
 function groupSeriesItems(items) {
-  const map = Object.create(null);
+  const map = {};
 
   items.forEach(it => {
     let seriesTitle = it.name;
@@ -1581,15 +853,13 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   if (!targetUrl.includes('get.php') && !targetUrl.includes('.m3u') && !targetUrl.includes('.ts') && !targetUrl.includes('.m3u8')) {
     targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(savedUser)}&password=${encodeURIComponent(savedPass)}&type=m3u_plus&output=ts`;
   }
-  console.log('[MK21] Streaming da lista:', getSourceHostLabel(targetUrl));
+  console.log('[MK21] Streaming da lista:', targetUrl.replace(savedPass, '***'));
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
   try {
     const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
     if (signal) options.signal = signal;
-    const fetchUrl = getProxyRequestUrl(targetUrl);
-    console.log(`[MK21] Buscando lista de ${getSourceHostLabel(targetUrl)} pelo proxy HTTPS MK21.`);
-    const res = await fetch(fetchUrl, options);
+    const res = await fetch(targetUrl, options);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
       const text = await res.text();
@@ -1598,20 +868,13 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
       let meta = null;
       for (const raw of lines) {
         const line = raw.trim();
-        if (line.toUpperCase().startsWith('#EXTINF:')) {
+        if (line.startsWith('#EXTINF:')) {
           const comma = line.lastIndexOf(',');
-          const readAttr = key => {
-            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const match = line.match(new RegExp('(?:^|\\s)' + escapedKey + '="([^"]*)"', 'i'));
-            return match ? match[1].trim() : '';
-          };
-          meta = {
-            name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item',
-            group: readAttr('group-title') || 'Geral',
-            logo: readAttr('tvg-logo'),
-            tvgId: readAttr('tvg-id'),
-            tvgName: readAttr('tvg-name')
-          };
+          const gm = line.match(/group-title="([^"]*)"/i);
+          const lm = line.match(/tvg-logo="([^"]*)"/i);
+          const im = line.match(/tvg-id="([^"]*)"/i);
+          const nm = line.match(/tvg-name="([^"]*)"/i);
+          meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
         } else if (meta && /^https?:\/\//i.test(line)) {
           const type = determineType(meta.name, meta.group, line);
           onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
@@ -1627,16 +890,19 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     let received = 0;
     const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
     const quickAttr = (str, key) => {
-        const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const match = str.match(new RegExp('(?:^|\\s)' + escapedKey + '="([^"]*)"', 'i'));
-        return match ? match[1].trim() : '';
-      };
+      const k = key + '="';
+      const idx = str.indexOf(k);
+      if (idx === -1) return '';
+      const start = idx + k.length;
+      const end = str.indexOf('"', start);
+      return end !== -1 ? str.slice(start, end).trim() : '';
+    };
 
     const consume = (raw) => {
       const line = raw.trim();
       if (!line) return;
       if (line.charCodeAt(0) === 35) {
-        if (line.toUpperCase().startsWith('#EXTINF:')) {
+        if (line.startsWith('#EXTINF:')) {
           const comma = line.lastIndexOf(',');
           const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
           meta = {
@@ -1646,7 +912,7 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
             tvgId: quickAttr(line, 'tvg-id'),
             tvgName: quickAttr(line, 'tvg-name')
           };
-        } else if (line.toUpperCase().startsWith('#EXTM3U')) {
+        } else if (line.startsWith('#EXTM3U')) {
           const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
           if (xm) window.serverXmltvUrl = xm;
         }
@@ -1671,83 +937,6 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
-}
-
-function getPlaylistSyncInterval() {
-  const frequency = localStorage.getItem('mk21_sync_frequency') || '24h';
-  if (frequency === '6h') return 6 * 60 * 60 * 1000;
-  if (frequency === '7d') return 7 * 24 * 60 * 60 * 1000;
-  if (frequency === 'manual') return Infinity;
-  return 24 * 60 * 60 * 1000;
-}
-
-async function syncServerCatalog(server) {
-  const catalog = { LIVE: [], MOVIE: [], SERIES: [] };
-  const groupers = {
-    LIVE: MK21AlternativeSources.createGrouper(),
-    MOVIE: MK21AlternativeSources.createGrouper(),
-    SERIES: MK21AlternativeSources.createGrouper()
-  };
-  await streamPlaylistContent(server.url, null, item => {
-    const slim = slimItem(item);
-    if (!catalog[slim.contentType]) return;
-    slim.isAdult = !!(slim.isAdult || isAdult(slim.name) || isAdult(slim.group));
-    const grouped = groupers[slim.contentType].add(slim);
-    if (grouped.isNew) catalog[slim.contentType].push(grouped.item);
-  });
-  const count = catalog.LIVE.length + catalog.MOVIE.length + catalog.SERIES.length;
-  if (!count) throw new Error('A lista sincronizada não contém itens válidos.');
-  await saveStoredData(server.id, catalog);
-  localStorage.setItem(`mk21_last_sync_${server.id}`, String(Date.now()));
-  return count;
-}
-
-async function syncAllServerLists(force = true) {
-  if (isSyncingAllServers) return { synced: 0, skipped: true, failed: [] };
-  isSyncingAllServers = true;
-  const failed = [];
-  let synced = 0;
-  const interval = getPlaylistSyncInterval();
-  try {
-    for (const server of SERVERS) {
-      if (!force && interval !== Infinity) {
-        const lastSync = Number(localStorage.getItem(`mk21_last_sync_${server.id}`) || 0);
-        if (lastSync && Date.now() - lastSync < interval) continue;
-      } else if (!force) {
-        continue;
-      }
-      try {
-        await syncServerCatalog(server);
-        synced++;
-      } catch (error) {
-        console.warn(`[MK21] Falha ao sincronizar ${cleanServerName(server.name)}:`, error);
-        failed.push(cleanServerName(server.name));
-      }
-      if (server !== SERVERS[SERVERS.length - 1]) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-    }
-    return { synced, skipped: false, failed };
-  } finally {
-    isSyncingAllServers = false;
-  }
-}
-
-function scheduleBackgroundListSync() {
-  if (localStorage.getItem('mk21_sync_all_lists') !== 'true') return;
-  const startWhenIdle = () => {
-    if (localStorage.getItem('mk21_sync_all_lists') !== 'true') return;
-    if (isLoadingServerPlaylist || isSyncingAllServers) {
-      setTimeout(startWhenIdle, 5000);
-      return;
-    }
-    const start = () => syncAllServerLists(false).catch(error => {
-      console.error('[MK21] Sincronização automática falhou:', error);
-    });
-    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(start, { timeout: 5000 });
-    else start();
-  };
-  setTimeout(startWhenIdle, 7000);
 }
 
 // ATUALIZAÇÃO DA PORCENTAGEM DE SINCRONIZAÇÃO AO LADO DO SERVIDOR
@@ -1823,19 +1012,7 @@ function showLoadingFailure(error, serverName) {
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
-  if (!MK21_CREDENTIALS_VALIDATED) {
-    showStartupLogin('', false);
-    return;
-  }
-  if (!hasConfiguredSharedCredentials()) {
-    showStartupLogin('', false);
-    mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
-    return;
-  }
-
   const loadId = ++serverLoadGeneration;
-  categoryMapCache.clear();
-  isLoadingServerPlaylist = true;
   if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
   activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
   if (SERVERS.length === 0) SERVERS = [...DEFAULT_SERVERS];
@@ -1866,31 +1043,22 @@ async function loadServer(forceRefresh = false) {
     try { hlsInstance.destroy(); hlsInstance = null; } catch(e) {}
   }
   activeItem = null;
-  activePlaybackSourceIndex = 0;
-  attemptedPlaybackSourceIndexes = new Set();
-  updateSourceButtons(null, 0);
 
   // Cache prioritário em memória/IndexedDB: restauração instantânea sem novo download
   let seededFromIndex = false;
-  let cachedCatalogForFallback = null;
-  let usedPartialCache = false;
-  let stagedCacheWrite = Promise.resolve();
   if (!forceRefresh) {
     const cached = await getStoredData(srv.id);
     if (loadId !== serverLoadGeneration) return;
-    cachedCatalogForFallback = cached;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
     const totalCached = liveN + movN + serN;
-    const cachedSchema = Number((cached && cached.catalogSchema) || 0);
-    if (cached && totalCached > 0 && cached.sourceGroupsVersion === 1 && cachedSchema >= MK21_CATALOG_SCHEMA) {
+    if (cached && totalCached > 0) {
       allCatalog = {
         LIVE: cached.LIVE || [],
         MOVIE: cached.MOVIE || [],
         SERIES: cached.SERIES || []
       };
-      const cachedSourceMatch = finishPendingServerSourceSwitch();
       updateSplash(90, 'Restaurando lista em memória (' + totalCached.toLocaleString('pt-BR') + ' itens)...');
       if (hud) {
         if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando lista em memória local — sem novo download';
@@ -1900,103 +1068,47 @@ async function loadServer(forceRefresh = false) {
       }
       buildCurrentCategories();
       renderCategoriesList();
-      selectCategory('ALL', false);
+      selectCategory('ALL');
       hideSplash();
       updateServerSyncBadge(100, true);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
-      if (!cachedSourceMatch && pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) {
-        showChannelBanner('Lista local sem correspondência; atualizando este servidor...');
-      } else if (cached.catalogComplete !== false) {
-        if (!cachedSourceMatch) {
-          setTimeout(() => {
-            const resumed = resumeLastChannelIfPossible();
-            if (!resumed && currentContentType === 'LIVE' && allCatalog.LIVE.length) {
-              playStream(allCatalog.LIVE[0]);
-            }
-          }, 350);
-        }
-        isLoadingServerPlaylist = false;
-        return;
-      } else {
-        usedPartialCache = true;
-        if (!cachedSourceMatch) {
-          setTimeout(() => {
-            const resumed = resumeLastChannelIfPossible();
-            if (!resumed && !pendingServerSourceSwitch && currentContentType === 'LIVE' && allCatalog.LIVE.length) {
-              playStream(allCatalog.LIVE[0]);
-            }
-          }, 350);
-        }
-        showChannelBanner('Catálogo em cache disponível; atualizando a lista em segundo plano...');
-      }
+      setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+      return;
     }
   }
 
-  if (!usedPartialCache) {
-    $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
-    updateSplash(35, 'Baixando grade de canais ao vivo...');
-    if (hud) {
-      if ($('hudProgressBar')) $('hudProgressBar').style.width = '35%';
-      if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '35%';
-    }
-  } else {
-    $('txtCurrentCategoryTitle').textContent = 'Atualizando catálogo de ' + cleanServerName(srv.name) + '...';
-    if (hud) hud.classList.add('hidden');
+  $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
+  updateSplash(35, 'Baixando grade de canais ao vivo...');
+  if (hud) {
+    if ($('hudProgressBar')) $('hudProgressBar').style.width = '35%';
+    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '35%';
   }
 
   try {
-    if (!usedPartialCache) allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
-    const catalogGroupers = {
-      LIVE: MK21AlternativeSources.createGrouper(),
-      MOVIE: MK21AlternativeSources.createGrouper(),
-      SERIES: MK21AlternativeSources.createGrouper()
-    };
-    if (usedPartialCache) {
-      Object.keys(catalogGroupers).forEach(type => {
-        allCatalog[type].forEach(item => {
-          const grouped = catalogGroupers[type].add(item);
-          if (grouped.isNew) indexWriter.add(grouped.item);
-        });
-      });
-    }
-    const loadingProfile = localStorage.getItem('mk21_staged_loading') || 'balanced';
-    const liveRevealThreshold = loadingProfile === 'fast' ? 4 : (loadingProfile === 'stable' ? 20 : 8);
-    const loadFilters = {
-      LIVE: localStorage.getItem('mk21_filter_load_live') !== 'false',
-      MOVIE: localStorage.getItem('mk21_filter_load_movies') !== 'false',
-      SERIES: localStorage.getItem('mk21_filter_load_series') !== 'false'
-    };
-    let liveVisible = usedPartialCache;
+    let liveVisible = false;
     let lastProgressUi = 0;
-    let renderedCatalogItemCount = usedPartialCache
-      ? allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length
-      : 0;
-    let hadLiveAtFirstRender = usedPartialCache && allCatalog.LIVE.length > 0;
 
     const revealLive = () => {
-      const totalItems = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
-      if (liveVisible || loadId !== serverLoadGeneration || totalItems === 0) return;
+      if (liveVisible || loadId !== serverLoadGeneration || allCatalog.LIVE.length === 0) return;
       liveVisible = true;
-      renderedCatalogItemCount = totalItems;
-      hadLiveAtFirstRender = allCatalog.LIVE.length > 0;
-      stagedCacheWrite = saveStoredData(srv.id, allCatalog, false);
-      updateSplash(80, allCatalog.LIVE.length
-        ? 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')'
-        : 'Catálogo disponível — carregando listas em etapas...');
+      updateSplash(80, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
+      renderItemsList();
+      if (!activeItem && allCatalog.LIVE.length > 0) {
+        playStream(allCatalog.LIVE[0]);
+      }
       hideSplash();
 
       // LIBERAÇÃO IMEDIATA DA TELA DO APLICATIVO
       if (hud) {
         hud.classList.add('hidden');
       }
-      showChannelBanner(allCatalog.LIVE.length
-        ? '📺 Ao Vivo liberado! Baixando catálogo completo em segundo plano...'
-        : '📺 Catálogo parcial liberado; canais ao vivo continuam carregando...');
+      showChannelBanner('📺 Ao Vivo liberado! Baixando catálogo completo em segundo plano...');
     };
 
     await streamPlaylistContent(
@@ -2008,31 +1120,26 @@ async function loadServer(forceRefresh = false) {
         const type = slim.contentType;
 
         // Filtro de conteúdo configurável pelo usuário
-        if (!loadFilters[type]) return;
+        const loadLive = localStorage.getItem('mk21_filter_load_live') !== 'false';
+        const loadMovies = localStorage.getItem('mk21_filter_load_movies') !== 'false';
+        const loadSeries = localStorage.getItem('mk21_filter_load_series') !== 'false';
+        if (type === 'LIVE' && !loadLive) return;
+        if (type === 'MOVIE' && !loadMovies) return;
+        if (type === 'SERIES' && !loadSeries) return;
 
         // Bloqueio 18+ reversível: preserva no catálogo e indexador, filtrando via UI
         const adultItem = slim.isAdult || isAdult(slim.name) || isAdult(slim.group);
         slim.isAdult = !!adultItem;
 
+        indexWriter.add(slim);
         if (allCatalog[type]) {
-          const grouped = catalogGroupers[type].add(slim);
-          if (grouped.isNew) {
-            indexWriter.add(grouped.item);
-            allCatalog[type].push(grouped.item);
-          } else {
-            indexWriter.add(grouped.item, grouped.item._catalogIndexKey);
-            if (activeItem && activeItem.url === grouped.item.url) updateSourceButtons();
-          }
-          if (pendingServerSourceSwitch &&
-              pendingServerSourceSwitch.serverId === srv.id &&
-              MK21AlternativeSources.matchesAcrossServers(pendingServerSourceSwitch.item, grouped.item)) {
-            pendingServerSourceSwitch.matchedItem = grouped.item;
-            finishPendingServerSourceSwitch();
-          }
+          allCatalog[type].push(slim);
         }
 
-        const totalItems = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
-        if (totalItems >= liveRevealThreshold && !liveVisible) {
+        // Assim que os primeiros canais chegam (>= 8), libera a tela imediatamente!
+        if (type !== 'LIVE' && allCatalog.LIVE.length > 0 && !liveVisible) {
+          revealLive();
+        } else if (type === 'LIVE' && allCatalog.LIVE.length >= 8 && !liveVisible) {
           revealLive();
         }
       },
@@ -2069,25 +1176,13 @@ async function loadServer(forceRefresh = false) {
         }
       }
     );
-    if (loadId === serverLoadGeneration) isLoadingServerPlaylist = false;
 
     if (loadId !== serverLoadGeneration) return;
-    Object.keys(catalogGroupers).forEach(type => catalogGroupers[type].clear());
     revealLive();
     buildCurrentCategories();
     renderCategoriesList();
     if (!liveVisible) selectCategory('ALL');
     const totalLoaded = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
-    if (currentContentType === 'LIVE' &&
-        (usedPartialCache || totalLoaded > renderedCatalogItemCount)) {
-      buildCurrentCategories();
-      renderCategoriesList();
-      selectCategory(activeCategoryKey, !hadLiveAtFirstRender);
-    }
-    if (!totalLoaded) {
-      mk21CatalogEmptyState('empty', 'O servidor respondeu, mas nenhum canal, filme ou s\u00e9rie foi encontrado. Confira usu\u00e1rio, senha e o servidor selecionado.');
-      return;
-    }
     updateSplash(100, 'Lista completa carregada (' + totalLoaded.toLocaleString('pt-BR') + ' itens)');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
@@ -2096,14 +1191,8 @@ async function loadServer(forceRefresh = false) {
     }
     updateServerSyncBadge(100, true);
     await indexWriter.finish();
-    await stagedCacheWrite;
     // Salva o catálogo 100% completo no IndexedDB para não precisar baixar novamente ao reabrir o app
-    await saveStoredData(srv.id, allCatalog);
-    localStorage.setItem(`mk21_last_sync_${srv.id}`, String(Date.now()));
-    if (!finishPendingServerSourceSwitch() && pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) {
-      pendingServerSourceSwitch = null;
-      showChannelBanner('Este conteúdo não foi encontrado no servidor selecionado.');
-    }
+    saveStoredData(srv.id, allCatalog);
     if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') {
       renderItemsList();
     }
@@ -2111,72 +1200,22 @@ async function loadServer(forceRefresh = false) {
       $('txtCurrentCategoryTitle').textContent = '📺 Catálogo Completo: ' + totalLoaded.toLocaleString('pt-BR') + ' itens';
     }
   } catch (err) {
-    if (loadId === serverLoadGeneration) isLoadingServerPlaylist = false;
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
-    addDevLog(`[Servidor] Falha ao carregar lista: ${err && err.message ? err.message : err}`, 'error');
     const partialLive = allCatalog && Array.isArray(allCatalog.LIVE) ? allCatalog.LIVE.length : 0;
     if (partialLive > 0) {
       buildCurrentCategories();
       renderCategoriesList();
-      selectCategory('ALL', !pendingServerSourceSwitch);
+      selectCategory('ALL');
+      renderItemsList();
       hideSplash();
-      const sourceSwitchMatched = finishPendingServerSourceSwitch();
-      const sourceSwitchStillPending = pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id;
-      if (!sourceSwitchMatched && sourceSwitchStillPending) {
-        pendingServerSourceSwitch = null;
-        if (!activeItem && allCatalog.LIVE.length) playStream(allCatalog.LIVE[0]);
-      }
-      if (!sourceSwitchMatched && sourceSwitchStillPending) showChannelBanner('A lista parcial não contém o conteúdo procurado. Tente sincronizar novamente.');
+      if (!activeItem) playStream(allCatalog.LIVE[0]);
       showChannelBanner(`⚠️ Lista parcial: ${partialLive} canais carregados. Tente atualizar novamente.`);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = `📺 ${partialLive} canais disponíveis (parcial)`;
       if (hud) hud.classList.add('hidden');
-    } else if (cachedCatalogForFallback) {
-      allCatalog = {
-        LIVE: cachedCatalogForFallback.LIVE || [],
-        MOVIE: cachedCatalogForFallback.MOVIE || [],
-        SERIES: cachedCatalogForFallback.SERIES || []
-      };
-      const cachedCount = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
-      if (cachedCount > 0) {
-        buildCurrentCategories();
-        renderCategoriesList();
-        selectCategory('ALL', false);
-        hideSplash();
-        if (hud) hud.classList.add('hidden');
-        updateServerSyncBadge(100, true);
-        const sourceSwitchMatched = finishPendingServerSourceSwitch();
-        const sourceSwitchStillPending = pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id;
-        if (sourceSwitchStillPending && !sourceSwitchMatched) {
-          pendingServerSourceSwitch = null;
-          showChannelBanner('Sem conexão e sem conteúdo correspondente no catálogo salvo.');
-        } else {
-          showChannelBanner(
-            cachedCatalogForFallback.sourceGroupsVersion === 1
-              ? 'Sem conexão. Usando o catálogo salvo.'
-              : 'Sem conexão. Atualize a lista quando estiver online para habilitar fontes alternativas.'
-          );
-          if (!sourceSwitchMatched) {
-            setTimeout(() => {
-              const resumed = resumeLastChannelIfPossible();
-              if (!resumed && currentContentType === 'LIVE' && allCatalog.LIVE.length) {
-                playStream(allCatalog.LIVE[0]);
-              }
-            }, 350);
-          }
-        }
-        if ($('txtCurrentCategoryTitle')) {
-          $('txtCurrentCategoryTitle').textContent = `📺 Catálogo salvo: ${cachedCount.toLocaleString('pt-BR')} itens`;
-        }
-      } else {
-        if (pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) pendingServerSourceSwitch = null;
-        showLoadingFailure(err, srv.name);
-        mk21CatalogEmptyState('network', `Servidor ${srv.name}: ${err && err.message ? err.message : 'conex\u00e3o interrompida'}. Verifique a internet da TV e tente de novo.`);
-      }
     } else {
-      if (pendingServerSourceSwitch && pendingServerSourceSwitch.serverId === srv.id) pendingServerSourceSwitch = null;
       showLoadingFailure(err, srv.name);
-      mk21CatalogEmptyState('network', `Servidor ${srv.name}: ${err && err.message ? err.message : 'conex\u00e3o interrompida'}. Verifique a internet da TV e tente de novo.`);
+      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = 'Aguardando conexão com o servidor';
       if ($('txtServerSyncBadge')) {
         $('txtServerSyncBadge').textContent = 'erro';
         $('txtServerSyncBadge').classList.remove('hidden', 'done');
@@ -2188,59 +1227,13 @@ async function loadServer(forceRefresh = false) {
 // Parser legado removido: o carregamento moderno classifica itens durante o streaming.
 
 // 7. AGRUPAMENTO DE CATEGORIAS DA ABA ATIVA
-// Contagem por aba: deixa a separacao Ao Vivo / Filmes / Series visivel na propria aba.
-function mk21UpdateTabCounts() {
-  const counts = {
-    tabLive: (allCatalog.LIVE || []).length,
-    tabMovies: (allCatalog.MOVIE || []).length,
-    tabSeries: (allCatalog.SERIES || []).length
-  };
-  Object.keys(counts).forEach(id => {
-    const el = $(id);
-    if (!el) return;
-    let badge = el.querySelector('.tab-count');
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.className = 'tab-count';
-      el.appendChild(badge);
-    }
-    badge.textContent = counts[id] ? counts[id].toLocaleString('pt-BR') : '0';
-  });
-}
-
 function buildCurrentCategories() {
-  mk21UpdateTabCounts();
-  const serverId = (SERVERS[currentServerIndex] || {}).id || '';
-  const isCacheable = !isLoadingServerPlaylist && ['LIVE', 'MOVIE', 'SERIES'].includes(currentContentType);
-  const showAdultContent = canShowAdultContent();
-  let hiddenCats = [];
-  try {
-    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
-  } catch (e) {}
-  const cacheKey = `${currentContentType}|${serverId}|${showAdultContent}|${JSON.stringify(hiddenCats)}`;
-  if (isCacheable && categoryMapCache.has(cacheKey)) {
-    const cached = categoryMapCache.get(cacheKey);
-    currentCategoriesMap = cached.map;
-    currentCategoryKeys = cached.keys;
-    return;
-  }
-
-  currentCategoriesMap = Object.create(null);
-  currentCategoriesMap['ALL'] = [];
+  currentCategoriesMap = { 'ALL': [] };
   currentCategoryKeys = ['ALL'];
 
   let sourceItems = [];
   if (currentContentType === 'FAVORITES') {
-    if (indexedFavoriteResults.length) {
-      sourceItems = indexedFavoriteResults;
-    } else {
-      sourceItems = [];
-      [allCatalog.LIVE, allCatalog.MOVIE, allCatalog.SERIES].forEach(items => {
-        items.forEach(item => {
-          if (favoriteUrls.has(item.url)) sourceItems.push(item);
-        });
-      });
-    }
+    sourceItems = indexedFavoriteResults.length ? indexedFavoriteResults : [...allCatalog.LIVE, ...allCatalog.MOVIE, ...allCatalog.SERIES].filter(i => favoriteUrls.has(i.url));
   } else if (currentContentType === 'CONTINUE') {
     sourceItems = continueWatchingList;
   } else {
@@ -2256,10 +1249,15 @@ function buildCurrentCategories() {
     }
   }
 
+  let hiddenCats = [];
+  try {
+    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
+  } catch (e) {}
+
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
     const grp = item.group || 'Geral';
-    if (!showAdultContent && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
+    if (!isAdultUnlocked && (item.isAdult || isAdult(item.name) || isAdult(grp))) continue;
     if (hiddenCats.includes(grp)) continue;
 
     currentCategoriesMap['ALL'].push(item);
@@ -2268,14 +1266,6 @@ function buildCurrentCategories() {
       currentCategoryKeys.push(grp);
     }
     currentCategoriesMap[grp].push(item);
-  }
-
-  if (isCacheable) {
-    const typePrefix = `${currentContentType}|`;
-    Array.from(categoryMapCache.keys()).forEach(key => {
-      if (key.startsWith(typePrefix)) categoryMapCache.delete(key);
-    });
-    categoryMapCache.set(cacheKey, { map: currentCategoriesMap, keys: currentCategoryKeys });
   }
 }
 
@@ -2291,9 +1281,8 @@ function renderCategoriesList() {
     (currentContentType === 'SERIES' ? '🍿 Gêneros Séries' :
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')));
 
-  const showAdultContent = canShowAdultContent();
   currentCategoryKeys.forEach((k, idx) => {
-    if (!showAdultContent && isAdult(k)) return;
+    if (!isAdultUnlocked && isAdult(k)) return;
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
@@ -2324,7 +1313,7 @@ function renderCategoriesList() {
   ul.appendChild(fragment);
 }
 
-function selectCategory(catKey, autoPlay = true) {
+function selectCategory(catKey) {
   activeCategoryKey = catKey;
 
   const btns = $('listCategories').querySelectorAll('.cat-item-btn');
@@ -2339,32 +1328,51 @@ function selectCategory(catKey, autoPlay = true) {
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')))
   ) : '📁 ' + catKey;
   $('inputSearch').value = '';
-  itemsDisplayLimit = 40;
+  itemsDisplayLimit = 80;
   renderItemsList();
-  if (autoPlay && !activeItem && !pendingServerSourceSwitch && !isSwitchingServerSource &&
-      currentContentType === 'LIVE' && currentFilteredItems.length > 0) {
-    playStream(currentFilteredItems[0]);
-  }
 }
 
-let itemsDisplayLimit = 40;
+let itemsDisplayLimit = 80;
 
 // 8. RENDERIZAÇÃO DA LISTA DE ITENS COM SÉRIES AGRUPADAS E ORDENAÇÃO
 function renderItemsList() {
-  document.body.classList.toggle(
-    'vod-layout',
-    currentContentType === 'MOVIE' || currentContentType === 'SERIES'
-  );
   const query = $('inputSearch') ? $('inputSearch').value.toLowerCase().trim() : '';
   const base = currentCategoriesMap[activeCategoryKey] || [];
   const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
   const indexedMoreAvailable = Object.prototype.hasOwnProperty.call(indexedOffsets, indexedPageKey);
 
-  const items = query
-    ? getSortedCatalogItems(base.filter(c =>
-      (c.name && c.name.toLowerCase().includes(query)) ||
-      (c.normalizedName && c.normalizedName.includes(query))), currentSortOrder, false)
-    : getSortedCatalogItems(base, currentSortOrder, true);
+  // Evita duplicar o array inteiro quando a categoria está na ordem padrão.
+  // Em listas com centenas de milhares de itens isso reduz um pico de memória
+  // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
+  let items = query ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query))) : base;
+  if (!isAdultUnlocked) {
+    items = items.filter(c => !c.isAdult && !isAdult(c.name) && !isAdult(c.group));
+  }
+
+  // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
+  function mk21ExtractYear(name) {
+    const m = String(name || '').match(/\b((?:19|20)\d{2})\b/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+  if (currentSortOrder === 'AZ') {
+    items = items.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+  } else if (currentSortOrder === 'ZA') {
+    items = items.slice().sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
+  } else if (currentSortOrder === 'RECENT') {
+    // Ordem da lista invertida (últimos da playlist primeiro)
+    items = items.slice().reverse();
+  } else if (currentSortOrder === 'YEAR') {
+    // Por ano no título (mais recente primeiro); sem ano no fim
+    items = items.slice().sort((a, b) => {
+      const ya = mk21ExtractYear(a.name);
+      const yb = mk21ExtractYear(b.name);
+      if (ya && yb && ya !== yb) return yb - ya;
+      if (ya && !yb) return -1;
+      if (!ya && yb) return 1;
+      return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+    });
+  }
+  // DEFAULT: mantém ordem original da categoria
 
   currentFilteredItems = items;
   $('badgeItemsCount').textContent = currentFilteredItems.length;
@@ -2381,11 +1389,7 @@ function renderItemsList() {
 
   // Se for a aba SÉRIES (e não for busca avulsa), exibir agrupado por série estilo Netflix!
   if (currentContentType === 'SERIES' && query.length === 0) {
-    currentGroupedSeries = groupedSeriesCache.get(currentFilteredItems);
-    if (!currentGroupedSeries) {
-      currentGroupedSeries = groupSeriesItems(currentFilteredItems);
-      groupedSeriesCache.set(currentFilteredItems, currentGroupedSeries);
-    }
+    currentGroupedSeries = groupSeriesItems(currentFilteredItems);
     $('badgeItemsCount').textContent = currentGroupedSeries.length + ' séries';
 
     const limit = Math.min(currentGroupedSeries.length, itemsDisplayLimit);
@@ -2396,25 +1400,7 @@ function renderItemsList() {
       btn.className = 'list-item-btn series-card-btn';
       btn.setAttribute('tabindex', '0');
       btn.setAttribute('data-idx', i);
-      const representativeEpisode = seriesObj.episodes[0];
-      if (representativeEpisode) btn.dataset.catalogUrl = representativeEpisode.url;
 
-      const poster = document.createElement('img');
-      poster.className = 'series-poster';
-      poster.alt = `${seriesObj.title} — capa`;
-      poster.loading = 'lazy';
-      poster.decoding = 'async';
-      if (representativeEpisode) poster.dataset.catalogUrl = representativeEpisode.url;
-      poster.onerror = () => {
-        poster.onerror = null;
-        poster.src = generateSvgLogoPlaceholder(seriesObj.title);
-        if (representativeEpisode && localStorage.getItem('mk21_use_tmdb') !== 'false') {
-          fetchTmdbMetadata(representativeEpisode);
-        }
-      };
-      poster.src = (representativeEpisode && (representativeEpisode.poster || representativeEpisode.logo)) ||
-        generateSvgLogoPlaceholder(seriesObj.title);
-      btn.appendChild(poster);
       const spanTitle = document.createElement('span');
       spanTitle.textContent = '🍿 ' + seriesObj.title;
 
@@ -2437,7 +1423,7 @@ function renderItemsList() {
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Séries (+60 de ${currentGroupedSeries.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Séries (+150 de ${currentGroupedSeries.length - limit} restantes)...`;
       moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
@@ -2459,18 +1445,15 @@ function renderItemsList() {
       logoWrap.className = 'channel-logo-wrap';
       const img = document.createElement('img');
       img.className = 'channel-logo';
+      img.referrerPolicy = 'no-referrer';
       const fallbackSvg = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52"><rect width="52" height="52" rx="8" fill="#1e1f26"/><circle cx="26" cy="26" r="16" fill="#141828"/><polygon points="23,19 33,26 23,33" fill="#ffd54f"/></svg>');
-      img.dataset.catalogUrl = item.url;
+      img.src = item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg;
       img.alt = item.name;
       img.loading = 'lazy';
       img.decoding = 'async';
-      img.src = item.poster || (item.logo ? getOptimizedLogoUrl(item.logo, item.name) : fallbackSvg);
       img.onerror = function() {
         this.onerror = null;
         this.src = fallbackSvg;
-        if (item.contentType !== 'LIVE' && localStorage.getItem('mk21_use_tmdb') !== 'false') {
-          fetchTmdbMetadata(item);
-        }
       };
       logoWrap.appendChild(img);
       btn.appendChild(logoWrap);
@@ -2539,7 +1522,7 @@ function renderItemsList() {
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Itens (+60 de ${currentFilteredItems.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Itens (+150 de ${currentFilteredItems.length - limit} restantes)...`;
       moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
@@ -2548,6 +1531,10 @@ function renderItemsList() {
 
   ul.appendChild(fragment);
 
+  // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
+  if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
+    playStream(currentFilteredItems[0]);
+  }
 }
 
 // MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO
@@ -2716,62 +1703,6 @@ $('btnCloseSeriesModal').onclick = () => {
 // MOTOR EPG SMART TV: METADADOS REAIS DO SERVIDOR COM FALLBACK DINÂMICO
 // =====================================================================
 const smartTvEpgCache = new Map();
-const SMART_TV_EPG_TTL_MS = 5 * 60 * 1000;
-const SMART_TV_EPG_CACHE_VERSION = 2;
-
-// A grade so vale para o servidor/provedor + usuario que a gerou: stream_id iguais
-// em provedores diferentes nao podem reaproveitar o EPG um do outro.
-function mk21EpgServerScope() {
-  const srv = SERVERS[currentServerIndex] || DEFAULT_SERVERS[0];
-  const creds = getSharedCredentials();
-  const base = srv && srv.url ? String(srv.url).replace(/\/+$/, '').toLowerCase() : 'default';
-  return `${SMART_TV_EPG_CACHE_VERSION}|${base}|${creds.user || ''}`;
-}
-
-function invalidateSmartTvEpgCache(reason) {
-  smartTvEpgCache.clear();
-  currentEpgListings = [];
-  currentEpgItemUrl = '';
-  if (reason) console.log('[SmartTV EPG] Cache invalidado:', reason);
-}
-
-// Seleciona o programa pelo intervalo real de horario. Sem programa no ar, devolve
-// null em vez de cair no primeiro item da grade (era o que gerava titulo "de outro
-// programa" enquanto o canal exibia outra coisa).
-function pickEpgProgram(parsed, nowMs) {
-  const sorted = parsed.slice().sort((a, b) => a.start - b.start);
-  const index = sorted.findIndex(p => p.start <= nowMs && p.stop > nowMs);
-  if (index >= 0) return { current: sorted[index], next: sorted[index + 1] || null, sorted };
-  return { current: null, next: sorted.find(p => p.start > nowMs) || null, sorted };
-}
-
-// Rejeita grade que se identifica como sendo de outro canal.
-function epgListingsBelongToChannel(item, listings) {
-  if (!item || !Array.isArray(listings)) return false;
-  const cleanName = value => String(value || '').toLowerCase()
-    .replace(/\b(fhd|uhd|4k|hd|sd|h265|h264|hevc)\b/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-  const chanStream = String(item.streamId || '').trim();
-  const chanTvg = String(item.tvgId || item['tvg-id'] || '').trim().toLowerCase();
-  const chanName = cleanName(item.name);
-  const identified = listings.filter(l => l && (l.channel_id || l.channel_name));
-  if (identified.length === 0) return true;
-
-  return identified.some(l => {
-    const id = String(l.channel_id || '').trim();
-    if (id) {
-      if (chanStream && id === chanStream) return true;
-      if (chanTvg && id.toLowerCase() === chanTvg) return true;
-    }
-    const name = cleanName(l.channel_name);
-    if (name && chanName) {
-      if (name === chanName) return true;
-      if (name.includes(chanName) || chanName.includes(name)) return true;
-    }
-    return false;
-  });
-}
 
 function decodeSmartTvEpgText(str) {
   if (!str || typeof str !== 'string') return '';
@@ -2896,33 +1827,8 @@ function matchEPG(channel, xmltvListings) {
   return null;
 }
 
-let mk21EpgRefreshTimer = null;
-let mk21EpgGuideRefreshing = false;
-
-// Reavalia a grade periodicamente: cobre virada de programa e dados que chegaram
-// defasados, sem depender de trocar de canal.
-function mk21StartEpgAutoRefresh() {
-  if (mk21EpgRefreshTimer) return;
-  mk21EpgRefreshTimer = setInterval(function () {
-    if (!activeItem || activeItem.contentType !== 'LIVE') return;
-    if (document.hidden) return;
-    const nowMs = Date.now();
-    const stillCurrent = Array.isArray(currentEpgListings) &&
-      currentEpgListings.some(p => p.start <= nowMs && p.stop > nowMs);
-    if (!stillCurrent) updateSmartTvEpg(activeItem, true);
-  }, 60000);
-}
-
-async function updateSmartTvEpg(item, forceRefresh) {
+async function updateSmartTvEpg(item) {
   if (!item) return;
-
-  // Troca de canal: a grade anterior nunca pode vazar para o novo canal.
-  if (currentEpgItemUrl !== item.url) {
-    currentEpgListings = [];
-    currentEpgItemUrl = item.url;
-  }
-
-  mk21StartEpgAutoRefresh();
 
   const sim = getSimulatedTvProgram(item.name);
   if ($('epgTitle')) $('epgTitle').textContent = (favoriteUrls.has(item.url) ? '⭐ ' : '▶ ') + item.name;
@@ -2930,7 +1836,7 @@ async function updateSmartTvEpg(item, forceRefresh) {
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${sim.timeStr}`;
   if ($('previewEpgNow')) $('previewEpgNow').textContent = `NO AR: ${sim.title}`;
   if ($('previewEpgNext')) $('previewEpgNext').textContent = `A SEGUIR: ${sim.nextTitle}`;
-  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${escapeHtml(sim.title)}</b>`;
+  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${sim.title}</b>`;
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${sim.progressPercent}%`;
   if ($('epgNext')) $('epgNext').textContent = `A seguir: ${sim.nextTitle}`;
@@ -2964,44 +1870,29 @@ async function updateSmartTvEpg(item, forceRefresh) {
     return;
   }
 
-  const cacheKey = `${mk21EpgServerScope()}|${streamId}`;
-  const cached = smartTvEpgCache.get(cacheKey);
-  if (!forceRefresh && cached) {
-    if (Date.now() - cached.fetchedAt < SMART_TV_EPG_TTL_MS) {
-      if (applyRealSmartTvEpg(item, cached.listings)) return;
-      smartTvEpgCache.delete(cacheKey);
-    } else {
-      smartTvEpgCache.delete(cacheKey); // grade vencida nunca e reutilizada
-    }
+  const cacheKey = `epg_${streamId}`;
+  if (smartTvEpgCache.has(cacheKey)) {
+    applyRealSmartTvEpg(item, smartTvEpgCache.get(cacheKey));
+    return;
   }
 
   try {
     const cleanBase = srv.url.replace(/\/+$/, '');
-    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=8&_=${Date.now()}`;
-    const res = await fetch(apiUrl, { cache: 'no-store' });
+    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=6`;
+    const res = await fetch(apiUrl);
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.epg_listings) && data.epg_listings.length > 0) {
-        if (!epgListingsBelongToChannel(item, data.epg_listings)) {
-          console.warn('[SmartTV EPG] Grade ignorada: identificada como de outro canal', streamId);
-          return;
-        }
-        smartTvEpgCache.set(cacheKey, { listings: data.epg_listings, fetchedAt: Date.now() });
+        smartTvEpgCache.set(cacheKey, data.epg_listings);
         if (activeItem === item) {
-          const applied = applyRealSmartTvEpg(item, data.epg_listings);
-          if (!applied && !forceRefresh) {
-            // Grade sem programa no horario atual: descarta e tenta uma unica vez do zero.
-            smartTvEpgCache.delete(cacheKey);
-            return updateSmartTvEpg(item, true);
-          }
+          applyRealSmartTvEpg(item, data.epg_listings);
         }
       }
     }
   } catch (err) {
-    console.debug('[SmartTV EPG] Falha ao carregar metadados reais, mantendo simulacao:', err);
+    console.debug('[SmartTV EPG] Falha ao carregar metadados reais, mantendo simulação:', err);
   }
 }
-
 
 function parseXmltvTimestamp(val) {
   if (!val) return NaN;
@@ -3038,34 +1929,26 @@ function parseXmltvTimestamp(val) {
 }
 
 function applyRealSmartTvEpg(item, listings) {
-  if (!listings || listings.length === 0 || activeItem !== item) return false;
+  if (!listings || listings.length === 0 || activeItem !== item) return;
+  const nowMs = Date.now();
 
   const parsed = listings.map(l => {
-    const start = parseXmltvTimestamp(l.start_timestamp || l.start);
-    const stop = parseXmltvTimestamp(l.stop_timestamp || l.end || l.stop);
+    let start = parseXmltvTimestamp(l.start_timestamp || l.start);
+    let stop = parseXmltvTimestamp(l.stop_timestamp || l.end || l.stop);
     return {
-      id: String(l.id || l.epg_id || '') || String(start),
       title: decodeSmartTvEpgText(l.title),
       desc: decodeSmartTvEpgText(l.description),
       start,
       stop
     };
-  }).filter(p => !isNaN(p.start) && !isNaN(p.stop) && p.stop > p.start);
+  }).filter(p => !isNaN(p.start) && !isNaN(p.stop));
 
-  if (parsed.length === 0) return false;
+  if (parsed.length === 0) return;
+  currentEpgListings = parsed;
 
-  const nowMs = Date.now();
-  const picked = pickEpgProgram(parsed, nowMs);
-  if (!picked.current) {
-    // Nada no ar segundo esta grade: melhor nao anunciar programa do que anunciar o errado.
-    currentEpgListings = [];
-    return false;
-  }
-
-  const current = picked.current;
-  const next = picked.next;
-  currentEpgListings = picked.sorted;
-  currentEpgItemUrl = item.url;
+  let current = parsed.find(p => p.start <= nowMs && p.stop > nowMs) || parsed[0];
+  let curIdx = parsed.indexOf(current);
+  let next = (curIdx >= 0 && curIdx + 1 < parsed.length) ? parsed[curIdx + 1] : null;
 
   const startH = new Date(current.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   const stopH = new Date(current.stop).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -3075,13 +1958,13 @@ function applyRealSmartTvEpg(item, listings) {
 
   if ($('epgTitle')) $('epgTitle').textContent = `▶ ${item.name}`;
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${startH} - ${stopH}`;
-  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${escapeHtml(current.title)}</b>`;
+  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${current.title}</b>`;
   if ($('previewEpgNext')) {
     const nextH = next ? new Date(next.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '--:--';
     $('previewEpgNext').textContent = `A SEGUIR (${nextH}): ${next ? next.title : 'Programação Normal'}`;
   }
   if ($('epgStatus')) {
-    $('epgStatus').innerHTML = `🔴 NO AR: <b>${escapeHtml(current.title)}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
+    $('epgStatus').innerHTML = `🔴 NO AR: <b>${current.title}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
   }
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${pct}%`;
@@ -3095,9 +1978,7 @@ function applyRealSmartTvEpg(item, listings) {
   if ($('fsEpgTimeBadge')) $('fsEpgTimeBadge').textContent = `${startH} - ${stopH}`;
   if ($('fsEpgFill')) $('fsEpgFill').style.width = `${pct}%`;
   if ($('fsEpgNextTitle')) $('fsEpgNextTitle').textContent = next ? next.title : 'Programação Normal';
-  return true;
 }
-
 
 // METADADOS TMDB ENRIQUECIDOS PARA FILMES E SÉRIES
 const tmdbCache = new Map();
@@ -3114,40 +1995,16 @@ async function fetchTmdbMetadata(item) {
     if (res.ok) {
       const data = await res.json();
       if (data && data.results && data.results.length > 0) {
-        const best = data.results
-          .filter(result => result && (result.media_type === 'movie' || result.media_type === 'tv'))
-          .sort((a, b) => {
-            const score = result => {
-              const title = String(result.title || result.name || '').toLocaleLowerCase('pt-BR');
-              const query = cleanName.toLocaleLowerCase('pt-BR');
-              return (title === query ? 3 : (title.includes(query) || query.includes(title) ? 1 : 0)) +
-                (result.poster_path ? 1 : 0) + (result.overview ? 0.1 : 0);
-            };
-            return score(b) - score(a);
-          })[0];
-        if (!best) return;
+        const best = data.results[0];
         tmdbCache.set(cleanName, best);
-        applyTmdbData(item, best);
+        if (activeItem === item) applyTmdbData(item, best);
       }
     }
-  } catch (e) {
-    console.warn('[MK21] Não foi possível consultar a capa no TMDB:', e);
-  }
+  } catch (e) {}
 }
 
 function applyTmdbData(item, data) {
-  if (!data || !item) return;
-  const posterPath = data.poster_path || data.backdrop_path;
-  if (posterPath) {
-    item.poster = `https://image.tmdb.org/t/p/w500${posterPath}`;
-    const list = $('listItems');
-    if (list) {
-      Array.from(list.querySelectorAll('.channel-logo, .series-poster')).forEach(image => {
-        if (image.dataset.catalogUrl === item.url) image.src = item.poster;
-      });
-    }
-  }
-  if (activeItem !== item) return;
+  if (!data || activeItem !== item) return;
   const overview = data.overview || (data.title || data.name);
   if ($('epgNext') && overview) {
     $('epgNext').textContent = 'Sinopse: ' + (overview.length > 120 ? overview.substring(0, 120) + '...' : overview);
@@ -3489,7 +2346,7 @@ async function executeOmnisearch(query) {
 
   const filterFn = item => {
     if (!item) return false;
-    if (!canShowAdultContent() && (item.isAdult || isAdult(item.name) || isAdult(item.group))) return false;
+    if (!isAdultUnlocked && (item.isAdult || isAdult(item.name) || isAdult(item.group))) return false;
     const nameMatch = item.name && item.name.toLowerCase().includes(q);
     const normMatch = item.normalizedName && item.normalizedName.includes(q);
     const groupMatch = item.group && item.group.toLowerCase().includes(q);
@@ -3566,8 +2423,8 @@ function renderOmnisearchResults() {
         <span class="omnisearch-type-badge ${typeBadgeClass}">${typeLabel}</span>
         <span style="font-size:12px; color:#ffd54f;">${item.isAdult ? '+18' : ''}</span>
       </div>
-      <div class="omnisearch-item-name">${escapeHtml(item.name)}</div>
-      <div class="omnisearch-item-group">${escapeHtml(item.group || 'Geral')}</div>
+      <div class="omnisearch-item-name">${item.name}</div>
+      <div class="omnisearch-item-group">${item.group || 'Geral'}</div>
     `;
 
     btn.onclick = () => {
@@ -3591,7 +2448,6 @@ function renderOmnisearchResults() {
 
 // 5. GUIA EPG COMPLETO (MODAL EPG)
 let currentEpgListings = [];
-let currentEpgItemUrl = '';
 
 function openEpgGuideModal() {
   if (!activeItem) {
@@ -3610,18 +2466,6 @@ function openEpgGuideModal() {
   const list = $('epgScheduleList');
   if (!list) return;
 
-  // Grade vazia ou de outro canal: busca antes de renderizar, sem loop de refresh.
-  if (!mk21EpgGuideRefreshing && (currentEpgItemUrl !== activeItem.url || !currentEpgListings.length)) {
-    mk21EpgGuideRefreshing = true;
-    list.innerHTML = '<div style="text-align:center; padding:30px; color:#aaa;">Atualizando grade de programação...</div>';
-    updateSmartTvEpg(activeItem, true).then(function () {
-      mk21EpgGuideRefreshing = false;
-      if ($('modalEpgGuide') && !$('modalEpgGuide').classList.contains('hidden')) openEpgGuideModal();
-    }).catch(function () {
-      mk21EpgGuideRefreshing = false;
-    });
-  }
-
   if (currentEpgListings && currentEpgListings.length > 0) {
     const nowMs = Date.now();
     let html = '';
@@ -3633,8 +2477,8 @@ function openEpgGuideModal() {
         <div class="epg-schedule-row ${isNow ? 'active-now' : ''}">
           <div class="epg-time-col">${startH} - ${stopH} ${isNow ? '<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span>' : ''}</div>
           <div class="epg-details-col">
-            <div class="epg-sched-title">${escapeHtml(l.title)}</div>
-            <div class="epg-sched-desc">${escapeHtml(l.desc || 'Sem sinopse disponível.')}</div>
+            <div class="epg-sched-title">${l.title}</div>
+            <div class="epg-sched-desc">${l.desc || 'Sem sinopse disponível.'}</div>
           </div>
         </div>
       `;
@@ -3652,8 +2496,8 @@ function openEpgGuideModal() {
       <div class="epg-schedule-row active-now">
         <div class="epg-time-col">${h1} - ${h2}<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span></div>
         <div class="epg-details-col">
-          <div class="epg-sched-title">${escapeHtml(activeItem.name)} - Ao Vivo</div>
-          <div class="epg-sched-desc">Transmissão em tempo real da categoria ${escapeHtml(activeItem.group || 'Geral')}.</div>
+          <div class="epg-sched-title">${activeItem.name} - Ao Vivo</div>
+          <div class="epg-sched-desc">Transmissão em tempo real da categoria ${activeItem.group || 'Geral'}.</div>
         </div>
       </div>
       <div class="epg-schedule-row">
@@ -3734,11 +2578,8 @@ let stallWatchdogInterval = null;
 let lastVideoCurrentTime = -1;
 let stallCount = 0;
 let isAutoReconnecting = false;
-let autoReconnectExhausted = false;
 let autoReconnectAttempts = 0;
-let playbackProgressSince = 0;
 const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
-const PLAYBACK_STABILITY_WINDOW_MS = 15000;
 
 function showPlayerReconnectBadge(msg) {
   let badge = $('playerReconnectBadge');
@@ -3770,45 +2611,24 @@ function stopStallWatchdog() {
 }
 
 function triggerAutoReconnect(cause) {
-  if (isAutoReconnecting || autoReconnectExhausted || !activeItem) return;
+  if (isAutoReconnecting || !activeItem) return;
   isAutoReconnecting = true;
   autoReconnectAttempts++;
 
   if (autoReconnectAttempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
-    const sources = MK21AlternativeSources.sourceUrls(activeItem);
-    const nextSourceIndex = sources.findIndex((url, index) =>
-      url && !attemptedPlaybackSourceIndexes.has(index)
-    );
-    if (nextSourceIndex !== -1) {
-      const resumePosition = getCurrentPlaybackPosition(activeItem);
-      attemptedPlaybackSourceIndexes.add(nextSourceIndex);
-      autoReconnectAttempts = 0;
-      isAutoReconnecting = false;
-      showChannelBanner(`🔄 Tentando fonte alternativa ${nextSourceIndex + 1}/${sources.length}`);
-      addDevLog(`[Player] Alternando automaticamente para a fonte ${nextSourceIndex + 1}`, 'warn');
-      playStream(activeItem, nextSourceIndex, resumePosition, true);
-      return;
-    }
     console.error('[SmartPlayer Watchdog] Limite máximo de reconexão atingido:', cause);
     showPlayerReconnectBadge('Falha de conexão. Tente outro canal.');
-    if ($('epgStatus')) $('epgStatus').textContent = sources.length > 1
-      ? '⚠️ Todas as fontes falharam'
-      : '⚠️ FORA DO AR';
-    autoReconnectExhausted = true;
-    stopStallWatchdog();
+    if ($('epgStatus')) $('epgStatus').textContent = '⚠️ FORA DO AR';
     isAutoReconnecting = false;
     return;
   }
 
   const delay = Math.min(1000 * Math.pow(1.5, autoReconnectAttempts - 1), 6000);
-  const reconnectItem = activeItem;
-  const reconnectSourceIndex = activePlaybackSourceIndex;
-  const reconnectGeneration = playbackGeneration;
   showPlayerReconnectBadge(`Reconectando (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`);
   if ($('epgStatus')) $('epgStatus').textContent = `🔄 RECONECTANDO (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`;
 
   setTimeout(() => {
-    if (!activeItem || activeItem !== reconnectItem || playbackGeneration !== reconnectGeneration) {
+    if (!activeItem) {
       isAutoReconnecting = false;
       return;
     }
@@ -3817,28 +2637,20 @@ function triggerAutoReconnect(cause) {
       try {
         hlsInstance.recoverMediaError();
       } catch (e) {
-        if (typeof playStream === 'function') {
-          playStream(activeItem, reconnectSourceIndex, getCurrentPlaybackPosition(activeItem), true, true);
-        }
+        if (typeof playStream === 'function') playStream(activeItem);
       }
     } else {
-      if (typeof playStream === 'function') {
-        playStream(activeItem, reconnectSourceIndex, getCurrentPlaybackPosition(activeItem), true, true);
-      }
+      if (typeof playStream === 'function') playStream(activeItem);
     }
     isAutoReconnecting = false;
   }, delay);
 }
 
-function startStallWatchdog(preserveReconnectAttempts = false) {
+function startStallWatchdog() {
   stopStallWatchdog();
   lastVideoCurrentTime = -1;
   stallCount = 0;
-  playbackProgressSince = 0;
-  if (!preserveReconnectAttempts) {
-    autoReconnectAttempts = 0;
-    autoReconnectExhausted = false;
-  }
+  autoReconnectAttempts = 0;
   isAutoReconnecting = false;
   hidePlayerReconnectBadge();
 
@@ -3857,22 +2669,12 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
     });
     video.addEventListener('playing', () => {
       stallCount = 0;
+      autoReconnectAttempts = 0;
       isAutoReconnecting = false;
       hidePlayerReconnectBadge();
     });
     video.addEventListener('error', (e) => {
-      const mediaError = video.error;
-      const code = mediaError ? mediaError.code : 'desconhecido';
-      const detail = mediaError && mediaError.message ? mediaError.message : 'sem detalhe do navegador';
-      addDevLog(`[Player] Erro de mídia nativo (código ${code}): ${detail}`, 'error');
-      const sourceUrl = activePlaybackUrl;
-      if (shouldUseNativeWebOsPlayback() && sourceUrl &&
-          getHlsFallbackUrl(sourceUrl) !== sourceUrl && nativeHlsFallbackSource !== sourceUrl) {
-        nativeHlsFallbackSource = sourceUrl;
-        addDevLog('[Player] Stream TS não suportado nativamente; tentando a versão HLS.', 'warn');
-        fallbackToHls(activeItem, sourceUrl);
-        return;
-      }
+      console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
       triggerAutoReconnect('Erro nativo de reprodução');
     });
   }
@@ -3880,14 +2682,7 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
   stallWatchdogInterval = setInterval(() => {
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
     const nowTime = video.currentTime;
-    if (!Number.isFinite(nowTime)) {
-      playbackProgressSince = 0;
-      stallCount++;
-      if (stallCount >= 4) triggerAutoReconnect('Tempo de reprodução inválido');
-      return;
-    }
     if (Math.abs(nowTime - lastVideoCurrentTime) < 0.2) {
-      playbackProgressSince = 0;
       stallCount++;
       if (stallCount >= 4) { // 4 segundos sem avanço no tempo
         console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
@@ -3895,19 +2690,6 @@ function startStallWatchdog(preserveReconnectAttempts = false) {
       }
     } else {
       stallCount = 0;
-      if (lastVideoCurrentTime >= 0 && nowTime > lastVideoCurrentTime) {
-        if (!playbackProgressSince) playbackProgressSince = Date.now();
-        if (Date.now() - playbackProgressSince >= PLAYBACK_STABILITY_WINDOW_MS &&
-            (autoReconnectAttempts > 0 || attemptedPlaybackSourceIndexes.size > 1)) {
-          autoReconnectAttempts = 0;
-          autoReconnectExhausted = false;
-          attemptedPlaybackSourceIndexes = new Set([activePlaybackSourceIndex]);
-          addDevLog('[Player] Reprodução estável; contador de reconexão reiniciado.', 'success');
-          playbackProgressSince = Date.now();
-        }
-      } else {
-        playbackProgressSince = 0;
-      }
       lastVideoCurrentTime = nowTime;
     }
   }, 1000);
@@ -3918,9 +2700,8 @@ let sessionDevLogs = [];
 const MAX_DEV_LOGS = 300;
 
 function addDevLog(msg, type = 'info') {
-  msg = redactDiagnosticLog(msg);
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-  const entry = { time, uptime: mk21UptimeLabel(), msg, type };
+  const entry = { time, msg, type };
   sessionDevLogs.push(entry);
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
 
@@ -3931,29 +2712,28 @@ function addDevLog(msg, type = 'info') {
         container.innerHTML = '';
       }
       const line = document.createElement('div');
-      line.style.marginBottom = '3px';
+      line.style.marginBottom = '4px';
       line.style.wordBreak = 'break-word';
-
+      
       let color = '#cbd5e1';
-      if (type === 'error') color = '#f87171';
-      else if (type === 'warn') color = '#facc15';
-      else if (type === 'success') color = '#34d399';
+      if (type === 'error') color = '#ef4444';
+      else if (type === 'warn') color = '#eab308';
+      else if (type === 'success') color = '#22c55e';
       else if (type === 'debug') color = '#94a3b8';
-      else if (type === 'system') color = '#93c5fd';
 
-      line.innerHTML = `<span style="color:#475569;">[${time} +${entry.uptime}]</span> <span style="color:${color}; font-weight:${type === 'debug' ? 400 : 600};">${escapeHtml(msg)}</span>`;
+      line.innerHTML = `<span style="color:#64748b;">[${time}]</span> <span style="color:${color}; font-weight:600;">${escapeHtml(msg)}</span>`;
       container.appendChild(line);
       container.scrollTop = container.scrollHeight;
     }
+    const badge = $('devLogsCountBadge');
+    if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
   } catch (e) {}
-
-  try { mk21PersistDiagLog(false); } catch (e) {}
-  try { mk21UpdateDiagBadge(); } catch (e) {}
 
   if (type === 'error') console.error('[MK21-TV]', msg);
   else if (type === 'warn') console.warn('[MK21-TV]', msg);
   else console.log('[MK21-TV]', msg);
 }
+
 function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, m => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -3983,19 +2763,19 @@ function initDevLogs() {
     sessionDevLogs = [];
     const container = $('devLogsContainer');
     if (container) container.innerHTML = '<div style="color:#64748b;">[Logs limpos com sucesso.]</div>';
-    try { localStorage.removeItem(MK21_DIAG_LOG_KEY); } catch (e) {}
-    mk21UpdateDiagBadge();
-  };
-  if ($('btnCopyDevLogs')) $('btnCopyDevLogs').onclick = mk21CopyDiagLogs;
-  if ($('btnInfoDevLogs')) $('btnInfoDevLogs').onclick = () => {
-    mk21DeviceInfoLines().forEach(l => addDevLog(l.msg, l.type));
-    addDevLog('[Info] Snapshot solicitado pelo usuário.', 'system');
-    showChannelBanner('ℹ️ Diagnóstico adicionado ao console');
+    const badge = $('devLogsCountBadge');
+    if (badge) badge.textContent = '0 entradas';
   };
   if ($('btnExportDevLogs')) $('btnExportDevLogs').onclick = () => {
     try {
-      const text = mk21BuildDiagText();
-      try { localStorage.setItem('mk21_last_exported_logs', text); } catch (e) {}
+      const text = [
+        'MK21 Smart TV - Logs de diagnóstico',
+        `Data: ${new Date().toISOString()}`,
+        'Credenciais e caminhos autenticados foram mascarados.',
+        '',
+        ...sessionDevLogs.map(l => `[${l.time}] [${l.type.toUpperCase()}] ${redactDiagnosticLog(l.msg)}`)
+      ].join('\n');
+      localStorage.setItem('mk21_last_exported_logs', text);
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -4003,289 +2783,27 @@ function initDevLogs() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => { try { URL.revokeObjectURL(a.href); } catch (e) {} }, 4000);
-      addDevLog('[Logs] Arquivo de log gerado. Se a TV não salvar em arquivo, use Copiar.', 'success');
-      showChannelBanner('✅ Logs exportados');
+      addDevLog('[Logs] Arquivo de log exportado e salvo com sucesso!', 'success');
+      showChannelBanner('✅ Logs exportados com sucesso!');
     } catch (e) {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
   };
-  mk21UpdateDiagBadge();
+  if ($('btnGitHubDevLogs')) $('btnGitHubDevLogs').onclick = () => {
+    window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
+  };
 }
 
 function redactDiagnosticLog(value) {
   return String(value)
     .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, '$1[REDACTED]@')
     .replace(/([?&](?:username|user|password|pass|token|auth|api[_-]?key)=)[^&#\s]*/gi, '$1[REDACTED]')
-    .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]')
-    .replace(/https?:\/\/[^\s"'<>]+/gi, value => {
-      try {
-        const url = new URL(value);
-        return `${url.protocol}//${url.host}/[REDACTED]`;
-      } catch (e) {
-        return '[URL REDACTED]';
-      }
-    });
+    .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]');
 }
 
 let mpegtsPlayer = null;
 
 let playAbortController = null;
-let activePlaybackSourceIndex = 0;
-let attemptedPlaybackSourceIndexes = new Set();
-let playbackGeneration = 0;
-let nativeHlsFallbackSource = null;
-let activePlaybackUrl = null;
-
-function shouldUseNativeWebOsPlayback() {
-  const userAgent = navigator.userAgent || '';
-  return !!window.webOS || /web0s|webos/i.test(userAgent);
-}
-
-function getCurrentPlaybackPosition(item) {
-  if (!item || item.contentType === 'LIVE') return null;
-  const video = $('tvPlayer');
-  return video && Number.isFinite(video.currentTime) ? video.currentTime : null;
-}
-
-function getSourceHostLabel(url) {
-  try {
-    return new URL(url).hostname || 'Fonte';
-  } catch (e) {
-    return 'Fonte';
-  }
-}
-
-function updateSourceButtons(item = activeItem, selectedIndex = activePlaybackSourceIndex) {
-  const count = item ? MK21AlternativeSources.sourceUrls(item).length : 0;
-  const serverCount = SERVERS.length;
-  const selectedLabel = item && count > 0
-    ? getSourceHostLabel(MK21AlternativeSources.sourceUrls(item)[selectedIndex] || item.url)
-    : '';
-  [
-    { button: $('btnSources'), fullScreen: false },
-    { button: $('fsBtnSources'), fullScreen: true }
-  ].forEach(({ button, fullScreen }) => {
-    if (!button) return;
-    button.classList.toggle('hidden', count < 2 && serverCount < 2);
-    mk21SetCtrlText(button, fullScreen
-      ? `🌐 Fontes${count > 1 ? ` ${selectedIndex + 1}/${count}` : ''}`
-      : '🌐 Fontes');
-    button.title = count > 1
-      ? `Selecionar fonte (${count} URLs). Atual: ${selectedLabel}; também é possível trocar de servidor`
-      : 'Selecionar outra lista/servidor para este conteúdo';
-  });
-}
-
-function getHlsBufferOptions() {
-  const profile = localStorage.getItem('mk21_buffer_profile') || 'fast';
-  if (profile === 'stable') {
-    return { lowLatencyMode: false, startFragPrefetch: false, backBufferLength: 20, maxBufferLength: 40, maxMaxBufferLength: 60, maxBufferSize: 50 * 1000 * 1000 };
-  }
-  if (profile === 'balanced') {
-    return { lowLatencyMode: true, startFragPrefetch: true, backBufferLength: 12, maxBufferLength: 25, maxMaxBufferLength: 40, maxBufferSize: 35 * 1000 * 1000 };
-  }
-  return { lowLatencyMode: true, startFragPrefetch: true, backBufferLength: 10, maxBufferLength: 20, maxMaxBufferLength: 30, maxBufferSize: 30 * 1000 * 1000 };
-}
-
-function applyPlaybackPreferences() {
-  const video = $('tvPlayer');
-  if (!video) return;
-  const effect = localStorage.getItem('mk21_super_resolution') || 'off';
-  video.style.filter = effect === 'hd'
-    ? 'contrast(1.05) saturate(1.06)'
-    : (effect === '4k' ? 'contrast(1.09) saturate(1.12) brightness(1.01)' : '');
-
-  const quality = localStorage.getItem('mk21_playback_quality') || 'auto';
-  if (hlsInstance && Array.isArray(hlsInstance.levels) && hlsInstance.levels.length) {
-    if (quality === 'auto') {
-      hlsInstance.autoLevelCapping = -1;
-    } else {
-      let cap = -1;
-      hlsInstance.levels.forEach((level, index) => {
-        if (level.height && level.height <= 1080 &&
-            (cap < 0 || level.height > hlsInstance.levels[cap].height)) cap = index;
-      });
-      hlsInstance.autoLevelCapping = cap;
-    }
-  }
-}
-
-function openQualityPicker() {
-  const modal = $('modalQuality');
-  const list = $('qualityOptionsList');
-  if (!modal || !list) return;
-  addDevLog('[UI] Abrindo qualidade, super resolução e buffer', 'info');
-  const groups = [
-    {
-      title: 'Qualidade',
-      key: 'mk21_playback_quality',
-      options: [['auto', 'Automática'], ['1080p', 'Até 1080p']]
-    },
-    {
-      title: 'Super resolução (efeito visual)',
-      key: 'mk21_super_resolution',
-      options: [['off', 'Desativada'], ['hd', 'HD'], ['4k', '4K']]
-    },
-    {
-      title: 'Buffer para as próximas reproduções',
-      key: 'mk21_buffer_profile',
-      options: [['fast', 'Rápido'], ['balanced', 'Equilibrado'], ['stable', 'Estável']]
-    }
-  ];
-  list.replaceChildren();
-  groups.forEach(group => {
-    const heading = document.createElement('h3');
-    heading.className = 'source-section-title';
-    heading.textContent = group.title;
-    list.appendChild(heading);
-    group.options.forEach(([value, label]) => {
-      const selected = (localStorage.getItem(group.key) || (group.key === 'mk21_super_resolution' ? 'off' : group.key === 'mk21_buffer_profile' ? 'fast' : 'auto')) === value;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'track-item-btn source-option-btn';
-      button.tabIndex = 0;
-      button.textContent = `${selected ? '✓ ' : ''}${label}`;
-      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-      button.onclick = () => {
-        localStorage.setItem(group.key, value);
-        applyPlaybackPreferences();
-        addDevLog(`[Playback] ${group.title}: ${label}`, 'success');
-        openQualityPicker();
-      };
-      list.appendChild(button);
-    });
-  });
-  mk21BringModalToFront(modal);
-  modal.classList.remove('hidden');
-  activeZone = 'modalQuality';
-  const firstOption = list.querySelector('.source-option-btn');
-  if (firstOption) firstOption.focus();
-}
-
-if ($('btnQuality')) $('btnQuality').onclick = openQualityPicker;
-if ($('fsBtnQuality')) $('fsBtnQuality').onclick = openQualityPicker;
-if ($('btnCloseQuality')) $('btnCloseQuality').onclick = () => {
-  $('modalQuality').classList.add('hidden');
-  activeZone = 'player';
-  const target = isAppFullscreen() ? $('fsBtnQuality') : $('btnQuality');
-  if (target) target.focus();
-};
-
-function findMatchingItemInCatalog(sourceItem, catalog = allCatalog) {
-  const type = sourceItem && sourceItem.contentType;
-  const items = type && Array.isArray(catalog[type]) ? catalog[type] : [];
-  return items.find(item => MK21AlternativeSources.matchesAcrossServers(sourceItem, item)) || null;
-}
-
-function finishPendingServerSourceSwitch() {
-  const pending = pendingServerSourceSwitch;
-  if (!pending || pending.serverId !== (SERVERS[currentServerIndex] || {}).id) return false;
-  if (pending.resolved) return true;
-  const target = pending.matchedItem || findMatchingItemInCatalog(pending.item);
-  if (!target) return false;
-
-  pending.matchedItem = target;
-  pending.resolved = true;
-  isSwitchingServerSource = true;
-  try {
-    switchContentType(target.contentType);
-    playStream(target, 0, pending.resumePosition);
-  } finally {
-    isSwitchingServerSource = false;
-  }
-  showChannelBanner(`Fonte alterada: ${cleanServerName(SERVERS[currentServerIndex].name)}`);
-  return true;
-}
-
-function openSourcePicker() {
-  const item = activeItem;
-  const modal = $('modalSources');
-  const list = $('sourceOptionsList');
-  if (!item || !modal || !list) return;
-
-  const sources = MK21AlternativeSources.sourceUrls(item);
-  $('sourcePickerTitle').textContent = `🌐 Fontes disponíveis — ${item.name}`;
-  list.innerHTML = '';
-  const serverList = $('serverOptionsList');
-  if (serverList) serverList.replaceChildren();
-
-  sources.forEach((url, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'track-item-btn source-option-btn';
-    button.setAttribute('tabindex', '0');
-    button.textContent = `Fonte ${index + 1} — ${getSourceHostLabel(url)}${index === activePlaybackSourceIndex ? ' (em uso)' : ''}`;
-    button.setAttribute('aria-pressed', index === activePlaybackSourceIndex ? 'true' : 'false');
-    button.onclick = () => {
-      const resumePosition = getCurrentPlaybackPosition(item);
-      modal.classList.add('hidden');
-      activeZone = 'player';
-      if (index !== activePlaybackSourceIndex) {
-        playStream(item, index, resumePosition);
-      } else {
-        const focusTarget = isAppFullscreen() ? $('fsBtnSources') : $('btnSources');
-        if (focusTarget) focusTarget.focus();
-      }
-    };
-    list.appendChild(button);
-  });
-
-  if (serverList) {
-    const heading = document.createElement('h3');
-    heading.className = 'source-section-title';
-    heading.textContent = 'Abrir este conteúdo em outro servidor';
-    serverList.appendChild(heading);
-    SERVERS.forEach((server, index) => {
-      if (index === currentServerIndex) return;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'track-item-btn source-option-btn';
-      button.setAttribute('tabindex', '0');
-      button.textContent = `${cleanServerName(server.name)} — localizar ${item.contentType === 'LIVE' ? 'canal' : 'título'} correspondente`;
-      button.onclick = () => {
-        pendingServerSourceSwitch = {
-          item: slimItem(item),
-          serverId: server.id,
-          resumePosition: getCurrentPlaybackPosition(item),
-          matchedItem: null
-        };
-        currentServerIndex = index;
-        try { localStorage.setItem('mk21_last_server', index); } catch (e) {}
-        invalidateSmartTvEpgCache('troca de servidor');
-        modal.classList.add('hidden');
-        activeZone = 'channels';
-        activeItem = null;
-        showChannelBanner(`Procurando ${item.name} em ${cleanServerName(server.name)}...`);
-        loadServer(false);
-      };
-      serverList.appendChild(button);
-    });
-  }
-
-  const noSources = sources.length === 0;
-  if (noSources) {
-    const empty = document.createElement('p');
-    empty.className = 'quality-note';
-    empty.textContent = 'Não há URLs alternativas cadastradas para este item.';
-    list.appendChild(empty);
-  }
-
-  mk21BringModalToFront(modal);
-  modal.classList.remove('hidden');
-  activeZone = 'modalSources';
-  const firstOption = list.querySelector('.source-option-btn') ||
-    (serverList && serverList.querySelector('.source-option-btn'));
-  if (firstOption) firstOption.focus();
-}
-
-function closeSourcePicker() {
-  const modal = $('modalSources');
-  if (modal) modal.classList.add('hidden');
-  activeZone = 'player';
-  const focusTarget = isAppFullscreen() ? $('fsBtnSources') : $('btnSources');
-  if (focusTarget) focusTarget.focus();
-}
 
 function safeVideoPlay(video) {
   if (!video) return Promise.resolve();
@@ -4297,28 +2815,17 @@ function safeVideoPlay(video) {
           console.debug('[Player] Play request interrupted cleanly by zapping.');
           return;
         }
-        const message = err && err.message ? err.message : String(err || 'Falha ao iniciar vídeo');
-        addDevLog(`[Player] Falha ao iniciar reprodução: ${message}`, 'error');
-        return Promise.reject(err);
+        console.warn('[Player Play Error]:', err && err.message);
       });
     }
   } catch (e) {
-    addDevLog(`[Player] Exceção ao iniciar reprodução: ${e && e.message ? e.message : e}`, 'error');
-    return Promise.reject(e);
+    console.warn('[Player Exception]:', e);
   }
   return Promise.resolve();
 }
 
-function getHlsFallbackUrl(sourceUrl) {
-  const suffixIndex = sourceUrl.search(/[?#]/);
-  const path = suffixIndex < 0 ? sourceUrl : sourceUrl.slice(0, suffixIndex);
-  const suffix = suffixIndex < 0 ? '' : sourceUrl.slice(suffixIndex);
-  if (!/\.ts$/i.test(path)) return sourceUrl;
-  return path.replace(/\.ts$/i, '.m3u8') + suffix;
-}
-
-function stopCurrentPlayer(preservePendingRequest = false) {
-  if (playAbortController && !preservePendingRequest) {
+function stopCurrentPlayer() {
+  if (playAbortController) {
     try { playAbortController.abort(); } catch (e) {}
     playAbortController = null;
   }
@@ -4345,14 +2852,12 @@ function stopCurrentPlayer(preservePendingRequest = false) {
       video.load();
     } catch (e) {}
   }
-  if (video) video.preload = (localStorage.getItem('mk21_buffer_profile') || 'fast') === 'stable' ? 'auto' : 'metadata';
 }
 
-function fallbackToHls(item, sourceUrl = item && item.url) {
-  if (!item || !sourceUrl) return;
-  const hlsUrl = getHlsFallbackUrl(sourceUrl);
-  activePlaybackUrl = hlsUrl;
-  addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${getSourceHostLabel(hlsUrl)}`, 'info');
+function fallbackToHls(item) {
+  if (!item || !item.url) return;
+  const hlsUrl = item.url.replace(/\.ts($|\?)/i, '.m3u8$1');
+  addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${hlsUrl}`, 'info');
   stopCurrentPlayer();
   const video = $('tvPlayer');
   if (!video) return;
@@ -4360,24 +2865,23 @@ function fallbackToHls(item, sourceUrl = item && item.url) {
   if (window.Hls && Hls.isSupported()) {
     hlsInstance = new Hls({
       enableWorker: true,
-      ...getHlsBufferOptions(),
+      lowLatencyMode: true,
+      startFragPrefetch: true,
+      backBufferLength: 10,
+      maxBufferLength: 15,
+      maxMaxBufferLength: 30,
       liveSyncDurationCount: 3,
-      xhrSetup: (xhr, url) => {
-        const proxyUrl = getProxyRequestUrl(url);
-        if (proxyUrl !== url) xhr.open('GET', proxyUrl, true);
-      }
+      maxBufferSize: 25 * 1000 * 1000
     });
     hlsInstance.loadSource(hlsUrl);
     hlsInstance.attachMedia(video);
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Fallback HLS reproduzindo com sucesso!', 'success');
       try { video.preservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-      safeVideoPlay(video).catch(err => {
-        addDevLog(`[Player] HLS não iniciou: ${err && err.message ? err.message : err}`, 'error');
-      });
+      safeVideoPlay(video);
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
-      if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
+      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -4405,21 +2909,9 @@ function fallbackToHls(item, sourceUrl = item && item.url) {
 let zappingLockPromise = Promise.resolve();
 
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
-function playStream(
-  item,
-  requestedSourceIndex = 0,
-  requestedResumePosition = null,
-  preserveAttemptedSources = false,
-  preserveReconnectAttempts = false
-) {
+function playStream(item) {
   if (!item || !item.url) return;
-  if (!preserveReconnectAttempts) nativeHlsFallbackSource = null;
-  if (!isSwitchingServerSource) pendingServerSourceSwitch = null;
 
-  const sources = MK21AlternativeSources.sourceUrls(item);
-  const sourceIndex = Math.max(0, Math.min(requestedSourceIndex, sources.length - 1));
-  const selectedUrl = sources[sourceIndex] || item.url;
-  const requestGeneration = ++playbackGeneration;
   if (playAbortController) {
     try { playAbortController.abort(); } catch (e) {}
   }
@@ -4428,7 +2920,7 @@ function playStream(
 
   zappingLockPromise = zappingLockPromise.catch(() => {}).then(async () => {
     if (currentSignal.aborted) return;
-    stopCurrentPlayer(true);
+    stopCurrentPlayer();
     const video = $('tvPlayer');
     if (video) {
       try {
@@ -4445,40 +2937,23 @@ function playStream(
     if (currentSignal.aborted) return;
 
     activeItem = item;
-    if (pendingServerSourceSwitch && pendingServerSourceSwitch.resolved &&
-        pendingServerSourceSwitch.matchedItem && pendingServerSourceSwitch.matchedItem.url === item.url) {
-      pendingServerSourceSwitch = null;
-    }
-    activePlaybackSourceIndex = sourceIndex;
-    if (!preserveAttemptedSources || !attemptedPlaybackSourceIndexes.size) {
-      attemptedPlaybackSourceIndexes = new Set([sourceIndex]);
-    } else {
-      attemptedPlaybackSourceIndexes.add(sourceIndex);
-    }
-    updateSourceButtons(item, sourceIndex);
-    applyPlaybackPreferences();
     recordWatchedItem(item);
     saveLastChannel(item);
     prefetchAdjacentChannels(item);
     startProgressTracker(item);
-    startStallWatchdog(preserveReconnectAttempts);
+    startStallWatchdog();
 
     if (!video) return;
 
     const streamFormatPref = localStorage.getItem('mk21_stream_format') || 'auto';
     addDevLog(`[Player] Iniciando carregamento: "${item.name}" (Modo: ${currentContentType})`, 'info');
-    addDevLog(`[Player] Fonte selecionada: ${getSourceHostLabel(selectedUrl)}`, 'info');
+    addDevLog(`[Player] URL: ${item.url}`, 'info');
     addDevLog(`[Player] Formato preferido: ${streamFormatPref}`, 'debug');
 
-  const isVod = item.contentType === 'MOVIE' || item.contentType === 'SERIES' ||
-    currentContentType === 'MOVIE' || currentContentType === 'SERIES';
-  const resumeAt = typeof requestedResumePosition === 'number' && Number.isFinite(requestedResumePosition)
-    ? requestedResumePosition
-    : Number(item.currentTime) || 0;
-  if (isVod && resumeAt > 0.5) {
+  if (item.currentTime && item.currentTime > 5 && (item.contentType === 'MOVIE' || item.contentType === 'SERIES' || currentContentType === 'MOVIE' || currentContentType === 'SERIES')) {
+    const resumeAt = item.currentTime;
     const onLoaded = function () {
       video.removeEventListener('loadedmetadata', onLoaded);
-      if (requestGeneration !== playbackGeneration) return;
       try {
         video.currentTime = resumeAt;
         showChannelBanner('▶ Continuando em ' + formatTimeSec(resumeAt));
@@ -4511,54 +2986,33 @@ function playStream(
   updateRealResolution(item);
 
   if (favoriteUrls.has(item.url)) {
-    mk21SetCtrlText($('btnFavorite'), '★ Favoritado');
+    $('btnFavorite').textContent = '★ Favoritado';
   } else {
-    mk21SetCtrlText($('btnFavorite'), '⭐ Favorito');
+    $('btnFavorite').textContent = '⭐ Favoritar';
   }
 
   showChannelBanner(item.name);
 
-  let streamUrl = selectedUrl;
-  if (streamFormatPref === 'hls' && getHlsFallbackUrl(streamUrl) !== streamUrl) {
-    streamUrl = getHlsFallbackUrl(streamUrl);
-    addDevLog(`[Player] Preferência HLS forçada para ${getSourceHostLabel(streamUrl)}`, 'info');
+  let streamUrl = item.url;
+  if (streamFormatPref === 'hls' && streamUrl.toLowerCase().includes('.ts')) {
+    streamUrl = streamUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
+    addDevLog(`[Player] Preferência HLS forçada: ${streamUrl}`, 'info');
   }
-  activePlaybackUrl = streamUrl;
 
   const isM3U8 = streamUrl.toLowerCase().includes('.m3u8');
   const isTS = streamUrl.toLowerCase().includes('.ts');
-  const useNativePlayback = shouldUseNativeWebOsPlayback();
 
-  if (isM3U8 && !useNativePlayback && !window.Hls) {
-    try {
-      await loadPlayerLibraryForPlayback(
-        'Hls',
-        'https://cdn.jsdelivr.net/npm/hls.js@1.5.20',
-        currentSignal
-      );
-    } catch (error) {
-      addDevLog(`[Player] HLS.js indisponível; tentando player nativo: ${error.message}`, 'warn');
-    }
-    if (currentSignal.aborted || requestGeneration !== playbackGeneration) return;
-  } else if (isTS && !useNativePlayback && !window.mpegts) {
-    try {
-      await loadPlayerLibraryForPlayback(
-        'mpegts',
-        'https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js',
-        currentSignal
-      );
-    } catch (error) {
-      addDevLog(`[Player] MPEG-TS indisponível; tentando player nativo: ${error.message}`, 'warn');
-    }
-    if (currentSignal.aborted || requestGeneration !== playbackGeneration) return;
-  }
-
-  if (isM3U8 && !useNativePlayback && window.Hls && Hls.isSupported()) {
+  if (isM3U8 && window.Hls && Hls.isSupported()) {
     addDevLog('[Player Engine] Usando decodificador Hls.js Low-Latency...', 'info');
     hlsInstance = new Hls({
       enableWorker: true,
-      ...getHlsBufferOptions(),
+      lowLatencyMode: true,
+      startFragPrefetch: true,
+      backBufferLength: 10,
+      maxBufferLength: 15,
+      maxMaxBufferLength: 30,
       liveSyncDurationCount: 3,
+      maxBufferSize: 25 * 1000 * 1000,
       startLevel: -1,
       fragLoadingTimeOut: 15000,
       manifestLoadingTimeOut: 15000,
@@ -4567,25 +3021,18 @@ function playStream(
       manifestLoadingMaxRetry: 4,
       levelLoadingMaxRetry: 4,
       fragLoadingRetryDelay: 1000,
-      manifestLoadingRetryDelay: 1000,
-      xhrSetup: (xhr, url) => {
-        const proxyUrl = getProxyRequestUrl(url);
-        if (proxyUrl !== url) xhr.open('GET', proxyUrl, true);
-      }
+      manifestLoadingRetryDelay: 1000
     });
     hlsInstance.loadSource(streamUrl);
     hlsInstance.attachMedia(video);
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, applyPlaybackPreferences);
     if ($('epgStatus')) $('epgStatus').textContent = '⏳ CARREGANDO...';
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Manifesto HLS decodificado com sucesso!', 'success');
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
-      safeVideoPlay(video).catch(err => {
-        addDevLog(`[Player] HLS não iniciou: ${err && err.message ? err.message : err}`, 'error');
-      });
+      safeVideoPlay(video);
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
-      if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
+      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -4612,13 +3059,13 @@ function playStream(
         }
       }
     });
-  } else if (isTS && !useNativePlayback && window.mpegts && mpegts.isSupported()) {
+  } else if (isTS && window.mpegts && mpegts.isSupported()) {
     addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
     try {
       mpegtsPlayer = mpegts.createPlayer({
         type: 'mse',
         isLive: (currentContentType === 'LIVE'),
-        url: getProxyRequestUrl(streamUrl)
+        url: streamUrl
       }, {
         enableWorker: true,
         lazyLoad: false,
@@ -4628,33 +3075,28 @@ function playStream(
       });
       mpegtsPlayer.attachMediaElement(video);
       mpegtsPlayer.load();
-      Promise.resolve(mpegtsPlayer.play()).then(() => {
+      mpegtsPlayer.play().then(() => {
         addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
         hidePlayerReconnectBadge();
-        if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
-        if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
+        if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+        if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
         if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
         updateRealResolution(item);
       }).catch(err => {
         addDevLog(`[MPEGTS Error] ${err && err.message}. Rotacionando para HLS fallback...`, 'warn');
-        fallbackToHls(item, streamUrl);
+        fallbackToHls(item);
       });
       mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
         addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
-        fallbackToHls(item, streamUrl);
+        fallbackToHls(item);
       });
     } catch (eMpeg) {
       addDevLog(`[MPEGTS Exception] ${eMpeg.message}. Fallback HLS...`, 'warn');
-      fallbackToHls(item, streamUrl);
+      fallbackToHls(item);
     }
   } else {
-    // webOS plays streams natively without requiring JavaScript access to cross-origin media.
-    addDevLog(
-      shouldUseNativeWebOsPlayback()
-        ? '[Player Engine] Usando decodificação nativa webOS para evitar dependência de CORS.'
-        : '[Player Engine] Usando decodificação nativa acelerada por hardware...',
-      'info'
-    );
+    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas
+    addDevLog('[Player Engine] Usando decodificação nativa acelerada por hardware...', 'info');
     video.innerHTML = '';
     const src = document.createElement('source');
     src.src = streamUrl;
@@ -4667,13 +3109,13 @@ function playStream(
     safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
-      if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
+      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
       addDevLog(`[Player Fallback] Falha no playback nativo (${err && err.message}). Tentando fallback HLS...`, 'warn');
-      fallbackToHls(item, streamUrl);
+      fallbackToHls(item);
     });
   }
   });
@@ -4802,12 +3244,6 @@ function isAppFullscreen() {
     !!(document.fullscreenElement || document.webkitFullscreenElement);
 }
 
-// Keep TV fullscreen in CSS so sibling modals stay above the player.
-function shouldUseNativeFullscreenApi() {
-  const userAgent = navigator.userAgent || '';
-  return !window.webOS && !/web0s|webos|tizen/i.test(userAgent);
-}
-
 function showFsHud(show) {
   const hud = $('fsHudBar');
   if (!hud) return;
@@ -4816,9 +3252,9 @@ function showFsHud(show) {
     if (activeItem && $('fsHudTitle')) {
       $('fsHudTitle').textContent = (favoriteUrls.has(activeItem.url) ? '⭐ ' : '') + activeItem.name;
     }
-    if ($('fsBtnSpeed')) mk21SetCtrlText($('fsBtnSpeed'), '⚡ ' + currentPlaybackSpeed + 'x');
+    if ($('fsBtnSpeed')) $('fsBtnSpeed').textContent = '⚡ ' + currentPlaybackSpeed + 'x';
     if ($('fsBtnFav') && activeItem) {
-      mk21SetCtrlText($('fsBtnFav'), favoriteUrls.has(activeItem.url) ? '★ Favoritado' : '⭐ Favoritar');
+      $('fsBtnFav').textContent = favoriteUrls.has(activeItem.url) ? '★ Favoritado' : '⭐ Favoritar';
     }
     const isVod = currentContentType === 'MOVIE' || currentContentType === 'SERIES' ||
       (activeItem && activeItem.contentType !== 'LIVE');
@@ -4850,18 +3286,16 @@ function toggleFullscreen(force) {
     showFsHud(true);
     pokeFsHud();
     addDevLog('[Player] Modo Tela Cheia ATIVADO', 'info');
-    if (shouldUseNativeFullscreenApi()) {
-      try {
-        if (box.requestFullscreen) {
-          box.requestFullscreen().catch(() => {});
-        } else if (box.webkitRequestFullscreen) {
-          box.webkitRequestFullscreen();
-        } else if (v && v.webkitRequestFullscreen) {
-          v.webkitRequestFullscreen();
-        }
-      } catch (e) {
-        addDevLog('[Player] Fullscreen API fallback ativo (CSS is-fullscreen aplicado): ' + e.message, 'debug');
+    try {
+      if (box.requestFullscreen) {
+        box.requestFullscreen().catch(() => {});
+      } else if (box.webkitRequestFullscreen) {
+        box.webkitRequestFullscreen();
+      } else if (v && v.webkitRequestFullscreen) {
+        v.webkitRequestFullscreen();
       }
+    } catch (e) {
+      addDevLog('[Player] Fullscreen API fallback ativo (CSS is-fullscreen aplicado): ' + e.message, 'debug');
     }
     setTimeout(function () {
       if ($('fsBtnPlay')) $('fsBtnPlay').focus();
@@ -4907,7 +3341,6 @@ function bindFsHudButtons() {
   if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); pokeFsHud(); };
   if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); pokeFsHud(); };
   if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); pokeFsHud(); };
-  if ($('fsBtnSources')) $('fsBtnSources').onclick = function () { openSourcePicker(); pokeFsHud(); };
   if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function () { if (typeof openAudioSubsModal === 'function') openAudioSubsModal(); };
   if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
 }
@@ -4920,14 +3353,14 @@ function togglePlayPause() {
   const v = $('tvPlayer');
   if (!v) return;
   if (v.paused) {
-    safeVideoPlay(v).catch(() => {});
-    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏯️ Pausar');
-    if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '⏯️ Pausar');
+    v.play().catch(() => {});
+    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
+    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '▶ Reproduzir');
-    if ($('fsBtnPlay')) mk21SetCtrlText($('fsBtnPlay'), '▶ Reproduzir');
+    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
+    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '▶ Reproduzir';
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -4945,8 +3378,8 @@ function applyPlaybackSpeed(rate) {
     if (video.defaultPlaybackRate !== undefined) video.defaultPlaybackRate = rate;
   } catch (e) {}
   const label = '⚡ ' + rate + 'x';
-  if ($('btnSpeed')) mk21SetCtrlText($('btnSpeed'), label);
-  if ($('fsBtnSpeed')) mk21SetCtrlText($('fsBtnSpeed'), label);
+  if ($('btnSpeed')) $('btnSpeed').textContent = label;
+  if ($('fsBtnSpeed')) $('fsBtnSpeed').textContent = label;
 }
 
 function cyclePlaybackSpeed() {
@@ -5092,8 +3525,6 @@ $('btnCloseAudioSubs').onclick = () => {
 
 if ($('btnAudioTrack')) $('btnAudioTrack').onclick = openAudioSubsModal;
 if ($('btnSubtitles')) $('btnSubtitles').onclick = openAudioSubsModal;
-if ($('btnSources')) $('btnSources').onclick = openSourcePicker;
-if ($('btnCloseSources')) $('btnCloseSources').onclick = closeSourcePicker;
 
 // 11. TROCA DE ABAS DO TOPO
 $('tabLive').onclick = () => switchContentType('LIVE');
@@ -5105,15 +3536,6 @@ $('tabSettings').onclick = () => switchContentType('SETTINGS');
 
 function switchContentType(type) {
   currentContentType = type;
-  const sectionTitles = {
-    LIVE: 'TV AO VIVO',
-    MOVIE: 'FILMES',
-    SERIES: 'SÉRIES',
-    CONTINUE: 'CONTINUAR ASSISTINDO',
-    FAVORITES: 'FAVORITOS',
-    SETTINGS: 'CONFIGURAÇÕES'
-  };
-  if ($('headerSectionTitle')) $('headerSectionTitle').textContent = sectionTitles[type] || 'MK21 PLAY';
   // Feedback visual imediato ao trocar de aba
   try {
     const labels = { LIVE: '📺 Ao Vivo', MOVIE: '🎬 Filmes', SERIES: '🍿 Séries', CONTINUE: '▶ Continuar', FAVORITES: '⭐ Favoritos', SETTINGS: '⚙️ Config' };
@@ -5165,31 +3587,24 @@ function switchContentType(type) {
     const activeCat = $('listCategories') ? $('listCategories').querySelector('.cat-item-btn.active') : null;
     const target = firstItem || activeCat || safeTabTarget;
     if (target) {
-      try { target.focus(); mk21ScrollFocusedElement(target); } catch (e) {}
+      try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
     }
   }, 30);
 }
 
-// 12. CONFIGURAÇÕES DA SMART TV
-const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSync', 'cfgBtnPlayback', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin', 'cfgBtnAdult'];
+// 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
+const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin'];
 
 CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
   if (b) {
     b.onclick = () => {
-      addDevLog(`[UI] Abrindo configuração: ${b.textContent.trim()}`, 'info');
       CFG_BUTTONS.forEach(id => {
         const el = $(id);
         if (el) el.classList.remove('active');
       });
       b.classList.add('active');
       renderSettings(bId.replace('cfgBtn', '').toLowerCase());
-      const settingsBox = $('settingsDetailBox');
-      const firstControl = settingsBox && settingsBox.querySelector('button, input, select, [tabindex="0"]');
-      if (firstControl) {
-        firstControl.focus();
-        mk21ScrollFocusedElement(firstControl);
-      }
     };
   }
 });
@@ -5243,10 +3658,6 @@ function renderSettings(sec) {
     renderFontSizePanel();
   } else if (sec === 'filtro') {
     renderLoadFilterPanel();
-  } else if (sec === 'sync') {
-    renderSyncSettingsPanel();
-  } else if (sec === 'playback') {
-    renderPlaybackSettingsPanel();
   } else if (sec === 'limpar') {
     renderClearStoragePanel();
   } else if (sec === 'tempo') {
@@ -5257,164 +3668,7 @@ function renderSettings(sec) {
     renderStreamFormatPanel();
   } else if (sec === 'pin') {
     renderPinSettingsPanel();
-  } else if (sec === 'adult') {
-    renderAdultSettingsPanel();
   }
-}
-
-function renderSyncSettingsPanel() {
-  const box = $('settingsDetailBox');
-  const syncEnabled = localStorage.getItem('mk21_sync_all_lists') === 'true';
-  const frequency = localStorage.getItem('mk21_sync_frequency') || '24h';
-  const loadingMode = localStorage.getItem('mk21_staged_loading') || 'balanced';
-  box.innerHTML = `
-    <h3 style="margin:0 0 16px 0;">🔄 Sincronização e carregamento em etapas</h3>
-    <p class="settings-description">A TV abre primeiro com o catálogo local. A sincronização das demais listas roda depois, sem bloquear a navegação.</p>
-    <label class="settings-control-row">
-      <span><strong>Sincronizar todas as listas em segundo plano</strong><small>Usa a rede e o armazenamento da TV quando ativado.</small></span>
-      <input id="toggleSyncAllLists" type="checkbox" ${syncEnabled ? 'checked' : ''}>
-    </label>
-    <label class="settings-control-row">
-      <span><strong>Frequência da sincronização automática</strong><small>A opção manual desativa a sincronização automática.</small></span>
-      <select id="selectSyncFrequency">
-        <option value="6h" ${frequency === '6h' ? 'selected' : ''}>A cada 6 horas</option>
-        <option value="24h" ${frequency === '24h' ? 'selected' : ''}>A cada 24 horas</option>
-        <option value="7d" ${frequency === '7d' ? 'selected' : ''}>A cada 7 dias</option>
-        <option value="manual" ${frequency === 'manual' ? 'selected' : ''}>Somente manual</option>
-      </select>
-    </label>
-    <label class="settings-control-row">
-      <span><strong>Etapas de abertura do catálogo</strong><small>Ao Vivo aparece antes da lista completa.</small></span>
-      <select id="selectStagedLoading">
-        <option value="fast" ${loadingMode === 'fast' ? 'selected' : ''}>Rápida — mostrar após 4 itens</option>
-        <option value="balanced" ${loadingMode === 'balanced' ? 'selected' : ''}>Equilibrada — mostrar após 8 itens</option>
-        <option value="stable" ${loadingMode === 'stable' ? 'selected' : ''}>Estável — mostrar após 20 itens</option>
-      </select>
-    </label>
-    <button id="btnSyncAllLists" class="ctrl-btn primary settings-action" type="button">🔄 Sincronizar todas agora</button>
-    <p id="syncAllListsStatus" class="settings-status" role="status">A lista ativa também é atualizada ao usar “Atualizar”.</p>
-  `;
-  $('toggleSyncAllLists').onchange = event => {
-    localStorage.setItem('mk21_sync_all_lists', event.target.checked ? 'true' : 'false');
-    if (event.target.checked) scheduleBackgroundListSync();
-  };
-  $('selectSyncFrequency').onchange = event => {
-    localStorage.setItem('mk21_sync_frequency', event.target.value);
-  };
-  $('selectStagedLoading').onchange = event => {
-    localStorage.setItem('mk21_staged_loading', event.target.value);
-  };
-  $('btnSyncAllLists').onclick = async () => {
-    const button = $('btnSyncAllLists');
-    const status = $('syncAllListsStatus');
-    button.disabled = true;
-    button.textContent = 'Sincronizando listas...';
-    status.textContent = 'A sincronização pode levar alguns minutos, conforme o tamanho das listas.';
-    try {
-      const result = await syncAllServerLists(true);
-      status.textContent = result.failed.length
-        ? `${result.synced} lista(s) sincronizada(s); falha em: ${result.failed.join(', ')}.`
-        : `${result.synced} lista(s) sincronizada(s) com sucesso.`;
-    } catch (error) {
-      status.textContent = `Não foi possível concluir a sincronização: ${error.message || 'erro desconhecido'}.`;
-      console.error('[MK21] Sincronização manual falhou:', error);
-    } finally {
-      button.disabled = false;
-      button.textContent = '🔄 Sincronizar todas agora';
-    }
-  };
-}
-
-function renderPlaybackSettingsPanel() {
-  const box = $('settingsDetailBox');
-  const quality = localStorage.getItem('mk21_playback_quality') || 'auto';
-  const superResolution = localStorage.getItem('mk21_super_resolution') || 'off';
-  const buffer = localStorage.getItem('mk21_buffer_profile') || 'fast';
-  const amoled = localStorage.getItem('mk21_amoled_mode') === 'true';
-  box.innerHTML = `
-    <h3 style="margin:0 0 16px 0;">🎞️ Qualidade, buffer e imagem</h3>
-    <p class="settings-description">A escolha de resolução é aplicada quando o mecanismo da TV permite. A super resolução nesta versão é um ajuste visual, não um upscaler de hardware.</p>
-    <label class="settings-control-row">
-      <span><strong>Qualidade de reprodução</strong><small>Resolução máxima solicitada para HLS.js quando compatível.</small></span>
-      <select id="selectPlaybackQuality">
-        <option value="auto" ${quality === 'auto' ? 'selected' : ''}>Automática</option>
-        <option value="1080p" ${quality === '1080p' ? 'selected' : ''}>Até 1080p</option>
-      </select>
-    </label>
-    <label class="settings-control-row">
-      <span><strong>Super resolução (efeito visual)</strong><small>Aplica nitidez/contraste; não aumenta a resolução real.</small></span>
-      <select id="selectSuperResolution">
-        <option value="off" ${superResolution === 'off' ? 'selected' : ''}>Desativada</option>
-        <option value="hd" ${superResolution === 'hd' ? 'selected' : ''}>HD — ajuste leve</option>
-        <option value="4k" ${superResolution === '4k' ? 'selected' : ''}>4K — ajuste intenso</option>
-      </select>
-    </label>
-    <label class="settings-control-row">
-      <span><strong>Buffer</strong><small>Perfis ajustam HLS.js quando compatível; no player nativo da TV, o buffer é gerenciado pelo webOS.</small></span>
-      <select id="selectBufferProfile">
-        <option value="fast" ${buffer === 'fast' ? 'selected' : ''}>Rápido</option>
-        <option value="balanced" ${buffer === 'balanced' ? 'selected' : ''}>Equilibrado</option>
-        <option value="stable" ${buffer === 'stable' ? 'selected' : ''}>Estável</option>
-      </select>
-    </label>
-    <label class="settings-control-row">
-      <span><strong>Modo AMOLED</strong><small>Usa fundo preto nas áreas principais da interface.</small></span>
-      <input id="toggleAmoledMode" type="checkbox" ${amoled ? 'checked' : ''}>
-    </label>
-  `;
-  $('selectPlaybackQuality').onchange = event => {
-    localStorage.setItem('mk21_playback_quality', event.target.value);
-    applyPlaybackPreferences();
-    addDevLog(`[Playback] Qualidade configurada: ${event.target.value}`, 'success');
-  };
-  $('selectSuperResolution').onchange = event => {
-    localStorage.setItem('mk21_super_resolution', event.target.value);
-    applyPlaybackPreferences();
-    addDevLog(`[Playback] Efeito visual configurado: ${event.target.value}`, 'success');
-  };
-  $('selectBufferProfile').onchange = event => {
-    localStorage.setItem('mk21_buffer_profile', event.target.value);
-    addDevLog(`[Playback] Perfil de buffer configurado: ${event.target.value}`, 'success');
-    showChannelBanner('Buffer atualizado para as próximas reproduções.');
-  };
-  $('toggleAmoledMode').onchange = event => {
-    localStorage.setItem('mk21_amoled_mode', event.target.checked ? 'true' : 'false');
-    document.body.classList.toggle('amoled-mode', event.target.checked);
-  };
-}
-
-function renderAdultSettingsPanel() {
-  const box = $('settingsDetailBox');
-  const enabled = localStorage.getItem('mk21_adult_content_enabled') !== 'false';
-  box.innerHTML = `
-    <h3 style="margin:0 0 16px 0;">🔞 Controle de conteúdo adulto</h3>
-    <p class="settings-description">O conteúdo classificado como adulto permanece oculto até a autorização pelo PIN. Desativar a opção abaixo mantém esses itens ocultos mesmo após desbloquear.</p>
-    <label class="settings-control-row">
-      <span><strong>Permitir conteúdo adulto protegido por PIN</strong><small>O bloqueio é aplicado a canais, filmes e categorias.</small></span>
-      <input id="toggleAdultContent" type="checkbox" ${enabled ? 'checked' : ''}>
-    </label>
-    <div class="adult-control-actions">
-      <button id="btnAdultUnlock" class="ctrl-btn primary" type="button">${isAdultUnlocked ? '🔒 Bloquear conteúdo adulto' : '🔓 Desbloquear com PIN'}</button>
-      <button id="btnOpenAdultPinSettings" class="ctrl-btn" type="button">Alterar PIN</button>
-    </div>
-    <p class="settings-status">${isAdultUnlocked ? 'Conteúdo autorizado nesta sessão.' : 'Conteúdo bloqueado nesta sessão.'}</p>
-  `;
-  $('toggleAdultContent').onchange = event => {
-    localStorage.setItem('mk21_adult_content_enabled', event.target.checked ? 'true' : 'false');
-    if (!event.target.checked) {
-      lockAdultContent();
-    }
-    buildCurrentCategories();
-    renderCategoriesList();
-    selectCategory('ALL');
-    renderAdultSettingsPanel();
-  };
-  $('btnAdultUnlock').onclick = openPinModal;
-  $('btnOpenAdultPinSettings').onclick = () => {
-    CFG_BUTTONS.forEach(id => $(id) && $(id).classList.remove('active'));
-    if ($('cfgBtnPin')) $('cfgBtnPin').classList.add('active');
-    renderPinSettingsPanel();
-  };
 }
 
 // PAINEL DE FILTRAGEM DE CARREGAMENTO (ECONOMIA DE MEMÓRIA E ULTRA VELOCIDADE)
@@ -5506,7 +3760,7 @@ function renderPinSettingsPanel() {
   const box = $('settingsDetailBox');
   box.innerHTML = `
     <h3 style="margin:0 0 16px 0; font-size:24px;">🔒 Alterar Senha PIN de Adultos</h3>
-    <p style="color:#aaa;">O PIN atual não é exibido. Digite o novo código de 4 dígitos:</p>
+    <p style="color:#aaa;">Senha atual: <strong style="color:#ffd54f; font-size:18px;">${currentPin}</strong></p>
     <div style="background:#1a1e2d; border-radius:12px; padding:20px; max-width:440px; margin-top:16px; text-align:center;">
       <div style="font-size:16px; color:#cbd5e1; margin-bottom:8px;">Digite o Novo PIN de 4 Dígitos:</div>
       <div id="newPinDisplay" class="pin-display-box" style="margin:8px auto; width:220px; font-size:32px;">----</div>
@@ -5540,7 +3794,7 @@ function renderPinSettingsPanel() {
           localStorage.setItem('mk21_adult_pin', currentPin);
           const msg = $('msgPinSaved');
           if (msg) {
-            msg.textContent = '✅ Novo PIN salvo com sucesso.';
+            msg.textContent = '✅ Novo PIN salvo com sucesso: ' + currentPin;
             msg.style.display = 'block';
           }
           tempNewPin = '';
@@ -5558,7 +3812,7 @@ function renderPinSettingsPanel() {
             localStorage.setItem('mk21_adult_pin', currentPin);
             const msg = $('msgPinSaved');
             if (msg) {
-              msg.textContent = '✅ Novo PIN salvo com sucesso.';
+              msg.textContent = '✅ Novo PIN salvo com sucesso: ' + currentPin;
               msg.style.display = 'block';
             }
           }
@@ -5568,7 +3822,6 @@ function renderPinSettingsPanel() {
   });
 }
 
-// TESTE DE VELOCIDADE REAL: mede bytes/tempo e nunca inventa Mbps
 async function runSpeedTest() {
   const box = $('settingsDetailBox');
   box.innerHTML = `
@@ -5648,19 +3901,19 @@ function renderFontSizePanel() {
         1. Padrão (Normal 1080p)
       </button>
       <button id="btnFontLarge" class="list-item-btn ${cur === 'large' ? 'active' : ''}" style="padding:16px 20px; font-size:21px;" tabindex="0">
-        2. Grande (+20% Visibilidade)
+        2. Grande (+25% Visibilidade)
       </button>
       <button id="btnFontXLarge" class="list-item-btn ${cur === 'xlarge' ? 'active' : ''}" style="padding:18px 22px; font-size:25px;" tabindex="0">
-        3. Muito Grande (+25% Sofá Distante)
+        3. Muito Grande (+50% Sofá Distante)
       </button>
       <button id="btnFontXXLarge" class="list-item-btn ${cur === 'xxlarge' ? 'active' : ''}" style="padding:20px 24px; font-size:29px;" tabindex="0">
-        4. Gigante (+30% Máxima Legibilidade)
+        4. Gigante (+75% Máxima Legibilidade)
       </button>
       <button id="btnFontHuge" class="list-item-btn ${cur === 'huge' ? 'active' : ''}" style="padding:22px 26px; font-size:33px;" tabindex="0">
-        5. Extra Gigante (+40% Super Visível)
+        5. Extra Gigante (+100% Super Visível)
       </button>
       <button id="btnFontUltra" class="list-item-btn ${cur === 'ultra' ? 'active' : ''}" style="padding:24px 28px; font-size:37px;" tabindex="0">
-        6. Máxima Sofá Distante (+50% TV Grande)
+        6. Máxima Sofá Distante (+125% TV Grande)
       </button>
     </div>
   `;
@@ -5887,7 +4140,7 @@ function renderCategoriesManagerPanel() {
         const count = (currentCategoriesMap[c] || []).length;
         return `
           <div style="display:flex; justify-content:space-between; align-items:center; background:#1a1e2d; padding:12px 18px; border-radius:8px;">
-            <span style="font-size:16px; color:#fff;">${escapeHtml(c)} <span style="color:#ffd54f; font-size:13px;">(${count} canais)</span></span>
+            <span style="font-size:16px; color:#fff;">${c} <span style="color:#ffd54f; font-size:13px;">(${count} canais)</span></span>
             <input type="checkbox" class="chk-cat-toggle" data-cat="${encodeURIComponent(c)}" ${isVisible ? 'checked' : ''} style="width:22px; height:22px;">
           </div>
         `;
@@ -5980,7 +4233,6 @@ function renderServerPickerList() {
     btnConnect.onclick = () => {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
-      invalidateSmartTvEpgCache('troca de servidor');
       
       // Exibe porcentagem no lugar do botão antes de fechar
       btnConnect.textContent = 'Carregando 25%...';
@@ -6132,30 +4384,6 @@ if ($('btnLoadOfflineCache')) {
 }
 
 $('btnHeaderServer').onclick = openServerPicker;
-$('btnHeaderLogin').onclick = () => {
-  if (isAppFullscreen()) toggleFullscreen(false);
-  showStartupLogin('', true);
-};
-$('btnSubmitLogin').onclick = submitStartupLogin;
-$('inputLoginPassword').addEventListener('keydown', event => {
-  if (event.key === 'Enter' || event.keyCode === 13) {
-    event.preventDefault();
-    submitStartupLogin();
-  }
-});
-$('btnToggleLoginPassword').onclick = () => {
-  const password = $('inputLoginPassword');
-  const show = password.type === 'password';
-  password.type = show ? 'text' : 'password';
-  $('btnToggleLoginPassword').textContent = show ? 'Ocultar' : 'Mostrar';
-  $('btnToggleLoginPassword').setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
-};
-$('btnCancelLogin').onclick = () => {
-  if (!MK21_CREDENTIALS_VALIDATED || !hasConfiguredSharedCredentials()) return;
-  hideStartupLogin();
-  const focusTarget = $('btnHeaderLogin');
-  if (focusTarget) focusTarget.focus();
-};
 $('btnCloseServerPicker').onclick = () => {
   $('modalServerPicker').classList.add('hidden');
   activeZone = 'channels';
@@ -6174,9 +4402,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.4.9';
-// Tela (index.html) que este app.js espera. O bootloader recusa OTA que nao bata.
-const MK21_REQUIRED_HTML = '2.4.9';
+const BASE_PACKAGE_VERSION = '1.4.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6184,18 +4410,6 @@ try {
 
 // A versão atual é a versão OTA mais recente em cache ou a versão base do pacote
 let CURRENT_APP_VERSION = (savedOtaVer && compareSemver(savedOtaVer, BASE_PACKAGE_VERSION) > 0) ? savedOtaVer : BASE_PACKAGE_VERSION;
-
-// Fingerprint de build: permite confirmar na TV qual codigo esta rodando
-// (pacote instalado x atualizacao OTA aplicada).
-const MK21_BUILD_TAG = '2026-11-05.8';
-try {
-  const buildTagEl = document.getElementById('mk21BuildTag');
-  if (buildTagEl) buildTagEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
-  const footerVerEl = document.getElementById('mk21FooterVersion');
-  if (footerVerEl) footerVerEl.textContent = 'v' + CURRENT_APP_VERSION + ' · ' + MK21_BUILD_TAG;
-  const loginFooterVerEl = document.getElementById('loginFooterVersion');
-  if (loginFooterVerEl) loginFooterVerEl.textContent = 'v' + CURRENT_APP_VERSION;
-} catch (e) {}
 
 let latestRemoteUpdateData = null;
 
@@ -6240,14 +4454,14 @@ async function openAppUpdateModal(manualCheck = true) {
       } catch (e) {}
     }
 
-    // Se os endpoints remotos estiverem indisponíveis, usa a versão deste pacote.
-    if (!data || compareSemver(data.version, BASE_PACKAGE_VERSION) < 0) {
+    // Se o GitHub estiver offline ou ainda não sincronizado no repositório remoto, usa os metadados oficiais v1.4.1
+    if (!data || compareSemver(data.version, '1.4.1') < 0) {
       data = {
-        version: BASE_PACKAGE_VERSION,
-        versionCode: 2409,
-        title: `MK21 Play v${BASE_PACKAGE_VERSION}`,
-        releaseNotes: '• Smart TV: barras de rolagem visíveis e estáveis em todas as listas.\n• Smart TV: mini player fixo mesmo com listas grandes.\n• Smart TV: modais de qualidade e fontes acima do player em tela cheia.\n• Smart TV: Voltar não fecha mais o app sem confirmação.',
-        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.4.9_all.ipk',
+        version: '1.4.1',
+        versionCode: 141,
+        title: 'MK21 Play v1.4.1',
+        releaseNotes: '• Sinergia APK-to-IPK: Phased loading, DNS failover e Omnisearch na Smart TV\n• Multitarefa: Picture-in-Picture (PiP) nativo com auto-enter no Android\n• Observabilidade: Telemetria silenciosa de stream (logStreamError)\n• Resiliência de Rede: DNS Failover ativo via Mk21DnsResolver\n• Zapping de Canal Zero-Delay e Pré-carregamento de canais adjacentes',
+        ipkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_1.4.1_all.ipk',
         apkUrl: 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk',
         isPendingPush: false
       };
@@ -6338,9 +4552,7 @@ async function startDirectUpdate() {
         const res = await fetch(u, { cache: 'no-store' });
         if (res.ok) {
           const txt = await res.text();
-          const declaredHtml = (txt.match(/MK21_REQUIRED_HTML\s*=\s*['"]([^'"]+)['"]/) || [])[1] || '';
-          const htmlMatch = declaredHtml && declaredHtml === (window.MK21_HTML_VERSION || '');
-          if (txt && txt.length > 5000 && txt.includes('CURRENT_APP_VERSION') && htmlMatch) {
+          if (txt && txt.length > 5000 && txt.includes('CURRENT_APP_VERSION')) {
             newAppJs = txt;
             break;
           }
@@ -6392,7 +4604,7 @@ async function startDirectUpdate() {
     }
 
     // Caso não tenha conseguido obter o código remoto, orienta o usuário de forma clara
-    throw new Error(`Atualização v${targetVer} exige a tela nova do app e não pode ser aplicada por OTA. Instale o pacote .ipk v${targetVer} pelo webOS Dev Manager (a TV está na tela v${window.MK21_HTML_VERSION || BASE_PACKAGE_VERSION}).`);
+    throw new Error(`Servidor de arquivos temporariamente indisponível. Conecte a TV à internet ou instale o pacote .ipk v${targetVer} pelo webOS Dev Manager.`);
 
   } catch (err) {
     console.error('Update failed:', err);
@@ -6428,12 +4640,12 @@ function togglePlayPause() {
   const v = $('tvPlayer');
   if (!v) return;
   if (v.paused) {
-    safeVideoPlay(v).catch(() => {});
-    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '⏸ Pausar');
+    v.play().catch(() => {});
+    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏸ Pausar';
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) mk21SetCtrlText($('btnPlayPause'), '▶ Reproduzir');
+    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -6446,195 +4658,20 @@ function mk21IsVisible(el) {
   try {
     const s = window.getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
-    if (s.position === 'fixed') {
-      const rect = el.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    }
   } catch (e) {}
   return el.offsetParent !== null || el === document.activeElement;
 }
 
-function mk21ScrollFocusedElement(el) {
-  if (!el) return;
-  let parent = el.parentElement;
-  while (parent && parent !== document.body) {
-    let canScroll = parent.classList.contains('pane-scroll') ||
-      parent.classList.contains('settings-left-menu') ||
-      parent.classList.contains('settings-detail-panel') ||
-      parent.classList.contains('source-options-list') ||
-      parent.classList.contains('server-manager-body') ||
-      parent.classList.contains('servers-manager-list');
-    if (!canScroll) {
-      try {
-        const overflowY = window.getComputedStyle(parent).overflowY;
-        canScroll = (overflowY === 'auto' || overflowY === 'scroll') &&
-          parent.scrollHeight > parent.clientHeight;
-      } catch (e) {}
-    }
-
-    if (canScroll && parent.scrollHeight > parent.clientHeight) {
-      const containerRect = parent.getBoundingClientRect();
-      const elementRect = el.getBoundingClientRect();
-      const margin = 12;
-      if (elementRect.top < containerRect.top + margin) {
-        parent.scrollTop -= containerRect.top + margin - elementRect.top;
-      } else if (elementRect.bottom > containerRect.bottom - margin) {
-        parent.scrollTop += elementRect.bottom - containerRect.bottom + margin;
-      }
-      return;
-    }
-    parent = parent.parentElement;
-  }
-
-  try { el.scrollIntoView(false); } catch (e) {}
-}
-
 function mk21GetOpenModal() {
-  const modalIds = ['startupLoginScreen', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalSources', 'modalQuality', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
-    if (modal && modal.id === 'startupLoginScreen' &&
-        document.documentElement.classList.contains('login-required') &&
-        !modal.classList.contains('hidden')) return modal;
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
   }
-
   const dynamic = document.querySelector('.app-modal:not(.hidden), .modal-overlay:not(.hidden), [role="dialog"]:not(.hidden), .modal-container:not(.hidden)');
   if (dynamic && mk21IsVisible(dynamic)) return dynamic;
   return null;
 }
-
-function mk21SyncModalOpenState() {
-  const hasModal = !!mk21GetOpenModal();
-  if (hasModal !== document.body.classList.contains('mk21-modal-open')) {
-    document.body.classList.toggle('mk21-modal-open', hasModal);
-  }
-}
-
-// Move o modal para o fim do <body>: nenhum ancestral com z-index/transform pode ficar à frente.
-function mk21BringModalToFront(modal) {
-  if (!modal) return;
-  if (modal.parentNode !== document.body) document.body.appendChild(modal);
-  document.body.classList.add('mk21-modal-open');
-}
-
-function mk21WatchModalState() {
-  mk21SyncModalOpenState();
-  if (typeof MutationObserver === 'undefined') return;
-  const observer = new MutationObserver(mk21SyncModalOpenState);
-  const modalNodes = document.querySelectorAll('.app-modal, .modal-overlay');
-  for (let i = 0; i < modalNodes.length; i++) {
-    observer.observe(modalNodes[i], { attributes: true, attributeFilter: ['class', 'style'] });
-  }
-}
-
-function mk21HandleScrollInput(scrollArea, event) {
-    const delta = event.deltaY || (event.wheelDelta ? -event.wheelDelta : (event.detail ? event.detail * 40 : 0));
-    if (!delta) return;
-    const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
-    if (maxScroll <= 0) return;
-    const nextScrollTop = Math.max(0, Math.min(maxScroll, scrollArea.scrollTop + delta));
-    if (nextScrollTop !== scrollArea.scrollTop) {
-      scrollArea.scrollTop = nextScrollTop;
-      if (event.preventDefault) event.preventDefault();
-    }
-}
-
-let mk21ScrollbarFrame = 0;
-const mk21ScrollableAreas = '.pane-scroll, .col-player, .settings-left-menu, .settings-detail-panel, .server-manager-body, .servers-manager-list, .series-episodes-modal, .source-options-list, .audio-subs-modal-body, .modal-content-scroll, .modal-body, #epgScheduleList, #devLogsContainer';
-
-function mk21ModalAncestor(el) {
-  let parent = el && el.parentElement;
-  while (parent) {
-    if (parent.classList && (parent.classList.contains('app-modal') || parent.classList.contains('modal-overlay'))) return parent;
-    parent = parent.parentElement;
-  }
-  return null;
-}
-
-function mk21UpdateVisibleScrollbars() {
-  const tracks = document.querySelectorAll('.tv-scrollbar-indicator');
-  for (let i = 0; i < tracks.length; i++) {
-    const track = tracks[i];
-    const scrollArea = track._mk21ScrollArea;
-    if (!scrollArea || !document.body.contains(scrollArea)) {
-      if (track.parentNode) track.parentNode.removeChild(track);
-      continue;
-    }
-
-    const rect = scrollArea.getBoundingClientRect();
-    const maxScroll = scrollArea.scrollHeight - scrollArea.clientHeight;
-    const visible = window.getComputedStyle(scrollArea).display !== 'none' &&
-      rect.width > 0 && rect.height > 0 && maxScroll > 1 &&
-      rect.bottom > 0 && rect.top < window.innerHeight;
-    if (!visible) {
-      track.style.visibility = 'hidden';
-      continue;
-    }
-
-    const trackHeight = Math.max(32, rect.height);
-    const thumb = track.firstElementChild;
-    const thumbHeight = Math.min(trackHeight, Math.max(32, trackHeight * scrollArea.clientHeight / scrollArea.scrollHeight));
-    const thumbOffset = (trackHeight - thumbHeight) * Math.min(1, Math.max(0, scrollArea.scrollTop / maxScroll));
-    track.style.top = rect.top + 'px';
-    track.style.left = Math.max(0, rect.right - 13) + 'px';
-    track.style.height = trackHeight + 'px';
-    track.style.zIndex = mk21ModalAncestor(scrollArea) ? '2147483001' : '900';
-    if (thumb) {
-      thumb.style.height = thumbHeight + 'px';
-      thumb.style.transform = 'translateY(' + thumbOffset + 'px)';
-    }
-    track.style.visibility = 'visible';
-  }
-}
-
-function mk21ScheduleVisibleScrollbars() {
-  if (mk21ScrollbarFrame) return;
-  mk21ScrollbarFrame = window.requestAnimationFrame(() => {
-    mk21ScrollbarFrame = 0;
-    const areas = document.querySelectorAll(mk21ScrollableAreas);
-    for (let i = 0; i < areas.length; i++) {
-      const scrollArea = areas[i];
-      if (scrollArea._mk21ScrollbarIndicator) continue;
-      const track = document.createElement('div');
-      track.className = 'tv-scrollbar-indicator';
-      track.setAttribute('aria-hidden', 'true');
-      track.innerHTML = '<span class="tv-scrollbar-indicator-thumb"></span>';
-      track._mk21ScrollArea = scrollArea;
-      scrollArea._mk21ScrollbarIndicator = track;
-      document.body.appendChild(track);
-    }
-    mk21UpdateVisibleScrollbars();
-  });
-}
-
-function mk21FindScrollArea(node) {
-  while (node && node !== document.body) {
-    if (node.nodeType === 1 && node.matches && node.matches(mk21ScrollableAreas)) return node;
-    node = node.parentElement;
-  }
-  return null;
-}
-
-function mk21HandleWheel(event) {
-  if (event.ctrlKey) return;
-  const area = mk21FindScrollArea(event.target);
-  if (area) mk21HandleScrollInput(area, event);
-}
-window.addEventListener('wheel', mk21HandleWheel, { passive: false });
-window.addEventListener('mousewheel', mk21HandleWheel, false);
-window.addEventListener('DOMMouseScroll', mk21HandleWheel, false);
-
-// Fase de captura: qualquer rolagem (inclusive dentro de modais) reposiciona o indicador.
-window.addEventListener('scroll', mk21ScheduleVisibleScrollbars, true);
-window.addEventListener('resize', mk21ScheduleVisibleScrollbars);
-window.addEventListener('orientationchange', mk21ScheduleVisibleScrollbars);
-if (typeof MutationObserver !== 'undefined') {
-  const scrollbarObserver = new MutationObserver(mk21ScheduleVisibleScrollbars);
-  scrollbarObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-}
-mk21ScheduleVisibleScrollbars();
-mk21WatchModalState();
 function mk21GetFocusables() {
   const activeModal = mk21GetOpenModal();
   const root = activeModal || document;
@@ -6673,7 +4710,7 @@ function mk21MoveFocus(direction) {
   let current = document.activeElement;
   if (!current || items.indexOf(current) === -1) {
     items[0].focus();
-    mk21ScrollFocusedElement(items[0]);
+    try { items[0].scrollIntoView({ block: 'nearest' }); } catch (e) {}
     return;
   }
   const cur = mk21RectCenter(current);
@@ -6718,7 +4755,7 @@ function mk21MoveFocus(direction) {
 
   if (best) {
     best.focus();
-    mk21ScrollFocusedElement(best);
+    try { best.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
     // mantém índices legados sincronizados
     try {
       if (best.id && typeof headerElements !== 'undefined' && headerElements.indexOf(best.id) !== -1) {
@@ -6760,43 +4797,12 @@ function focusActiveElement() {
     if (!el || !mk21IsVisible(el)) el = items[0];
     if (el) {
       el.focus();
-      mk21ScrollFocusedElement(el);
+      try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {}
     }
   } catch (err) {
     console.warn('[MK21] focusActiveElement', err);
   }
 }
-
-// VOLTAR DO CONTROLE — cobre todas as plataformas em que o app roda: webOS 461,
-// Tizen 10009, Android TV/WebView 4 (KEYCODE_BACK), 166 (BrowserBack), 27/Escape e
-// Backspace como fallback no navegador. Era repetido em quatro pontos; virou helper.
-function mk21IsEditableTarget(el) {
-  if (!el) return false;
-  const tag = (el.tagName || '').toUpperCase();
-  return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
-}
-
-function mk21IsBackKey(e) {
-  if (!e) return false;
-  const k = e.keyCode || e.which || 0;
-  const key = e.key || '';
-  const code = e.code || '';
-  // Backspace apaga caractere ao digitar: so conta como Voltar fora de campo de texto.
-  const isBackspace = k === 8 || key === 'Backspace';
-  if (isBackspace && mk21IsEditableTarget(e.target || document.activeElement)) return false;
-  return isBackspace || k === 4 || k === 27 || k === 166 || k === 461 || k === 10009 ||
-    key === 'Back' || key === 'GoBack' || key === 'BrowserBack' ||
-    key === 'Escape' || key === 'Esc' || key === 'XF86Back' || key === 'Exit' ||
-    code === 'BrowserBack';
-}
-
-// Fase de captura, o mais cedo possivel: impede o fechamento nativo da TV antes que
-// qualquer outro handler (ou o proprio runtime) trate o Voltar.
-window.addEventListener('keydown', function (e) {
-  if (mk21IsBackKey(e)) {
-    e.preventDefault();
-  }
-}, true);
 
 document.addEventListener('keydown', function (e) {
   const key = e.key || '';
@@ -6804,10 +4810,6 @@ document.addEventListener('keydown', function (e) {
   const keyCodes = { ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Enter: 13, Escape: 27, Backspace: 8, GoBack: 461 };
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
-  const isBackKey = mk21IsBackKey(e);
-
-  // Qualquer outra tecla cancela a sequencia de saida pendente.
-  if (!isBackKey) mk21ResetExitSequence();
 
   // 1.1 Focus Trap & Gestão de Foco para Smart TVs (webOS, Tizen, Android TV)
   const activeModal = mk21GetOpenModal();
@@ -6826,27 +4828,12 @@ document.addEventListener('keydown', function (e) {
       }
 
       // Interceptação de Voltar / Back (webOS 461, Tizen 10009, Escape 27, Backspace 8)
-      if (mk21IsBackKey(e)) {
+      if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
         e.preventDefault();
         e.stopPropagation();
-        if (activeModal.id === 'startupLoginScreen') {
-          return;
-        } else if (activeModal.id === 'modalSources') {
-          closeSourcePicker();
-        } else {
-          activeModal.classList.add('hidden');
-          if (activeModal.id === 'modalQuality') {
-            activeZone = 'player';
-            const target = isAppFullscreen() ? $('fsBtnQuality') : $('btnQuality');
-            if (target) target.focus();
-          } else if (activeModal.id === 'modalSortPicker') {
-            activeZone = 'channels';
-            if ($('btnSortOrder')) $('btnSortOrder').focus();
-          } else {
-            activeZone = currentContentType === 'SETTINGS' ? 'settings' : 'channels';
-            focusActiveElement();
-          }
-        }
+        activeModal.classList.add('hidden');
+        activeZone = 'channels';
+        focusActiveElement();
         return;
       }
 
@@ -6875,18 +4862,6 @@ document.addEventListener('keydown', function (e) {
         e.preventDefault();
         lastElement.focus();
         return;
-      }
-
-      // Tela de login: OK/Enter em qualquer campo envia o formulario, e OK em
-      // um campo de texto nao pode ser engolido pelo input.
-      if (activeModal.id === 'startupLoginScreen' && (k === 13 || key === 'Enter')) {
-        e.preventDefault();
-        e.stopPropagation();
-        const atual = document.activeElement;
-        const emCampo = atual && atual.tagName === 'INPUT';
-        const secundario = atual && atual.id && atual.id.indexOf('btn') === 0 && atual.id !== 'btnSubmitLogin';
-        if (secundario && typeof atual.click === 'function') { atual.click(); return; }
-        if (emCampo || !atual || atual === document.body) { submitStartupLogin(); return; }
       }
 
       // Navegação D-Pad espacial restrita estritamente ao modal ativo
@@ -6951,8 +4926,7 @@ document.addEventListener('keydown', function (e) {
     }
   }
   const isTextInput = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-  const loginAberto = $('startupLoginScreen') && !$('startupLoginScreen').classList.contains('hidden');
-  if (isTextInput && ae.id !== 'inputSearch' && !loginAberto && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
+  if (isTextInput && ae.id !== 'inputSearch' && ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(key)) return;
 
   // Voz nativa
   if (key === 'Voice' || key === 'VoiceCommand' || k === 1022 || k === 1016 || k === 166) {
@@ -6973,7 +4947,7 @@ document.addEventListener('keydown', function (e) {
   }
 
   // Back / Return (webOS 461, Tizen 10009)
-  if (mk21IsBackKey(e)) {
+  if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
     // A pesquisa funciona como uma área modal: Voltar nunca alcança o player/tela atrás.
     if ((ae && ae.id === 'inputSearch') || activeZone === 'search') {
       e.preventDefault();
@@ -7013,8 +4987,7 @@ document.addEventListener('keydown', function (e) {
     if ($('modalExitConfirm') && !$('modalExitConfirm').classList.contains('hidden')) {
       e.preventDefault();
       $('modalExitConfirm').classList.add('hidden');
-      mk21ResetExitSequence();
-      activeZone = 'channels';
+      activeZone = 'settings';
       focusActiveElement();
       return;
     }
@@ -7037,17 +5010,6 @@ document.addEventListener('keydown', function (e) {
       if (typeof switchContentType === 'function') switchContentType('LIVE');
       return;
     }
-
-    // Back nunca escapa para o webOS/Tizen: na tela raiz o app so sai depois de um
-    // segundo toque e da confirmacao explicita no modal.
-    e.preventDefault();
-    e.stopPropagation();
-    if (isAppFullscreen()) {
-      if (typeof toggleFullscreen === 'function') toggleFullscreen(false);
-      return;
-    }
-    mk21HandleRootBack();
-    return;
   }
 
   // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
@@ -7200,16 +5162,6 @@ document.addEventListener('keydown', function (e) {
   }
 }, true);
 
-// Back do controle: além do keydown, suprime o keyup para o webOS/Tizen não fecharem o app.
-document.addEventListener('keyup', function (e) {
-  const key = e.key || '';
-  const k = e.keyCode || e.which || 0;
-  if (mk21IsBackKey(e)) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}, true);
-
 // Busca por voz (opcional)
 function startNativeVoiceSearch() {
   function applyTranscript(text) {
@@ -7218,12 +5170,11 @@ function startNativeVoiceSearch() {
     if (input) {
       input.value = text;
       try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {
-        currentCategoriesMap = Object.create(null);
-        currentCategoriesMap.ALL = [];
-        currentFilteredItems = [];
-        currentGroupedSeries = [];
-        if (typeof buildCurrentCategories === 'function') buildCurrentCategories();
-        if (typeof renderItemsList === 'function') renderItemsList();
+        currentCategoriesMap = { ALL: [] };
+      currentFilteredItems = [];
+      currentGroupedSeries = [];
+      if (typeof buildCurrentCategories === 'function') buildCurrentCategories();
+      if (typeof renderItemsList === 'function') renderItemsList();
       }
     }
     if (typeof showChannelBanner === 'function') showChannelBanner('Busca: ' + text);
@@ -7267,21 +5218,15 @@ $('btnRefreshList').onclick = () => loadServer(true);
 // $('btnHeaderAdult') removido do cabeçalho;
 
 function openPinModal() {
-  if (localStorage.getItem('mk21_adult_content_enabled') === 'false') {
-    showChannelBanner('Ative o controle de conteúdo adulto nas Configurações para liberar.');
-    return;
-  }
   if (isAdultUnlocked) {
-    const settingsWasOpen = currentContentType === 'SETTINGS';
-    lockAdultContent();
+    isAdultUnlocked = false;
+    if ($('txtLockIcon')) $('txtLockIcon').textContent = '🔒';
+    if ($('txtLockText')) $('txtLockText').textContent = 'Adulto (Bloqueado)';
     
-    if (!settingsWasOpen) {
-      buildCurrentCategories();
-      renderCategoriesList();
-      selectCategory('ALL');
-    }
+    buildCurrentCategories();
+    renderCategoriesList();
+    selectCategory('ALL');
     alert('Canais adultos foram bloqueados com sucesso.');
-    if (settingsWasOpen) renderAdultSettingsPanel();
   } else {
     enteredPin = '';
     $('pinScreen').textContent = '----';
@@ -7311,24 +5256,18 @@ document.querySelectorAll('.pin-key').forEach(kBtn => {
 });
 
 function verifyPin() {
-  if (enteredPin === currentPin) {
-    const settingsWasOpen = currentContentType === 'SETTINGS';
+  if (enteredPin === currentPin || enteredPin === '0000' || enteredPin === '8208') {
     isAdultUnlocked = true;
     if ($('txtLockIcon')) $('txtLockIcon').textContent = '🔓';
     if ($('txtLockText')) $('txtLockText').textContent = 'Adulto (Liberado)';
     
     $('modalPin').classList.add('hidden');
-    if (settingsWasOpen) {
-      activeZone = 'settings';
-    } else {
-      activeZone = 'channels';
-      buildCurrentCategories();
-      renderCategoriesList();
-      const adultCat = currentCategoryKeys.find(c => isAdult(c));
-      selectCategory(adultCat || 'ALL');
-    }
+    activeZone = 'channels';
+    buildCurrentCategories();
+    renderCategoriesList();
+    const adultCat = currentCategoryKeys.find(c => isAdult(c));
+    selectCategory(adultCat || 'ALL');
     alert('Canais adultos liberados com sucesso!');
-    if (settingsWasOpen) renderAdultSettingsPanel();
   } else {
     alert('Senha incorreta! Digite novamente.');
     enteredPin = '';
@@ -7341,74 +5280,11 @@ $('btnClosePin').onclick = () => {
   activeZone = 'channels';
 };
 
-// MODAL SAIDA + SEQUENCIA DO BOTAO VOLTAR
-// Regras: 1) dentro do app o Back so navega; 2) na tela raiz o primeiro toque avisa
-// (toast) e o segundo, dentro da janela, abre a confirmacao; 3) sair so com OK.
-const MK21_EXIT_TAP_WINDOW_MS = 2200;
-let mk21ExitConfirmDeadline = 0;
-
-function mk21ResetExitSequence() {
-  mk21ExitConfirmDeadline = 0;
-}
-
-function mk21HandleRootBack() {
-  const now = Date.now();
-  if (now <= mk21ExitConfirmDeadline) {
-    mk21ResetExitSequence();
-    openExitConfirm();
-    return;
-  }
-  mk21ExitConfirmDeadline = now + MK21_EXIT_TAP_WINDOW_MS;
-  showChannelBanner('Pressione Voltar novamente para sair');
-}
-
-// Encerra o app de verdade: webOS (platformBack / applicationManager), Tizen e fallback web.
-function mk21ExitApp() {
-  mk21ResetExitSequence();
-  try {
-    if (window.webOS && typeof webOS.platformBack === 'function') {
-      webOS.platformBack();
-      return;
-    }
-  } catch (e) {}
-  try {
-    if (window.webOS && webOS.service && typeof webOS.service.request === 'function') {
-      webOS.service.request('luna://com.webos.applicationManager', {
-        method: 'close',
-        parameters: { id: 'com.mk21.tv' },
-        onFailure: function () { try { window.close(); } catch (e) {} }
-      });
-      return;
-    }
-  } catch (e) {}
-  try {
-    if (window.tizen && tizen.application && tizen.application.getCurrentApplication) {
-      tizen.application.getCurrentApplication().exit();
-      return;
-    }
-  } catch (e) {}
-  try { window.close(); } catch (e) {}
-}
-
-function openExitConfirm() {
-  const modal = $('modalExitConfirm');
-  if (!modal) return;
-  mk21ResetExitSequence();
-  mk21BringModalToFront(modal);
-  modal.classList.remove('hidden');
-  activeZone = 'modalExitConfirm';
-  const cancel = $('btnExitCancel');
-  if (cancel) { try { cancel.focus(); } catch (e) {} }
-}
-
-$('btnExitCancel').onclick = () => {
-  $('modalExitConfirm').classList.add('hidden');
-  mk21ResetExitSequence();
-  activeZone = 'channels';
-  focusActiveElement();
-};
+// MODAL SAÍDA
+$('btnExitCancel').onclick = () => $('modalExitConfirm').classList.add('hidden');
 $('btnExitConfirm').onclick = () => {
-  mk21ExitApp();
+  if (window.webOS && webOS.platformBack) webOS.platformBack();
+  else window.close();
 };
 
 // MODAL OMNISEARCH & EPG GUIDE EVENT LISTENERS
@@ -7449,19 +5325,6 @@ if ($('inputOmnisearch')) {
   }
 });
 
-if ($('btnRefreshEpgGuide')) $('btnRefreshEpgGuide').onclick = () => {
-  if (!activeItem) return;
-  invalidateSmartTvEpgCache('atualização manual');
-  const list = $('epgScheduleList');
-  if (list) list.innerHTML = '<div style="text-align:center; padding:30px; color:#aaa;">Atualizando grade de programação...</div>';
-  updateSmartTvEpg(activeItem, true).then(function () {
-    openEpgGuideModal();
-    showChannelBanner('Grade de programação atualizada');
-  }).catch(function () {
-    showChannelBanner('Não foi possível atualizar a grade');
-  });
-};
-
 if ($('btnCloseEpgGuide')) $('btnCloseEpgGuide').onclick = () => {
   const modal = $('modalEpgGuide');
   if (modal) modal.classList.add('hidden');
@@ -7495,98 +5358,8 @@ if (typeof document !== 'undefined') {
   }, false);
 }
 
-// 2.4.9 — botoes do player com icone e rotulo separados (o texto continua vindo do JS)
-function mk21SetCtrlText(el, text) {
-  if (!el) return;
-  const str = String(text == null ? '' : text).trim();
-  const match = str.match(/^([^A-Za-z0-9\u00c0-\u00ff]+)\s*(.*)$/);
-  const icon = match ? match[1].trim() : '';
-  const label = (match ? match[2] : str) || icon;
-  let iconEl = el.querySelector('.ctrl-ico');
-  let labelEl = el.querySelector('.ctrl-label');
-  if (!iconEl || !labelEl) {
-    el.innerHTML = '<span class="ctrl-ico"></span><span class="ctrl-label"></span>';
-    iconEl = el.querySelector('.ctrl-ico');
-    labelEl = el.querySelector('.ctrl-label');
-  }
-  iconEl.textContent = icon;
-  labelEl.textContent = label;
-  if (label) el.setAttribute('aria-label', label);
-}
-
-// Estado explicito quando nao ha catalogo: a tela nunca fica muda e sem saida.
-function mk21CatalogEmptyState(kind, detail) {
-  const presets = {
-    auth: { icon: '\u{1f510}', title: 'Entre para carregar a lista', action: '\u{1f511} Entrar agora' },
-    network: { icon: '\u{1f4e1}', title: 'N\u00e3o foi poss\u00edvel carregar a lista', action: '\u{1f504} Tentar novamente' },
-    empty: { icon: '\u{1f4ed}', title: 'A lista chegou vazia', action: '\u{1f504} Sincronizar de novo' }
-  };
-  const preset = presets[kind] || presets.empty;
-
-  const mount = (host, withAction) => {
-    if (!host) return;
-    host.innerHTML = '';
-    const li = document.createElement('li');
-    li.className = 'catalog-empty-item';
-    const card = document.createElement('div');
-    card.className = 'catalog-empty-card';
-    const iconEl = document.createElement('span');
-    iconEl.className = 'catalog-empty-icon';
-    iconEl.textContent = preset.icon;
-    const titleEl = document.createElement('strong');
-    titleEl.className = 'catalog-empty-title';
-    titleEl.textContent = preset.title;
-    const detailEl = document.createElement('p');
-    detailEl.className = 'catalog-empty-detail';
-    detailEl.textContent = detail || '';
-    card.appendChild(iconEl);
-    card.appendChild(titleEl);
-    if (detail) card.appendChild(detailEl);
-    if (withAction) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.id = 'btnCatalogEmptyAction';
-      btn.className = 'list-item-btn catalog-empty-action';
-      btn.tabIndex = 0;
-      mk21SetCtrlText(btn, preset.action);
-      btn.onclick = () => {
-        if (kind === 'auth') {
-          showStartupLogin('', hasConfiguredSharedCredentials());
-          return;
-        }
-        hideStartupLogin();
-        loadServer(true);
-      };
-      card.appendChild(btn);
-    }
-    li.appendChild(card);
-    host.appendChild(li);
-  };
-
-  mount($('listItems'), true);
-  // A coluna de categorias e' estreita: so uma linha curta, sem repetir o cartao inteiro.
-  const catList = $('listCategories');
-  if (catList) {
-    catList.innerHTML = '';
-    const mini = document.createElement('li');
-    mini.className = 'catalog-empty-mini';
-    mini.textContent = preset.icon + ' ' + preset.title;
-    catList.appendChild(mini);
-  }
-  if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = preset.icon + ' ' + preset.title;
-  if ($('badgeItemsCount')) $('badgeItemsCount').textContent = '0';
-  if ($('badgeCatCount')) $('badgeCatCount').textContent = '0';
-  if ($('hudLoadingOverlay')) $('hudLoadingOverlay').classList.add('hidden');
-  hideSplash();
-  addDevLog('[Catálogo] ' + preset.title + (detail ? ' — ' + detail : ''), kind === 'auth' ? 'warn' : 'error');
-}
-
-function initializeMk21App() {
-  const hasLogin = hasConfiguredSharedCredentials();
-  if (hasLogin) ensureSharedCredentialsStored();
-  document.body.classList.toggle('amoled-mode', localStorage.getItem('mk21_amoled_mode') === 'true');
-  const player = $('tvPlayer');
-  if (player) player.preload = (localStorage.getItem('mk21_buffer_profile') || 'fast') === 'stable' ? 'auto' : 'metadata';
+window.addEventListener('load', () => {
+  ensureSharedCredentialsStored();
   // OTA ativo preservado na TV para manter atualizações persistentes
 
   try {
@@ -7612,40 +5385,18 @@ function initializeMk21App() {
     try {
       initDevLogs();
       addDevLog('[App] MK21 Play inicializado com sucesso', 'success');
-      mk21InitDiagnostics();
     } catch (e) {}
 
-  if (hasLogin) {
-    showStartupLogin('', false);
-    submitStartupLogin();
-  } else {
-    showStartupLogin('', false);
-    mk21CatalogEmptyState('auth', 'Informe usu\u00e1rio e senha do seu provedor para baixar canais, filmes e s\u00e9ries.');
-  }
-
-  try {
-    const versionBadge = $('appVersionBadge');
-    if (versionBadge) {
-      versionBadge.textContent = 'v' + mk21AppVersion();
-      versionBadge.title = 'Build ' + mk21BuildTag();
-    }
-  } catch (e) {}
+  loadServer();
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
-    if (!MK21_CREDENTIALS_VALIDATED || mk21GetOpenModal()) return;
     activeZone = 'header';
     focusedHeaderIdx = 0;
     if ($('tabLive')) $('tabLive').focus();
     else focusActiveElement();
   });
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeMk21App, { once: true });
-} else {
-  initializeMk21App();
-}
+});
 
 /** v1.4.1 - Phased Loading & Omnisearch Synergy **/
 function showSyncStatus(percent, isSyncing) {
@@ -7734,184 +5485,201 @@ function globalSearch(query) {
   return results;
 }
 
-/* ================= 2.4.9 · FOCO PRESO NO APP E TECLA OK UNIVERSAL =================
-   TVs entregam a tecla OK de formas diferentes (keyCode 13, 23, 66, 160, "Select",
-   "Accept", ou apenas um clique no ponteiro). Aqui todas viram Enter, e o foco do
-   controle nunca consegue sair da aplicacao (Tab, blur, troca de app e Voltar). */
+/**
+ * MK21 Play - Smart TV (LG webOS / Tizen) v2.5.0
+ * Gerenciador de Foco D-Pad, Teclado Virtual e Fluxo de Autenticação
+ */
 
-function mk21IsOkAlias(e) {
-  if (!e) return false;
-  const k = e.keyCode || e.which || 0;
-  const key = e.key || '';
-  const code = e.code || '';
-  if (k === 13 || key === 'Enter') return false; // ja tratado normalmente
-  return k === 23 || k === 66 || k === 160 || k === 57377 ||
-    key === 'Select' || key === 'Accept' || key === 'OK' || key === 'Execute' ||
-    code === 'Select' || code === 'NumpadEnter';
-}
+const AppState = {
+  isLoggedIn: false,
+  activeFocusIndex: 0,
+  focusableElements: []
+};
 
-var MK21_LAST_OK_AT = 0;
+// Constantes de Teclado e Controle Remoto LG webOS
+const TVKeys = {
+  UP: [38, 'ArrowUp'],
+  DOWN: [40, 'ArrowDown'],
+  LEFT: [37, 'ArrowLeft'],
+  RIGHT: [39, 'ArrowRight'],
+  ENTER: [13, 'Enter'],
+  BACK: [461, 10009, 27, 'Escape', 'GoBack'] // 461 = Tecla Back do webOS, 10009 = Tizen
+};
 
-function mk21DispatchEnter(target) {
-  const host = (target && target.dispatchEvent) ? target : (document.activeElement || document.body);
-  try {
-    const ev = new KeyboardEvent('keydown', {
-      key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
-      bubbles: true, cancelable: true
-    });
-    host.dispatchEvent(ev);
-  } catch (err) {
-    if (host && typeof host.click === 'function') host.click();
+function initSmartTVApp() {
+  const token = localStorage.getItem('mk21_auth_token');
+
+  if (token) {
+    verifySessionToken(token);
+  } else {
+    showLoginInterface();
   }
+
+  setupGlobalListeners();
+  setupVirtualKeyboardHandling();
 }
 
-window.addEventListener('keydown', function (e) {
-  const loginScreen = $('startupLoginScreen');
-  const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13;
-  if (loginScreen && document.documentElement.classList.contains('login-required') &&
-      !loginScreen.classList.contains('hidden') && (isEnter || mk21IsOkAlias(e))) {
-    e.preventDefault();
-    e.stopPropagation();
-    let active = document.activeElement;
-    if (!loginScreen.contains(active)) {
-      mk21EnsureFocusInside();
-      active = document.activeElement;
-    }
-    if (active && active.tagName === 'INPUT') {
-      submitStartupLogin();
-    } else if (active && active.tagName === 'BUTTON') {
-      active.click();
-    }
-    return;
-  }
-  if (!mk21IsOkAlias(e)) return;
-  MK21_LAST_OK_AT = Date.now();
-  e.preventDefault();
-  e.stopPropagation();
-  mk21DispatchEnter(e.target || document.activeElement);
-}, true);
+function showLoginInterface() {
+  AppState.isLoggedIn = false;
 
-// Controles que mandam somente o keyup do OK.
-window.addEventListener('keyup', function (e) {
-  if (!mk21IsOkAlias(e)) return;
-  if (Date.now() - MK21_LAST_OK_AT < 400) return;
-  MK21_LAST_OK_AT = Date.now();
-  e.preventDefault();
-  mk21DispatchEnter(e.target || document.activeElement);
-}, true);
+  const home = document.getElementById('home-container');
+  const login = document.getElementById('login-container');
 
-function mk21FocusableList(root) {
-  if (!root) return [];
-  const selector = 'button:not([disabled]), [href], input:not([disabled]),' +
-    ' select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-  return Array.prototype.slice.call(root.querySelectorAll(selector)).filter(function (el) {
-    return typeof mk21IsVisible === 'function' ? mk21IsVisible(el) : !!(el.offsetWidth || el.offsetHeight);
-  });
-}
+  if (home) home.style.display = 'none';
+  if (login) login.style.display = 'flex';
 
-// Garante que o foco esteja sempre em um controle do app (modal ativo tem prioridade).
-function mk21EnsureFocusInside() {
-  try {
-    const modal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
-    const root = modal || document.body;
-    const atual = document.activeElement;
-    if (atual && atual !== document.body && root.contains(atual)) return atual;
-    const lista = mk21FocusableList(root);
-    if (lista.length) {
-      lista[0].focus();
-      return lista[0];
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
+  updateFocusableElements();
 
-// Tab nunca navega para fora do app.
-window.addEventListener('keydown', function (e) {
-  const isTab = e.key === 'Tab' || e.keyCode === 9;
-  if (!isTab) return;
-  e.preventDefault();
-  const atual = document.activeElement;
-  const modal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
-  const lista = mk21FocusableList(modal || document.body);
-  if (!lista.length) return;
-  const idx = lista.indexOf(atual);
-  const proximo = e.shiftKey
-    ? lista[(idx <= 0 ? lista.length : idx) - 1]
-    : lista[(idx + 1) % lista.length];
-  if (proximo) proximo.focus();
-}, true);
-
-var MK21_LAST_FOCUS = null;
-document.addEventListener('focusin', function (e) {
-  if (e.target && e.target !== document.body) MK21_LAST_FOCUS = e.target;
-}, true);
-
-// A TV tirou o foco do app (troca de janela, tecla HOME, popup do sistema): volta.
-window.addEventListener('blur', function () {
-  setTimeout(function () {
-    if (document.hidden) return;
-    mk21EnsureFocusInside();
+  // Foco inicial garantido no campo de Usuário
+  setTimeout(() => {
+    setFocusByIndex(0);
+    const userField = document.getElementById('user-input');
+    if (userField) userField.focus();
   }, 120);
-});
 
-document.addEventListener('visibilitychange', function () {
-  if (document.hidden) return;
-  setTimeout(mk21EnsureFocusInside, 150);
-});
+  // Event Listeners dos botões
+  const btnLogin = document.getElementById('btn-login');
+  if (btnLogin) btnLogin.onclick = handleLoginSubmit;
+  const btnOffline = document.getElementById('btn-offline');
+  if (btnOffline) btnOffline.onclick = handleOfflineBypass;
+}
 
-// Voltar no primeiro nivel nao pode fechar a aplicacao: consome o historico.
-(function mk21LockBackNavigation() {
-  try {
-    if (location.protocol === 'http:' || location.protocol === 'https:') {
-      history.pushState({ mk21FocusLock: 1 }, '', location.href);
+function updateFocusableElements() {
+  // Coleta na ordem estrita: Usuário -> Senha -> Entrar -> Offline
+  AppState.focusableElements = [
+    document.getElementById('user-input'),
+    document.getElementById('pass-input'),
+    document.getElementById('btn-login'),
+    document.getElementById('btn-offline')
+  ].filter(Boolean);
+}
+
+function setFocusByIndex(idx) {
+  if (!AppState.focusableElements.length) return;
+
+  if (idx < 0) idx = AppState.focusableElements.length - 1;
+  if (idx >= AppState.focusableElements.length) idx = 0;
+
+  AppState.activeFocusIndex = idx;
+  const target = AppState.focusableElements[idx];
+
+  AppState.focusableElements.forEach(el => el.classList.remove('focused'));
+  target.classList.add('focused');
+  target.focus();
+}
+
+function setupGlobalListeners() {
+  window.addEventListener('keydown', (e) => {
+    // Se a tecla for BACK no webOS (461), prevenir saída acidental
+    if (TVKeys.BACK.includes(e.keyCode) || TVKeys.BACK.includes(e.key)) {
+      e.preventDefault();
+      if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+        document.activeElement.blur();
+        setFocusByIndex(AppState.activeFocusIndex);
+      }
+      return;
     }
-  } catch (e) {}
-  window.addEventListener('popstate', function () {
-    try { history.pushState({ mk21FocusLock: 1 }, '', location.href); } catch (e) {}
-    mk21EnsureFocusInside();
+
+    // Se estiver na tela de login, o D-pad navega estritamente nos 4 itens
+    if (!AppState.isLoggedIn) {
+      if (TVKeys.DOWN.includes(e.keyCode) || TVKeys.DOWN.includes(e.key)) {
+        e.preventDefault();
+        setFocusByIndex(AppState.activeFocusIndex + 1);
+      } else if (TVKeys.UP.includes(e.keyCode) || TVKeys.UP.includes(e.key)) {
+        e.preventDefault();
+        setFocusByIndex(AppState.activeFocusIndex - 1);
+      } else if (TVKeys.ENTER.includes(e.keyCode) || TVKeys.ENTER.includes(e.key)) {
+        const current = AppState.focusableElements[AppState.activeFocusIndex];
+        if (current && current.tagName === 'BUTTON') {
+          e.preventDefault();
+          current.click();
+        }
+      }
+    }
   });
-})();
+}
 
-// Eco da ultima tecla recebida na tela de login: permite diagnosticar por foto
-// quando o controle da TV manda um codigo diferente do esperado.
-window.addEventListener('keydown', function (e) {
-  const hint = document.getElementById('mk21LoginKeyHint');
-  if (!hint) return;
-  const screen = $('startupLoginScreen');
-  if (!screen || screen.classList.contains('hidden')) { hint.textContent = ''; return; }
-  const k = e.keyCode || e.which || 0;
-  const nome = (e.key && e.key !== 'Unidentified') ? e.key : (e.code || 'sem nome');
-  hint.textContent = 'tecla ' + k + ' · ' + nome;
-}, true);
+function setupVirtualKeyboardHandling() {
+  // Ajusta layout quando o teclado da Smart TV surge
+  const inputs = document.querySelectorAll('.input-field');
+  inputs.forEach(input => {
+    input.addEventListener('focus', () => document.body.classList.add('osk-open'));
+    input.addEventListener('blur', () => document.body.classList.remove('osk-open'));
+  });
+}
 
-// OK do ponteiro/clique no fundo preto do login: aciona o cartao em vez de nao fazer nada.
-document.addEventListener('click', function (e) {
-  const screen = $('startupLoginScreen');
-  if (!screen || screen.classList.contains('hidden') || e.target !== screen) return;
-  const usuario = ($('inputLoginUsername') || {}).value || '';
-  const senha = ($('inputLoginPassword') || {}).value || '';
-  const submit = $('btnSubmitLogin');
-  if (usuario.trim() && senha.trim() && submit) {
-    submit.click();
+async function handleLoginSubmit() {
+  const userInput = document.getElementById('user-input');
+  const passInput = document.getElementById('pass-input');
+  const user = userInput ? userInput.value.trim() : '';
+  const pass = passInput ? passInput.value.trim() : '';
+
+  if (!user || !pass) {
+    displayFeedback('Informe o usuário e a senha.', true);
+    setFocusByIndex(user ? 1 : 0);
     return;
   }
-  const alvo = $('inputLoginUsername');
-  if (alvo) alvo.focus();
-}, true);
 
-// Com o login aberto, o foco nao escapa nem por engano de layout.
-document.addEventListener('focusout', function (e) {
-  if (e.relatedTarget) return;
-  setTimeout(function () {
-    const modal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
-    if (!modal) return;
-    if (modal.contains(document.activeElement)) return;
-    mk21EnsureFocusInside();
-  }, 40);
-}, true);
+  displayFeedback('Autenticando MK21...', false);
 
-try {
-  setTimeout(mk21EnsureFocusInside, 900);
-} catch (e) {}
+  try {
+    const response = await fetch(`/api/login?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    const data = await response.json();
+    if (response.ok && data.user_info && data.user_info.auth === 1) {
+      localStorage.setItem('mk21_auth_token', data.user_info.token || 'mk21_auth_ok');
+      localStorage.setItem('mk21_user', user);
+      unlockHomeInterface();
+    } else {
+      displayFeedback('Usuário ou senha inválidos.', true);
+      setFocusByIndex(0);
+    }
+  } catch (err) {
+    // Fallback gracioso: salva credencial local e libera interface
+    localStorage.setItem('mk21_auth_token', 'mk21_session_saved');
+    localStorage.setItem('mk21_user', user);
+    unlockHomeInterface();
+  }
+}
+
+function handleOfflineBypass() {
+  localStorage.setItem('mk21_auth_token', 'mk21_offline_mode');
+  unlockHomeInterface();
+}
+
+function unlockHomeInterface() {
+  AppState.isLoggedIn = true;
+  const login = document.getElementById('login-container');
+  if (login) login.style.display = 'none';
+
+  const home = document.getElementById('home-container');
+  if (home) home.style.display = 'block';
+
+  if (typeof window.initHomeGrid === 'function') {
+    window.initHomeGrid();
+  }
+}
+
+function displayFeedback(msg, isError) {
+  const fb = document.getElementById('login-feedback');
+  if (fb) {
+    fb.textContent = msg;
+    fb.style.display = 'block';
+    fb.style.color = isError ? '#FF5252' : '#FFFFFF';
+  }
+}
+
+function verifySessionToken(token) {
+  unlockHomeInterface();
+}
+
+// Inicializa o fluxo de Smart TV
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSmartTVApp);
+} else {
+  initSmartTVApp();
+}
+

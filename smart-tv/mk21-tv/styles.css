@@ -194,7 +194,7 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
-  height: auto;
+  height: calc(100vh - 128px);
   min-height: 0;
   background: #090b12;
 }
@@ -215,9 +215,8 @@ body {
   gap: 14px;
   padding: 12px 18px;
   background: #090b12;
-  height: 100%;
-  max-height: 100%;
-  grid-template-rows: minmax(0, 1fr);
+  height: calc(100vh - 75px);
+  max-height: calc(100vh - 75px);
   overflow: hidden;
   box-sizing: border-box;
   width: 100%;
@@ -251,16 +250,7 @@ body {
   flex-shrink: 0;
 }
 
-.pane-header > span:first-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .counter-badge {
-  flex: 0 0 auto;
-  white-space: nowrap;
   background: rgba(229, 9, 20, 0.25);
   color: #ff6b72;
   font-size: 1.1rem;
@@ -300,52 +290,21 @@ body {
 
 /* Barra de Rolagem Visível e Otimizada para Smart TV */
 ::-webkit-scrollbar {
-  width: 16px;
-  height: 16px;
-  background-color: rgba(255, 255, 255, 0.06);
+  width: 6px;
+  display: block !important;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
 }
 
 ::-webkit-scrollbar-thumb {
-  min-height: 48px;
-  background-color: #f2c45c;
-  border: 2px solid rgba(0, 0, 0, 0.55);
-  background-clip: padding-box;
-  border-radius: 12px;
-}
-
-::-webkit-scrollbar-thumb:vertical {
-  min-height: 48px;
+  background: rgba(255, 152, 0, 0.5);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 152, 0, 0.85);
-}
-
-.tv-scrollbar-indicator {
-  position: fixed;
-  z-index: 999998;
-  width: 10px;
-  min-height: 32px;
-  padding: 2px;
-  box-sizing: border-box;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.tv-scrollbar-indicator-thumb {
-  display: block;
-  width: 100%;
-  min-height: 28px;
-  border-radius: 999px;
-  background: #f2c45c;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+  background: rgba(255, 152, 0, 0.85);
 }
 
 .col-categories,
@@ -360,11 +319,8 @@ body {
   list-style: none;
   margin: 0;
   padding: 8px;
-  min-height: 0;
-  overflow-y: scroll;
-  overflow-x: hidden;
-  flex: 1 1 0%;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .pane-scroll li {
@@ -403,29 +359,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  position: relative;
+  position: sticky;
   top: 0;
   height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-/* O mini player nunca sai da tela: a coluna não rola, apenas o card de EPG rola. */
-.col-player > .video-box {
-  flex: 0 0 auto;
-  position: relative;
-  z-index: 2;
-}
-
-.col-player > .epg-card {
-  flex: 1 1 auto;
-  min-height: 0;
   overflow-y: auto;
-}
-
-.col-player > .player-controls {
-  flex: 0 0 auto;
+  box-sizing: border-box;
 }
 
 .video-box {
@@ -721,11 +659,6 @@ video {
   grid-template-columns: 32% 68%;
   gap: 20px;
   padding: 20px 35px;
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden;
-  min-height: 0;
-  min-width: 0;
 }
 
 .settings-left-menu {
@@ -736,9 +669,6 @@ video {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 0;
-  overflow-y: scroll;
-  -webkit-overflow-scrolling: touch;
 }
 
 .cfg-menu-item {
@@ -780,8 +710,6 @@ video {
   border-radius: 12px;
   padding: 26px;
   overflow-y: auto;
-  min-height: 0;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* ================= 5. BARRA DO CONTROLE REMOTO LG ================= */
@@ -847,16 +775,16 @@ video {
 }
 
 /* ================= 7. MODAIS (MODERN FOCUS TRAP & OVERFLOW FIX v1.1.0) ================= */
-/* Modais acima de qualquer camada do app (player em tela cheia, splash e login). */
 .app-modal, .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.94);
+  background: rgba(0, 0, 0, 0.92);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2147483000;
-  isolation: isolate;
+  z-index: 1000;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .modal-container, .modal-content, .modal-card {
@@ -1099,7 +1027,8 @@ video {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(4, 6, 12, 0.94);
+  background: rgba(4, 6, 12, 0.88);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1216,10 +1145,10 @@ video {
 
 /* ================= 10. TAMANHO DA FONTE EXPANDIDO (ACESSIBILIDADE EM TODOS OS MENUS) ================= */
 body.font-large { --font-scale: 1.2; font-size: 24px; }
-body.font-xlarge { --font-scale: 1.25; font-size: 25px; }
-body.font-xxlarge { --font-scale: 1.3; font-size: 26px; }
-body.font-huge { --font-scale: 1.4; font-size: 28px; }
-body.font-ultra { --font-scale: 1.5; font-size: 30px; }
+body.font-xlarge { --font-scale: 1.4; font-size: 28px; }
+body.font-xxlarge { --font-scale: 1.65; font-size: 33px; }
+body.font-huge { --font-scale: 1.9; font-size: 38px; }
+body.font-ultra { --font-scale: 2.2; font-size: 44px; }
 
 /* Aplica escala a todos os menus, botões, títulos e inputs */
 body[class*="font-"] .list-item-btn,
@@ -1239,10 +1168,6 @@ body[class*="font-"] .remote-key {
   font-size: calc(18px * var(--font-scale, 1)) !important;
   padding-top: calc(8px * var(--font-scale, 1)) !important;
   padding-bottom: calc(8px * var(--font-scale, 1)) !important;
-  min-width: 0;
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 
 body[class*="font-"] .epg-name {
@@ -1520,23 +1445,6 @@ body[class*="font-"] .search-box input {
   font-weight: bold;
 }
 
-.source-picker-modal {
-  width: 760px;
-}
-
-.source-options-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.source-option-btn[aria-pressed="true"] {
-  border-color: #ffd54f;
-  color: #ffd54f;
-}
-
 /* ================= 14. BOTÃO EDITAR SERVIDOR ================= */
 .btn-server-edit {
   padding: 8px 14px;
@@ -1593,7 +1501,9 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
 .fs-hud-bar {
   position: absolute; left: 0; right: 0; bottom: 0;
   padding: 24px 30px 28px;
-  background: rgba(16, 17, 24, 0.96);
+  background: rgba(16, 17, 24, 0.90);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 20px 20px 0 0;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.85);
@@ -1845,11 +1755,10 @@ body.is-fullscreen .col-player {
 
 /* Barra de Atalhos Coloridos do Controle Remoto (Footer) */
 .remote-color-bar {
-  position: relative;
-  bottom: auto;
-  left: auto;
-  right: auto;
-  flex-shrink: 0;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   height: 38px;
   background: rgba(10, 12, 18, 0.94);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -1858,6 +1767,8 @@ body.is-fullscreen .col-player {
   justify-content: center;
   gap: 32px;
   z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .color-shortcut-item {
@@ -2148,2125 +2059,166 @@ body.is-fullscreen .col-player {
     margin: 10px 0;
 }
 
-body {
-  --tv-accent: #f2c45c;
-  --tv-bg: #080e18;
-  --tv-panel: #101a28;
-  background:
-    radial-gradient(ellipse at 75% 0%, rgba(35, 75, 110, 0.18), transparent 42%),
-    var(--tv-bg);
-}
-
-html {
-    scrollbar-color: #f2c45c rgba(255, 255, 255, 0.14);
-    scrollbar-width: auto;
-}
-
-/* scrollbar-width: auto é obrigatório: "thin" desliga o desenho do ::-webkit-scrollbar
-   em Chromium novo e deixa a barra invisível nas TVs. */
-.pane-scroll,
-.settings-left-menu,
-.settings-detail-panel,
-.modal-content-scroll,
-.modal-body,
-.audio-subs-modal-body,
-.server-manager-body,
-.servers-manager-list,
-.source-options-list,
-#epgScheduleList,
-#devLogsContainer,
-.omnisearch-body,
-.epg-card {
-    scrollbar-color: #f2c45c rgba(255, 255, 255, 0.14);
-    scrollbar-width: auto;
-    scrollbar-gutter: stable;
-}
-
-.pane-scroll,
-.settings-left-menu,
-.settings-detail-panel {
-    overflow-y: scroll;
-    -webkit-overflow-scrolling: touch;
-}
-
-.app-sidebar {
-  position: fixed;
-  inset: 0 auto 38px 0;
-  z-index: 25;
-  display: flex;
-  flex-direction: column;
-  width: 248px;
-  padding: 28px 18px 20px;
-  background: linear-gradient(180deg, #101b2a 0%, #0b1420 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 12px 0 36px rgba(0, 0, 0, 0.18);
-}
-
-.app-sidebar .logo-box {
-  gap: 12px;
-  padding: 4px 8px 26px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.app-sidebar .logo-badge {
-  background: linear-gradient(135deg, #e34d56, #9e2535);
-  border-radius: 9px;
-  box-shadow: none;
-}
-
-.app-sidebar .logo-title {
-  font-size: 21px;
-  letter-spacing: 0.4px;
-}
-
-.sidebar-section-label {
-  margin: 26px 8px 12px;
-  color: #74849a;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1.4px;
-}
-
-.main-tabs {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  min-height: 54px;
-  padding: 0 15px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: #a7b3c2;
-  font-size: 16px;
-  font-weight: 700;
-  text-align: left;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
-}
-
-.tab-btn i {
-  flex: 0 0 22px;
-  width: 22px;
-  color: #91a1b5;
-  text-align: center;
-}
-
-.tab-btn .tab-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tab-btn.active {
-  border-color: rgba(242, 196, 92, 0.28);
-  background: linear-gradient(90deg, rgba(242, 196, 92, 0.18), rgba(242, 196, 92, 0.05));
-  color: #fff;
-}
-
-.tab-btn.active i {
-  color: var(--tv-accent);
-}
-
-.sidebar-footer {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: auto;
-  padding: 16px 10px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  color: #8d9bad;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.sidebar-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4bc58a;
-  box-shadow: 0 0 10px rgba(75, 197, 138, 0.65);
-}
-
-.app-header {
-  width: calc(100% - 248px);
-  height: 82px;
-  min-height: 82px;
-  margin-left: 248px;
-  padding: 0 30px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(9, 16, 26, 0.94);
-}
-
-.header-left {
-  gap: 0;
-}
-
-.header-context {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.header-kicker {
-  color: #8797aa;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 1.3px;
-}
-
-.header-section-title {
-  color: #f4f6fa;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-}
-
-.header-right {
-  gap: 10px;
-}
-
-.action-btn {
-  min-height: 44px;
-  border-radius: 9px;
-  background: #142131;
-  border-color: rgba(255, 255, 255, 0.09);
-  font-size: 15px;
-}
-
-.clock-display {
-  color: #e8c66f;
-  font-size: 19px;
-}
-
-.app-body {
-  width: calc(100% - 248px);
-  margin-left: 248px;
-  background: transparent;
-}
-
-#sectionUnified {
-  grid-template-columns: minmax(210px, 0.82fr) minmax(410px, 1.7fr) minmax(390px, 1.35fr);
-  gap: 16px;
-  padding: 16px 20px;
-  background: transparent;
-}
-
-.col-pane {
-  border-color: rgba(255, 255, 255, 0.075);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(17, 28, 43, 0.98), rgba(12, 21, 33, 0.98));
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
-}
-
-.pane-header {
-  min-height: 58px;
-  padding: 13px 16px;
-  background: rgba(255, 255, 255, 0.025);
-  font-size: 17px;
-}
-
-.counter-badge {
-  border-radius: 8px;
-  background: rgba(242, 196, 92, 0.12);
-  color: #e8c66f;
-  font-size: 13px;
-}
-
-.search-box {
-  padding: 14px 14px 12px;
-  border-bottom-color: rgba(255, 255, 255, 0.07);
-  background: transparent;
-}
-
-.search-box input {
-  min-height: 48px;
-  border-radius: 10px;
-  background: #0a1421;
-  border-color: rgba(255, 255, 255, 0.1);
-  font-size: 16px;
-}
-
-.col-categories .pane-scroll {
-  padding: 10px;
-}
-
-.cat-item-btn {
-  min-height: 48px;
-  padding: 10px 12px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.035);
-  font-size: 15px;
-}
-
-.cat-item-btn.active {
-  border-color: rgba(242, 196, 92, 0.4);
-  background: rgba(242, 196, 92, 0.13);
-  color: #fff;
-}
-
-.list-item-btn.active {
-  border-color: rgba(242, 196, 92, 0.65) !important;
-  background: linear-gradient(90deg, rgba(242, 196, 92, 0.19), rgba(242, 196, 92, 0.055)) !important;
-}
-
-.channel-row {
-  background: rgba(255, 255, 255, 0.035) !important;
-  border-color: rgba(255, 255, 255, 0.045) !important;
-}
-
-.channel-row:focus,
-.channel-row:hover {
-  background: rgba(242, 196, 92, 0.12) !important;
-  border-color: rgba(242, 196, 92, 0.55) !important;
-}
-
-.channel-row.active-playing {
-  border-left-color: var(--tv-accent) !important;
-  background: rgba(242, 196, 92, 0.1) !important;
-}
-
-.col-player {
-  background: linear-gradient(180deg, rgba(15, 25, 39, 0.98), rgba(10, 17, 27, 0.98));
-}
-
-.video-box {
-  border-color: rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-}
-
-.epg-card {
-  border-color: rgba(255, 255, 255, 0.075);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.epg-name {
-  color: var(--tv-accent);
-}
-
-.ctrl-btn {
-  border-radius: 9px;
-}
-
-.ctrl-btn.primary {
-  background: linear-gradient(135deg, #e34d56, #b63242);
-}
-
-body.vod-layout #listItems {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(142px, 1fr));
-  align-content: start;
-  gap: 14px;
-  padding: 14px;
-}
-
-body.vod-layout #listItems > li {
-  min-width: 0;
-  margin: 0;
-}
-
-body.vod-layout .channel-row {
-  position: relative;
-  display: block !important;
-  width: 100% !important;
-  aspect-ratio: 2 / 3;
-  min-height: 0;
-  padding: 0 !important;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 11px;
-  background: #101a28 !important;
-}
-
-body.vod-layout .channel-logo {
-  width: 100% !important;
-  height: 100% !important;
-  object-position: center;
-}
-
-.channel-row {
-  min-height: 92px;
-}
-
-body.vod-layout .channel-logo-wrap {
-  position: absolute;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  min-width: 0 !important;
-  padding: 0 !important;
-  border-radius: 0;
-  background: linear-gradient(145deg, #1d3045, #101a28) !important;
-}
-
-body.vod-layout .channel-logo {
-  object-fit: cover !important;
-}
-
-body.vod-layout .channel-details {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  width: 100% !important;
-  padding: 30px 10px 11px;
-  background: linear-gradient(transparent, rgba(5, 10, 17, 0.96) 42%);
-  z-index: 1;
-}
-
-body.vod-layout .channel-name {
-  display: -webkit-box !important;
-  white-space: normal !important;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  font-size: 14px !important;
-  line-height: 1.25;
-}
-
-body.vod-layout .channel-epg-sub {
-  margin-top: 3px;
-  color: #c1cbd7 !important;
-  font-size: 11px !important;
-}
-
-body.vod-layout .channel-fav-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(6, 12, 20, 0.72) !important;
-  color: #fff !important;
-  font-size: 18px !important;
-}
-
-body.vod-layout .channel-fav-btn.active {
-  color: var(--tv-accent) !important;
-}
-
-body.vod-layout .continue-progress-track {
-  position: absolute;
-  right: 9px;
-  bottom: 5px;
-  left: 9px;
-  z-index: 2;
-  width: auto;
-  height: 4px;
-  margin: 0;
-}
-
-body.vod-layout .series-card-btn {
-  min-height: 225px;
-  height: 100%;
-  flex-direction: column;
-  justify-content: center;
-  gap: 16px;
-  padding: 18px !important;
-  border-color: rgba(255, 255, 255, 0.1);
-  border-radius: 11px;
-  background:
-    radial-gradient(circle at 85% 20%, rgba(242, 196, 92, 0.22), transparent 38%),
-    linear-gradient(145deg, #1c3046, #101a28);
-  text-align: center;
-  white-space: normal;
-}
-
-body.vod-layout .series-card-btn > span:first-child {
-  font-size: 16px;
-  line-height: 1.35;
-}
-
-body.vod-layout .series-card-btn {
-  position: relative;
-  min-height: 225px;
-  overflow: hidden;
-}
-
-.series-poster {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.62;
-}
-
-body.vod-layout .series-card-btn > span {
-  position: relative;
-  z-index: 1;
-}
-
-.settings-description,
-.settings-status {
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.settings-control-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  max-width: 820px;
-  min-height: 78px;
-  margin: 12px 0;
-  padding: 14px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.settings-control-row > span {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.settings-control-row small {
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.settings-control-row select {
-  width: 280px;
-  max-width: 42%;
-  min-height: 46px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 9px;
-  background: #121522;
-  color: #fff;
-  font-size: 16px;
-}
-
-.settings-control-row input[type="checkbox"] {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  accent-color: var(--primary-red);
-}
-
-.settings-action {
-  min-height: 52px;
-  margin-top: 12px;
-  padding: 12px 20px;
-}
-
-.adult-control-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.source-section-title {
-  margin: 12px 0 2px;
-  color: var(--focus-ring);
-  font-size: 18px;
-}
-
-.settings-left-menu,
-.settings-detail-panel {
-  border-color: rgba(255, 255, 255, 0.075);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(17, 28, 43, 0.98), rgba(12, 21, 33, 0.98));
-}
-
-body.is-fullscreen .app-sidebar {
-  display: none !important;
-}
-
-.logo-badge {
-  width: 52px;
-  height: 52px;
-  padding: 0;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: 0 0 16px rgba(229, 9, 20, 0.28);
-}
-
-.logo-title span {
-  color: #fff;
-}
-
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.search-box input {
-  flex: 1;
-  min-width: 0;
-}
-
-.sort-order-btn {
-  flex: 0 0 auto;
-  min-height: 48px;
-  max-width: 45%;
-  padding: 8px 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.remote-color-bar {
-  height: 50px;
-  gap: 20px;
-  padding: 0 18px;
-}
-
-.color-shortcut-item {
-  gap: 10px;
-  font-size: 17px;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
-.color-key-dot {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-}
-
-.channel-logo-wrap {
-  width: 76px !important;
-  height: 76px !important;
-  min-width: 76px !important;
-}
-
-.channel-name {
-  font-size: 1.2rem !important;
-  font-weight: 700 !important;
-}
-
-.channel-epg-sub {
-  font-size: 0.95rem !important;
-}
-
-.settings-left-menu,
-.settings-detail-panel {
-  min-width: 0;
-  min-height: 0;
-}
-
-.settings-left-menu {
-  overflow-y: scroll;
-  -webkit-overflow-scrolling: touch;
-}
-
-.settings-detail-panel {
-  overflow-x: hidden;
-  overflow-y: auto;
-  overflow-wrap: anywhere;
-  -webkit-overflow-scrolling: touch;
-}
-
-.settings-detail-panel button,
-.settings-detail-panel input,
-.settings-detail-panel select {
-  max-width: 100%;
-  min-width: 0;
-}
-
-body[class*="font-"] #sectionSettings,
-body[class*="font-"] .settings-left-menu,
-body[class*="font-"] .settings-detail-panel {
-  min-height: 0;
-  min-width: 0;
-}
-
-body[class*="font-"] .settings-detail-panel h3 {
-  font-size: calc(22px * var(--font-scale, 1)) !important;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-body[class*="font-"] .cfg-menu-item,
-body[class*="font-"] .settings-detail-panel .list-item-btn {
-  line-height: 1.25;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.source-picker-modal,
-.quality-picker-modal {
-  width: 860px;
-  max-width: 92vw;
-  max-height: 86vh;
-  overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  background: linear-gradient(155deg, #171d2b, #0d111b 70%);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6);
-}
-
-.source-options-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 22px;
-}
-
-.server-source-options {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.source-option-btn {
-  min-height: 58px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.source-option-btn[aria-pressed="true"] {
-  border-color: rgba(229, 9, 20, 0.75);
-  background: rgba(229, 9, 20, 0.15);
-}
-
-.quality-note {
-  margin: 0;
-  padding: 0 22px 20px;
-  color: var(--text-muted);
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-.server-manager-modal {
-  width: 1080px;
-  max-width: 94vw;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  background: linear-gradient(155deg, #171d2b, #0d111b 70%);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.6);
-}
-
-.server-manager-modal .modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 22px;
-}
-
-.server-manager-body {
-  padding: 20px 24px;
-}
-
-.server-manager-row,
-.add-server-card {
-  border-radius: 14px;
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.server-manager-row.active-server {
-  border-color: rgba(229, 9, 20, 0.75);
-  background: linear-gradient(100deg, rgba(229, 9, 20, 0.17), rgba(255, 255, 255, 0.025));
-}
-
-.player-controls .ctrl-btn,
-.hud-ctrl-btn {
-  border-radius: 14px;
-  background: linear-gradient(155deg, rgba(37, 45, 62, 0.95), rgba(18, 24, 37, 0.98));
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.22);
-}
-
-.player-controls .ctrl-btn:focus,
-.hud-ctrl-btn:focus {
-  border-color: var(--focus-ring);
-  box-shadow: 0 0 0 2px rgba(255, 213, 79, 0.35), 0 7px 22px rgba(0, 0, 0, 0.32);
-  transform: translateY(-2px);
-}
-
-body.amoled-mode {
-  --bg-dark: #000;
-  --header-bg: #000;
-  --pane-bg: #000;
-  --card-bg: #050505;
-}
-
-body.amoled-mode .app-sidebar,
-body.amoled-mode .app-header,
-body.amoled-mode .col-pane,
-body.amoled-mode .settings-left-menu,
-body.amoled-mode .settings-detail-panel,
-body.amoled-mode .remote-color-bar {
-  background: #000 !important;
-}
-
-body[class*="font-"] .settings-control-row,
-body[class*="font-"] .settings-control-row > span {
-  min-width: 0;
-}
-
-body[class*="font-"] .settings-control-row {
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-body[class*="font-"] .settings-control-row select {
-  width: 100%;
-  max-width: 100%;
-}
-
-@media (max-width: 900px) {
-  .remote-color-bar {
-    justify-content: space-around;
-    gap: 8px;
-  }
-
-  .color-shortcut-item {
-    font-size: 14px;
-  }
-
-  .settings-control-row {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .settings-control-row select {
-    width: 100%;
-  }
-}
-
-@media (max-width: 1360px) {
-  .app-sidebar {
-    width: 214px;
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-
-  .app-header,
-  .app-body {
-    width: calc(100% - 214px);
-    margin-left: 214px;
-  }
-
-  #sectionUnified {
-    grid-template-columns: minmax(175px, 0.75fr) minmax(330px, 1.55fr) minmax(310px, 1.3fr);
-    gap: 10px;
-    padding: 12px;
-  }
-
-  body.vod-layout #listItems {
-    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-    gap: 10px;
-  }
-}
-
-.startup-login-screen {
-  position: fixed;
-  inset: 0;
-  z-index: 2000000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow-y: auto;
-  padding: 32px;
-  background:
-    radial-gradient(ellipse at 50% 20%, rgba(227, 77, 86, 0.18), transparent 55%),
-    rgba(5, 9, 16, 0.98);
-}
-
-.startup-login-screen.hidden,
-html.authenticated-session .startup-login-screen {
-  display: none !important;
-}
-
-.startup-login-card {
-  width: min(100%, 560px);
-  padding: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 24px;
-  background: linear-gradient(145deg, #171d2b, #0d111b);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-}
-
-.startup-login-brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  margin-bottom: 30px;
-  text-align: left;
-}
-
-.startup-login-logo {
-  display: grid;
-  width: 76px;
-  height: 76px;
-  place-items: center;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #e34d56, #9e2535);
-  color: #fff;
-  font-size: 23px;
-  font-weight: 900;
-  box-shadow: 0 8px 26px rgba(227, 77, 86, 0.28);
-}
-
-.startup-login-brand h1,
-.startup-login-brand p,
-.startup-login-form h2,
-.startup-login-description,
-.startup-login-footer {
-  margin: 0;
-}
-
-.startup-login-brand h1 {
-  color: #fff;
-  font-size: 28px;
-}
-
-.startup-login-brand p {
-  margin-top: 5px;
-  color: #f2c45c;
-  font-weight: 700;
-}
-
-.startup-login-form {
-  display: flex;
-  flex-direction: column;
-}
-
-.startup-login-form h2 {
-  color: #fff;
-  font-size: 21px;
-  text-align: center;
-}
-
-.startup-login-description {
-  margin: 7px 0 24px;
-  color: #aeb8c8;
-  text-align: center;
-}
-
-.startup-login-form label {
-  margin: 0 0 7px;
-  color: #d7deea;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.startup-login-form input {
-  width: 100%;
-  min-height: 52px;
-  padding: 12px 15px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
-  outline: none;
-  background: #0f1420;
-  color: #fff;
-  font-size: 17px;
-}
-
-.startup-login-form input:focus {
-  border-color: #e34d56;
-  box-shadow: 0 0 0 3px rgba(227, 77, 86, 0.2);
-}
-
-.startup-password-field {
-  display: flex;
-  gap: 8px;
-}
-
-.startup-password-field input {
-  flex: 1;
-  min-width: 0;
-}
-
-.startup-password-toggle,
-.startup-login-primary,
-.startup-login-secondary {
-  min-height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 12px;
-  background: #20283a;
-  color: #e8edf5;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.startup-password-toggle {
-  min-width: 92px;
-  padding: 0 12px;
-}
-
-.startup-login-primary {
-  min-height: 54px;
-  margin-top: 22px;
-  border-color: #e34d56;
-  background: linear-gradient(135deg, #e34d56, #b52e42);
-  color: #fff;
-  font-size: 17px;
-}
-
-.startup-login-secondary {
-  margin-top: 10px;
-  padding: 8px 12px;
-}
-
-.startup-password-toggle:focus,
-.startup-login-primary:focus,
-.startup-login-secondary:focus {
-  outline: 3px solid #ffd54f;
-  outline-offset: 2px;
-}
-
-.startup-login-error {
-  min-height: 0;
-  margin-top: 8px;
-  color: #ff8a8a;
-  font-size: 14px;
-}
-
-.startup-login-error:empty {
-  display: none;
-}
-
-.startup-login-footer {
-  margin-top: 22px;
-  color: #8190a4;
-  font-size: 12px;
-  text-align: center;
-}
-
-@media (max-width: 700px) {
-  .startup-login-screen {
-    padding: 16px;
-  }
-
-  .startup-login-card {
-    padding: 24px 20px;
-  }
-}
-
-
 /* ==========================================================================
-   v2.4.1 — Camadas, rolagem e mini player em Smart TV
+   MK21 SMART TV (webOS / IPK) - DESIGN SYSTEM v2.5.0
    ========================================================================== */
-
-/* Indicador de rolagem desenhado pelo app (TVs que ocultam a barra nativa). */
-.tv-scrollbar-indicator {
-  width: 12px;
-  min-width: 12px;
-}
-
-/* O mini player fica sempre visível: a coluna do player não rola. */
-.col-player {
-  overflow: hidden;
-}
-
-/* Em tela cheia a TV pode compor o plano de vídeo acima do HTML. Enquanto um
-   modal está aberto, o vídeo e o HUD são ocultados para o modal aparecer. */
-body.mk21-modal-open #videoContainer,
-body.mk21-modal-open .video-box.is-fullscreen {
-  z-index: 60 !important;
-}
-
-body.mk21-modal-open .video-box.is-fullscreen video,
-body.mk21-modal-open .video-box.is-fullscreen .fs-hud-bar {
-  visibility: hidden !important;
-}
-
-/* =====================================================================
-   MK21 — DESIGN SYSTEM DE BOTÕES (v2.4.2)
-   ---------------------------------------------------------------------
-   Regras de UI para TV (10-foot experience):
-   - alvo mínimo de 64px de altura (64x64 para botão só de ícone);
-   - :focus é o estado principal (D-Pad), com anel + glow + escala leve;
-   - transições curtas (160ms) só em transform/background/shadow;
-   - NADA de backdrop-filter: blur() (trava GPU de TV);
-   - contraste AA: texto claro sobre superfície escura, foco em âmbar.
-   ===================================================================== */
 :root {
-  /* Ritmo e alvo de toque/foco */
-  --btn-radius: 14px;
-  --btn-radius-sm: 12px;
-  --btn-radius-pill: 999px;
-  --btn-min-h: 64px;
-  --btn-min-size: 64px;
-  --btn-pad-y: 16px;
-  --btn-pad-x: 26px;
-  --btn-gap: 12px;
-  --btn-font: 24px;
-  --btn-font-compact: 18px;
-
-  /* Superfícies (dark theme) */
-  --btn-bg: linear-gradient(155deg, #262e42 0%, #171c2b 100%);
-  --btn-bg-hover: linear-gradient(155deg, #2f3850 0%, #1d2334 100%);
-  --btn-bg-pressed: linear-gradient(155deg, #1a2030 0%, #12161f 100%);
-  --btn-border: rgba(255, 255, 255, 0.14);
-  --btn-border-strong: rgba(255, 255, 255, 0.30);
-  --btn-fg: #f7f9ff;
-  --btn-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-
-  /* Acento e foco (mesmo amarelo do tema) */
-  --btn-accent: #ffd54f;
-  --btn-accent-soft: rgba(255, 213, 79, 0.16);
-  --btn-focus-shadow: 0 0 0 3px rgba(255, 213, 79, 0.95), 0 0 26px rgba(255, 213, 79, 0.45);
-  --btn-focus-scale: 1.05;
-
-  /* Ação principal e perigo */
-  --btn-primary-bg: linear-gradient(135deg, #ff3b46 0%, #c00d1b 100%);
-  --btn-primary-bg-hover: linear-gradient(135deg, #ff5560 0%, #d3121f 100%);
-
-  /* Movimento */
-  --btn-motion: 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  --mk21-red: #FF0000;
+  --mk21-red-glow: rgba(255, 0, 0, 0.85);
+  --mk21-red-dark: #B30000;
+  --mk21-surface: #121212;
+  --mk21-surface-border: #262626;
+  --mk21-text: #FFFFFF;
+  --mk21-text-muted: #8E8E93;
 }
 
-/* ---------- Base ---------- */
-.ctrl-btn,
-.hud-ctrl-btn,
-.modal-btn,
-.modal-button,
-.tab-btn {
-  min-height: var(--btn-min-h);
-  padding: var(--btn-pad-y) var(--btn-pad-x);
-  border-radius: var(--btn-radius);
-  border: 1px solid var(--btn-border);
-  background: var(--btn-bg);
-  color: var(--btn-fg);
-  font-size: var(--btn-font);
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  line-height: 1.2;
-  box-shadow: var(--btn-shadow);
-  cursor: pointer;
-  transition:
-    transform var(--btn-motion),
-    background var(--btn-motion),
-    border-color var(--btn-motion),
-    box-shadow var(--btn-motion),
-    color var(--btn-motion);
-}
-
-/* ---------- Hover (mouse / ponteiro) ---------- */
-.ctrl-btn:hover,
-.hud-ctrl-btn:hover,
-.modal-btn:hover,
-.modal-button:hover {
-  background: var(--btn-bg-hover);
-  border-color: var(--btn-border-strong);
-  transform: translateY(-1px);
-}
-
-/* ---------- FOCUS: o estado que manda na TV ---------- */
-.ctrl-btn:focus,
-.modal-btn:focus,
-.modal-button:focus,
-.tab-btn:focus {
-  outline: none !important;
-  border-color: var(--btn-accent) !important;
-  background: var(--btn-accent-soft) !important;
-  color: #ffffff !important;
-  box-shadow: var(--btn-focus-shadow) !important;
-  transform: scale(var(--btn-focus-scale)) !important;
-  z-index: 3;
-}
-
-/* No HUD o botão fica sobre o vídeo: fundo sólido garante contraste AA. */
-.hud-ctrl-btn:focus {
-  outline: none !important;
-  background: var(--btn-accent) !important;
-  border-color: var(--btn-accent) !important;
-  color: #14161f !important;
-  box-shadow: var(--btn-focus-shadow) !important;
-  transform: scale(var(--btn-focus-scale)) !important;
-  z-index: 3;
-}
-
-/* ---------- Pressionado ---------- */
-.ctrl-btn:active,
-.hud-ctrl-btn:active,
-.modal-btn:active,
-.modal-button:active,
-.tab-btn:active {
-  background: var(--btn-bg-pressed) !important;
-  transform: scale(0.99) translateY(1px) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
-}
-
-/* ---------- Desabilitado ---------- */
-.ctrl-btn:disabled,
-.hud-ctrl-btn:disabled,
-.modal-btn:disabled,
-.modal-button:disabled,
-.tab-btn:disabled {
-  opacity: 0.45;
-  filter: grayscale(0.6);
-  cursor: default;
-  box-shadow: none;
-  transform: none !important;
-}
-
-/* ---------- Variantes ---------- */
-.ctrl-btn.primary,
-.modal-btn.primary,
-.modal-button.primary {
-  background: var(--btn-primary-bg);
-  border-color: rgba(255, 255, 255, 0.16);
-}
-.ctrl-btn.primary:hover,
-.modal-btn.primary:hover,
-.modal-button.primary:hover {
-  background: var(--btn-primary-bg-hover);
-}
-.ctrl-btn.primary:focus,
-.modal-btn.primary:focus,
-.modal-button.primary:focus {
-  border-color: #ffffff !important;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9), 0 0 26px rgba(255, 60, 70, 0.55) !important;
-}
-
-.hud-ctrl-btn.primary {
-  background: var(--btn-primary-bg);
-  border-color: rgba(255, 255, 255, 0.18);
-}
-
-/* Botão só de ícone: alvo quadrado de 64x64. */
-.ctrl-btn.icon-only,
-.hud-ctrl-btn.icon-only,
-.modal-btn.icon-only {
-  min-width: var(--btn-min-size);
-  padding-left: 0;
-  padding-right: 0;
-}
-
-/* ---------- Barra de controles do player ----------
-   10 botões dividindo ~1/3 da tela: 24px não cabe, então a barra usa a
-   escala compacta (18px) mantendo alvo de 56px. Os botões de ação e os
-   modais seguem com 24px. */
-.player-controls .ctrl-btn {
-  min-height: 56px;
-  padding: 12px 10px;
-  border-radius: var(--btn-radius-sm);
-  font-size: var(--btn-font-compact);
-}
-.player-controls .ctrl-btn:focus {
-  transform: scale(1.06) translateY(-2px) !important;
-}
-
-/* ---------- Navegação lateral (abas) ---------- */
-.tab-btn {
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 0 20px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
-.tab-btn:focus {
-  transform: translateX(3px) scale(1.02) !important;
-}
-
-/* ---------- Teclado numérico do PIN (alvo grande) ---------- */
-.pin-key {
-  min-height: var(--btn-min-size);
-  min-width: var(--btn-min-size);
-  border-radius: var(--btn-radius-sm);
-  font-size: var(--btn-font);
-  font-weight: 800;
-  transition: transform var(--btn-motion), background var(--btn-motion), box-shadow var(--btn-motion);
-}
-.pin-key:focus {
-  outline: none !important;
-  background: var(--btn-accent) !important;
-  color: #14161f !important;
-  box-shadow: var(--btn-focus-shadow) !important;
-  transform: scale(var(--btn-focus-scale)) !important;
-}
-
-/* ---------- Espaçamento entre botões vizinhos ---------- */
-.player-controls,
-.fs-hud-actions,
-.modal-footer {
-  gap: var(--btn-gap);
-}
-
-/* Respeita quem pediu menos animação (TVs fracas / acessibilidade). */
-@media (prefers-reduced-motion: reduce) {
-  .ctrl-btn,
-  .hud-ctrl-btn,
-  .modal-btn,
-  .modal-button,
-  .tab-btn,
-  .pin-key {
-    transition: none;
-  }
-}
-
-/* =====================================================================
-   SPLASH DE IDENTIDADE — preto absoluto + logo do APK centralizado
-   ===================================================================== */
-.mk21-splash {
+.login-modal-fullscreen {
+  display: flex !important;
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: #000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at center, rgba(30, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.95) 100%),
+              url('assets/bg.jpg') center/cover no-repeat,
+              #000000;
   z-index: 99999;
-  transition: opacity 350ms ease, visibility 350ms ease;
-}
-.mk21-splash.fade-out {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-.mk21-splash-logo {
-  width: 300px;
-  height: 300px;
-  display: block;
-  filter: drop-shadow(0 0 42px rgba(229, 9, 20, 0.45));
-}
-.mk21-splash-title {
-  margin-top: 26px;
-  font-size: 30px;
-  font-weight: 900;
-  letter-spacing: 10px;
-  color: #fff;
-}
-.mk21-splash-title span { color: var(--primary-red); }
-.mk21-splash-sub {
-  margin-top: 10px;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 6px;
-  color: #7c8798;
-}
-.mk21-splash-progress {
-  margin-top: 34px;
-  width: 320px;
-  height: 4px;
-  border-radius: 2px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.12);
-}
-#splashProgressBar {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #e50914, #ffd54f);
-  transition: width 300ms ease;
-}
-#splashStatusText {
-  margin-top: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #7c8798;
 }
 
-/* Logo vetorial do sidebar (mesmo desenho do APK) */
-.logo-mark {
-  width: 46px;
-  height: 46px;
-  display: block;
-}
-
-/* =====================================================================
-   LISTAS PADRONIZADAS COM O DESIGN SYSTEM DE BOTOES
-   Canais, categorias, episodios, faixas, servidores e fontes usam o
-   mesmo raio, superficie e anel de foco dos botoes de acao.
-   ===================================================================== */
-.list-item-btn,
-.cat-item-btn,
-.episode-item-btn,
-.track-item-btn,
-.source-option-btn,
-.server-manager-row {
-  min-height: var(--btn-min-h);
-  padding: 14px 18px;
-  border-radius: var(--btn-radius-sm);
-  border: 1px solid var(--btn-border);
-  background: var(--btn-bg);
-  color: var(--btn-fg);
-  font-size: 20px;
-  font-weight: 700;
-  transition:
-    transform var(--btn-motion),
-    background var(--btn-motion),
-    border-color var(--btn-motion),
-    box-shadow var(--btn-motion);
-}
-
-.list-item-btn:focus,
-.cat-item-btn:focus,
-.episode-item-btn:focus,
-.track-item-btn:focus,
-.source-option-btn:focus,
-.server-manager-row:focus {
-  outline: none !important;
-  border-color: var(--btn-accent) !important;
-  background: var(--btn-accent-soft) !important;
-  color: #fff !important;
-  box-shadow: var(--btn-focus-shadow) !important;
-  transform: translateX(4px) !important;
-}
-
-.list-item-btn.active,
-.cat-item-btn.active,
-.track-item-btn.active,
-.server-manager-row.active-server {
-  background: linear-gradient(100deg, rgba(229, 9, 20, 0.22), rgba(255, 255, 255, 0.03));
-  border-color: rgba(229, 9, 20, 0.6);
-  box-shadow: inset 3px 0 0 var(--primary-red);
-  color: #fff;
-}
-
-/* Grade do guia EPG: card com o mesmo raio, sem ser focavel */
-.epg-schedule-row {
-  min-height: 72px;
-  padding: 14px 18px;
-  border-radius: var(--btn-radius-sm);
-  border: 1px solid var(--btn-border);
-  background: var(--btn-bg);
-  margin-bottom: 10px;
-}
-.epg-schedule-row.active-now {
-  background: linear-gradient(100deg, rgba(16, 185, 129, 0.20), rgba(255, 255, 255, 0.03));
-  border-color: rgba(16, 185, 129, 0.55);
-  box-shadow: inset 3px 0 0 #10b981;
-}
-
-/* =====================================================================
-   MK21 — CAMADA FINAL DE BOTOES (2.4.4)
-   ---------------------------------------------------------------------
-   As regras antigas de foco usam seletores mais especificos
-   (.player-controls .ctrl-btn, .hud-ctrl-btn, button:focus) e !important,
-   entao elas venciam a camada do design system por especificidade, mesmo
-   estando antes no arquivo. Esta camada vem por ULTIMO e tambem usa
-   !important: e ela que vale.
-
-   Foco = botao preenchido de ambar com anel e glow. Nao existe estado
-   mais visivel que esse a 3 metros de distancia.
-   ===================================================================== */
-
-/* ---------- Superficie padrao de todo botao de acao ---------- */
-.ctrl-btn,
-.hud-ctrl-btn,
-.modal-btn,
-.modal-button,
-.action-btn,
-.cfg-menu-item,
-.list-item-btn,
-.sort-choice-btn,
-.omnisearch-tab-btn,
-.omnisearch-item-btn,
-.season-tab-btn,
-.sort-order-btn,
-.util-btn,
-.storage-action-btn,
-.startup-login-primary,
-.startup-login-secondary,
-.startup-password-toggle,
-.source-option-btn,
-.track-item-btn,
-.episode-item-btn,
-.cat-item-btn,
-.channel-row,
-.server-pill,
-.pin-key,
-.btn-server-connect,
-.btn-server-edit,
-.btn-server-delete {
-  border-radius: var(--btn-radius) !important;
-  border: 1px solid var(--btn-border) !important;
-  background: var(--btn-bg) !important;
-  color: var(--btn-fg) !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.2px !important;
-  box-shadow: var(--btn-shadow) !important;
-  transition:
-    transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    background 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    border-color 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    box-shadow 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    color 160ms cubic-bezier(0.22, 0.61, 0.36, 1) !important;
-}
-
-/* ---------- Alvos: 64px nas listas/HUD, 56px na barra do player ---------- */
-.tab-btn,
-.action-btn,
-.cfg-menu-item,
-.list-item-btn,
-.omnisearch-item-btn,
-.sort-choice-btn,
-.season-tab-btn,
-.source-option-btn,
-.track-item-btn,
-.episode-item-btn,
-.cat-item-btn,
-.channel-row,
-.modal-btn,
-.modal-button,
-.hud-ctrl-btn,
-.pin-key {
-  min-height: var(--btn-min-h) !important;
-}
-
-.player-controls .ctrl-btn {
-  min-height: 56px !important;
-  padding: 10px 14px !important;
-  font-size: var(--btn-font-compact) !important;
-  border-radius: 13px !important;
-}
-
-.hud-ctrl-btn,
-.fs-hud-actions .ctrl-btn {
-  font-size: 22px !important;
-  padding: 14px 20px !important;
-}
-
-.pin-key {
-  font-size: 26px !important;
-  min-width: 64px !important;
-}
-
-.tab-btn,
-.action-btn,
-.modal-btn,
-.modal-button,
-.startup-login-primary,
-.startup-login-secondary,
-.cfg-menu-item {
-  font-size: var(--btn-font) !important;
-}
-
-/* ---------- Acoes primarias continuam vermelhas ---------- */
-.startup-login-primary,
-.ctrl-btn.primary,
-.hud-ctrl-btn.primary,
-.modal-button.primary,
-.modal-btn.primary,
-.action-btn.primary,
-.btn-server-connect {
-  background: var(--btn-primary-bg) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  color: #ffffff !important;
-}
-
-/* ---------- Aba ativa: vermelho chapado, sem competir com o foco ---------- */
-.tab-btn.active,
-.omnisearch-tab-btn.active,
-.season-tab-btn.active {
-  background: linear-gradient(135deg, #e50914 0%, #8b060d 100%) !important;
-  border-color: rgba(229, 9, 20, 0.85) !important;
-  color: #ffffff !important;
-}
-
-.list-item-btn.active,
-.cat-item-btn.active,
-.track-item-btn.active,
-.sort-choice-btn.active,
-.server-manager-row.active-server {
-  background: linear-gradient(100deg, rgba(229, 9, 20, 0.22), rgba(255, 255, 255, 0.03)) !important;
-  border-color: rgba(229, 9, 20, 0.6) !important;
-  box-shadow: inset 3px 0 0 var(--primary-red) !important;
-}
-
-/* ---------- Hover (ponteiro) ---------- */
-.ctrl-btn:hover,
-.hud-ctrl-btn:hover,
-.modal-btn:hover,
-.modal-button:hover,
-.action-btn:hover,
-.cfg-menu-item:hover,
-.list-item-btn:hover {
-  background: var(--btn-bg-hover) !important;
-  border-color: var(--btn-border-strong) !important;
-}
-
-/* ---------- FOCUS: o estado que manda na TV ---------- */
-.ctrl-btn:focus,
-.player-controls .ctrl-btn:focus,
-.fs-hud-actions .ctrl-btn:focus,
-.hud-ctrl-btn:focus,
-.fs-hud-bar .hud-ctrl-btn:focus,
-.modal-btn:focus,
-.modal-btn:focus-visible,
-.modal-button:focus,
-.modal-button:focus-visible,
-.tab-btn:focus,
-.action-btn:focus,
-.cfg-menu-item:focus,
-.pin-key:focus,
-.list-item-btn:focus,
-.cat-item-btn:focus,
-.episode-item-btn:focus,
-.track-item-btn:focus,
-.sort-choice-btn:focus,
-.omnisearch-tab-btn:focus,
-.omnisearch-item-btn:focus,
-.season-tab-btn:focus,
-.sort-order-btn:focus,
-.util-btn:focus,
-.storage-action-btn:focus,
-.startup-login-primary:focus,
-.startup-login-secondary:focus,
-.startup-password-toggle:focus,
-.source-option-btn:focus,
-.channel-row:focus,
-.server-pill:focus,
-.btn-server-connect:focus,
-.btn-server-edit:focus,
-.btn-server-delete:focus,
-.header-focusable:focus,
-button:focus,
-[tabindex="0"]:focus:not(input):not(textarea) {
-  outline: none !important;
-  outline-offset: 0 !important;
-  border-color: #fff3c4 !important;
-  background: var(--btn-accent) !important;
-  color: #12141c !important;
-  text-shadow: none !important;
-  box-shadow:
-    0 0 0 4px rgba(0, 0, 0, 0.55),
-    0 0 0 7px var(--btn-accent),
-    0 0 34px rgba(255, 213, 79, 0.75) !important;
-  transform: scale(var(--btn-focus-scale)) !important;
-  z-index: 60 !important;
-}
-
-/* Icones herdam a cor do botao focado (antes ficavam brancos no ambar) */
-.ctrl-btn:focus i,
-.hud-ctrl-btn:focus i,
-.tab-btn:focus i,
-.action-btn:focus i,
-.modal-btn:focus i,
-.modal-button:focus i,
-.pin-key:focus i {
-  color: #12141c !important;
-}
-
-/* ---------- Pressionado / desabilitado ---------- */
-.ctrl-btn:active,
-.hud-ctrl-btn:active,
-.modal-btn:active,
-.modal-button:active,
-.action-btn:active,
-.tab-btn:active,
-.list-item-btn:active,
-.pin-key:active {
-  transform: scale(0.97) !important;
-  background: var(--btn-bg-pressed) !important;
-}
-
-button:disabled,
-.ctrl-btn:disabled,
-.hud-ctrl-btn:disabled,
-.tab-btn:disabled,
-.modal-btn:disabled {
-  opacity: 0.45 !important;
-  filter: grayscale(0.5) !important;
-  cursor: not-allowed !important;
-  transform: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ctrl-btn, .hud-ctrl-btn, .modal-btn, .modal-button, .tab-btn,
-  .action-btn, .list-item-btn, .pin-key, .cfg-menu-item {
-    transition: none !important;
-  }
-}
-
-/* ---------- Canais: linha da lista com foco alinhado a esquerda ---------- */
-.channel-row,
-.list-item-btn,
-.omnisearch-item-btn,
-.cfg-menu-item {
-  text-align: left !important;
-}
-
-/* ---------- Contagem por aba (Ao Vivo / Filmes / Series) ---------- */
-.tab-btn .tab-count {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  margin-left: auto;
-  padding: 2px 7px;
-  min-width: 32px;
-  max-width: none;
-  white-space: nowrap;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 800;
-  text-align: center;
-}
-
-.tab-btn.active .tab-count {
-  background: rgba(255, 255, 255, 0.30);
-}
-
-.tab-btn .tab-count.is-empty {
-  opacity: 0.5;
-}
-
-/* =====================================================================
-   MK21 — PLAYER 2.4.6 (botoes grandes e rotulados)
-   ---------------------------------------------------------------------
-   A barra antiga era um circulo de 50x50 com icone: a 3 metros ninguem
-   identifica o que e' "🎞️" ou "🌐", e o min-height da camada 2.4.4 ficava
-   brigando com o height fixo, gerando pastilhas cortadas. Agora cada botao
-   e' um cartao de 64 px com icone + rotulo, em grade de 4 colunas — sem
-   corte, sem texto truncado, e o foco ambar continua sendo o mais forte.
-   ===================================================================== */
-
-.player-controls {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 10px !important;
-  padding: 10px 2px 2px !important;
-  width: 100% !important;
-  align-items: stretch !important;
-}
-
-.player-controls .ctrl-btn {
-  width: auto !important;
-  height: 64px !important;
-  min-width: 0 !important;
-  min-height: 64px !important;
-  flex: 0 0 auto !important;
-  border-radius: 14px !important;
-  padding: 0 10px !important;
-  font-size: 18px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.2px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 6px !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  background: #232838 !important;
-  border: 2px solid rgba(255, 255, 255, 0.14) !important;
-  color: #ffffff !important;
-}
-
-.player-controls .ctrl-btn.primary {
-  background: var(--btn-primary-bg) !important;
-  border-color: rgba(255, 255, 255, 0.30) !important;
-}
-
-.player-controls .ctrl-btn.hidden,
-.player-controls .ctrl-btn[hidden] {
-  display: none !important;
-}
-
-/* Fullscreen HUD: mesmas regras, uma linha de 4 por vez */
-.fs-hud-actions {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 12px !important;
-  width: 100% !important;
-  align-items: stretch !important;
-}
-
-.hud-ctrl-btn,
-.fs-hud-actions .ctrl-btn {
-  height: 64px !important;
-  min-height: 64px !important;
-  padding: 0 14px !important;
-  font-size: 20px !important;
-  border-radius: 14px !important;
-  justify-content: center !important;
-  white-space: nowrap !important;
-}
-
-.hud-ctrl-btn.hidden,
-.fs-hud-actions .ctrl-btn.hidden {
-  display: none !important;
-}
-
-.fs-hud-title {
-  font-size: 22px !important;
-  font-weight: 800 !important;
-  margin-bottom: 8px !important;
-}
-
-/* Faixa de diagnostico do console de logs */
-#devDiagHeader {
-  display: block;
-  background: #0f1422;
-  border: 1px solid rgba(96, 165, 250, 0.35);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #cbd5e1;
-  font-family: monospace, Courier, sans-serif;
-  word-break: break-word;
-}
-
-
-/* =====================================================================
-   MK21 2.4.7 — PLAYER REDESENHADO + ESTADO VAZIO + SELO DE VERSAO
-   ===================================================================== */
-
-.app-version-badge {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.16);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  color: #cbd5e1;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  text-transform: none;
-}
-
-/* Barra lateral do player: cartao com icone sobre rotulo, como app de TV */
-.player-controls {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 10px !important;
-  padding: 12px 2px 0 !important;
-  width: 100% !important;
-  align-items: stretch !important;
-}
-
-.player-controls .ctrl-btn {
-  width: auto !important;
-  height: 74px !important;
-  min-width: 0 !important;
-  min-height: 74px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 3px !important;
-  padding: 6px 4px !important;
-  border-radius: 16px !important;
-  background: linear-gradient(180deg, rgba(40, 48, 68, 0.98), rgba(22, 27, 40, 0.98)) !important;
-  border: 1px solid rgba(148, 163, 184, 0.22) !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.30) !important;
-  color: #e2e8f0 !important;
-  font-weight: 800 !important;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease !important;
-}
-
-.player-controls .ctrl-btn .ctrl-ico {
-  font-size: 24px;
-  line-height: 1;
-  display: block;
-}
-
-.player-controls .ctrl-btn .ctrl-label {
-  font-size: 12px;
-  line-height: 1.1;
-  letter-spacing: 0.3px;
-  font-weight: 800;
-  text-transform: uppercase;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Acoes principais ocupam meia barra cada */
-.player-controls .ctrl-btn.ctrl-hero {
-  grid-column: span 2 !important;
-  height: 78px !important;
-  min-height: 78px !important;
-}
-
-.player-controls .ctrl-btn.ctrl-hero .ctrl-ico { font-size: 26px; }
-.player-controls .ctrl-btn.ctrl-hero .ctrl-label { font-size: 13px; }
-
-.player-controls .ctrl-btn.primary {
-  background: linear-gradient(180deg, #f472b6, #db2777) !important;
-  border-color: rgba(255, 255, 255, 0.35) !important;
-  color: #ffffff !important;
-}
-
-/* Foco ambar preenchido, com destaque fisico */
-.player-controls .ctrl-btn:focus,
-.player-controls .ctrl-btn:focus-visible {
-  background: var(--focus-fill, #ffc400) !important;
-  border-color: #fff3c4 !important;
-  color: #10141f !important;
-  transform: translateY(-2px) scale(1.03) !important;
-  box-shadow: 0 0 0 3px rgba(255, 196, 0, 0.35), 0 10px 22px rgba(0, 0, 0, 0.45) !important;
-  outline: none !important;
-}
-
-.player-controls .ctrl-btn.hidden,
-.player-controls .ctrl-btn[hidden] {
-  display: none !important;
-}
-
-/* HUD de tela cheia: 5 por linha, mesmo desenho de cartao */
-.fs-hud-actions {
-  display: grid !important;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
-  gap: 10px !important;
-  width: 100% !important;
-}
-
-.fs-hud-actions .ctrl-btn,
-.hud-ctrl-btn {
-  height: 68px !important;
-  min-height: 68px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 3px !important;
-  padding: 6px 8px !important;
-  border-radius: 16px !important;
-  font-size: 12px !important;
-  font-weight: 800 !important;
-  background: linear-gradient(180deg, rgba(40, 48, 68, 0.96), rgba(18, 23, 34, 0.96)) !important;
-  border: 1px solid rgba(148, 163, 184, 0.22) !important;
-}
-
-.fs-hud-actions .ctrl-btn .ctrl-ico,
-.hud-ctrl-btn .ctrl-ico { font-size: 22px; line-height: 1; }
-
-.fs-hud-actions .ctrl-btn .ctrl-label,
-.hud-ctrl-btn .ctrl-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.fs-hud-actions .ctrl-btn:focus,
-.fs-hud-actions .ctrl-btn:focus-visible {
-  background: var(--focus-fill, #ffc400) !important;
-  color: #10141f !important;
-  border-color: #fff3c4 !important;
-  transform: translateY(-2px) scale(1.03) !important;
-  outline: none !important;
-}
-
-.fs-hud-actions .ctrl-btn.hidden { display: none !important; }
-
-/* Estado explicito quando nao ha lista */
-.catalog-empty-item {
-  list-style: none !important;
-  padding: 6px 4px !important;
-}
-
-.catalog-empty-card {
+.login-card {
+  width: 540px;
+  background: var(--mk21-surface);
+  border: 1px solid var(--mk21-surface-border);
+  border-radius: 14px;
+  padding: 44px;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.95);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 22px;
+  transform: translateY(0);
+  transition: transform 0.3s ease;
+}
+
+body.osk-open .login-card {
+  transform: translateY(-160px);
+}
+
+.brand-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.brand-logo {
+  height: 64px;
+  max-width: 280px;
+  object-fit: contain;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  padding: 18px 16px;
-  border-radius: 16px;
-  background: #151a28;
-  border: 1px solid rgba(96, 165, 250, 0.28);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+  margin-bottom: 12px;
 }
 
-.catalog-empty-icon { font-size: 30px; line-height: 1; }
-
-.catalog-empty-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.catalog-empty-detail {
-  margin: 0;
+.input-group label {
   font-size: 14px;
-  line-height: 1.45;
-  color: #cbd5e1;
-}
-
-.catalog-empty-action {
-  margin-top: 4px;
-  min-height: 64px !important;
-  padding: 0 20px !important;
-  border-radius: 14px !important;
-  background: var(--focus-fill, #ffc400) !important;
-  color: #10141f !important;
-  border: 1px solid #fff3c4 !important;
-  font-size: 16px !important;
-  font-weight: 900 !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-
-.catalog-empty-action .ctrl-ico { font-size: 20px; }
-
-.catalog-empty-action:focus,
-.catalog-empty-action:focus-visible {
-  outline: 3px solid #ffffff !important;
-  outline-offset: 3px !important;
-}
-
-/* Ajustes finos do estado vazio e do selo de versao */
-.app-version-badge {
-  white-space: nowrap;
-  align-self: flex-start;
-}
-
-.catalog-empty-mini {
-  list-style: none !important;
-  padding: 12px 10px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: #94a3b8;
   font-weight: 700;
+  color: var(--mk21-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
 }
 
-.player-controls .ctrl-btn .ctrl-label { font-size: 11.5px; }
-
-/* "Fontes" so aparece quando ha alternativa; vira uma faixa fina embaixo para
-   nao deixar um cartao solitario na ultima linha da grade. */
-.player-controls #btnSources {
-  grid-column: 1 / -1 !important;
-  flex-direction: row !important;
-  gap: 8px !important;
-  height: 56px !important;
-  min-height: 56px !important;
+.input-field {
+  width: 100%;
+  height: 56px;
+  background: #1A1A1A;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0 18px;
+  color: #FFFFFF;
+  font-size: 20px;
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
-.player-controls #btnSources .ctrl-ico { font-size: 20px; }
 
-/* 2.4.8 - estado do login visivel na propria tela (a TV nao tem devtools) */
-.startup-login-status {
-  min-height: 20px;
-  margin: 10px 2px 2px;
+.action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.btn-primary, .btn-secondary {
+  width: 100%;
+  height: 56px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  outline: none;
+  border: 2px solid transparent;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.btn-primary {
+  background: var(--mk21-red);
+  color: #FFFFFF;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--mk21-text-muted);
+  border-color: #333333;
+}
+
+.focusable:focus,
+.focusable.focused {
+  outline: none !important;
+  border-color: #FFFFFF !important;
+  color: #FFFFFF !important;
+  background-color: #222222;
+  box-shadow: 0 0 20px var(--mk21-red-glow), inset 0 0 10px rgba(255, 0, 0, 0.4) !important;
+  transform: scale(1.03);
+}
+
+.btn-primary.focused,
+.btn-primary:focus {
+  background-color: #FF1A1A !important;
+  box-shadow: 0 0 28px var(--mk21-red-glow) !important;
+  transform: scale(1.04);
+}
+
+.btn-secondary.focused,
+.btn-secondary:focus {
+  background-color: #2A2A2A !important;
+  border-color: #FFFFFF !important;
+  box-shadow: 0 0 20px var(--mk21-red-glow) !important;
+  transform: scale(1.03);
+}
+
+.feedback-message {
+  padding: 12px;
+  border-radius: 6px;
   font-size: 15px;
-  font-weight: 600;
-  color: #ffd166;
-  letter-spacing: .01em;
+  text-align: center;
+  background: rgba(255, 0, 0, 0.18);
+  color: #FF5252;
+  border: 1px solid rgba(255, 0, 0, 0.4);
 }
 
-.startup-login-status:empty { display: none; }
-
-.startup-login-status.is-error { color: #ff8a8a; }
-
-.startup-login-error {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
+.tv-header-logo {
+  max-height: 50px !important;
+  object-fit: contain;
 }
 
-/* ================== 2.4.9 · ENTRADA PRETA, LOGO E FOCO PRESO ================== */
-/* Durante a validacao, somente o logo fica visivel sobre preto absoluto. */
-html.mk21-splash-hold .mk21-splash {
-  background: #000 !important;
-  color: transparent !important;
+.home-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-html.mk21-splash-hold .mk21-splash-title,
-html.mk21-splash-hold .mk21-splash-sub,
-html.mk21-splash-hold .mk21-splash-progress,
-html.mk21-splash-hold #splashStatusText,
-.mk21-splash.is-hold .mk21-splash-progress,
-.mk21-splash.is-hold #splashStatusText,
-.mk21-splash.is-hold .mk21-splash-sub,
-.mk21-splash.is-hold .mk21-splash-title {
-  display: none !important;
-}
-
-.mk21-splash.is-hold {
-  background: #000 !important;
-  opacity: 1 !important;
-  display: flex !important;
-  transition: opacity 320ms ease;
-}
-
-html.mk21-splash-hold .mk21-splash-logo,
-.mk21-splash.is-hold .mk21-splash-logo {
-  width: 168px;
-  height: 168px;
-  animation: mk21LogoPulse 2.4s ease-in-out infinite;
-}
-
-@keyframes mk21LogoPulse {
-  0%, 100% { transform: scale(1); opacity: 0.92; }
-  50% { transform: scale(1.04); opacity: 1; }
-}
-
-/* Login sobre preto absoluto, revelado depois do logo. */
-.startup-login-screen {
-  background: #000 !important;
-  opacity: 1;
-  transition: opacity 300ms ease;
-}
-
-html.mk21-splash-hold .startup-login-screen {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.startup-login-version {
-  display: block;
-  margin-top: 8px;
-  font-size: 15px;
-  letter-spacing: 0.08em;
-  color: rgba(226, 232, 240, 0.62);
-}
-
-/* Versao no rodape da tela toda (splash, login e app). */
-.mk21-footer-version {
-  position: fixed;
-  right: 20px;
-  bottom: 10px;
-  z-index: 2000002;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 15px;
-  letter-spacing: 0.07em;
-  color: rgba(226, 232, 240, 0.72);
-  pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
-}
-
-/* 2.4.9 · rotulos do login nao podem encostar no campo anterior */
-.startup-login-form label {
-  margin-top: 12px;
-}
-.startup-login-form label:first-of-type {
-  margin-top: 0;
-}
-
-/* Eco da tecla (diagnostico): discreto, so enquanto o login esta aberto */
-.mk21-login-keyhint {
-  display: none;
-  position: fixed;
-  left: 20px;
-  bottom: 10px;
-  z-index: 2000002;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  color: rgba(148, 163, 184, 0.7);
-  pointer-events: none;
-}
-
-html.login-required .mk21-login-keyhint {
-  display: block;
-}

@@ -2,50 +2,13 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
-## [2.4.0] - 2026-11-02
+## [2.5.0] - 2026-11-06
 
-- **Android:** remove regras R8 que mantinham bibliotecas inteiras, preservando as proteções necessárias para Room e Retrofit.
-- **Smart TV:** solicita login IPTV antes de conectar, como no Android, e permite entrar, trocar credenciais, gerenciar servidores ou abrir o cache offline.
-- **Smart TV:** não inicia mais com credenciais padrão embutidas; as credenciais informadas ficam salvas no dispositivo para reutilização.
-- **Smart TV/webOS:** exibe indicadores de rolagem mesmo quando a TV oculta as barras nativas.
-- **Smart TV/webOS e Tizen:** usa tela cheia CSS para manter os modais de qualidade e fontes sobre o player.
-- **Smart TV:** carrega listas e fluxos HLS/MPEG-TS processados por JavaScript pelo proxy HTTPS próprio para evitar CORS; endereços de rede local permanecem diretos. O proxy não armazena playlists nem conteúdo associado a contas em cache.
-
-## [2.3.13] - 2026-11-01
-
-- **Smart TV/webOS:** tenta automaticamente a URL HLS equivalente quando o player nativo falha ao abrir um fluxo `.ts`.
-- **Smart TV:** reforça a visibilidade das barras de rolagem nos painéis de canais, categorias e configurações.
-- **Smart TV/webOS:** ignora código e CSS OTA em cache mais antigos que a versão instalada, evitando que substituam correções recentes.
-
-## [2.3.12] - 2026-11-01
-
-- **Smart TV/webOS:** inicia a aplicação e o carregamento da lista sem aguardar imagens e bibliotecas externas do player.
-- **Smart TV/webOS:** evita recalcular ordenação e agrupamento de séries em cada renderização, melhora o carregamento tardio das capas e reduz renderizações duplicadas da busca.
-- **Smart TV/webOS:** invalida corretamente as categorias após atualizar o catálogo e escapa dados externos exibidos na busca e no EPG.
-- **Smart TV/webOS:** evita consultas ao índice quando a busca já encontra resultados carregados, exibe resultados indexados que ainda não estavam no catálogo e escapa nomes externos no gerenciador de categorias.
-- **Smart TV/webOS:** carrega HLS/MPEG-TS sob demanda e evita expor URLs autenticadas nos logs.
-- **Empacotamento:** sincroniza o tamanho instalado e deixa de sobrescrever um alias de pacote obsoleto.
-
-## [2.3.11] - 2026-11-01
-
-- **Smart TV/webOS:** permite trocar a fonte do conteúdo procurando o mesmo item em outro servidor e restaura o controle de ordenação.
-- **Smart TV/webOS:** corrige a rolagem pelo Magic Remote, melhora legibilidade sem transbordar os painéis e remove rótulos duplicados no rodapé.
-- **Smart TV/webOS:** adiciona sincronização opcional de todas as listas, frequência, etapas de carregamento, modo AMOLED e opções de qualidade/buffer com limitações do player nativo explicitadas.
-- **Smart TV/webOS:** adiciona controle adulto protegido por PIN, fallback de capas TMDB, logotipo MK21 e atualiza os controles/modal do player e gerenciador de servidores.
-
-## [2.3.10] - 2026-10-31
-
-- **Smart TV/webOS:** usa o player nativo da TV para evitar dependência de CORS em streams de vídeo.
-
-## [2.3.9] - 2026-10-31
-
-- **Smart TV/webOS:** reorganiza a interface do IPK com navegação lateral, cabeçalho simplificado e cartões de catálogo para filmes e séries.
-- **Smart TV/webOS:** preserva a lista compacta para canais ao vivo e mantém a navegação por controle remoto.
-
-## [2.3.8] - 2026-10-31
-
-- **Smart TV/webOS:** porta o agrupamento de fontes alternativas M3U, a seleção manual e o fallback automático disponíveis no Android.
-- **Smart TV/webOS:** preserva a posição de filmes e episódios ao alternar de fonte e migra o catálogo salvo para agrupar fontes após a próxima carga online.
+- **Identidade Visual:** Atualização da marca oficial MK21 ("Mais que um número é resultado") com tipografia metálica, glow rubi e restrição de altura máxima (50px).
+- **Smart TV (LG webOS / Tizen):** Restauração do fluxo de autenticação com modal fullscreen de login, navegação D-pad estrita e compensação de teclado virtual (OSK `translateY(-160px)`).
+- **Smart TV:** Mapeamento da tecla BACK (webOS 461 / Tizen 10009 / Escape) com interceptação de blur de input para evitar o encerramento acidental do app.
+- **Web / PWA:** Invalidação de cache com Service Worker `mk21-cache-v2.5.0`.
+- **Android:** Sincronização de versão `2.5.0` (Build `250`) mantendo chaves de assinatura e identificadores legados intactos.
 
 ## [2.3.7] - 2026-10-30
 

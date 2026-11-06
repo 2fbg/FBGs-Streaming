@@ -122,8 +122,8 @@ android {
     applicationId = "com.aistudio.multiservidor.iptvmk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2409
-    versionName = "2.4.9"
+    versionCode = 250
+    versionName = "2.5.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -162,19 +162,17 @@ android {
         val keystorePath = System.getenv("KEYSTORE_PATH")
         val keystoreFile = if (!keystorePath.isNullOrEmpty()) file(keystorePath) else File(rootProject.rootDir, "my-upload-key.jks")
         val base64File = File(rootProject.rootDir, "my-upload-key.base64")
-        // Permite keystores cujo alias não seja "upload" (ex.: CI passando KEY_ALIAS).
-        val keyAliasName = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
         decodeBase64OrGenerateKeystore(
           keystoreFile,
           base64File,
-          keyAliasName,
+          "upload",
           "CN=Fabio Guarniere, O=MK21, C=BR",
           storePass,
           keyPass
         )
         storeFile = keystoreFile
         storePassword = storePass
-        keyAlias = keyAliasName
+        keyAlias = "upload"
         keyPassword = keyPass
       } else {
         // Fallback to debug keystore for development / preview release builds
