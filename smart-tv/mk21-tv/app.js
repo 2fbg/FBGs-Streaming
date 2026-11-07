@@ -1,4 +1,4 @@
-/** Mk21DnsResolver v1.4.1 - TV Failover **/
+/** Mk21 DNS resolver - TV failover **/
 const Mk21DnsResolver = {
     async fetchWithFailover(url, options = {}) {
         const controller = new AbortController();
@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v1.4.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.5.0 — Navegação espacial D-Pad para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -65,9 +65,24 @@ const DEFAULT_SERVERS = [
   { id: 'cinelon', name: 'CINELON', url: 'http://coliseuop.site' },
   { id: 'multttv', name: 'MULTT TV', url: 'http://dali-as.skin' }
 ];
+const MK21_CORS_PROXY_ENDPOINT = 'https://bgstreaming.vercel.app/api/proxy';
 
 function cleanServerName(name) {
   return String(name || '').replace(/^[^\w\dÀ-ÿ]+/i, '').trim() || name;
+}
+
+function isPrivateServerHost(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  return host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') ||
+    host === '::1' || host === '0.0.0.0' || /^(?:fc|fd)[0-9a-f]{2}:/i.test(host) ||
+    /^fe[89ab][0-9a-f]:/i.test(host) || /^127\./.test(host) || /^10\./.test(host) ||
+    /^192\.168\./.test(host) || /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host);
+}
+
+function getLoginRequestUrl(url) {
+  if (isPrivateServerHost(new URL(url).hostname)) return url;
+  return `${MK21_CORS_PROXY_ENDPOINT}?url=${encodeURIComponent(url)}`;
 }
 
 let SERVERS = [...DEFAULT_SERVERS];
@@ -856,10 +871,17 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   console.log('[MK21] Streaming da lista:', targetUrl.replace(savedPass, '***'));
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
+  const abortWithParent = () => {
+    if (controller) controller.abort();
+  };
+  if (signal && controller) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', abortWithParent, { once: true });
+  }
   try {
     const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
-    if (signal) options.signal = signal;
-    const res = await fetch(targetUrl, options);
+    const requestUrl = getLoginRequestUrl(targetUrl);
+    const res = await fetch(requestUrl, options);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
       const text = await res.text();
@@ -936,6 +958,7 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     if (buffer) consume(buffer);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+    if (signal && controller) signal.removeEventListener('abort', abortWithParent);
   }
 }
 
@@ -1012,6 +1035,8 @@ function showLoadingFailure(error, serverName) {
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
+  if (!AppState.isLoggedIn) return;
+
   const loadId = ++serverLoadGeneration;
   if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
   activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -5371,6 +5396,7 @@ window.addEventListener('load', () => {
     const saved = localStorage.getItem('mk21_last_server');
     if (saved !== null && SERVERS[saved]) currentServerIndex = parseInt(saved, 10);
   } catch (e) {}
+  updateLoginServerOptions();
 
     try {
       const tmdbToggle = $('cfgToggleTmdb');
@@ -5507,9 +5533,22 @@ const TVKeys = {
 };
 
 function initSmartTVApp() {
-  const token = localStorage.getItem('mk21_auth_token');
+  try {
+    const saved = localStorage.getItem('mk21_last_server');
+    const savedIndex = saved === null ? -1 : Number(saved);
+    if (Number.isInteger(savedIndex) && SERVERS[savedIndex]) currentServerIndex = savedIndex;
+  } catch (error) {
+    displayFeedback('Não foi possível restaurar o servidor selecionado.', true);
+  }
 
-  if (token) {
+  const token = localStorage.getItem('mk21_auth_token');
+  updateLoginServerOptions();
+
+  if (token === 'mk21_session_saved') {
+    localStorage.removeItem('mk21_auth_token');
+    showLoginInterface();
+    displayFeedback('A sessão anterior não foi autenticada. Entre novamente.', true);
+  } else if (token) {
     verifySessionToken(token);
   } else {
     showLoginInterface();
@@ -5528,25 +5567,64 @@ function showLoginInterface() {
   if (home) home.style.display = 'none';
   if (login) login.style.display = 'flex';
 
+  updateLoginServerOptions();
   updateFocusableElements();
 
   // Foco inicial garantido no campo de Usuário
   setTimeout(() => {
     setFocusByIndex(0);
-    const userField = document.getElementById('user-input');
-    if (userField) userField.focus();
   }, 120);
 
-  // Event Listeners dos botões
-  const btnLogin = document.getElementById('btn-login');
-  if (btnLogin) btnLogin.onclick = handleLoginSubmit;
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) loginForm.onsubmit = (event) => {
+    event.preventDefault();
+    handleLoginSubmit();
+  };
   const btnOffline = document.getElementById('btn-offline');
   if (btnOffline) btnOffline.onclick = handleOfflineBypass;
+
+  const serverSelect = document.getElementById('server-select');
+  if (serverSelect) serverSelect.onchange = () => {
+    const index = Number(serverSelect.value);
+    if (!Number.isInteger(index) || !SERVERS[index]) return;
+    currentServerIndex = index;
+    try {
+      localStorage.setItem('mk21_last_server', String(index));
+    } catch (error) {
+      displayFeedback('Não foi possível salvar o servidor selecionado neste dispositivo.', true);
+    }
+  };
+}
+
+function updateLoginServerOptions() {
+  const select = document.getElementById('server-select');
+  if (!select) return;
+
+  select.replaceChildren();
+  SERVERS.forEach((server, index) => {
+    if (!server || !server.url) return;
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = cleanServerName(server.name) || server.url;
+    select.appendChild(option);
+  });
+
+  if (select.options.length) {
+    if (!SERVERS[currentServerIndex] || !SERVERS[currentServerIndex].url) currentServerIndex = 0;
+    select.value = String(currentServerIndex);
+  } else {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Nenhum servidor configurado';
+    select.appendChild(option);
+    select.disabled = true;
+  }
 }
 
 function updateFocusableElements() {
-  // Coleta na ordem estrita: Usuário -> Senha -> Entrar -> Offline
+  // Coleta na ordem estrita: Servidor -> Usuário -> Senha -> Entrar -> Offline
   AppState.focusableElements = [
+    document.getElementById('server-select'),
     document.getElementById('user-input'),
     document.getElementById('pass-input'),
     document.getElementById('btn-login'),
@@ -5580,8 +5658,20 @@ function setupGlobalListeners() {
       return;
     }
 
-    // Se estiver na tela de login, o D-pad navega estritamente nos 4 itens
+    // Se estiver na tela de login, o D-pad navega estritamente nos 5 itens
     if (!AppState.isLoggedIn) {
+      const current = AppState.focusableElements[AppState.activeFocusIndex];
+      if (current && current.tagName === 'SELECT' &&
+          (TVKeys.LEFT.includes(e.keyCode) || TVKeys.LEFT.includes(e.key) ||
+           TVKeys.RIGHT.includes(e.keyCode) || TVKeys.RIGHT.includes(e.key))) {
+        e.preventDefault();
+        const select = current;
+        const direction = TVKeys.RIGHT.includes(e.keyCode) || TVKeys.RIGHT.includes(e.key) ? 1 : -1;
+        select.selectedIndex = (select.selectedIndex + direction + select.options.length) % select.options.length;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+
       if (TVKeys.DOWN.includes(e.keyCode) || TVKeys.DOWN.includes(e.key)) {
         e.preventDefault();
         setFocusByIndex(AppState.activeFocusIndex + 1);
@@ -5593,6 +5683,8 @@ function setupGlobalListeners() {
         if (current && current.tagName === 'BUTTON') {
           e.preventDefault();
           current.click();
+        } else if (current && current.tagName === 'SELECT') {
+          e.preventDefault();
         }
       }
     }
@@ -5601,7 +5693,7 @@ function setupGlobalListeners() {
 
 function setupVirtualKeyboardHandling() {
   // Ajusta layout quando o teclado da Smart TV surge
-  const inputs = document.querySelectorAll('.input-field');
+  const inputs = document.querySelectorAll('input.input-field');
   inputs.forEach(input => {
     input.addEventListener('focus', () => document.body.classList.add('osk-open'));
     input.addEventListener('blur', () => document.body.classList.remove('osk-open'));
@@ -5611,37 +5703,73 @@ function setupVirtualKeyboardHandling() {
 async function handleLoginSubmit() {
   const userInput = document.getElementById('user-input');
   const passInput = document.getElementById('pass-input');
+  const serverSelect = document.getElementById('server-select');
   const user = userInput ? userInput.value.trim() : '';
   const pass = passInput ? passInput.value.trim() : '';
+  const selectedIndex = serverSelect ? Number(serverSelect.value) : currentServerIndex;
+  const server = Number.isInteger(selectedIndex) ? SERVERS[selectedIndex] : null;
 
+  if (!server || !server.url) {
+    displayFeedback('Selecione um servidor válido.', true);
+    setFocusByIndex(0);
+    return;
+  }
   if (!user || !pass) {
     displayFeedback('Informe o usuário e a senha.', true);
-    setFocusByIndex(user ? 1 : 0);
+    setFocusByIndex(user ? 2 : 1);
     return;
   }
 
-  displayFeedback('Autenticando MK21...', false);
+  const submitButton = document.getElementById('btn-login');
+  if (submitButton) submitButton.disabled = true;
+  displayFeedback(`Validando acesso em ${cleanServerName(server.name)}...`, false);
 
   try {
-    const response = await fetch(`/api/login?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-
-    const data = await response.json();
-    if (response.ok && data.user_info && data.user_info.auth === 1) {
-      localStorage.setItem('mk21_auth_token', data.user_info.token || 'mk21_auth_ok');
-      localStorage.setItem('mk21_user', user);
-      unlockHomeInterface();
-    } else {
-      displayFeedback('Usuário ou senha inválidos.', true);
-      setFocusByIndex(0);
+    const apiUrl = `${server.url.replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+    const requestUrl = getLoginRequestUrl(apiUrl);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
+    let response;
+    try {
+      response = await fetch(requestUrl, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+        ...(controller ? { signal: controller.signal } : {})
+      });
+    } catch (error) {
+      if (controller && controller.signal.aborted) {
+        throw new Error('A validação excedeu o tempo limite. Tente novamente.');
+      }
+      throw new Error('Não foi possível conectar ao servidor selecionado. Verifique a rede e tente novamente.');
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
-  } catch (err) {
-    // Fallback gracioso: salva credencial local e libera interface
-    localStorage.setItem('mk21_auth_token', 'mk21_session_saved');
+
+    if (!response.ok) throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      throw new Error('O servidor retornou uma resposta de autenticação inválida.');
+    }
+    const auth = data && data.user_info && data.user_info.auth;
+    if (!(auth === 1 || auth === true || auth === '1')) {
+      throw new Error('Usuário ou senha não reconhecidos pelo servidor selecionado.');
+    }
+
+    currentServerIndex = selectedIndex;
+    localStorage.setItem('mk21_last_server', String(selectedIndex));
+    localStorage.setItem('mk21_username', user);
     localStorage.setItem('mk21_user', user);
+    localStorage.setItem('mk21_password', pass);
+    localStorage.setItem('mk21_pass', pass);
+    localStorage.setItem('mk21_auth_token', 'mk21_auth_ok');
     unlockHomeInterface();
+  } catch (err) {
+    displayFeedback(err.message || 'Falha ao autenticar no servidor selecionado.', true);
+    setFocusByIndex(1);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
   }
 }
 
@@ -5658,9 +5786,7 @@ function unlockHomeInterface() {
   const home = document.getElementById('home-container');
   if (home) home.style.display = 'block';
 
-  if (typeof window.initHomeGrid === 'function') {
-    window.initHomeGrid();
-  }
+  if (document.readyState === 'complete') loadServer(true);
 }
 
 function displayFeedback(msg, isError) {
@@ -5682,4 +5808,3 @@ if (document.readyState === 'loading') {
 } else {
   initSmartTVApp();
 }
-

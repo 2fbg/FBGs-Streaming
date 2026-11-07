@@ -2073,7 +2073,7 @@ body.is-fullscreen .col-player {
 }
 
 .login-modal-fullscreen {
-  display: flex !important;
+  display: flex;
   position: fixed;
   top: 0;
   left: 0;
@@ -2221,4 +2221,3 @@ body.osk-open .login-card {
   display: flex;
   flex-direction: column;
 }
-

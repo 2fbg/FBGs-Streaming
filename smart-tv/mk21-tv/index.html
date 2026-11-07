@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.5.0">
-  <link rel="stylesheet" href="css/style.css?v=2.5.0">
+  <link rel="stylesheet" href="styles.css?v=2.5.0-login-fix">
+  <link rel="stylesheet" href="css/style.css?v=2.5.0-login-fix">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
@@ -20,14 +20,18 @@
         <img src="assets/logo.png" alt="MK21 Play" class="brand-logo" onerror="this.src='icon.png'">
       </div>
 
-      <form id="login-form" autocomplete="off" onsubmit="return false;">
+      <form id="login-form" autocomplete="off">
+        <div class="input-group">
+          <label for="server-select">Servidor</label>
+          <select id="server-select" class="focusable input-field" tabindex="1"></select>
+        </div>
         <div class="input-group">
           <label for="user-input">Usuário</label>
           <input 
             type="text" 
             id="user-input" 
             class="focusable input-field" 
-            tabindex="1" 
+            tabindex="2"
             placeholder="Digite seu usuário"
             inputmode="text"
             autocomplete="off" 
@@ -43,7 +47,7 @@
             type="password" 
             id="pass-input" 
             class="focusable input-field" 
-            tabindex="2" 
+            tabindex="3"
             placeholder="Digite sua senha"
             inputmode="text"
             autocomplete="off"
@@ -53,14 +57,15 @@
         <div id="login-feedback" class="feedback-message" style="display: none;"></div>
 
         <div class="action-group">
-          <button type="button" id="btn-login" class="focusable btn-primary" tabindex="3">
+          <button type="submit" id="btn-login" class="focusable btn-primary" tabindex="4">
             ENTRAR
           </button>
-          <button type="button" id="btn-offline" class="focusable btn-secondary" tabindex="4">
+          <button type="button" id="btn-offline" class="focusable btn-secondary" tabindex="5">
             MODO OFFLINE
           </button>
         </div>
       </form>
+      <p class="login-version">v2.5.0</p>
     </div>
   </div>
 
@@ -564,7 +569,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=1.0.5';
+              fallback.src = 'app.js?v=2.5.0-login-fix';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -581,7 +586,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=1.0.5';
+      s.src = 'app.js?v=2.5.0-login-fix';
       document.body.appendChild(s);
     })();
   </script>

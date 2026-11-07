@@ -31,7 +31,7 @@ body.mk21-tv-body {
 
 /* Modal de Login Centralizado com Flexbox */
 .login-modal-fullscreen {
-  display: flex !important;
+  display: flex;
   position: fixed;
   top: 0;
   left: 0;
@@ -103,11 +103,27 @@ body.osk-open .login-card {
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 
+.login-card select.input-field {
+  cursor: pointer;
+}
+
+.login-card select.input-field option {
+  color: #FFFFFF;
+  background: #1A1A1A;
+}
+
 .action-group {
   display: flex;
   flex-direction: column;
   gap: 14px;
   margin-top: 10px;
+}
+
+.login-version {
+  color: var(--mk21-text-muted);
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-align: center;
 }
 
 .btn-primary, .btn-secondary {
