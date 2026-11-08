@@ -1753,45 +1753,57 @@ body.is-fullscreen .col-player {
    Omnisearch, Remote Color Bar, EPG Guide Modal & Logo Optimization
    ========================================================================== */
 
-/* Barra de Atalhos Coloridos do Controle Remoto (Footer) */
+/* Barra de Atalhos Coloridos do Controle Remoto (Footer 10-Foot UI) */
 .remote-color-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 38px;
-  background: rgba(10, 12, 18, 0.94);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  height: 52px;
+  background: rgba(8, 10, 16, 0.96);
+  border-top: 2px solid rgba(255, 255, 255, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 32px;
+  gap: 36px;
   z-index: 100;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .color-shortcut-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: 0.3px;
-  color: #e2e8f0;
+  letter-spacing: 0.5px;
+  color: #f1f5f9;
 }
 
 .color-key-dot {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   display: inline-block;
-  box-shadow: 0 0 8px currentColor;
+  box-shadow: 0 0 12px currentColor;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 .dot-red { background: #e50914; color: #e50914; }
 .dot-green { background: #10b981; color: #10b981; }
 .dot-yellow { background: #f59e0b; color: #f59e0b; }
 .dot-blue { background: #3b82f6; color: #3b82f6; }
+
+.remote-key-pill {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.8px;
+}
 
 /* Omnisearch Modal */
 .omnisearch-modal {

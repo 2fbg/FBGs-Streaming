@@ -133,7 +133,51 @@ function openDB() {
   });
 }
 
+function saveFastCache(id, liveItems) {
+  try {
+    if (!liveItems || !liveItems.length) return;
+    const compact = liveItems.slice(0, 1000).map(slimItem);
+    localStorage.setItem('mk21_fast_cache_' + id, JSON.stringify(compact));
+    localStorage.setItem('mk21_fast_cache_time_' + id, Date.now());
+    // Salva fallback universal para inicialização rápida imediata
+    localStorage.setItem('mk21_fast_cache_universal', JSON.stringify({
+      serverId: id,
+      items: compact,
+      updatedAt: Date.now()
+    }));
+  } catch (e) {
+    console.warn('[MK21] save fast cache falhou', e);
+  }
+}
+
+function getFastCache(id) {
+  try {
+    const raw = localStorage.getItem('mk21_fast_cache_' + id);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return { LIVE: parsed, MOVIE: [], SERIES: [] };
+      }
+    }
+    // Fallback universal de qualquer servidor salvo anteriormente
+    const uniRaw = localStorage.getItem('mk21_fast_cache_universal');
+    if (uniRaw) {
+      const uni = JSON.parse(uniRaw);
+      if (uni && Array.isArray(uni.items) && uni.items.length > 0) {
+        return { LIVE: uni.items, MOVIE: [], SERIES: [] };
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 async function getStoredData(id) {
+  // 1. Tenta cache rápido em localStorage (0ms síncrono)
+  const fast = getFastCache(id);
+  if (fast && fast.LIVE && fast.LIVE.length > 0) {
+    return fast;
+  }
+  // 2. Se não houver, busca no IndexedDB
   try {
     const db = await openDB();
     if (!db) return null;
@@ -147,10 +191,12 @@ async function getStoredData(id) {
 }
 
 async function saveStoredData(id, payload) {
+  if (payload && payload.LIVE && payload.LIVE.length > 0) {
+    saveFastCache(id, payload.LIVE);
+  }
   try {
     const db = await openDB();
     if (!db) return;
-    // Salva o catálogo COMPLETO em disco (IndexedDB) para restauração instantânea sem rede
     const full = {
       LIVE: (payload.LIVE || []).map(slimItem),
       MOVIE: (payload.MOVIE || []).map(slimItem),
@@ -1022,17 +1068,7 @@ async function loadServer(forceRefresh = false) {
   if ($('txtActiveServer')) $('txtActiveServer').textContent = cleanServerName(srv.name);
   updateServerSyncBadge(15, false);
 
-  updateSplash(25, 'Conectando ao ' + srv.name + '...');
-
   const hud = $('hudLoadingOverlay');
-  resetLoadingHud();
-  if (hud) {
-    if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Conectando ao ' + srv.name;
-    if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Conectando e baixando grade de programação...';
-    if ($('hudProgressBar')) $('hudProgressBar').style.width = '25%';
-    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '25%';
-    hud.classList.remove('hidden');
-  }
 
   // Interrompe qualquer stream anterior
   const oldVideo = $('tvPlayer');
@@ -1044,10 +1080,12 @@ async function loadServer(forceRefresh = false) {
   }
   activeItem = null;
 
-  // Cache prioritário em memória/IndexedDB: restauração instantânea sem novo download
-  let seededFromIndex = false;
+  // 1. CARGA INSTANTÂNEA VIA CACHE LOCAL: se não for refresh forçado, abre os canais em 0ms sem bloquear
   if (!forceRefresh) {
-    const cached = await getStoredData(srv.id);
+    let cached = getFastCache(srv.id);
+    if (!cached || !cached.LIVE || cached.LIVE.length === 0) {
+      cached = await getStoredData(srv.id);
+    }
     if (loadId !== serverLoadGeneration) return;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
@@ -1059,23 +1097,67 @@ async function loadServer(forceRefresh = false) {
         MOVIE: cached.MOVIE || [],
         SERIES: cached.SERIES || []
       };
-      updateSplash(90, 'Restaurando lista em memória (' + totalCached.toLocaleString('pt-BR') + ' itens)...');
-      if (hud) {
-        if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Usando lista em memória local — sem novo download';
-        if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
-        if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
-        setTimeout(() => hud.classList.add('hidden'), 200);
-      }
+      if (hud) hud.classList.add('hidden');
+      hideSplash();
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
-      hideSplash();
+      renderItemsList();
       updateServerSyncBadge(100, true);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
-      setTimeout(() => { resumeLastChannelIfPossible(); }, 350);
+      showChannelBanner('✓ Canais carregados da memória local (' + liveN + ' canais)');
+      setTimeout(() => { resumeLastChannelIfPossible(); }, 150);
       return;
     }
   }
+
+  // 2. SE NÃO HOUVER CACHE OU FOR REFRESH FORÇADO: Exibe HUD de conexão com ações de escape
+  updateSplash(25, 'Conectando ao ' + srv.name + '...');
+  resetLoadingHud();
+  if (hud) {
+    if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Conectando ao ' + srv.name;
+    if ($('hudLoadingSub')) $('hudLoadingSub').textContent = 'Baixando grade de programação ao vivo...';
+    if ($('hudProgressBar')) $('hudProgressBar').style.width = '20%';
+    if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '20%';
+    hud.classList.remove('hidden');
+  }
+
+  // Configura botões de escape do HUD para nunca travar a navegação
+  if ($('btnHudChangeServer')) {
+    $('btnHudChangeServer').onclick = () => {
+      if (activePlaylistController) { try { activePlaylistController.abort(); } catch(e){} }
+      if (hud) hud.classList.add('hidden');
+      hideSplash();
+      openServerPicker();
+    };
+  }
+  if ($('btnHudCancelLoading')) {
+    $('btnHudCancelLoading').onclick = () => {
+      if (activePlaylistController) { try { activePlaylistController.abort(); } catch(e){} }
+      if (hud) hud.classList.add('hidden');
+      hideSplash();
+      if (allCatalog.LIVE && allCatalog.LIVE.length > 0) {
+        buildCurrentCategories();
+        renderCategoriesList();
+        selectCategory('ALL');
+        renderItemsList();
+      }
+    };
+  }
+
+  // Watchdog de segurança: se após 7 segundos a conexão estiver travada (ex: 35%), oferece trocar de servidor
+  let hudSafetyTimer = setTimeout(() => {
+    if (loadId !== serverLoadGeneration) return;
+    if (hud && !hud.classList.contains('hidden') && (!allCatalog.LIVE || allCatalog.LIVE.length === 0)) {
+      if ($('hudLoadingSub')) {
+        $('hudLoadingSub').textContent = '⚠️ Servidor ' + srv.name + ' demorando a responder. Deseja trocar a fonte?';
+      }
+      const actions = $('hudLoadingActions');
+      if (actions) actions.style.display = 'flex';
+      const btn = $('btnHudChangeServer');
+      if (btn) btn.focus();
+    }
+  }, 7000);
 
   $('txtCurrentCategoryTitle').textContent = 'Conectando ao ' + srv.name + '...';
   updateSplash(35, 'Baixando grade de canais ao vivo...');
@@ -1094,6 +1176,12 @@ async function loadServer(forceRefresh = false) {
     const revealLive = () => {
       if (liveVisible || loadId !== serverLoadGeneration || allCatalog.LIVE.length === 0) return;
       liveVisible = true;
+      if (hudSafetyTimer) { clearTimeout(hudSafetyTimer); hudSafetyTimer = null; }
+
+      // Salva imediatamente no fast cache e IndexedDB para garantir que a próxima reinicialização seja instantânea
+      saveFastCache(srv.id, allCatalog.LIVE);
+      saveStoredData(srv.id, allCatalog);
+
       updateSplash(80, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
       buildCurrentCategories();
       renderCategoriesList();
@@ -1134,6 +1222,11 @@ async function loadServer(forceRefresh = false) {
         indexWriter.add(slim);
         if (allCatalog[type]) {
           allCatalog[type].push(slim);
+        }
+
+        // Salva periodicamente os canais ao vivo recebidos para garantir cache mesmo se interrompido
+        if (type === 'LIVE' && allCatalog.LIVE.length % 50 === 0) {
+          saveFastCache(srv.id, allCatalog.LIVE);
         }
 
         // Assim que os primeiros canais chegam (>= 8), libera a tela imediatamente!
@@ -4663,7 +4756,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['hudLoadingOverlay', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -4948,6 +5041,14 @@ document.addEventListener('keydown', function (e) {
 
   // Back / Return (webOS 461, Tizen 10009)
   if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+    if ($('hudLoadingOverlay') && !$('hudLoadingOverlay').classList.contains('hidden')) {
+      e.preventDefault();
+      if (activePlaylistController) { try { activePlaylistController.abort(); } catch(e){} }
+      $('hudLoadingOverlay').classList.add('hidden');
+      hideSplash();
+      showChannelBanner('⚠️ Carregamento cancelado pelo usuário');
+      return;
+    }
     // A pesquisa funciona como uma área modal: Voltar nunca alcança o player/tela atrás.
     if ((ae && ae.id === 'inputSearch') || activeZone === 'search') {
       e.preventDefault();
@@ -5143,6 +5244,11 @@ document.addEventListener('keydown', function (e) {
   // Atalhos de teclas coloridas do controle remoto (Smart TV 10-foot UI)
   if (k === 403 || key === 'Red' || key === 'ColorF0Red') {
     e.preventDefault();
+    if ($('hudLoadingOverlay') && !$('hudLoadingOverlay').classList.contains('hidden')) {
+      if (activePlaylistController) { try { activePlaylistController.abort(); } catch(e){} }
+      $('hudLoadingOverlay').classList.add('hidden');
+      hideSplash();
+    }
     if (typeof openServerPicker === 'function') openServerPicker();
     else toggleMute();
     return;

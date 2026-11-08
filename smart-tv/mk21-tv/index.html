@@ -83,7 +83,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.5.1 • Smart TV (webOS & Tizen)
+          MK21 PLAY OTT • v2.5.2 • Smart TV (webOS & Tizen)
         </div>
       </form>
     </div>
@@ -444,13 +444,19 @@
   <div id="hudLoadingOverlay" class="hud-loading-overlay hidden">
     <div class="hud-loading-card">
       <div class="spinner-ring"></div>
-      <h3 id="hudLoadingTitle" style="margin: 16px 0 8px 0; font-size: 24px; color: #fff;">Atualizando Lista MK21</h3>
-      <p id="hudLoadingSub" style="margin: 0 0 16px 0; font-size: 16px; color: #ffd54f;">Priorizando Canais Ao Vivo...</p>
+      <h3 id="hudLoadingTitle" style="margin: 16px 0 8px 0; font-size: 24px; color: #fff;">Conectando ao MK21</h3>
+      <p id="hudLoadingSub" style="margin: 0 0 16px 0; font-size: 16px; color: #ffd54f;">Carregando grade de programação...</p>
       <div class="hud-progress-track">
         <div id="hudProgressBar" class="hud-progress-fill" style="width: 0%;"></div>
       </div>
       <span id="hudProgressPercent" style="display: block; margin-top: 10px; font-weight: 800; font-size: 20px; color: #fff;">0%</span>
       <div id="hudLoadingError" class="hud-loading-error hidden" role="alert"></div>
+      
+      <!-- Ações de Escape para Smart TV caso o servidor demore -->
+      <div id="hudLoadingActions" style="display: flex; gap: 12px; margin-top: 18px; justify-content: center; flex-wrap: wrap;">
+        <button id="btnHudChangeServer" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #e50914; color: #fff;" tabindex="0">🔴 Trocar Fonte (Servidor)</button>
+        <button id="btnHudCancelLoading" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px;" tabindex="0">↩️ Voltar ao App</button>
+      </div>
       <button id="btnRetryLoading" class="ctrl-btn primary hidden" type="button" tabindex="0">↻ Tentar novamente</button>
     </div>
   </div>
@@ -459,25 +465,27 @@
   <footer id="remoteColorBar" class="remote-color-bar">
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-red"></span>
-      <span>🔴 <strong>Servidor</strong> (Trocar Fonte)</span>
+      <span><strong>Servidor</strong> (Trocar Fonte)</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-green"></span>
-      <span>🟢 <strong>Favoritar</strong></span>
+      <span><strong>Favoritar</strong></span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-yellow"></span>
-      <span>🟡 <strong>Buscar</strong> (Omnisearch)</span>
+      <span><strong>Buscar</strong> (Omnisearch)</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-blue"></span>
-      <span>🔵 <strong>Guia EPG</strong></span>
+      <span><strong>Guia EPG</strong></span>
     </div>
     <div class="color-shortcut-item">
-      <span>↕️ <strong>CH +/-:</strong> Zapping</span>
+      <span class="remote-key-pill">CH +/-</span>
+      <span>Zapping</span>
     </div>
     <div class="color-shortcut-item">
-      <span>↩️ <strong>Voltar:</strong> Fechar / Sair</span>
+      <span class="remote-key-pill">Voltar</span>
+      <span>Fechar / Sair</span>
     </div>
   </footer>
 
@@ -616,7 +624,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.5.1';
+      s.src = 'app.js?v=2.5.2';
       document.body.appendChild(s);
     })();
   </script>
