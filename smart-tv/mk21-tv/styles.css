@@ -2685,3 +2685,29 @@ body.osk-open .login-card {
 /* Ajuste fino das 3 colunas com a barra lateral presente */
 .col-categories { flex: 0 0 22%; }
 .col-channels { flex: 0 0 36%; }
+
+/* TVs com viewport menor (1280x720): barra lateral e menu um pouco mais compactos */
+@media (max-width: 1366px) {
+  .app-header {
+    width: 210px;
+    padding: 12px 10px;
+  }
+  .home-fullscreen {
+    padding-left: 210px;
+  }
+  .app-header .tab-btn {
+    font-size: 14px;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .app-header .logo-title {
+    font-size: 18px;
+  }
+  .cfg-menu-item {
+    font-size: 15px;
+    padding: 9px 12px;
+  }
+  .cfg-tmdb-toggle {
+    font-size: 14px;
+  }
+}
