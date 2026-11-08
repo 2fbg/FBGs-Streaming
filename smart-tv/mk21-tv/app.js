@@ -2893,13 +2893,21 @@ function triggerAutoReconnect(cause) {
   }, delay);
 }
 
-function startStallWatchdog() {
+let watchdogStreamKey = '';
+
+function startStallWatchdog(streamKey) {
   stopStallWatchdog();
-  lastVideoCurrentTime = -1;
-  stallCount = 0;
-  autoReconnectAttempts = 0;
-  isAutoReconnecting = false;
-  hidePlayerReconnectBadge();
+  const chave = String(streamKey || (activeItem && activeItem.url) || '');
+  // Zera o contador só quando muda o canal/URL. Antes cada reinício da mesma URL
+  // zerava as tentativas e o app ficava reconectando para sempre a cada ~2s.
+  if (watchdogStreamKey !== chave) {
+    watchdogStreamKey = chave;
+    lastVideoCurrentTime = -1;
+    stallCount = 0;
+    autoReconnectAttempts = 0;
+    isAutoReconnecting = false;
+    hidePlayerReconnectBadge();
+  }
 
   const video = $('tvPlayer');
   if (!video) return;
@@ -3158,6 +3166,9 @@ function mk21MpegtsOptions() {
 // Um fallback por URL por vez: antes o play() do mpegts rejeitava atrasado e
 // derrubava um HLS que já estava tocando.
 let mk21FallbackState = { url: '', at: 0, stage: 0 };
+// URLs que já deram erro HTTP no mpegts.js: a próxima tentativa vai direto para
+// o decodificador nativo, sem repetir 2s de espera a cada reconexão.
+const mk21MpegtsBlocked = new Set();
 
 function mk21FallbackAllowed(item, stage) {
   if (!item || !item.url) return false;
@@ -3184,11 +3195,16 @@ function fallbackToNativeTs(item) {
   try {
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (mpegtsPlayer) { try { mpegtsPlayer.unload(); mpegtsPlayer.detachMediaElement(); mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
+    // No webOS/Tizen o pipeline de hardware costuma abrir o .ts quando a URL é
+    // definida direto no <video>; a tag <source type="video/mp2t"> é plano B.
     video.innerHTML = '';
-    const src = document.createElement('source');
-    src.src = item.url;
-    src.type = 'video/mp2t';
-    video.appendChild(src);
+    try { video.src = item.url; } catch (e) { video.src = ''; }
+    if (!video.src) {
+      const src = document.createElement('source');
+      src.src = item.url;
+      src.type = 'video/mp2t';
+      video.appendChild(src);
+    }
     video.load();
     safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] MPEG-TS nativo reproduzindo!', 'success');
@@ -3290,7 +3306,7 @@ function playStream(item, forcedUrl) {
     saveLastChannel(item);
     prefetchAdjacentChannels(item);
     startProgressTracker(item);
-    startStallWatchdog();
+    startStallWatchdog(forcedUrl || item.url);
 
     if (!video) return;
 
@@ -3391,7 +3407,7 @@ function playStream(item, forcedUrl) {
         }
       }
     });
-  } else if (isTS && window.mpegts && mpegts.isSupported()) {
+  } else if (isTS && window.mpegts && mpegts.isSupported() && !mk21MpegtsBlocked.has(item.url)) {
     addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
     try {
       if (mpegtsPlayer) { try { mpegtsPlayer.unload(); mpegtsPlayer.detachMediaElement(); mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
@@ -3421,6 +3437,12 @@ function playStream(item, forcedUrl) {
         const msg = String(detail || '') + ' ' + String((info && (info.msg || info.reason)) || '');
         if (/interrupt|abort/i.test(msg)) return;
         addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
+        // Erro de rede/HTTP do mpegts: o provedor recusou esta requisição.
+        if (/HttpStatus|NetworkError|NETWORK_/i.test(msg)) {
+          if (mk21MpegtsBlocked.size > 400) mk21MpegtsBlocked.clear();
+          mk21MpegtsBlocked.add(item.url);
+          addDevLog('[Player Engine] Fonte recusou o mpegts.js; usando decodificador nativo da TV.', 'warn');
+        }
         if (!fallbackToNativeTs(item)) fallbackToHls(item);
       });
     } catch (eMpeg) {
@@ -3926,7 +3948,63 @@ function switchContentType(type) {
 }
 
 // 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
-const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnQualidade', 'cfgBtnQualidadeVideo', 'cfgBtnBuffer', 'cfgBtnAdulto', 'cfgBtnPin'];
+// 2.5.5 — o menu de Configurações passa a ser montado pelo próprio JS.
+// Motivo: o "Sincronizar Arquivos" (OTA) baixa só app.js e styles.css; o HTML
+// continua vindo do pacote instalado. Em TV com pacote antigo os itens novos
+// do menu simplesmente não apareciam, mesmo com o código novo rodando.
+const MK21_SETTINGS_SPEC = [
+  ['cfgBtnInfo', '⚙️ Informação geral'],
+  ['cfgBtnFonte', '🔤 Tamanho da fonte'],
+  ['cfgBtnFiltro', '📦 Filtrar conteúdo'],
+  ['cfgBtnSpeedTest', '🚀 Teste de velocidade'],
+  ['cfgBtnLimpar', '🗑️ Limpar armazenamento'],
+  ['cfgBtnTempo', '⏱️ Configurações de tempo'],
+  ['cfgBtnCategorias', '📁 Gerenciar categorias'],
+  ['cfgBtnFluxo', '📺 Alterar formato de fluxo'],
+  ['cfgBtnQualidade', '📡 Servidor / Fonte'],
+  ['cfgBtnQualidadeVideo', '🎞️ Qualidade de vídeo'],
+  ['cfgBtnBuffer', '⚡ Buffer e fluidez'],
+  ['cfgBtnAdulto', '🔞 Restrição adulto'],
+  ['cfgBtnPin', '🔒 Alterar código pin']
+];
+const CFG_BUTTONS = MK21_SETTINGS_SPEC.map(item => item[0]);
+
+function ensureSettingsMenu() {
+  const box = document.querySelector('.settings-left-menu');
+  if (!box) return;
+  const assinatura = MK21_SETTINGS_SPEC.map(item => item[0]).join('|');
+  if (box.dataset.mk21Menu === assinatura) return;
+  const tmdb = box.querySelector('.cfg-tmdb-toggle');
+  const ativoAntigo = box.querySelector('.cfg-menu-item.active');
+  const ativoId = ativoAntigo ? ativoAntigo.id : 'cfgBtnInfo';
+  box.innerHTML = '';
+  MK21_SETTINGS_SPEC.forEach(item => {
+    const b = document.createElement('button');
+    b.id = item[0];
+    b.type = 'button';
+    b.className = 'cfg-menu-item';
+    b.tabIndex = 0;
+    b.textContent = item[1];
+    if (item[0] === ativoId) b.classList.add('active');
+    box.appendChild(b);
+  });
+  if (tmdb) box.appendChild(tmdb);
+  else {
+    const wrap = document.createElement('div');
+    wrap.className = 'cfg-tmdb-toggle';
+    wrap.innerHTML = '<span>🎬 Usar API TMDB</span>';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'cfgToggleTmdb';
+    chk.checked = true;
+    chk.style.width = '22px';
+    chk.style.height = '22px';
+    wrap.appendChild(chk);
+    box.appendChild(wrap);
+  }
+  box.dataset.mk21Menu = assinatura;
+}
+ensureSettingsMenu();
 
 CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
@@ -4864,7 +4942,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.5.4';
+const BASE_PACKAGE_VERSION = '2.5.5';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6481,6 +6559,7 @@ async function mk21TryAlternativeSource() {
       return false;
     }
     mk21TriedSourceUrls.add(next.url);
+    watchdogStreamKey = ''; // fonte nova = contador de reconexão zerado
     addDevLog('[AutoFonte] Alternando para ' + next.origem, 'warn');
     showChannelBanner('🔄 Fonte alternativa: ' + next.origem);
     autoReconnectAttempts = 0;

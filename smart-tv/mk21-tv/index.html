@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.5.4">
-  <link rel="stylesheet" href="css/style.css?v=2.5.4">
+  <link rel="stylesheet" href="styles.css?v=2.5.5">
+  <link rel="stylesheet" href="css/style.css?v=2.5.5">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -86,7 +86,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.5.4 • Smart TV (webOS & Tizen)
+          MK21 PLAY OTT • v2.5.5 • Smart TV (webOS & Tizen)
         </div>
       </form>
     </div>
@@ -592,8 +592,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.5.4, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.5.4') {
+        // Se a versão OTA armazenada for anterior a 2.5.5, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.5.5') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -616,7 +616,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.5.4';
+              fallback.src = 'app.js?v=2.5.5';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -633,7 +633,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.5.4';
+      s.src = 'app.js?v=2.5.5';
       document.body.appendChild(s);
     })();
   </script>
