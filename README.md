@@ -1,11 +1,11 @@
-# FBGs-Streaming (MK21 MultiServidor) — v2.5.0
+# FBGs-Streaming (MK21 MultiServidor) — v2.5.8
 
 <div align="center">
   <img src="assets/logo.png" alt="MK21 Streaming Logo" width="220" style="object-fit: contain;" />
   
   ### Player & Client IPTV Multiplataforma de Alta Performance (Android, Web & Smart TV)
   
-  [![Version](https://img.shields.io/badge/Version-v2.5.0-red.svg)](docs/CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/Version-v2.5.8-red.svg)](docs/CHANGELOG.md)
   [![Android](https://img.shields.io/badge/Platform-Android_24%2B-green.svg)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.10-blue.svg)](https://kotlinlang.org)
   [![Media3 ExoPlayer](https://img.shields.io/badge/Media3_ExoPlayer-1.4.1-orange.svg)](https://developer.android.com/guide/topics/media/media3)
@@ -14,12 +14,12 @@
 
 ---
 
-## 📦 Downloads Oficiais & Pacotes da Release v2.5.0
+## 📦 Downloads Oficiais & Pacotes da Release v2.5.8
 
 | Plataforma | Pacote / Binário | SHA-256 |
 |---|---|---|
 | **Android APK** | [`mk21.apk`](mk21.apk) | `84f821a2cd99d132374f926cf9b590f6ac2a4cc8c3f88315ca0446e36fef91f9` |
-| **LG webOS Smart TV** | [`mk21.ipk`](smart-tv/mk21play_2.5.0_all.ipk) | `47d2dc82ac014510c4a575c631d277e2f7b86aef6ee5ead006731b6a61572091` |
+| **LG webOS Smart TV** | [`mk21.ipk`](smart-tv/mk21play_2.5.8_all.ipk) | `47d2dc82ac014510c4a575c631d277e2f7b86aef6ee5ead006731b6a61572091` |
 | **Web / PWA** | [Deploy Vercel / PWA](index.html) | Multi-servidor + Modo Offline PWA |
 
 ---
