@@ -758,56 +758,82 @@ function determineType(name, category, url) {
 
   if (isExplicitSeriesCategory || hasSeriesPattern) return "SERIES";
 
-  // 3. Indicador forte de Filmes / VOD (Prefixos e Palavras-chave)
-  const isExplicitMovieCategory = 
-    uppercaseCategory.startsWith("FILMES") ||
-    uppercaseCategory.startsWith("FILME") ||
-    uppercaseCategory.startsWith("MOVIES") ||
-    uppercaseCategory.startsWith("MOVIE") ||
+  // 3. IDENTIFICAÇÃO INFALÍVEL DE CANAIS LINEARES AO VIVO (Pay-TV / IPTV)
+  // Canais com [ALT], FHD, HD, SD ou nomes de emissoras consagradas NUNCA são filmes VOD
+  const hasLiveFeedMarker = 
+    /\[ALT\]|\(ALT\)|\[BACKUP\]|\(BACKUP\)|\[OFF\]|\bFHD\b|\bUHD\b|\b4K\b|\bHD\b|\bSD\b|\bHEVC\b|\bH\.?265\b|\b1080P\b|\b720P\b|\b480P\b/i.test(uppercaseName);
+
+  const KNOWN_LIVE_NETWORKS = [
+    "A&E", "AMC", "ANIMAL PLANET", "DISCOVERY", "HISTORY", "NAT GEO", "NATIONAL GEOGRAPHIC",
+    "TELECINE", "MEGAPIX", "WARNER", "UNIVERSAL", "STUDIO UNIVERSAL", "TNT", "SPACE", "AXN",
+    "PARAMOUNT", "SONY", "STAR CHANNEL", "FX", "HBO", "CINEMAX", "LIFETIME", "TCM",
+    "CANAL BRASIL", "GLOBO", "SBT", "RECORD", "BAND", "REDE TV", "CULTURA", "PREMIERE",
+    "SPORTV", "ESPN", "FOX SPORTS", "COMBATE", "BANDSPORTS", "CONMEBOL", "VIVA", "MULTISHOW",
+    "GNT", "OFF", "BIS", "GLOOB", "CARTOON", "NICKELODEON", "NICK JR", "BOOMERANG", "TOONCAST",
+    "CNN", "GLOBO NEWS", "BANDNEWS", "RECORD NEWS", "JOVEM PAN", "TV CULTURA", "TV BRASIL"
+  ];
+
+  const matchesLiveNetwork = KNOWN_LIVE_NETWORKS.some(net => 
+    uppercaseName.startsWith(net + " ") || uppercaseName.startsWith(net + "-") || uppercaseName.startsWith(net + ":") || uppercaseName === net ||
+    uppercaseName.includes(" " + net + " ") || uppercaseName.includes("[" + net + "]") || uppercaseName.includes("(" + net + ")")
+  );
+
+  const isLiveStreamUrl = 
+    uppercaseUrl.endsWith(".TS") || uppercaseUrl.includes(".TS?") ||
+    uppercaseUrl.endsWith(".M3U8") || uppercaseUrl.includes(".M3U8?") ||
+    uppercaseUrl.includes("/LIVE/");
+
+  const isVodExtension = 
+    uppercaseUrl.endsWith(".MP4") || uppercaseUrl.includes(".MP4?") ||
+    uppercaseUrl.endsWith(".MKV") || uppercaseUrl.includes(".MKV?") ||
+    uppercaseUrl.endsWith(".AVI") || uppercaseUrl.includes(".AVI?");
+
+  // Se tem marcador de feed linear ou nome de rede ao vivo e NÃO é arquivo MP4/MKV -> É LIVE!
+  if ((hasLiveFeedMarker || matchesLiveNetwork) && !isVodExtension) {
+    return "LIVE";
+  }
+
+  // 4. Indicador forte de Filmes VOD genuínos
+  if (isVodExtension) {
+    return "MOVIE";
+  }
+
+  // Ano de lançamento explícito de filme (ex: "Interestelar (2014)" ou "[2023]")
+  const hasYearPattern = /\b\((?:19|20)\d{2}\)\b/.test(uppercaseName) || /\b\[(?:19|20)\d{2}\]\b/.test(uppercaseName);
+  if (hasYearPattern && !hasLiveFeedMarker && !matchesLiveNetwork) {
+    return "MOVIE";
+  }
+
+  // Categorias que são tipicamente VOD puras (NÃO confundir com "FILMES E SÉRIES" ou "DOCUMENTÁRIOS" que são canais lineares)
+  const isPureVodCategory = 
     uppercaseCategory.startsWith("VOD") ||
-    uppercaseCategory.startsWith("CINEMA") ||
+    uppercaseCategory.startsWith("ON DEMAND") ||
+    uppercaseCategory.startsWith("ONDEMAND") ||
     uppercaseCategory.startsWith("LANÇAMENTOS") ||
     uppercaseCategory.startsWith("LANCAMENTOS") ||
-    uppercaseCategory.includes("FILMES |") ||
-    uppercaseCategory.includes("FILMES:") ||
-    uppercaseCategory.includes("FILME |") ||
+    uppercaseCategory.startsWith("FILMES 202") ||
+    uppercaseCategory.startsWith("FILMES 19") ||
     uppercaseCategory.includes("VOD |") ||
     uppercaseCategory.includes("VOD:") ||
     uppercaseCategory.includes("CINEMA |") ||
     uppercaseCategory.includes("4K FILMES") ||
     uppercaseCategory.includes("FHD FILMES");
 
-  // Gêneros cinematográficos típicos de catálogos VOD
-  const MOVIE_GENRES = [
-    "AÇÃO", "ACAO", "ACTION", "COMÉDIA", "COMEDIA", "COMEDY", "TERROR", "HORROR",
-    "SUSPENSE", "THRILLER", "DRAMA", "AVENTURA", "ADVENTURE", "FICÇÃO", "FICCAO", "SCI-FI",
-    "ROMANCE", "ANIMAÇÃO", "ANIMACAO", "ANIMATION", "DESENHOS", "DESENHO", "INFANTIL", "KIDS",
-    "DOCUMENTÁRIO", "DOCUMENTARIO", "DOCUMENTÁRIOS", "DOCUMENTARIOS", "DOCUMENTARY",
-    "POLICIAL", "CRIME", "FAROESTE", "WESTERN", "GUERRA", "WAR", "NACIONAL", "NACIONAIS",
-    "CLÁSSICOS", "CLASSICOS", "CLASSIC", "STAND UP", "SHOWS", "SHOW", "MUSICAIS", "MUSICAL",
-    "BIOGRAFIA", "BIOGRAPHY", "MISTÉRIO", "MISTERIO", "MYSTERY", "FANTASIA", "FANTASY",
-    "FAMÍLIA", "FAMILIA", "FAMILY", "LANÇAMENTOS", "LANCAMENTOS", "RELEASES"
-  ];
-
-  const hasMovieGenre = MOVIE_GENRES.some(g => uppercaseCategory.includes(g));
-
-  const isLiveIndicative = 
-    uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") ||
-    uppercaseCategory.includes("24H") || uppercaseCategory.includes("24 HORAS") ||
+  const isLinearCategoryIndicative = 
+    uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("CANAL") ||
     uppercaseCategory.includes("AO VIVO") || uppercaseCategory.includes("AOVIVO") ||
+    uppercaseCategory.includes("24H") || uppercaseCategory.includes("24 HORAS") ||
+    uppercaseCategory.includes("FILMES E SERIES") || uppercaseCategory.includes("FILMES E SÉRIES") ||
+    uppercaseCategory.includes("DOCUMENTÁRIOS") || uppercaseCategory.includes("DOCUMENTARIOS") ||
     uppercaseCategory.includes("TV ABERTA") || uppercaseCategory.includes("ABERTOS") ||
     uppercaseCategory.includes("ESPORTES") || uppercaseCategory.includes("SPORTS") ||
-    uppercaseCategory.includes("NOTICIAS") || uppercaseCategory.includes("NEWS") ||
-    uppercaseCategory.includes("GLOBO") || uppercaseCategory.includes("PREMIERE") ||
-    uppercaseCategory.includes("COMBATE") || uppercaseCategory.includes("DAZN") ||
-    uppercaseCategory.includes("RADIO") || uppercaseCategory.includes("RÁDIO") ||
-    uppercaseName.includes("24H") || uppercaseName.includes("CANAL") || uppercaseName.includes("AO VIVO");
+    uppercaseCategory.includes("NOTICIAS") || uppercaseCategory.includes("NEWS");
 
-  if ((isExplicitMovieCategory || hasMovieGenre) && !isLiveIndicative) {
+  if (isPureVodCategory && !isLinearCategoryIndicative && !isLiveStreamUrl) {
     return "MOVIE";
   }
 
-  // 4. Provedores de Streaming (Netflix, Prime, Disney, etc.)
+  // 5. Provedores de Streaming VOD (Netflix, Prime, Disney, etc.)
   const isVodStreamingProvider = 
     uppercaseCategory.includes("NETFLIX") ||
     uppercaseCategory.includes("AMAZON") ||
@@ -818,54 +844,11 @@ function determineType(name, category, url) {
     uppercaseCategory.includes("PARAMOUNT+") ||
     uppercaseCategory.includes("GLOBOPLAY");
 
-  if (isVodStreamingProvider) {
-    if (isLiveIndicative) return "LIVE";
-    if (hasSeriesPattern || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
+  if (isVodStreamingProvider && !isLinearCategoryIndicative && !hasLiveFeedMarker && !isLiveStreamUrl) {
     return "MOVIE";
   }
 
-  // 5. Extensões de arquivo VOD (.mp4, .mkv, .avi)
-  const isVodExtension = uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI");
-  if (isVodExtension) {
-    return hasSeriesPattern ? "SERIES" : "MOVIE";
-  }
-
-  // 5.1 Ano no título (ex: "Filme Exemplo (2023)") sem indicação de canal linear
-  const hasYearPattern = /\b\((?:19|20)\d{2}\)\b/.test(uppercaseName) || /\b\[(?:19|20)\d{2}\]\b/.test(uppercaseName);
-  if (hasYearPattern && !isLiveIndicative) {
-    return "MOVIE";
-  }
-
-  // 6. Categorias lineares autênticas de TV Ao Vivo
-  const isLiveCategory = 
-    uppercaseCategory.startsWith("CANAIS") ||
-    uppercaseCategory.startsWith("CANAL") ||
-    uppercaseCategory.startsWith("TV") ||
-    uppercaseCategory.startsWith("AO VIVO") ||
-    uppercaseCategory.startsWith("AOVIVO") ||
-    uppercaseCategory.startsWith("24H") ||
-    uppercaseCategory.startsWith("24 HORAS") ||
-    uppercaseCategory.startsWith("TV ABERTA") ||
-    uppercaseCategory.startsWith("ABERTOS") ||
-    uppercaseCategory.startsWith("NOTICIAS") ||
-    uppercaseCategory.startsWith("ESPORTES") ||
-    uppercaseCategory.startsWith("GLOBO") ||
-    uppercaseCategory.startsWith("PREMIERE") ||
-    uppercaseCategory.startsWith("COMBATE") ||
-    uppercaseCategory.startsWith("DAZN") ||
-    uppercaseCategory.includes("CANAIS |") ||
-    uppercaseCategory.includes("CANAL |") ||
-    uppercaseCategory.includes("TV |") ||
-    uppercaseCategory.includes("CANAIS:") ||
-    uppercaseCategory.includes("CANAL:") ||
-    uppercaseCategory.includes("24H |") ||
-    uppercaseCategory.includes("AO VIVO |") ||
-    uppercaseCategory.includes("CANAIS 4K") ||
-    uppercaseCategory.includes("CANAIS FHD");
-
-  if (isLiveCategory) return "LIVE";
-
-  // 7. Padrão residual
+  // 6. Padrão residual: todo o resto de canais / streams IPTV é LIVE
   return "LIVE";
 }
 
@@ -2887,10 +2870,10 @@ let watchdogStreamKey = '';
 
 function isCurrentItemVod() {
   if (!activeItem) return false;
-  if (activeItem.type === 'MOVIE' || activeItem.type === 'SERIES') return true;
-  if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') return true;
+  const cType = activeItem.contentType || activeItem.type || currentContentType;
+  if (cType === 'MOVIE' || cType === 'SERIES') return true;
   const u = String(activeItem.url || '').toLowerCase();
-  return u.includes('/movie/') || u.includes('/series/') || u.endsWith('.mp4') || u.endsWith('.mkv');
+  return u.includes('/movie/') || u.includes('/series/') || u.includes('.mp4') || u.includes('.mkv') || u.includes('.avi');
 }
 
 function startStallWatchdog(streamKey) {
@@ -2940,14 +2923,14 @@ function startStallWatchdog(streamKey) {
   stallWatchdogInterval = setInterval(() => {
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
     const isVod = isCurrentItemVod();
-    const stallThreshold = isVod ? 30 : 6; // VOD tolera até 30s de buffer de rede sem reiniciar o filme
+    const stallThreshold = isVod ? 30 : 6; // VOD tolera buffer de rede sem reiniciar o filme
     const nowTime = video.currentTime;
     if (Math.abs(nowTime - lastVideoCurrentTime) < 0.2) {
       stallCount++;
       if (stallCount >= stallThreshold) {
         if (isVod) {
-          console.warn('[SmartPlayer Watchdog] VOD pausado para buffer. Tentando recuperar posição...');
-          try { video.currentTime = nowTime; safeVideoPlay(video); } catch (e) {}
+          console.warn('[SmartPlayer Watchdog] VOD em buffer. Retomando reprodução...');
+          try { safeVideoPlay(video); } catch (e) {}
           stallCount = 0;
         } else {
           console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
@@ -4991,7 +4974,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.5.6';
+const BASE_PACKAGE_VERSION = '2.5.7';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5352,6 +5335,10 @@ function mk21MoveFocus(direction) {
       if (document.documentElement.scrollLeft !== 0) {
         document.documentElement.scrollLeft = 0;
       }
+      const colPl = document.querySelector('.col-player');
+      if (colPl && colPl.scrollTop !== 0) {
+        colPl.scrollTop = 0;
+      }
     } catch (e) {}
     // mantém índices legados sincronizados
     try {
@@ -5367,7 +5354,11 @@ function mk21MoveFocus(direction) {
         activeZone = 'channels';
         const its = Array.from(($('listItems') || document).querySelectorAll('.list-item-btn'));
         const ix = its.indexOf(best);
-        if (ix >= 0) focusedItemIdx = ix;
+        if (ix >= 0) {
+          focusedItemIdx = ix;
+          const badge = $('badgeItemsCount');
+          if (badge && its.length > 0) badge.textContent = (ix + 1) + ' / ' + its.length;
+        }
       } else if (best.classList.contains('cfg-menu-item')) {
         activeZone = 'settings';
       }

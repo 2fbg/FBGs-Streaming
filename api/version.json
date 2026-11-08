@@ -1,10 +1,10 @@
 {
   "name": "MK21 Streaming",
-  "version": "2.5.6",
-  "build": 256,
-  "versionCode": 256,
-  "tagName": "v2.5.6",
-  "title": "MK21 Play v2.5.6",
+  "version": "2.5.7",
+  "build": 257,
+  "versionCode": 257,
+  "tagName": "v2.5.7",
+  "title": "MK21 Play v2.5.7",
   "theme": "MK21 Red/Black/White",
   "platforms": {
     "web": "2.5.3",
@@ -12,18 +12,18 @@
     "webos": "2.5.3"
   },
   "releaseDate": "2026-11-08T03:30:00Z",
-  "releaseNotes": "MK21 Play v2.5.6: Tela de login em preto absoluto OLED com identidade MK21, layout dinâmico sem cortar menu Configurações, correção do travamento de VOD e restauração dos botões de qualidade, buffer e fonte no player.",
+  "releaseNotes": "MK21 Play v2.5.7: Layout responsivo 100% dinâmico sem sobreposição do menu Configurações, barra de rolagem visível em Smart TVs, mini player travado no topo para não sumir com listas longas, eliminação de canais de TV na aba Filmes e correção no buffer de VOD.",
   "body": "Smart TV 2.5.3: o player voltou a reproduzir (o pedido de play nao era mais abortado por engano), seletor de qualidade (automatica ou ate 1080p/720p/480p) no controle do player, em tela cheia e nas configuracoes, troca automatica de servidor quando a lista falha e troca automatica para uma fonte alternativa do mesmo canal antes de mostrar 'fora do ar'.",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.5.6_all.ipk",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.5.7_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "apkSha256": "84f821a2cd99d132374f926cf9b590f6ac2a4cc8c3f88315ca0446e36fef91f9",
-  "ipkSha256": "2619414bcfd863d2131aa0909ee5945ea45a3a5536726a8ade9dfc7bd5a4b405",
+  "ipkSha256": "be779c8a5763ba30829b811841c1f5143e187a3256485d995bea0ac312314bfc",
   "sizeBytes": 5777533,
-  "ipkSizeBytes": 534724,
+  "ipkSizeBytes": 535564,
   "updatedAt": "2026-11-08",
   "sha256": "84f821a2cd99d132374f926cf9b590f6ac2a4cc8c3f88315ca0446e36fef91f9",
   "breakingChanges": "",
-  "versionName": "2.5.6",
-  "changelog": "MK21 Play v2.5.6: Tela de login em preto absoluto OLED com identidade MK21, layout dinâmico sem cortar menu Configurações, correção do travamento de VOD e restauração dos botões de qualidade, buffer e fonte no player."
+  "versionName": "2.5.7",
+  "changelog": "MK21 Play v2.5.7: Layout responsivo 100% dinâmico sem sobreposição do menu Configurações, barra de rolagem visível em Smart TVs, mini player travado no topo para não sumir com listas longas, eliminação de canais de TV na aba Filmes e correção no buffer de VOD."
 }

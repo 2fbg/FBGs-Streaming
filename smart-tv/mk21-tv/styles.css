@@ -290,24 +290,28 @@ body {
 
 /* Barra de Rolagem Visível e Otimizada para Smart TV (10-foot UI) */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 14px !important;
+  height: 14px !important;
   display: block !important;
+  background: rgba(0, 0, 0, 0.75) !important;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 8px;
+  background: rgba(10, 14, 24, 0.95) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #ff9800;
-  border-radius: 8px;
-  box-shadow: 0 0 8px rgba(255, 152, 0, 0.5);
+  background: #ff9800 !important;
+  border-radius: 8px !important;
+  border: 2px solid #000000 !important;
+  min-height: 48px !important;
+  box-shadow: 0 0 10px rgba(255, 152, 0, 0.6) !important;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #ffa726;
+  background: #ffa726 !important;
 }
 
 .col-categories,
@@ -322,11 +326,11 @@ body {
   list-style: none;
   margin: 0;
   padding: 8px;
-  overflow-y: auto;
+  overflow-y: scroll !important;
   overflow-x: hidden !important;
   flex: 1;
   scrollbar-width: thin;
-  scrollbar-color: #ff9800 rgba(0, 0, 0, 0.45);
+  scrollbar-color: #ff9800 #0a0e18;
 }
 
 .pane-scroll li {
@@ -359,27 +363,30 @@ body {
   border-color: var(--primary-red);
 }
 
-/* COLUNA 3: PLAYER & EPG (Preview Fixo e EPG Fixo na Barra Lateral - Item 7 e 10) */
+/* COLUNA 3: PLAYER & EPG (Mini player travado no topo, NUNCA some ao rolar canais) */
 .col-player {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  position: sticky;
-  top: 0;
-  height: 100%;
-  overflow-y: auto;
-  box-sizing: border-box;
+  padding: 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
 }
 
 .video-box {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #000;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  flex: 0 0 auto !important;
+  position: relative !important;
+  width: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  background: #000 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  border: 2px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6) !important;
   cursor: pointer;
 }
 
@@ -2577,49 +2584,69 @@ body.osk-open .login-card {
 
 
 /* ==========================================================================
-   2.5.5 — NAVEGAÇÃO VERTICAL (menu lateral fixo, estilo apps de TV modernos)
+   2.5.7 — NAVEGAÇÃO VERTICAL ROBUSTA (FLEX ROW: MENU LATERAL + CONTEÚDO)
+   Garante 0% de sobreposição em qualquer Smart TV (LG webOS, Tizen, Android TV)
    ========================================================================== */
-.app-header {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
+.home-fullscreen {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100vw !important;
   height: 100vh !important;
-  width: clamp(235px, 16vw, 275px);
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 14px 10px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: linear-gradient(180deg, #05070d 0%, #0b0f19 100%);
-  border-right: 1px solid #1c2436;
-  border-bottom: none;
-  z-index: 300;
-  box-sizing: border-box;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+}
+
+.app-header {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  width: clamp(220px, 15vw, 260px) !important;
+  min-width: 210px !important;
+  max-width: 270px !important;
+  flex: 0 0 clamp(220px, 15vw, 260px) !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  padding: 12px 10px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  background: linear-gradient(180deg, #05070d 0%, #0b0f19 100%) !important;
+  border-right: 1px solid #1c2436 !important;
+  border-bottom: none !important;
+  z-index: 200 !important;
+  box-sizing: border-box !important;
 }
 
 .app-header .header-left {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  width: 100%;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  width: 100% !important;
 }
 
 .app-header .logo-box {
-  justify-content: flex-start;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px 6px 10px;
-  border-bottom: 1px solid #161f2f;
+  justify-content: flex-start !important;
+  align-items: flex-start !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  padding: 4px 6px 8px !important;
+  border-bottom: 1px solid #161f2f !important;
 }
 
 .app-header .logo-title {
   margin-left: 0 !important;
-  font-size: 19px;
-  letter-spacing: 0.8px;
+  font-size: 19px !important;
+  letter-spacing: 0.8px !important;
 }
 
 .app-header .tv-header-logo {
@@ -2627,137 +2654,198 @@ body.osk-open .login-card {
 }
 
 .app-header .main-tabs {
-  flex-direction: column;
-  align-items: stretch;
-  width: 100%;
-  gap: 6px;
-  overflow: visible;
-  background: transparent;
-  border: none;
-  padding: 0;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  gap: 5px !important;
+  overflow: visible !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
 }
 
 .app-header .tab-btn {
-  width: 100%;
-  justify-content: flex-start;
-  text-align: left;
-  gap: 8px;
-  padding: 10px 12px;
-  font-size: clamp(13px, 0.92vw, 15px);
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  border-radius: 10px;
-  white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
-  flex: 0 0 auto;
+  width: 100% !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  gap: 8px !important;
+  padding: 9px 12px !important;
+  font-size: clamp(13px, 0.92vw, 15px) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px !important;
+  border-radius: 10px !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  flex: 0 0 auto !important;
 }
 
 .app-header .tab-btn i {
-  width: 18px;
-  text-align: center;
-  font-size: 15px;
+  width: 18px !important;
+  text-align: center !important;
+  font-size: 15px !important;
 }
 
 .app-header .header-right {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  width: 100%;
-  margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px solid #161f2f;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 6px !important;
+  width: 100% !important;
+  margin-top: auto !important;
+  padding-top: 8px !important;
+  border-top: 1px solid #161f2f !important;
 }
 
 .app-header .header-right .action-btn {
-  width: 100%;
-  justify-content: center;
-  font-size: 13px;
-  padding: 9px 8px;
+  width: 100% !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  padding: 8px 8px !important;
 }
 
 .app-header #liveClock {
-  width: 100%;
-  text-align: center;
-  font-size: 17px;
-  padding: 4px 0;
-}
-
-/* Conteúdo deslocado para a direita da barra lateral */
-.home-fullscreen {
-  padding-left: clamp(235px, 16vw, 275px);
-  width: 100vw;
-  height: 100vh;
-  box-sizing: border-box;
-  overflow-x: hidden !important;
+  width: 100% !important;
+  text-align: center !important;
+  font-size: 17px !important;
+  padding: 4px 0 !important;
 }
 
 .app-body {
-  height: 100%;
-  padding: 0;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
   overflow-x: hidden !important;
+  box-sizing: border-box !important;
+  background: #090b12 !important;
 }
 
-/* Ajuste fino das 3 colunas com a barra lateral presente */
-.col-categories { flex: 0 0 22%; }
-.col-channels { flex: 0 0 36%; }
+/* Seção Unificada 3 Colunas: 100% ajustada e dinâmica */
+#sectionUnified {
+  display: grid !important;
+  grid-template-columns: minmax(140px, 1.15fr) minmax(210px, 1.85fr) minmax(310px, 2.1fr) !important;
+  gap: 12px !important;
+  padding: 10px 14px !important;
+  background: #090b12 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* Seção Configurações: Nunca cortada pela barra lateral */
+#sectionSettings {
+  display: grid !important;
+  grid-template-columns: minmax(240px, 28%) 1fr !important;
+  gap: 16px !important;
+  padding: 14px 20px !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.settings-left-menu {
+  background: var(--pane-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  padding: 10px !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.settings-detail-panel {
+  background: var(--pane-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 12px !important;
+  padding: 20px 24px !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
 
 /* TVs com viewport menor (1280x720 e 1366x768): proporções dinâmicas */
 @media (max-width: 1366px) {
   .app-header {
-    width: 220px;
-    padding: 10px 8px;
-    gap: 8px;
-  }
-  .home-fullscreen {
-    padding-left: 220px;
+    width: 210px !important;
+    min-width: 200px !important;
+    flex: 0 0 210px !important;
+    padding: 10px 8px !important;
+    gap: 6px !important;
   }
   .app-header .tab-btn {
-    font-size: 13px;
-    padding: 8px 10px;
-    gap: 8px;
+    font-size: 13px !important;
+    padding: 8px 10px !important;
+    gap: 8px !important;
   }
   .app-header .tab-btn i {
-    width: 16px;
-    font-size: 14px;
+    width: 16px !important;
+    font-size: 14px !important;
   }
   .app-header .logo-title {
-    font-size: 17px;
+    font-size: 17px !important;
   }
   .cfg-menu-item {
-    font-size: 14px;
-    padding: 8px 10px;
+    font-size: 14px !important;
+    padding: 8px 10px !important;
   }
   .cfg-tmdb-toggle {
-    font-size: 13px;
+    font-size: 13px !important;
   }
   #sectionUnified {
-    grid-template-columns: minmax(140px, 1.15fr) minmax(200px, 1.85fr) minmax(270px, 2fr);
-    gap: 10px;
-    padding: 8px 10px;
+    grid-template-columns: minmax(130px, 1.1fr) minmax(190px, 1.8fr) minmax(270px, 2fr) !important;
+    gap: 10px !important;
+    padding: 8px 10px !important;
+  }
+  #sectionSettings {
+    grid-template-columns: minmax(220px, 26%) 1fr !important;
+    gap: 12px !important;
+    padding: 10px 14px !important;
   }
 }
 
 @media (max-width: 1280px) {
   .app-header {
-    width: 200px;
-    padding: 8px 6px;
-  }
-  .home-fullscreen {
-    padding-left: 200px;
+    width: 195px !important;
+    min-width: 185px !important;
+    flex: 0 0 195px !important;
+    padding: 8px 6px !important;
   }
   .app-header .tab-btn {
-    font-size: 12px;
-    padding: 8px 8px;
-    gap: 6px;
+    font-size: 12px !important;
+    padding: 7px 8px !important;
+    gap: 6px !important;
   }
   .app-header .tab-btn i {
-    width: 14px;
-    font-size: 13px;
+    width: 14px !important;
+    font-size: 13px !important;
   }
   #sectionUnified {
-    grid-template-columns: minmax(130px, 1.1fr) minmax(180px, 1.8fr) minmax(240px, 2.1fr);
-    gap: 8px;
-    padding: 6px 8px;
+    grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.7fr) minmax(240px, 2.1fr) !important;
+    gap: 8px !important;
+    padding: 6px 8px !important;
+  }
+  #sectionSettings {
+    grid-template-columns: minmax(200px, 25%) 1fr !important;
+    gap: 10px !important;
+    padding: 8px 12px !important;
   }
 }
