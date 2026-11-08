@@ -1254,6 +1254,9 @@ async function loadServer(forceRefresh = false, options = {}) {
       if (currentContentType === 'SETTINGS') return;
       const input = $('inputSearch');
       if (input && document.activeElement === input) return;
+      // Se o usuário está navegando na lista, não recria os botões embaixo do foco.
+      const lista = $('listItems');
+      if (lista && document.activeElement && lista.contains(document.activeElement)) return;
       const now = Date.now();
       if (!force && now - lastPublishAt < 3000) return;
       lastPublishAt = now;
@@ -1261,7 +1264,7 @@ async function loadServer(forceRefresh = false, options = {}) {
       buildCurrentCategories();
       renderCategoriesList();
       if (!currentCategoriesMap[activeCategoryKey]) activeCategoryKey = 'ALL';
-      renderItemsList();
+      renderItemsList(true);
     };
 
     const revealLive = () => {
@@ -1564,7 +1567,8 @@ function selectCategory(catKey) {
 let itemsDisplayLimit = 80;
 
 // 8. RENDERIZAÇÃO DA LISTA DE ITENS COM SÉRIES AGRUPADAS E ORDENAÇÃO
-function renderItemsList() {
+function renderItemsList(preserveScroll) {
+  const scrollAnterior = preserveScroll && $('listItems') ? $('listItems').scrollTop : 0;
   const query = $('inputSearch') ? $('inputSearch').value.toLowerCase().trim() : '';
   const base = currentCategoriesMap[activeCategoryKey] || [];
   const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
@@ -1759,6 +1763,7 @@ function renderItemsList() {
   }
 
   ul.appendChild(fragment);
+  if (preserveScroll) { try { ul.scrollTop = scrollAnterior; } catch (e) {} }
 
   // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
   if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
