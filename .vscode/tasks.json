@@ -1,0 +1,63 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "git status",
+			"type": "shell",
+			"command": "git",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git add",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"add",
+				"README.md",
+				"smart-tv/README.md",
+				"smart-tv/webos/appinfo.json",
+				"web/index.html"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git commit",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"commit",
+				"-m",
+				"chore: update all documentation to version 2.5.8"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git push",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"push",
+				"origin",
+				"main"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git pull",
+			"type": "shell",
+			"command": "git",
+			"args": [
+				"pull",
+				"origin",
+				"main"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
