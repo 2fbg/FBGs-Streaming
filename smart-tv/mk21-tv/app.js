@@ -664,13 +664,11 @@ function toggleFav(url) {
   if (!url) return;
   if (favoriteUrls.has(url)) {
     favoriteUrls.delete(url);
-    if ($('btnFavorite')) $('btnFavorite').textContent = '⭐ Favoritar';
-    if ($('fsBtnFav')) $('fsBtnFav').textContent = '⭐ Favoritar';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(false);
     showChannelBanner('Removido dos Favoritos');
   } else {
     favoriteUrls.add(url);
-    if ($('btnFavorite')) $('btnFavorite').textContent = '★ Favoritado';
-    if ($('fsBtnFav')) $('fsBtnFav').textContent = '★ Favoritado';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(true);
     showChannelBanner('⭐ Adicionado aos Favoritos');
   }
   try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
@@ -727,18 +725,10 @@ function determineType(name, category, url) {
   const uppercaseCategory = (category || '').toUpperCase().trim();
   const uppercaseUrl = (url || '').toUpperCase().trim();
 
-  // 1. Checagem explícita na rota Xtream Codes
+  // 1. Checagem canônica explícita na rota Xtream Codes (prioridade máxima absoluta)
   if (uppercaseUrl.includes("/SERIES/")) return "SERIES";
   if (uppercaseUrl.includes("/MOVIE/")) return "MOVIE";
-  if (uppercaseUrl.includes("/LIVE/")) {
-    const isExplicitVodCat = uppercaseCategory.includes("FILME") || uppercaseCategory.includes("VOD") || uppercaseCategory.includes("CINEMA") || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE");
-    const isChannelIndicative = uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("24H") || uppercaseCategory.includes("AO VIVO") || uppercaseName.includes("24H") || uppercaseName.includes("CANAL");
-    if (isExplicitVodCat && !isChannelIndicative) {
-      if (uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
-      return "MOVIE";
-    }
-    return "LIVE";
-  }
+  if (uppercaseUrl.includes("/LIVE/")) return "LIVE";
 
   // 2. Indicador forte de Séries (Temporadas e Episódios)
   const hasSeriesPattern = 
@@ -2895,11 +2885,17 @@ function triggerAutoReconnect(cause) {
 
 let watchdogStreamKey = '';
 
+function isCurrentItemVod() {
+  if (!activeItem) return false;
+  if (activeItem.type === 'MOVIE' || activeItem.type === 'SERIES') return true;
+  if (currentContentType === 'MOVIE' || currentContentType === 'SERIES') return true;
+  const u = String(activeItem.url || '').toLowerCase();
+  return u.includes('/movie/') || u.includes('/series/') || u.endsWith('.mp4') || u.endsWith('.mkv');
+}
+
 function startStallWatchdog(streamKey) {
   stopStallWatchdog();
   const chave = String(streamKey || (activeItem && activeItem.url) || '');
-  // Zera o contador só quando muda o canal/URL. Antes cada reinício da mesma URL
-  // zerava as tentativas e o app ficava reconectando para sempre a cada ~2s.
   if (watchdogStreamKey !== chave) {
     watchdogStreamKey = chave;
     lastVideoCurrentTime = -1;
@@ -2915,12 +2911,17 @@ function startStallWatchdog(streamKey) {
   if (!video._mk21EventsBound) {
     video._mk21EventsBound = true;
     video.addEventListener('waiting', () => {
+      if (isCurrentItemVod()) {
+        showPlayerReconnectBadge('Carregando filme/série...');
+        return;
+      }
       stallCount += 2;
-      if (stallCount >= 4) triggerAutoReconnect('Buffer esgotado (waiting)');
+      if (stallCount >= 6) triggerAutoReconnect('Buffer esgotado (waiting)');
     });
     video.addEventListener('stalled', () => {
+      if (isCurrentItemVod()) return;
       stallCount += 2;
-      if (stallCount >= 4) triggerAutoReconnect('Stream estagnado (stalled)');
+      if (stallCount >= 6) triggerAutoReconnect('Stream estagnado (stalled)');
     });
     video.addEventListener('playing', () => {
       stallCount = 0;
@@ -2930,18 +2931,28 @@ function startStallWatchdog(streamKey) {
     });
     video.addEventListener('error', (e) => {
       console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
-      triggerAutoReconnect('Erro nativo de reprodução');
+      if (!isCurrentItemVod()) {
+        triggerAutoReconnect('Erro nativo de reprodução');
+      }
     });
   }
 
   stallWatchdogInterval = setInterval(() => {
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
+    const isVod = isCurrentItemVod();
+    const stallThreshold = isVod ? 30 : 6; // VOD tolera até 30s de buffer de rede sem reiniciar o filme
     const nowTime = video.currentTime;
     if (Math.abs(nowTime - lastVideoCurrentTime) < 0.2) {
       stallCount++;
-      if (stallCount >= 4) { // 4 segundos sem avanço no tempo
-        console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
-        triggerAutoReconnect('Stream congelado');
+      if (stallCount >= stallThreshold) {
+        if (isVod) {
+          console.warn('[SmartPlayer Watchdog] VOD pausado para buffer. Tentando recuperar posição...');
+          try { video.currentTime = nowTime; safeVideoPlay(video); } catch (e) {}
+          stallCount = 0;
+        } else {
+          console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
+          triggerAutoReconnect('Stream congelado');
+        }
       }
     } else {
       stallCount = 0;
@@ -3351,9 +3362,9 @@ function playStream(item, forcedUrl) {
   updateRealResolution(item);
 
   if (favoriteUrls.has(item.url)) {
-    $('btnFavorite').textContent = '★ Favoritado';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(true);
   } else {
-    $('btnFavorite').textContent = '⭐ Favoritar';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(false);
   }
 
   showChannelBanner(item.name);
@@ -3379,8 +3390,7 @@ function playStream(item, forcedUrl) {
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       safeVideoPlay(video);
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -3422,13 +3432,10 @@ function playStream(item, forcedUrl) {
       mpegtsPlayer.play().then(() => {
         addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
         hidePlayerReconnectBadge();
-        if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-        if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+        if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
         if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
         updateRealResolution(item);
       }).catch(err => {
-        // "play() request was interrupted by a new load request" é troca de canal,
-        // não falha de stream: não pode jogar o player para o fallback.
         if (isPlayInterruption(err)) return;
         addDevLog(`[MPEGTS Error] ${err && err.message}. Tentando MPEG-TS nativo...`, 'warn');
         if (!fallbackToNativeTs(item)) fallbackToHls(item);
@@ -3437,7 +3444,6 @@ function playStream(item, forcedUrl) {
         const msg = String(detail || '') + ' ' + String((info && (info.msg || info.reason)) || '');
         if (/interrupt|abort/i.test(msg)) return;
         addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
-        // Erro de rede/HTTP do mpegts: o provedor recusou esta requisição.
         if (/HttpStatus|NetworkError|NETWORK_/i.test(msg)) {
           if (mk21MpegtsBlocked.size > 400) mk21MpegtsBlocked.clear();
           mk21MpegtsBlocked.add(item.url);
@@ -3450,22 +3456,16 @@ function playStream(item, forcedUrl) {
       fallbackToHls(item);
     }
   } else {
-    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas
+    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas e suporte direto a VOD
     addDevLog('[Player Engine] Usando decodificação nativa acelerada por hardware...', 'info');
     video.innerHTML = '';
-    const src = document.createElement('source');
-    src.src = streamUrl;
-    if (isM3U8) src.type = 'application/x-mpegURL';
-    else if (isTS) src.type = 'video/mp2t';
-    else src.type = 'video/mp4';
-    video.appendChild(src);
+    video.src = streamUrl;
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
     safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
@@ -3696,26 +3696,69 @@ function bindFsHudButtons() {
   if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); pokeFsHud(); };
   if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); pokeFsHud(); };
   if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); pokeFsHud(); };
+  if ($('fsBtnQuality')) $('fsBtnQuality').onclick = function () { if (typeof mk21OpenQualityModal === 'function') mk21OpenQualityModal(true); };
+  if ($('fsBtnBuffer')) $('fsBtnBuffer').onclick = function () { cycleBufferMode(); pokeFsHud(); };
+  if ($('fsBtnServer')) $('fsBtnServer').onclick = function () { if (typeof openServerPicker === 'function') openServerPicker(); };
   if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function () { if (typeof openAudioSubsModal === 'function') openAudioSubsModal(); };
   if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
 }
 bindFsHudButtons();
 
+function updatePlayPauseBtnUI(isPlaying) {
+  const btn = $('btnPlayPause');
+  if (btn) {
+    btn.title = isPlaying ? 'Pausar' : 'Reproduzir';
+    btn.innerHTML = isPlaying 
+      ? '<svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+      : '<svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  }
+  const fsBtn = $('fsBtnPlay');
+  if (fsBtn) {
+    fsBtn.textContent = isPlaying ? '⏸️ Pausar' : '▶️ Reproduzir';
+  }
+}
+
+function updateFavoriteBtnUI(isFav) {
+  const btn = $('btnFavorite');
+  if (btn) {
+    btn.title = isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos';
+    btn.innerHTML = isFav
+      ? '<svg style="width:22px;height:22px;fill:#ffd54f;" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>'
+      : '<svg style="width:22px;height:22px;fill:rgba(255,255,255,0.7);" viewBox="0 0 24 24"><path d="M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"/></svg>';
+  }
+  const fsBtn = $('fsBtnFav');
+  if (fsBtn) {
+    fsBtn.textContent = isFav ? '★ Favoritado' : '⭐ Favoritar';
+  }
+}
+
+function cycleBufferMode() {
+  const modes = ['auto', 'fast', 'stable'];
+  const current = mk21BufferMode();
+  const next = modes[(modes.indexOf(current) + 1) % modes.length];
+  localStorage.setItem('mk21_buffer_mode', next);
+  const info = MK21_BUFFER_MODES[next];
+  const msg = '⚡ Fluidez: ' + (info ? info.label : next);
+  if (typeof showToast === 'function') {
+    showToast(msg);
+  } else if (typeof showChannelBanner === 'function') {
+    showChannelBanner(msg);
+  }
+}
+
 $('videoContainer').ondblclick = () => toggleFullscreen();
-$('btnFullscreen').onclick = () => toggleFullscreen();
+if ($('btnFullscreen')) $('btnFullscreen').onclick = () => toggleFullscreen();
 
 function togglePlayPause() {
   const v = $('tvPlayer');
   if (!v) return;
   if (v.paused) {
     v.play().catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+    updatePlayPauseBtnUI(true);
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
-    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '▶ Reproduzir';
+    updatePlayPauseBtnUI(false);
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -3726,7 +3769,6 @@ function applyPlaybackSpeed(rate) {
   currentPlaybackSpeed = rate;
   try {
     video.playbackRate = rate;
-    // Áudio sem chipmunk ao acelerar (webOS / Chromium)
     video.preservesPitch = true;
     video.mozPreservesPitch = true;
     video.webkitPreservesPitch = true;
@@ -3743,13 +3785,20 @@ function cyclePlaybackSpeed() {
   showChannelBanner('⚡ Velocidade: ' + currentPlaybackSpeed + 'x (áudio normal)');
 }
 
-$('btnPlayPause').onclick = togglePlayPause;
-$('btnFavorite').onclick = () => {
+if ($('btnPlayPause')) $('btnPlayPause').onclick = togglePlayPause;
+if ($('btnFavorite')) $('btnFavorite').onclick = () => {
   if (activeItem) toggleFav(activeItem.url);
 };
+if ($('btnSpeed')) $('btnSpeed').onclick = cyclePlaybackSpeed;
 
-// VELOCIDADE DE REPRODUÇÃO ATÉ 4X NO PLAYER PRINCIPAL E PRÉVIO (COM PRESERVAÇÃO DE ÁUDIO)
-$('btnSpeed').onclick = cyclePlaybackSpeed;
+// BINDING DIRETO DOS NOVOS BOTÕES DO MINI PLAYER: QUALIDADE, BUFFER E FONTE
+if ($('btnQuality')) $('btnQuality').onclick = () => {
+  if (typeof mk21OpenQualityModal === 'function') mk21OpenQualityModal(false);
+};
+if ($('btnBufferMode')) $('btnBufferMode').onclick = cycleBufferMode;
+if ($('btnQuickServer')) $('btnQuickServer').onclick = () => {
+  if (typeof openServerPicker === 'function') openServerPicker();
+};
 
 // MODAL INTERATIVO DE ÁUDIO E LEGENDAS (TEXTTRACK)
 function openAudioSubsModal() {
@@ -4942,7 +4991,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.5.5';
+const BASE_PACKAGE_VERSION = '2.5.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5181,11 +5230,11 @@ function togglePlayPause() {
   if (!v) return;
   if (v.paused) {
     v.play().catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏸ Pausar';
+    if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
+    if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(false);
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -5295,7 +5344,15 @@ function mk21MoveFocus(direction) {
 
   if (best) {
     best.focus();
-    try { best.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+    try {
+      best.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.documentElement.scrollLeft !== 0) {
+        document.documentElement.scrollLeft = 0;
+      }
+    } catch (e) {}
     // mantém índices legados sincronizados
     try {
       if (best.id && typeof headerElements !== 'undefined' && headerElements.indexOf(best.id) !== -1) {
