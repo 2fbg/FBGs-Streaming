@@ -4,12 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.5.0-login-fix">
-  <link rel="stylesheet" href="css/style.css?v=2.5.0-login-fix">
+  <link rel="stylesheet" href="styles.css?v=2.5.1">
+  <link rel="stylesheet" href="css/style.css?v=2.5.1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+  <script src="libs/hls.min.js"></script>
+  <script src="libs/mpegts.min.js"></script>
+  <script>
+    if (typeof Hls === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"><\/script>');
+    }
+    if (typeof mpegts === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"><\/script>');
+    }
+  </script>
 </head>
 <body class="mk21-tv-body">
 
@@ -20,18 +28,27 @@
         <img src="assets/logo.png" alt="MK21 Play" class="brand-logo" onerror="this.src='icon.png'">
       </div>
 
-      <form id="login-form" autocomplete="off">
+      <form id="login-form" autocomplete="off" onsubmit="return false;">
         <div class="input-group">
-          <label for="server-select">Servidor</label>
-          <select id="server-select" class="focusable input-field" tabindex="1"></select>
+          <label for="server-select">Servidor / Fonte IPTV</label>
+          <select id="server-select" class="focusable input-field" tabindex="1">
+            <option value="0">Fonte 1: VLOG (Recomendado)</option>
+            <option value="1">Fonte 2: TANNIX</option>
+            <option value="2">Fonte 3: LUB TV</option>
+            <option value="3">Fonte 4: MK21 PRÓ</option>
+            <option value="4">Fonte 5: CB6000</option>
+            <option value="5">Fonte 6: CINELON</option>
+            <option value="6">Fonte 7: MULTT TV</option>
+          </select>
         </div>
+
         <div class="input-group">
           <label for="user-input">Usuário</label>
           <input 
             type="text" 
             id="user-input" 
             class="focusable input-field" 
-            tabindex="2"
+            tabindex="2" 
             placeholder="Digite seu usuário"
             inputmode="text"
             autocomplete="off" 
@@ -47,7 +64,7 @@
             type="password" 
             id="pass-input" 
             class="focusable input-field" 
-            tabindex="3"
+            tabindex="3" 
             placeholder="Digite sua senha"
             inputmode="text"
             autocomplete="off"
@@ -57,15 +74,18 @@
         <div id="login-feedback" class="feedback-message" style="display: none;"></div>
 
         <div class="action-group">
-          <button type="submit" id="btn-login" class="focusable btn-primary" tabindex="4">
+          <button type="button" id="btn-login" class="focusable btn-primary" tabindex="4">
             ENTRAR
           </button>
           <button type="button" id="btn-offline" class="focusable btn-secondary" tabindex="5">
             MODO OFFLINE
           </button>
         </div>
+
+        <div class="login-version" style="margin-top: 18px;">
+          MK21 PLAY OTT • v2.5.1 • Smart TV (webOS & Tizen)
+        </div>
       </form>
-      <p class="login-version">v2.5.0</p>
     </div>
   </div>
 
@@ -439,25 +459,25 @@
   <footer id="remoteColorBar" class="remote-color-bar">
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-red"></span>
-      <span>🔴 Mudo</span>
+      <span>🔴 <strong>Servidor</strong> (Trocar Fonte)</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-green"></span>
-      <span>🟢 Favoritos</span>
+      <span>🟢 <strong>Favoritar</strong></span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-yellow"></span>
-      <span>🟡 Proporção</span>
+      <span>🟡 <strong>Buscar</strong> (Omnisearch)</span>
     </div>
     <div class="color-shortcut-item">
       <span class="color-key-dot dot-blue"></span>
-      <span>🔵 Logs / Diag</span>
+      <span>🔵 <strong>Guia EPG</strong></span>
     </div>
     <div class="color-shortcut-item">
-      <span>↩️ <strong>Voltar:</strong> Navegar (2x Sair)</span>
+      <span>↕️ <strong>CH +/-:</strong> Zapping</span>
     </div>
     <div class="color-shortcut-item">
-      <span>🖱️ <strong>Magic:</strong> Rolar / OK</span>
+      <span>↩️ <strong>Voltar:</strong> Fechar / Sair</span>
     </div>
   </footer>
 
@@ -554,8 +574,18 @@
   <script>
     (function() {
       try {
-        var otaCode = localStorage.getItem('mk21_ota_app_js');
         var otaVer = localStorage.getItem('mk21_ota_app_version');
+        // Se a versão OTA armazenada for anterior a 2.5.1, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.5.1') {
+          try {
+            localStorage.removeItem('mk21_ota_app_js');
+            localStorage.removeItem('mk21_ota_app_version');
+            localStorage.removeItem('mk21_ota_styles_css');
+          } catch (eClean) {}
+          otaVer = null;
+        }
+
+        var otaCode = localStorage.getItem('mk21_ota_app_js');
         var otaCss = localStorage.getItem('mk21_ota_styles_css');
         if (otaCss) {
           var el = document.getElementById('mk21-ota-override-css');
@@ -569,7 +599,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.5.0-login-fix';
+              fallback.src = 'app.js?v=2.5.1';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -586,7 +616,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.5.0-login-fix';
+      s.src = 'app.js?v=2.5.1';
       document.body.appendChild(s);
     })();
   </script>

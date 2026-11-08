@@ -1,4 +1,4 @@
-/** Mk21 DNS resolver - TV failover **/
+/** Mk21DnsResolver v1.4.1 - TV Failover **/
 const Mk21DnsResolver = {
     async fetchWithFailover(url, options = {}) {
         const controller = new AbortController();
@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.5.0 — Navegação espacial D-Pad para Smart TV LG webOS/Tizen
+// MK21 PLAY v1.4.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
 const $ = id => document.getElementById(id);
 
@@ -65,24 +65,9 @@ const DEFAULT_SERVERS = [
   { id: 'cinelon', name: 'CINELON', url: 'http://coliseuop.site' },
   { id: 'multttv', name: 'MULTT TV', url: 'http://dali-as.skin' }
 ];
-const MK21_CORS_PROXY_ENDPOINT = 'https://bgstreaming.vercel.app/api/proxy';
 
 function cleanServerName(name) {
   return String(name || '').replace(/^[^\w\dÀ-ÿ]+/i, '').trim() || name;
-}
-
-function isPrivateServerHost(hostname) {
-  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
-  return host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') ||
-    host === '::1' || host === '0.0.0.0' || /^(?:fc|fd)[0-9a-f]{2}:/i.test(host) ||
-    /^fe[89ab][0-9a-f]:/i.test(host) || /^127\./.test(host) || /^10\./.test(host) ||
-    /^192\.168\./.test(host) || /^169\.254\./.test(host) ||
-    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host);
-}
-
-function getLoginRequestUrl(url) {
-  if (isPrivateServerHost(new URL(url).hostname)) return url;
-  return `${MK21_CORS_PROXY_ENDPOINT}?url=${encodeURIComponent(url)}`;
 }
 
 let SERVERS = [...DEFAULT_SERVERS];
@@ -871,17 +856,10 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
   console.log('[MK21] Streaming da lista:', targetUrl.replace(savedPass, '***'));
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
-  const abortWithParent = () => {
-    if (controller) controller.abort();
-  };
-  if (signal && controller) {
-    if (signal.aborted) controller.abort();
-    else signal.addEventListener('abort', abortWithParent, { once: true });
-  }
   try {
     const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
-    const requestUrl = getLoginRequestUrl(targetUrl);
-    const res = await fetch(requestUrl, options);
+    if (signal) options.signal = signal;
+    const res = await fetch(targetUrl, options);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
       const text = await res.text();
@@ -958,7 +936,6 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     if (buffer) consume(buffer);
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
-    if (signal && controller) signal.removeEventListener('abort', abortWithParent);
   }
 }
 
@@ -1035,8 +1012,6 @@ function showLoadingFailure(error, serverName) {
 
 // 6. CARREGAMENTO COM PRIORIDADE MÁXIMA NO AO VIVO E CARGA RÁPIDA
 async function loadServer(forceRefresh = false) {
-  if (!AppState.isLoggedIn) return;
-
   const loadId = ++serverLoadGeneration;
   if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
   activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -5123,6 +5098,13 @@ document.addEventListener('keydown', function (e) {
 
   // OK / Enter / Space
   if (k === 13 || k === 32 || key === 'Enter' || key === ' ') {
+    if (isAppFullscreen() && (!ae || ae === document.body || ae.id === 'tvPlayer' || ae.id === 'videoContainer')) {
+      e.preventDefault();
+      pokeFsHud();
+      const firstHudBtn = $('fsHudBar') ? $('fsHudBar').querySelector('.hud-ctrl-btn') : null;
+      if (firstHudBtn) firstHudBtn.focus();
+      return;
+    }
     if (channelNumberBuffer && channelNumberBuffer.length > 0) {
       e.preventDefault();
       commitChannelNumber();
@@ -5158,10 +5140,11 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // Atalhos de teclas coloridas do controle remoto (Smart TV v1.2.0 - Fase 2)
+  // Atalhos de teclas coloridas do controle remoto (Smart TV 10-foot UI)
   if (k === 403 || key === 'Red' || key === 'ColorF0Red') {
     e.preventDefault();
-    toggleMute();
+    if (typeof openServerPicker === 'function') openServerPicker();
+    else toggleMute();
     return;
   }
   if (k === 404 || key === 'Green' || key === 'ColorF1Green') {
@@ -5177,12 +5160,27 @@ document.addEventListener('keydown', function (e) {
   }
   if (k === 405 || key === 'Yellow' || key === 'ColorF2Yellow') {
     e.preventDefault();
-    cycleAspectRatio();
+    if (typeof openOmnisearch === 'function') openOmnisearch();
+    else cycleAspectRatio();
     return;
   }
   if (k === 406 || key === 'Blue' || key === 'ColorF3Blue' || key === 'b' || key === 'B') {
     e.preventDefault();
-    toggleDevLogsModal();
+    if (typeof openEpgGuideModal === 'function') openEpgGuideModal();
+    else toggleDevLogsModal();
+    return;
+  }
+
+  // Teclas nativas LG webOS & Tizen: GUIDE (458) e INFO (457)
+  if (k === 458 || key === 'Guide' || key === 'EPG') {
+    e.preventDefault();
+    if (typeof openEpgGuideModal === 'function') openEpgGuideModal();
+    return;
+  }
+  if (k === 457 || key === 'Info') {
+    e.preventDefault();
+    if (typeof toggleStreamDiagnostics === 'function') toggleStreamDiagnostics();
+    else if (activeItem) showChannelBanner(activeItem.name + ' - ' + (activeItem.group || ''));
     return;
   }
 }, true);
@@ -5396,7 +5394,6 @@ window.addEventListener('load', () => {
     const saved = localStorage.getItem('mk21_last_server');
     if (saved !== null && SERVERS[saved]) currentServerIndex = parseInt(saved, 10);
   } catch (e) {}
-  updateLoginServerOptions();
 
     try {
       const tmdbToggle = $('cfgToggleTmdb');
@@ -5413,15 +5410,18 @@ window.addEventListener('load', () => {
       addDevLog('[App] MK21 Play inicializado com sucesso', 'success');
     } catch (e) {}
 
-  loadServer();
+  const hasAuthToken = !!localStorage.getItem('mk21_auth_token');
+  if (hasAuthToken) {
+    loadServer();
 
-  const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
-  scheduleFrame(function () {
-    activeZone = 'header';
-    focusedHeaderIdx = 0;
-    if ($('tabLive')) $('tabLive').focus();
-    else focusActiveElement();
-  });
+    const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
+    scheduleFrame(function () {
+      activeZone = 'header';
+      focusedHeaderIdx = 0;
+      if ($('tabLive')) $('tabLive').focus();
+      else focusActiveElement();
+    });
+  }
 });
 
 /** v1.4.1 - Phased Loading & Omnisearch Synergy **/
@@ -5533,22 +5533,9 @@ const TVKeys = {
 };
 
 function initSmartTVApp() {
-  try {
-    const saved = localStorage.getItem('mk21_last_server');
-    const savedIndex = saved === null ? -1 : Number(saved);
-    if (Number.isInteger(savedIndex) && SERVERS[savedIndex]) currentServerIndex = savedIndex;
-  } catch (error) {
-    displayFeedback('Não foi possível restaurar o servidor selecionado.', true);
-  }
-
   const token = localStorage.getItem('mk21_auth_token');
-  updateLoginServerOptions();
 
-  if (token === 'mk21_session_saved') {
-    localStorage.removeItem('mk21_auth_token');
-    showLoginInterface();
-    displayFeedback('A sessão anterior não foi autenticada. Entre novamente.', true);
-  } else if (token) {
+  if (token) {
     verifySessionToken(token);
   } else {
     showLoginInterface();
@@ -5556,6 +5543,23 @@ function initSmartTVApp() {
 
   setupGlobalListeners();
   setupVirtualKeyboardHandling();
+}
+
+function populateServerSelect() {
+  const select = document.getElementById('server-select');
+  if (!select) return;
+  select.innerHTML = '';
+  SERVERS.forEach((srv, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `Fonte ${idx + 1}: ${cleanServerName(srv.name)}`;
+    if (idx === currentServerIndex) opt.selected = true;
+    select.appendChild(opt);
+  });
+  select.onchange = () => {
+    currentServerIndex = parseInt(select.value, 10) || 0;
+    try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
+  };
 }
 
 function showLoginInterface() {
@@ -5567,58 +5571,31 @@ function showLoginInterface() {
   if (home) home.style.display = 'none';
   if (login) login.style.display = 'flex';
 
-  updateLoginServerOptions();
+  populateServerSelect();
+
+  // Pré-preenche com credenciais existentes para poupar digitação com controle remoto
+  try {
+    const userField = document.getElementById('user-input');
+    const passField = document.getElementById('pass-input');
+    const creds = getSharedCredentials();
+    if (userField && !userField.value) userField.value = creds.user || '';
+    if (passField && !passField.value) passField.value = creds.pass || '';
+  } catch (e) {}
+
   updateFocusableElements();
 
-  // Foco inicial garantido no campo de Usuário
+  // Foco inicial garantido no campo de Usuário (ou Servidor se desejar trocar)
   setTimeout(() => {
-    setFocusByIndex(0);
+    setFocusByIndex(1); // Foco no campo de usuário para conveniência
+    const userField = document.getElementById('user-input');
+    if (userField) userField.focus();
   }, 120);
 
-  const loginForm = document.getElementById('login-form');
-  if (loginForm) loginForm.onsubmit = (event) => {
-    event.preventDefault();
-    handleLoginSubmit();
-  };
+  // Event Listeners dos botões
+  const btnLogin = document.getElementById('btn-login');
+  if (btnLogin) btnLogin.onclick = handleLoginSubmit;
   const btnOffline = document.getElementById('btn-offline');
   if (btnOffline) btnOffline.onclick = handleOfflineBypass;
-
-  const serverSelect = document.getElementById('server-select');
-  if (serverSelect) serverSelect.onchange = () => {
-    const index = Number(serverSelect.value);
-    if (!Number.isInteger(index) || !SERVERS[index]) return;
-    currentServerIndex = index;
-    try {
-      localStorage.setItem('mk21_last_server', String(index));
-    } catch (error) {
-      displayFeedback('Não foi possível salvar o servidor selecionado neste dispositivo.', true);
-    }
-  };
-}
-
-function updateLoginServerOptions() {
-  const select = document.getElementById('server-select');
-  if (!select) return;
-
-  select.replaceChildren();
-  SERVERS.forEach((server, index) => {
-    if (!server || !server.url) return;
-    const option = document.createElement('option');
-    option.value = String(index);
-    option.textContent = cleanServerName(server.name) || server.url;
-    select.appendChild(option);
-  });
-
-  if (select.options.length) {
-    if (!SERVERS[currentServerIndex] || !SERVERS[currentServerIndex].url) currentServerIndex = 0;
-    select.value = String(currentServerIndex);
-  } else {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'Nenhum servidor configurado';
-    select.appendChild(option);
-    select.disabled = true;
-  }
 }
 
 function updateFocusableElements() {
@@ -5651,27 +5628,15 @@ function setupGlobalListeners() {
     // Se a tecla for BACK no webOS (461), prevenir saída acidental
     if (TVKeys.BACK.includes(e.keyCode) || TVKeys.BACK.includes(e.key)) {
       e.preventDefault();
-      if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) {
         document.activeElement.blur();
         setFocusByIndex(AppState.activeFocusIndex);
       }
       return;
     }
 
-    // Se estiver na tela de login, o D-pad navega estritamente nos 5 itens
+    // Se estiver na tela de login, o D-pad navega estritamente nos itens focáveis
     if (!AppState.isLoggedIn) {
-      const current = AppState.focusableElements[AppState.activeFocusIndex];
-      if (current && current.tagName === 'SELECT' &&
-          (TVKeys.LEFT.includes(e.keyCode) || TVKeys.LEFT.includes(e.key) ||
-           TVKeys.RIGHT.includes(e.keyCode) || TVKeys.RIGHT.includes(e.key))) {
-        e.preventDefault();
-        const select = current;
-        const direction = TVKeys.RIGHT.includes(e.keyCode) || TVKeys.RIGHT.includes(e.key) ? 1 : -1;
-        select.selectedIndex = (select.selectedIndex + direction + select.options.length) % select.options.length;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        return;
-      }
-
       if (TVKeys.DOWN.includes(e.keyCode) || TVKeys.DOWN.includes(e.key)) {
         e.preventDefault();
         setFocusByIndex(AppState.activeFocusIndex + 1);
@@ -5683,8 +5648,6 @@ function setupGlobalListeners() {
         if (current && current.tagName === 'BUTTON') {
           e.preventDefault();
           current.click();
-        } else if (current && current.tagName === 'SELECT') {
-          e.preventDefault();
         }
       }
     }
@@ -5693,7 +5656,7 @@ function setupGlobalListeners() {
 
 function setupVirtualKeyboardHandling() {
   // Ajusta layout quando o teclado da Smart TV surge
-  const inputs = document.querySelectorAll('input.input-field');
+  const inputs = document.querySelectorAll('.input-field');
   inputs.forEach(input => {
     input.addEventListener('focus', () => document.body.classList.add('osk-open'));
     input.addEventListener('blur', () => document.body.classList.remove('osk-open'));
@@ -5701,84 +5664,79 @@ function setupVirtualKeyboardHandling() {
 }
 
 async function handleLoginSubmit() {
+  const serverSelect = document.getElementById('server-select');
+  if (serverSelect) {
+    currentServerIndex = parseInt(serverSelect.value, 10) || 0;
+    try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
+  }
+
   const userInput = document.getElementById('user-input');
   const passInput = document.getElementById('pass-input');
-  const serverSelect = document.getElementById('server-select');
   const user = userInput ? userInput.value.trim() : '';
   const pass = passInput ? passInput.value.trim() : '';
-  const selectedIndex = serverSelect ? Number(serverSelect.value) : currentServerIndex;
-  const server = Number.isInteger(selectedIndex) ? SERVERS[selectedIndex] : null;
 
-  if (!server || !server.url) {
-    displayFeedback('Selecione um servidor válido.', true);
-    setFocusByIndex(0);
-    return;
-  }
   if (!user || !pass) {
     displayFeedback('Informe o usuário e a senha.', true);
-    setFocusByIndex(user ? 2 : 1);
+    setFocusByIndex(user ? 1 : 0);
     return;
   }
 
-  const submitButton = document.getElementById('btn-login');
-  if (submitButton) submitButton.disabled = true;
-  displayFeedback(`Validando acesso em ${cleanServerName(server.name)}...`, false);
+  displayFeedback('Autenticando MK21...', false);
+
+  const activeSrv = SERVERS[currentServerIndex] || SERVERS[0];
+  let authToken = 'mk21_session_ok';
+
+  if (activeSrv && activeSrv.url) {
+    try {
+      const c = new AbortController();
+      const timer = setTimeout(() => c.abort(), 6000);
+      const authUrl = `${activeSrv.url}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+      const response = await fetch(authUrl, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: c.signal
+      });
+      clearTimeout(timer);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.user_info) {
+          if (data.user_info.auth === 1) {
+            authToken = data.user_info.token || 'mk21_auth_ok';
+          } else if (data.user_info.auth === 0) {
+            displayFeedback('Usuário ou senha inválidos no servidor.', true);
+            setFocusByIndex(0);
+            return;
+          }
+        }
+      }
+    } catch (eAuth) {
+      console.warn('[Login] Validação online indisponível ou CORS, prosseguindo com credenciais:', eAuth);
+    }
+  }
 
   try {
-    const apiUrl = `${server.url.replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
-    const requestUrl = getLoginRequestUrl(apiUrl);
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
-    let response;
-    try {
-      response = await fetch(requestUrl, {
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-        ...(controller ? { signal: controller.signal } : {})
-      });
-    } catch (error) {
-      if (controller && controller.signal.aborted) {
-        throw new Error('A validação excedeu o tempo limite. Tente novamente.');
-      }
-      throw new Error('Não foi possível conectar ao servidor selecionado. Verifique a rede e tente novamente.');
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-
-    if (!response.ok) throw new Error(`O servidor respondeu com HTTP ${response.status}.`);
-    let data;
-    try {
-      data = await response.json();
-    } catch (error) {
-      throw new Error('O servidor retornou uma resposta de autenticação inválida.');
-    }
-    const auth = data && data.user_info && data.user_info.auth;
-    if (!(auth === 1 || auth === true || auth === '1')) {
-      throw new Error('Usuário ou senha não reconhecidos pelo servidor selecionado.');
-    }
-
-    currentServerIndex = selectedIndex;
-    localStorage.setItem('mk21_last_server', String(selectedIndex));
-    localStorage.setItem('mk21_username', user);
+    localStorage.setItem('mk21_auth_token', authToken);
     localStorage.setItem('mk21_user', user);
-    localStorage.setItem('mk21_password', pass);
+    localStorage.setItem('mk21_username', user);
+    localStorage.setItem('iptv_user', user);
     localStorage.setItem('mk21_pass', pass);
-    localStorage.setItem('mk21_auth_token', 'mk21_auth_ok');
-    unlockHomeInterface();
-  } catch (err) {
-    displayFeedback(err.message || 'Falha ao autenticar no servidor selecionado.', true);
-    setFocusByIndex(1);
-  } finally {
-    if (submitButton) submitButton.disabled = false;
-  }
+    localStorage.setItem('mk21_password', pass);
+    localStorage.setItem('iptv_pass', pass);
+  } catch (eStore) {}
+
+  displayFeedback('Conectado! Carregando catálogo...', false);
+  unlockHomeInterface(true);
 }
 
 function handleOfflineBypass() {
-  localStorage.setItem('mk21_auth_token', 'mk21_offline_mode');
-  unlockHomeInterface();
+  try {
+    localStorage.setItem('mk21_auth_token', 'mk21_offline_mode');
+  } catch (e) {}
+  unlockHomeInterface(true);
 }
 
-function unlockHomeInterface() {
+function unlockHomeInterface(shouldLoad = true) {
   AppState.isLoggedIn = true;
   const login = document.getElementById('login-container');
   if (login) login.style.display = 'none';
@@ -5786,7 +5744,21 @@ function unlockHomeInterface() {
   const home = document.getElementById('home-container');
   if (home) home.style.display = 'block';
 
-  if (document.readyState === 'complete') loadServer(true);
+  if (typeof window.initHomeGrid === 'function') {
+    try { window.initHomeGrid(); } catch (e) {}
+  }
+
+  const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
+  scheduleFrame(function () {
+    activeZone = 'header';
+    focusedHeaderIdx = 0;
+    if ($('tabLive')) $('tabLive').focus();
+    else if (typeof focusActiveElement === 'function') focusActiveElement();
+  });
+
+  if (shouldLoad) {
+    try { loadServer(true); } catch (eLoad) { console.error('Erro ao chamar loadServer:', eLoad); }
+  }
 }
 
 function displayFeedback(msg, isError) {
@@ -5799,7 +5771,7 @@ function displayFeedback(msg, isError) {
 }
 
 function verifySessionToken(token) {
-  unlockHomeInterface();
+  unlockHomeInterface(false);
 }
 
 // Inicializa o fluxo de Smart TV
@@ -5808,3 +5780,4 @@ if (document.readyState === 'loading') {
 } else {
   initSmartTVApp();
 }
+
