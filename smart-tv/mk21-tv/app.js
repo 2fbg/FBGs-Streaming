@@ -1170,6 +1170,8 @@ async function loadServer(forceRefresh = false) {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     indexedOffsets = {};
     const indexWriter = await createCatalogIndexWriter(srv.id);
+    // 2.5.3: agrupa canais repetidos na mesma lista em fontes alternativas.
+    const liveGrouper = window.MK21AlternativeSources ? MK21AlternativeSources.createGrouper() : null;
     let liveVisible = false;
     let lastProgressUi = 0;
 
@@ -1221,7 +1223,12 @@ async function loadServer(forceRefresh = false) {
 
         indexWriter.add(slim);
         if (allCatalog[type]) {
-          allCatalog[type].push(slim);
+          if (type === 'LIVE' && liveGrouper) {
+            const grouped = liveGrouper.add(slim);
+            if (grouped.isNew) allCatalog[type].push(grouped.item);
+          } else {
+            allCatalog[type].push(slim);
+          }
         }
 
         // Salva periodicamente os canais ao vivo recebidos para garantir cache mesmo se interrompido
@@ -1283,6 +1290,7 @@ async function loadServer(forceRefresh = false) {
       hud.classList.add('hidden');
     }
     updateServerSyncBadge(100, true);
+    mk21AutoServerTries = 0;
     await indexWriter.finish();
     // Salva o catálogo 100% completo no IndexedDB para não precisar baixar novamente ao reabrir o app
     saveStoredData(srv.id, allCatalog);
@@ -1306,6 +1314,8 @@ async function loadServer(forceRefresh = false) {
       showChannelBanner(`⚠️ Lista parcial: ${partialLive} canais carregados. Tente atualizar novamente.`);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = `📺 ${partialLive} canais disponíveis (parcial)`;
       if (hud) hud.classList.add('hidden');
+    } else if (mk21AutoAdvanceServer(err, srv)) {
+      // 2.5.3: o módulo já avisou na tela e vai tentar o próximo servidor.
     } else {
       showLoadingFailure(err, srv.name);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = 'Aguardando conexão com o servidor';
@@ -2710,9 +2720,22 @@ function triggerAutoReconnect(cause) {
 
   if (autoReconnectAttempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
     console.error('[SmartPlayer Watchdog] Limite máximo de reconexão atingido:', cause);
+    isAutoReconnecting = false;
+    // 2.5.3: antes de desistir, tenta outra fonte (duplicata na mesma lista ou
+    // o mesmo canal em outro servidor já guardado no cache do aparelho).
+    if (typeof mk21TryAlternativeSource === 'function') {
+      mk21TryAlternativeSource().then(trocou => {
+        if (trocou) return;
+        showPlayerReconnectBadge('Falha de conexão. Tente outro canal.');
+        if ($('epgStatus')) $('epgStatus').textContent = '⚠️ FORA DO AR';
+      }).catch(() => {
+        showPlayerReconnectBadge('Falha de conexão. Tente outro canal.');
+        if ($('epgStatus')) $('epgStatus').textContent = '⚠️ FORA DO AR';
+      });
+      return;
+    }
     showPlayerReconnectBadge('Falha de conexão. Tente outro canal.');
     if ($('epgStatus')) $('epgStatus').textContent = '⚠️ FORA DO AR';
-    isAutoReconnecting = false;
     return;
   }
 
@@ -2917,8 +2940,8 @@ function safeVideoPlay(video) {
   return Promise.resolve();
 }
 
-function stopCurrentPlayer() {
-  if (playAbortController) {
+function stopCurrentPlayer(abortPlayRequests = true) {
+  if (abortPlayRequests && playAbortController) {
     try { playAbortController.abort(); } catch (e) {}
     playAbortController = null;
   }
@@ -2951,7 +2974,7 @@ function fallbackToHls(item) {
   if (!item || !item.url) return;
   const hlsUrl = item.url.replace(/\.ts($|\?)/i, '.m3u8$1');
   addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${hlsUrl}`, 'info');
-  stopCurrentPlayer();
+  stopCurrentPlayer(false);
   const video = $('tvPlayer');
   if (!video) return;
 
@@ -2970,6 +2993,7 @@ function fallbackToHls(item) {
     hlsInstance.attachMedia(video);
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Fallback HLS reproduzindo com sucesso!', 'success');
+      if (typeof mk21ApplyPlaybackQuality === 'function') mk21ApplyPlaybackQuality(hlsInstance);
       try { video.preservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       safeVideoPlay(video);
       hidePlayerReconnectBadge();
@@ -3002,7 +3026,7 @@ function fallbackToHls(item) {
 let zappingLockPromise = Promise.resolve();
 
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
-function playStream(item) {
+function playStream(item, forcedUrl) {
   if (!item || !item.url) return;
 
   if (playAbortController) {
@@ -3013,7 +3037,7 @@ function playStream(item) {
 
   zappingLockPromise = zappingLockPromise.catch(() => {}).then(async () => {
     if (currentSignal.aborted) return;
-    stopCurrentPlayer();
+    stopCurrentPlayer(false);
     const video = $('tvPlayer');
     if (video) {
       try {
@@ -3030,6 +3054,7 @@ function playStream(item) {
     if (currentSignal.aborted) return;
 
     activeItem = item;
+    if (typeof mk21ResetSourceFailover === 'function') mk21ResetSourceFailover(item);
     recordWatchedItem(item);
     saveLastChannel(item);
     prefetchAdjacentChannels(item);
@@ -3086,7 +3111,7 @@ function playStream(item) {
 
   showChannelBanner(item.name);
 
-  let streamUrl = item.url;
+  let streamUrl = forcedUrl || item.url;
   if (streamFormatPref === 'hls' && streamUrl.toLowerCase().includes('.ts')) {
     streamUrl = streamUrl.replace(/\.ts($|\?)/i, '.m3u8$1');
     addDevLog(`[Player] Preferência HLS forçada: ${streamUrl}`, 'info');
@@ -3121,6 +3146,7 @@ function playStream(item) {
     if ($('epgStatus')) $('epgStatus').textContent = '⏳ CARREGANDO...';
     hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       addDevLog('[Player Engine] Manifesto HLS decodificado com sucesso!', 'success');
+      if (typeof mk21ApplyPlaybackQuality === 'function') mk21ApplyPlaybackQuality(hlsInstance);
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       safeVideoPlay(video);
       hidePlayerReconnectBadge();
@@ -3686,7 +3712,7 @@ function switchContentType(type) {
 }
 
 // 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
-const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnPin'];
+const CFG_BUTTONS = ['cfgBtnInfo', 'cfgBtnFonte', 'cfgBtnFiltro', 'cfgBtnSpeedTest', 'cfgBtnLimpar', 'cfgBtnTempo', 'cfgBtnCategorias', 'cfgBtnFluxo', 'cfgBtnQualidade', 'cfgBtnPin'];
 
 CFG_BUTTONS.forEach(bId => {
   const b = $(bId);
@@ -3761,6 +3787,8 @@ function renderSettings(sec) {
     renderStreamFormatPanel();
   } else if (sec === 'pin') {
     renderPinSettingsPanel();
+  } else if (sec === 'qualidade') {
+    renderQualityPanel();
   }
 }
 
@@ -5887,3 +5915,255 @@ if (document.readyState === 'loading') {
   initSmartTVApp();
 }
 
+
+// ============================================================================
+// 2.5.3 · QUALIDADE DE VÍDEO + TROCA AUTOMÁTICA DE SERVIDOR/FONTE
+// ----------------------------------------------------------------------------
+// O player adaptativo do Hls.js sempre escolhe a melhor faixa sozinho. Aqui o
+// usuário pode limitar a qualidade (útil em internet fraca) e o app passa a
+// trocar de servidor/fonte sozinho quando a lista ou o canal falham.
+// ============================================================================
+
+var mk21AutoServerTries = 0;
+var mk21TriedSourceUrls = new Set();
+var mk21SourceTrying = false;
+
+/* ---------------------------------------------------------------- qualidade */
+function mk21QualityPref() {
+  return localStorage.getItem('mk21_playback_quality') || 'auto';
+}
+
+function mk21QualityHeights() {
+  const player = (typeof hlsInstance !== 'undefined') ? hlsInstance : null;
+  const found = new Set();
+  if (player && Array.isArray(player.levels)) {
+    player.levels.forEach(level => { if (level && level.height) found.add(level.height); });
+  }
+  const list = Array.from(found).sort((a, b) => b - a);
+  if (!list.length) [1080, 720, 480].forEach(h => list.push(h));
+  return list;
+}
+
+function mk21ApplyPlaybackQuality(hls) {
+  const player = hls || ((typeof hlsInstance !== 'undefined') ? hlsInstance : null);
+  if (!player || !Array.isArray(player.levels) || !player.levels.length) return;
+  const pref = mk21QualityPref();
+  try {
+    if (pref === 'auto') {
+      player.autoLevelCapping = -1;
+      player.currentLevel = -1;
+      return;
+    }
+    const target = parseInt(pref, 10) || 1080;
+    let best = -1;
+    player.levels.forEach((level, index) => {
+      if (!level || !level.height) return;
+      if (level.height <= target && (best < 0 || level.height > player.levels[best].height)) best = index;
+    });
+    if (best < 0) best = 0;
+    player.autoLevelCapping = best;
+    player.currentLevel = best;
+    addDevLog('[Qualidade] Fixada em ' + player.levels[best].height + 'p', 'info');
+  } catch (e) {
+    addDevLog('[Qualidade] Não foi possível aplicar: ' + (e && e.message), 'warn');
+  }
+}
+
+function mk21EnsureQualityModal() {
+  let modal = $('modalQuality');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'modalQuality';
+  modal.className = 'app-modal hidden';
+  modal.innerHTML =
+    '<div class="modal-content" style="width: 680px;">' +
+      '<div class="modal-header" style="padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">' +
+        '<span style="font-size: 22px; font-weight: 800; color: #ffd54f;">🎞️ Qualidade de vídeo</span>' +
+        '<button id="btnCloseQuality" class="ctrl-btn" tabindex="0" style="padding: 6px 14px;">✕ Fechar</button>' +
+      '</div>' +
+      '<div id="qualityOptionsList" style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;"></div>' +
+      '<p style="margin: 18px 0 0 0; font-size: 15px; color: #94a3b8;">' +
+        'A escolha vale para todos os canais e é lembrada ao ligar a TV. Em internet fraca, limitar em 720p ou 480p evita travamentos.' +
+      '</p>' +
+    '</div>';
+  document.body.appendChild(modal);
+  const close = $('btnCloseQuality');
+  if (close) close.onclick = mk21CloseQualityModal;
+  return modal;
+}
+
+function mk21RenderQualityOptions() {
+  const list = $('qualityOptionsList');
+  if (!list) return;
+  const pref = mk21QualityPref();
+  list.replaceChildren();
+  const options = [['auto', 'Automática (recomendada)']].concat(
+    mk21QualityHeights().map(h => [String(h), 'Até ' + h + 'p'])
+  );
+  options.forEach(pair => {
+    const value = pair[0];
+    const label = pair[1];
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'track-item-btn quality-option' + (pref === value ? ' active' : '');
+    button.tabIndex = 0;
+    button.textContent = (pref === value ? '✓ ' : '') + label;
+    button.onclick = () => {
+      localStorage.setItem('mk21_playback_quality', value);
+      mk21ApplyPlaybackQuality();
+      mk21RenderQualityOptions();
+      addDevLog('[Qualidade] ' + label, 'success');
+      showChannelBanner('Qualidade: ' + label);
+    };
+    list.appendChild(button);
+  });
+}
+
+function mk21OpenQualityModal() {
+  const modal = mk21EnsureQualityModal();
+  mk21RenderQualityOptions();
+  modal.classList.remove('hidden');
+  const first = modal.querySelector('.quality-option');
+  if (first) first.focus();
+  addDevLog('[UI] Qualidade de vídeo aberta', 'info');
+}
+
+function mk21CloseQualityModal() {
+  const modal = $('modalQuality');
+  if (modal) modal.classList.add('hidden');
+  const fullscreen = (typeof isAppFullscreen === 'function') && isAppFullscreen();
+  const target = fullscreen ? $('fsBtnQuality') : $('btnQuality');
+  if (target && target.focus) target.focus();
+}
+
+/* ------------------------------------------------- painel nas configurações */
+function renderQualityPanel() {
+  const box = $('settingsDetailBox');
+  if (!box) return;
+  const pref = mk21QualityPref();
+  const heights = mk21QualityHeights();
+  const rows = [['auto', 'Automática (recomendada)', 'O player escolhe a melhor faixa conforme a internet.']]
+    .concat(heights.map(h => [String(h), 'Até ' + h + 'p', 'Limita o canal em ' + h + 'p.']));
+  const cards = rows.map(pair => {
+    const active = pref === pair[0];
+    return '<button class="track-item-btn quality-option' + (active ? ' active' : '') + '" data-quality="' + pair[0] + '" tabindex="0" ' +
+      'style="text-align:left; padding: 16px 20px; font-size: 20px; display: flex; flex-direction: column; gap: 4px;">' +
+      '<span style="font-weight: 800;">' + (active ? '✓ ' : '') + pair[1] + '</span>' +
+      '<span style="font-size: 14px; color: #94a3b8; font-weight: 500;">' + pair[2] + '</span>' +
+    '</button>';
+  }).join('');
+  box.innerHTML =
+    '<h3 style="margin:0 0 16px 0; font-size:24px; border-bottom:1px solid #333; padding-bottom:8px;">🎞️ Qualidade de vídeo</h3>' +
+    '<p style="margin:0 0 18px 0; font-size:16px; color:#94a3b8;">Vale para todos os canais e fica salva no aparelho.</p>' +
+    '<div style="display:flex; flex-direction:column; gap:10px;">' + cards + '</div>';
+  box.querySelectorAll('.quality-option').forEach(button => {
+    button.onclick = () => {
+      localStorage.setItem('mk21_playback_quality', button.getAttribute('data-quality'));
+      mk21ApplyPlaybackQuality();
+      renderQualityPanel();
+      addDevLog('[Qualidade] ' + button.textContent.trim(), 'success');
+      showChannelBanner('Qualidade: ' + button.textContent.trim());
+      const again = box.querySelector('.quality-option.active');
+      if (again) again.focus();
+    };
+  });
+}
+
+/* ------------------------------------------------- troca automática servidor */
+function mk21AutoAdvanceServer(err, failedServer) {
+  if (!Array.isArray(SERVERS) || SERVERS.length < 2) return false;
+  if (mk21AutoServerTries >= SERVERS.length - 1) {
+    mk21AutoServerTries = 0;
+    addDevLog('[AutoServidor] Todos os servidores falharam', 'error');
+    return false;
+  }
+  const nextIndex = (currentServerIndex + 1) % SERVERS.length;
+  const next = SERVERS[nextIndex];
+  mk21AutoServerTries += 1;
+  const falhou = failedServer && failedServer.name ? cleanServerName(failedServer.name) : 'Servidor atual';
+  addDevLog('[AutoServidor] ' + falhou + ' falhou (' + (err && err.message) + '); tentando ' + cleanServerName(next.name), 'warn');
+  showChannelBanner('🔄 ' + falhou + ' falhou. Trocando para ' + cleanServerName(next.name) + '...');
+  currentServerIndex = nextIndex;
+  if (typeof saveServersToStorage === 'function') {
+    try { saveServersToStorage(); } catch (e) {}
+  }
+  setTimeout(() => {
+    if (typeof loadServer === 'function') loadServer(true);
+  }, 1500);
+  return true;
+}
+
+/* -------------------------------------------- failover de fonte no player */
+var mk21FailoverItemName = '';
+
+function mk21ResetSourceFailover(item) {
+  // Só volta a tentar as fontes quando o usuário troca de canal de verdade;
+  // durante a mesma reprodução a lista de URLs já tentadas é preservada.
+  const nome = item && item.name ? String(item.name) : '';
+  if (nome && nome === mk21FailoverItemName) {
+    if (item && item.url) mk21TriedSourceUrls.add(item.url);
+    return;
+  }
+  mk21FailoverItemName = nome;
+  mk21TriedSourceUrls = new Set();
+  if (item && item.url) mk21TriedSourceUrls.add(item.url);
+}
+
+function mk21SameChannel(a, b, sources) {
+  if (!sources) return false;
+  try { return sources.matchesAcrossServers(a, b); } catch (e) { return false; }
+}
+
+async function mk21TryAlternativeSource() {
+  if (!activeItem || mk21SourceTrying) return false;
+  mk21SourceTrying = true;
+  const sources = window.MK21AlternativeSources || null;
+  try {
+    const candidates = [];
+    if (sources) {
+      sources.sourceUrls(activeItem).forEach(url => candidates.push({ url: url, origem: 'mesma lista' }));
+    }
+    for (let i = 0; i < SERVERS.length; i++) {
+      const srv = SERVERS[i];
+      if (!srv || (SERVERS[currentServerIndex] && srv.id === SERVERS[currentServerIndex].id)) continue;
+      let cached = null;
+      try {
+        cached = getFastCache(srv.id) || await getStoredData(srv.id);
+      } catch (e) {
+        cached = null;
+      }
+      const list = cached && Array.isArray(cached.LIVE) ? cached.LIVE : [];
+      const match = list.find(candidate => mk21SameChannel(activeItem, candidate, sources));
+      if (match && match.url) candidates.push({ url: match.url, origem: cleanServerName(srv.name) });
+    }
+    const next = candidates.find(candidate => candidate.url && !mk21TriedSourceUrls.has(candidate.url));
+    if (!next) {
+      addDevLog('[AutoFonte] Nenhuma fonte alternativa disponível para ' + activeItem.name, 'warn');
+      return false;
+    }
+    mk21TriedSourceUrls.add(next.url);
+    addDevLog('[AutoFonte] Alternando para ' + next.origem, 'warn');
+    showChannelBanner('🔄 Fonte alternativa: ' + next.origem);
+    autoReconnectAttempts = 0;
+    isAutoReconnecting = false;
+    playStream(activeItem, next.url);
+    return true;
+  } finally {
+    mk21SourceTrying = false;
+  }
+}
+
+/* ------------------------------------------------------------- inicialização */
+function mk21BindQualityButtons() {
+  const btn = $('btnQuality');
+  if (btn) btn.onclick = mk21OpenQualityModal;
+  const fsBtn = $('fsBtnQuality');
+  if (fsBtn) fsBtn.onclick = mk21OpenQualityModal;
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mk21BindQualityButtons);
+} else {
+  mk21BindQualityButtons();
+}
+setTimeout(mk21BindQualityButtons, 1500);

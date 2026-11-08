@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=1920, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.5.1">
-  <link rel="stylesheet" href="css/style.css?v=2.5.1">
+  <link rel="stylesheet" href="styles.css?v=2.5.3">
+  <link rel="stylesheet" href="css/style.css?v=2.5.3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
   <script src="libs/mpegts.min.js"></script>
+  <script src="core/AlternativeSources.js"></script>
   <script>
     if (typeof Hls === 'undefined') {
       document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"><\/script>');
@@ -83,7 +84,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.5.2 • Smart TV (webOS & Tizen)
+          MK21 PLAY OTT • v2.5.3 • Smart TV (webOS & Tizen)
         </div>
       </form>
     </div>
@@ -196,6 +197,7 @@
               <button type="button" id="fsBtnNext" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Próximo canal / Avançar 10s">⏭ Próximo</button>
               <button type="button" id="fsBtnSpeed" class="ctrl-btn primary hud-ctrl-btn" tabindex="0">⚡ 1x</button>
               <button type="button" id="fsBtnFav" class="ctrl-btn hud-ctrl-btn" tabindex="0">⭐ Favoritar</button>
+              <button type="button" id="fsBtnQuality" class="ctrl-btn hud-ctrl-btn" tabindex="0">🎞️ Qualidade</button>
               <button type="button" id="fsBtnAudio" class="ctrl-btn hud-ctrl-btn" tabindex="0">🔊 Áudio & Legendas</button>
               <button type="button" id="fsBtnBack" class="ctrl-btn hud-ctrl-btn" tabindex="0">↩️ Sair</button>
             </div>
@@ -226,6 +228,7 @@
           <button id="btnPlayPause" class="ctrl-btn" tabindex="0" title="Pausar / Reproduzir"><svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
           <button id="btnFavorite" class="ctrl-btn" tabindex="0" title="Favoritar"><svg style="width:22px;height:22px;fill:#ffd54f;" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
           <button id="btnSpeed" class="ctrl-btn" tabindex="0" title="Velocidade (1x a 4x)"><svg style="width:22px;height:22px;fill:#ffd54f;" viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg></button>
+          <button id="btnQuality" class="ctrl-btn" tabindex="0" title="Qualidade de vídeo"><svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M21 3H3v18h18V3zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg></button>
           <button id="btnAudioTrack" class="ctrl-btn" tabindex="0" title="Áudio & Legendas"><svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg></button>
         </div>
       </div>
@@ -243,6 +246,7 @@
         <button id="cfgBtnTempo" class="cfg-menu-item" tabindex="0">⏱️ Configurações de tempo</button>
         <button id="cfgBtnCategorias" class="cfg-menu-item" tabindex="0">📁 Gerenciar categorias</button>
         <button id="cfgBtnFluxo" class="cfg-menu-item" tabindex="0">📺 Alterar formato de fluxo</button>
+        <button id="cfgBtnQualidade" class="cfg-menu-item" tabindex="0">🎞️ Qualidade de vídeo</button>
         <button id="cfgBtnPin" class="cfg-menu-item" tabindex="0">🔒 Alterar código pin</button>
         <div class="cfg-tmdb-toggle">
           <span>🎬 Usar API TMDB</span>
@@ -607,7 +611,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.5.1';
+              fallback.src = 'app.js?v=2.5.3';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -624,7 +628,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.5.2';
+      s.src = 'app.js?v=2.5.3';
       document.body.appendChild(s);
     })();
   </script>
