@@ -500,31 +500,27 @@ function loadLastChannelMeta() {
 
 function resumeLastChannelIfPossible() {
   const meta = loadLastChannelMeta();
-  if (!meta || !meta.url) return false;
-  const srv = SERVERS[currentServerIndex];
-  if (meta.serverId && srv && srv.id && meta.serverId !== srv.id) return false;
-  const pools = []
-    .concat(allCatalog.LIVE || [])
-    .concat(allCatalog.MOVIE || [])
-    .concat(allCatalog.SERIES || []);
-  const found = pools.find(i => i.url === meta.url);
-  if (found) {
-    if (found.contentType && found.contentType !== currentContentType && found.contentType !== 'LIVE') {
-      // só retoma automaticamente canais ao vivo para fluidez no boot
-      if (found.contentType !== 'LIVE') return false;
-    }
-    if (found.contentType === 'LIVE' || !found.contentType) {
-      currentContentType = 'LIVE';
-      try {
-        ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings'].forEach(t => {
-          if ($(t)) $(t).classList.remove('active');
-        });
-        if ($('tabLive')) $('tabLive').classList.add('active');
-      } catch (e) {}
-      playStream(found);
-      showChannelBanner('▶ Continuando: ' + found.name);
-      return true;
-    }
+  const livePool = (allCatalog && allCatalog.LIVE) ? allCatalog.LIVE : [];
+  let toPlay = null;
+
+  if (meta && meta.url) {
+    toPlay = livePool.find(i => i.url === meta.url || (meta.name && i.name === meta.name)) || meta;
+  }
+  if (!toPlay && livePool.length > 0) {
+    toPlay = livePool[0];
+  }
+
+  if (toPlay) {
+    currentContentType = 'LIVE';
+    try {
+      ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings'].forEach(t => {
+        if ($(t)) $(t).classList.remove('active');
+      });
+      if ($('tabLive')) $('tabLive').classList.add('active');
+    } catch (e) {}
+    playStream(toPlay);
+    showChannelBanner('▶ Sintonizando: ' + toPlay.name);
+    return true;
   }
   return false;
 }
@@ -4974,7 +4970,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.5.7';
+const BASE_PACKAGE_VERSION = '2.5.8';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6134,12 +6130,18 @@ const TVKeys = {
 };
 
 function initSmartTVApp() {
-  // 2.5.4: a tela de login (preta, centralizada e com a identidade MK21) volta a
-  // ser a entrada do app. Antes, um token salvo pulava direto para a grade.
-  showLoginInterface();
-
   setupGlobalListeners();
   setupVirtualKeyboardHandling();
+
+  const creds = getSharedCredentials();
+  const hasAuth = !!(creds.user && creds.pass) || !!localStorage.getItem('mk21_auth_token');
+
+  if (hasAuth) {
+    // Inicialização idêntica ao APK: foca no cache local imediatamente sem tela de login
+    unlockHomeInterface(true);
+  } else {
+    showLoginInterface();
+  }
 }
 
 function populateServerSelect() {
@@ -6335,13 +6337,73 @@ function handleOfflineBypass() {
   unlockHomeInterface(true);
 }
 
+async function getBestAvailableCache(preferredId) {
+  try {
+    let data = await getStoredData(preferredId);
+    if (data && data.LIVE && data.LIVE.length > 0) return data;
+  } catch (e) {}
+  try {
+    let fast = getFastCache(preferredId);
+    if (fast && fast.LIVE && fast.LIVE.length > 0) return fast;
+  } catch (e) {}
+  try {
+    let univ = getFastCache('universal');
+    if (univ && univ.LIVE && univ.LIVE.length > 0) return univ;
+  } catch (e) {}
+  try {
+    for (let s of SERVERS) {
+      if (s.id && s.id !== preferredId) {
+        let alt = await getStoredData(s.id);
+        if (alt && alt.LIVE && alt.LIVE.length > 0) return alt;
+        let altFast = getFastCache(s.id);
+        if (altFast && altFast.LIVE && altFast.LIVE.length > 0) return altFast;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function loadInitialCacheAndSyncInBackground() {
+  if (SERVERS.length === 0) SERVERS = [...DEFAULT_SERVERS];
+  if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
+  const srv = SERVERS[currentServerIndex];
+  if ($('txtActiveServer')) $('txtActiveServer').textContent = cleanServerName(srv.name);
+  if ($('hudLoadingOverlay')) $('hudLoadingOverlay').classList.add('hidden');
+  hideSplash();
+
+  let cached = await getBestAvailableCache(srv.id);
+  if (cached && cached.LIVE && cached.LIVE.length > 0) {
+    allCatalog = {
+      LIVE: cached.LIVE || [],
+      MOVIE: cached.MOVIE || [],
+      SERIES: cached.SERIES || []
+    };
+    buildCurrentCategories();
+    renderCategoriesList();
+    selectCategory('ALL');
+    renderItemsList();
+    updateServerSyncBadge(100, true);
+    setTimeout(() => { resumeLastChannelIfPossible(); }, 100);
+    setTimeout(() => {
+      activeZone = 'channels';
+      const firstBtn = $('listItems') ? $('listItems').querySelector('.list-item-btn') : null;
+      if (firstBtn) { try { firstBtn.focus(); } catch (e) {} }
+    }, 200);
+    setTimeout(() => { loadServer(true, { silent: true }); }, 1200);
+    return;
+  }
+  loadServer(false);
+}
+
 function unlockHomeInterface(shouldLoad = true) {
   AppState.isLoggedIn = true;
   const login = document.getElementById('login-container');
   if (login) login.style.display = 'none';
 
   const home = document.getElementById('home-container');
-  if (home) home.style.display = 'block';
+  if (home) { home.style.display = 'flex'; home.classList.remove('hidden'); }
+  if ($('sectionSettings')) $('sectionSettings').classList.add('hidden');
+  if ($('sectionUnified')) $('sectionUnified').classList.remove('hidden');
 
   if (typeof window.initHomeGrid === 'function') {
     try { window.initHomeGrid(); } catch (e) {}
@@ -6356,7 +6418,12 @@ function unlockHomeInterface(shouldLoad = true) {
   });
 
   if (shouldLoad) {
-    try { loadServer(true); } catch (eLoad) { console.error('Erro ao chamar loadServer:', eLoad); }
+    try {
+      loadInitialCacheAndSyncInBackground();
+    } catch (eLoad) {
+      console.error('Erro ao inicializar cache:', eLoad);
+      try { loadServer(false); } catch (eFallback) {}
+    }
   }
 }
 

@@ -667,7 +667,7 @@ video {
 }
 
 /* ================= 4. SEÇÃO CONFIGURAÇÕES ================= */
-#sectionSettings {
+#sectionSettings:not(.hidden) {
   display: grid;
   grid-template-columns: 32% 68%;
   gap: 20px;
@@ -2725,8 +2725,15 @@ body.osk-open .login-card {
   background: #090b12 !important;
 }
 
-/* Seção Unificada 3 Colunas: 100% ajustada e dinâmica */
-#sectionUnified {
+/* Regras estritas de visibilidade de telas (NUNCA misturar configurações com TV) */
+#sectionUnified.hidden,
+#sectionSettings.hidden,
+.content-section.hidden {
+  display: none !important;
+}
+
+/* Seção Unificada 3 Colunas: ativa apenas quando NÃO oculta */
+#sectionUnified:not(.hidden) {
   display: grid !important;
   grid-template-columns: minmax(140px, 1.15fr) minmax(210px, 1.85fr) minmax(310px, 2.1fr) !important;
   gap: 12px !important;
@@ -2742,8 +2749,8 @@ body.osk-open .login-card {
   min-width: 0 !important;
 }
 
-/* Seção Configurações: Nunca cortada pela barra lateral */
-#sectionSettings {
+/* Seção Configurações: ativa apenas quando o usuário clica em Configurações */
+#sectionSettings:not(.hidden) {
   display: grid !important;
   grid-template-columns: minmax(240px, 28%) 1fr !important;
   gap: 16px !important;
@@ -2810,12 +2817,12 @@ body.osk-open .login-card {
   .cfg-tmdb-toggle {
     font-size: 13px !important;
   }
-  #sectionUnified {
+  #sectionUnified:not(.hidden) {
     grid-template-columns: minmax(130px, 1.1fr) minmax(190px, 1.8fr) minmax(270px, 2fr) !important;
     gap: 10px !important;
     padding: 8px 10px !important;
   }
-  #sectionSettings {
+  #sectionSettings:not(.hidden) {
     grid-template-columns: minmax(220px, 26%) 1fr !important;
     gap: 12px !important;
     padding: 10px 14px !important;
@@ -2838,12 +2845,12 @@ body.osk-open .login-card {
     width: 14px !important;
     font-size: 13px !important;
   }
-  #sectionUnified {
+  #sectionUnified:not(.hidden) {
     grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.7fr) minmax(240px, 2.1fr) !important;
     gap: 8px !important;
     padding: 6px 8px !important;
   }
-  #sectionSettings {
+  #sectionSettings:not(.hidden) {
     grid-template-columns: minmax(200px, 25%) 1fr !important;
     gap: 10px !important;
     padding: 8px 12px !important;
