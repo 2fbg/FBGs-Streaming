@@ -587,8 +587,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.5.1, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.5.1') {
+        // Se a versão OTA armazenada for anterior a 2.5.3, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.5.3') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
