@@ -1,4 +1,4 @@
-# FBGs-Streaming (MK21 MultiServidor) — v2.5.8
+# FBGs-Streaming (MK21 MultiServidor)
 
 <div align="center">
   <img src="assets/logo.png" alt="MK21 Streaming Logo" width="220" style="object-fit: contain;" />
