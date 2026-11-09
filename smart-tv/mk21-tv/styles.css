@@ -3118,3 +3118,9 @@ body.osk-open .login-card {
   width: 20px !important;
   height: 20px !important;
 }
+
+/* Texto nunca deve estourar os botoes redondos do player (o icone SVG manda) */
+.player-controls .ctrl-btn {
+  font-size: 0 !important;
+  overflow: hidden !important;
+}

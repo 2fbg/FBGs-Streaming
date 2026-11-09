@@ -3366,8 +3366,7 @@ function fallbackToHls(item) {
       try { video.preservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       safeVideoPlay(video);
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      mk21SetBotaoTocando(true);
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -3677,6 +3676,18 @@ function updateVodProgressTimeline() {
   if (pBar) pBar.style.width = pct + '%';
   if ($('vodTimeCurrent')) $('vodTimeCurrent').textContent = formatTimeSec(cur);
   if ($('vodTimeDuration')) $('vodTimeDuration').textContent = formatTimeSec(dur);
+}
+
+// Os botoes redondos do player tem icone SVG: escrever texto neles apagava o
+// icone e o texto vazava para fora do circulo. updatePlayPauseBtnUI troca o
+// desenho (play/pause) sem perder o formato do botao.
+function mk21SetBotaoTocando(tocando) {
+  if (typeof updatePlayPauseBtnUI === 'function') {
+    updatePlayPauseBtnUI(!!tocando);
+    return;
+  }
+  const fs = $('fsBtnPlay');
+  if (fs) fs.textContent = tocando ? '⏸️ Pausar' : '▶️ Reproduzir';
 }
 
 function showChannelBanner(text) {
@@ -7023,10 +7034,20 @@ async function mk21TryAlternativeSource() {
 
 /* ------------------------------------------------------------- inicialização */
 function mk21BindQualityButtons() {
-  const btn = $('btnQuality');
-  if (btn) btn.onclick = mk21OpenQualityModal;
-  const fsBtn = $('fsBtnQuality');
-  if (fsBtn) fsBtn.onclick = mk21OpenQualityModal;
+  // 2.6.0: cada botao do player abre o painel de opcoes na aba certa.
+  // Antes, os botoes de buffer e fonte existiam no HTML mas nao tinham handler.
+  const mapa = [
+    ['btnQuality', 'qualidade'],
+    ['btnBufferMode', 'buffer'],
+    ['btnQuickServer', 'fonte'],
+    ['fsBtnQuality', 'qualidade'],
+    ['fsBtnBuffer', 'buffer'],
+    ['fsBtnServer', 'fonte']
+  ];
+  mapa.forEach(par => {
+    const el = $(par[0]);
+    if (el) el.onclick = () => mk21OpenPlayerOptions(par[1]);
+  });
 }
 
 if (document.readyState === 'loading') {
