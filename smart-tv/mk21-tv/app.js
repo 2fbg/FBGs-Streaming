@@ -500,31 +500,27 @@ function loadLastChannelMeta() {
 
 function resumeLastChannelIfPossible() {
   const meta = loadLastChannelMeta();
-  if (!meta || !meta.url) return false;
-  const srv = SERVERS[currentServerIndex];
-  if (meta.serverId && srv && srv.id && meta.serverId !== srv.id) return false;
-  const pools = []
-    .concat(allCatalog.LIVE || [])
-    .concat(allCatalog.MOVIE || [])
-    .concat(allCatalog.SERIES || []);
-  const found = pools.find(i => i.url === meta.url);
-  if (found) {
-    if (found.contentType && found.contentType !== currentContentType && found.contentType !== 'LIVE') {
-      // só retoma automaticamente canais ao vivo para fluidez no boot
-      if (found.contentType !== 'LIVE') return false;
-    }
-    if (found.contentType === 'LIVE' || !found.contentType) {
-      currentContentType = 'LIVE';
-      try {
-        ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings'].forEach(t => {
-          if ($(t)) $(t).classList.remove('active');
-        });
-        if ($('tabLive')) $('tabLive').classList.add('active');
-      } catch (e) {}
-      playStream(found);
-      showChannelBanner('▶ Continuando: ' + found.name);
-      return true;
-    }
+  const livePool = (allCatalog && allCatalog.LIVE) ? allCatalog.LIVE : [];
+  let toPlay = null;
+
+  if (meta && meta.url) {
+    toPlay = livePool.find(i => i.url === meta.url || (meta.name && i.name === meta.name)) || meta;
+  }
+  if (!toPlay && livePool.length > 0) {
+    toPlay = livePool[0];
+  }
+
+  if (toPlay) {
+    currentContentType = 'LIVE';
+    try {
+      ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings'].forEach(t => {
+        if ($(t)) $(t).classList.remove('active');
+      });
+      if ($('tabLive')) $('tabLive').classList.add('active');
+    } catch (e) {}
+    playStream(toPlay);
+    showChannelBanner('▶ Sintonizando: ' + toPlay.name);
+    return true;
   }
   return false;
 }
@@ -664,13 +660,11 @@ function toggleFav(url) {
   if (!url) return;
   if (favoriteUrls.has(url)) {
     favoriteUrls.delete(url);
-    if ($('btnFavorite')) $('btnFavorite').textContent = '⭐ Favoritar';
-    if ($('fsBtnFav')) $('fsBtnFav').textContent = '⭐ Favoritar';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(false);
     showChannelBanner('Removido dos Favoritos');
   } else {
     favoriteUrls.add(url);
-    if ($('btnFavorite')) $('btnFavorite').textContent = '★ Favoritado';
-    if ($('fsBtnFav')) $('fsBtnFav').textContent = '★ Favoritado';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(true);
     showChannelBanner('⭐ Adicionado aos Favoritos');
   }
   try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
@@ -727,18 +721,10 @@ function determineType(name, category, url) {
   const uppercaseCategory = (category || '').toUpperCase().trim();
   const uppercaseUrl = (url || '').toUpperCase().trim();
 
-  // 1. Checagem explícita na rota Xtream Codes
+  // 1. Checagem canônica explícita na rota Xtream Codes (prioridade máxima absoluta)
   if (uppercaseUrl.includes("/SERIES/")) return "SERIES";
   if (uppercaseUrl.includes("/MOVIE/")) return "MOVIE";
-  if (uppercaseUrl.includes("/LIVE/")) {
-    const isExplicitVodCat = uppercaseCategory.includes("FILME") || uppercaseCategory.includes("VOD") || uppercaseCategory.includes("CINEMA") || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE");
-    const isChannelIndicative = uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("24H") || uppercaseCategory.includes("AO VIVO") || uppercaseName.includes("24H") || uppercaseName.includes("CANAL");
-    if (isExplicitVodCat && !isChannelIndicative) {
-      if (uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
-      return "MOVIE";
-    }
-    return "LIVE";
-  }
+  if (uppercaseUrl.includes("/LIVE/")) return "LIVE";
 
   // 2. Indicador forte de Séries (Temporadas e Episódios)
   const hasSeriesPattern = 
@@ -768,56 +754,82 @@ function determineType(name, category, url) {
 
   if (isExplicitSeriesCategory || hasSeriesPattern) return "SERIES";
 
-  // 3. Indicador forte de Filmes / VOD (Prefixos e Palavras-chave)
-  const isExplicitMovieCategory = 
-    uppercaseCategory.startsWith("FILMES") ||
-    uppercaseCategory.startsWith("FILME") ||
-    uppercaseCategory.startsWith("MOVIES") ||
-    uppercaseCategory.startsWith("MOVIE") ||
+  // 3. IDENTIFICAÇÃO INFALÍVEL DE CANAIS LINEARES AO VIVO (Pay-TV / IPTV)
+  // Canais com [ALT], FHD, HD, SD ou nomes de emissoras consagradas NUNCA são filmes VOD
+  const hasLiveFeedMarker = 
+    /\[ALT\]|\(ALT\)|\[BACKUP\]|\(BACKUP\)|\[OFF\]|\bFHD\b|\bUHD\b|\b4K\b|\bHD\b|\bSD\b|\bHEVC\b|\bH\.?265\b|\b1080P\b|\b720P\b|\b480P\b/i.test(uppercaseName);
+
+  const KNOWN_LIVE_NETWORKS = [
+    "A&E", "AMC", "ANIMAL PLANET", "DISCOVERY", "HISTORY", "NAT GEO", "NATIONAL GEOGRAPHIC",
+    "TELECINE", "MEGAPIX", "WARNER", "UNIVERSAL", "STUDIO UNIVERSAL", "TNT", "SPACE", "AXN",
+    "PARAMOUNT", "SONY", "STAR CHANNEL", "FX", "HBO", "CINEMAX", "LIFETIME", "TCM",
+    "CANAL BRASIL", "GLOBO", "SBT", "RECORD", "BAND", "REDE TV", "CULTURA", "PREMIERE",
+    "SPORTV", "ESPN", "FOX SPORTS", "COMBATE", "BANDSPORTS", "CONMEBOL", "VIVA", "MULTISHOW",
+    "GNT", "OFF", "BIS", "GLOOB", "CARTOON", "NICKELODEON", "NICK JR", "BOOMERANG", "TOONCAST",
+    "CNN", "GLOBO NEWS", "BANDNEWS", "RECORD NEWS", "JOVEM PAN", "TV CULTURA", "TV BRASIL"
+  ];
+
+  const matchesLiveNetwork = KNOWN_LIVE_NETWORKS.some(net => 
+    uppercaseName.startsWith(net + " ") || uppercaseName.startsWith(net + "-") || uppercaseName.startsWith(net + ":") || uppercaseName === net ||
+    uppercaseName.includes(" " + net + " ") || uppercaseName.includes("[" + net + "]") || uppercaseName.includes("(" + net + ")")
+  );
+
+  const isLiveStreamUrl = 
+    uppercaseUrl.endsWith(".TS") || uppercaseUrl.includes(".TS?") ||
+    uppercaseUrl.endsWith(".M3U8") || uppercaseUrl.includes(".M3U8?") ||
+    uppercaseUrl.includes("/LIVE/");
+
+  const isVodExtension = 
+    uppercaseUrl.endsWith(".MP4") || uppercaseUrl.includes(".MP4?") ||
+    uppercaseUrl.endsWith(".MKV") || uppercaseUrl.includes(".MKV?") ||
+    uppercaseUrl.endsWith(".AVI") || uppercaseUrl.includes(".AVI?");
+
+  // Se tem marcador de feed linear ou nome de rede ao vivo e NÃO é arquivo MP4/MKV -> É LIVE!
+  if ((hasLiveFeedMarker || matchesLiveNetwork) && !isVodExtension) {
+    return "LIVE";
+  }
+
+  // 4. Indicador forte de Filmes VOD genuínos
+  if (isVodExtension) {
+    return "MOVIE";
+  }
+
+  // Ano de lançamento explícito de filme (ex: "Interestelar (2014)" ou "[2023]")
+  const hasYearPattern = /\b\((?:19|20)\d{2}\)\b/.test(uppercaseName) || /\b\[(?:19|20)\d{2}\]\b/.test(uppercaseName);
+  if (hasYearPattern && !hasLiveFeedMarker && !matchesLiveNetwork) {
+    return "MOVIE";
+  }
+
+  // Categorias que são tipicamente VOD puras (NÃO confundir com "FILMES E SÉRIES" ou "DOCUMENTÁRIOS" que são canais lineares)
+  const isPureVodCategory = 
     uppercaseCategory.startsWith("VOD") ||
-    uppercaseCategory.startsWith("CINEMA") ||
+    uppercaseCategory.startsWith("ON DEMAND") ||
+    uppercaseCategory.startsWith("ONDEMAND") ||
     uppercaseCategory.startsWith("LANÇAMENTOS") ||
     uppercaseCategory.startsWith("LANCAMENTOS") ||
-    uppercaseCategory.includes("FILMES |") ||
-    uppercaseCategory.includes("FILMES:") ||
-    uppercaseCategory.includes("FILME |") ||
+    uppercaseCategory.startsWith("FILMES 202") ||
+    uppercaseCategory.startsWith("FILMES 19") ||
     uppercaseCategory.includes("VOD |") ||
     uppercaseCategory.includes("VOD:") ||
     uppercaseCategory.includes("CINEMA |") ||
     uppercaseCategory.includes("4K FILMES") ||
     uppercaseCategory.includes("FHD FILMES");
 
-  // Gêneros cinematográficos típicos de catálogos VOD
-  const MOVIE_GENRES = [
-    "AÇÃO", "ACAO", "ACTION", "COMÉDIA", "COMEDIA", "COMEDY", "TERROR", "HORROR",
-    "SUSPENSE", "THRILLER", "DRAMA", "AVENTURA", "ADVENTURE", "FICÇÃO", "FICCAO", "SCI-FI",
-    "ROMANCE", "ANIMAÇÃO", "ANIMACAO", "ANIMATION", "DESENHOS", "DESENHO", "INFANTIL", "KIDS",
-    "DOCUMENTÁRIO", "DOCUMENTARIO", "DOCUMENTÁRIOS", "DOCUMENTARIOS", "DOCUMENTARY",
-    "POLICIAL", "CRIME", "FAROESTE", "WESTERN", "GUERRA", "WAR", "NACIONAL", "NACIONAIS",
-    "CLÁSSICOS", "CLASSICOS", "CLASSIC", "STAND UP", "SHOWS", "SHOW", "MUSICAIS", "MUSICAL",
-    "BIOGRAFIA", "BIOGRAPHY", "MISTÉRIO", "MISTERIO", "MYSTERY", "FANTASIA", "FANTASY",
-    "FAMÍLIA", "FAMILIA", "FAMILY", "LANÇAMENTOS", "LANCAMENTOS", "RELEASES"
-  ];
-
-  const hasMovieGenre = MOVIE_GENRES.some(g => uppercaseCategory.includes(g));
-
-  const isLiveIndicative = 
-    uppercaseCategory.includes("CANAL") || uppercaseCategory.includes("CANAIS") ||
-    uppercaseCategory.includes("24H") || uppercaseCategory.includes("24 HORAS") ||
+  const isLinearCategoryIndicative = 
+    uppercaseCategory.includes("CANAIS") || uppercaseCategory.includes("CANAL") ||
     uppercaseCategory.includes("AO VIVO") || uppercaseCategory.includes("AOVIVO") ||
+    uppercaseCategory.includes("24H") || uppercaseCategory.includes("24 HORAS") ||
+    uppercaseCategory.includes("FILMES E SERIES") || uppercaseCategory.includes("FILMES E SÉRIES") ||
+    uppercaseCategory.includes("DOCUMENTÁRIOS") || uppercaseCategory.includes("DOCUMENTARIOS") ||
     uppercaseCategory.includes("TV ABERTA") || uppercaseCategory.includes("ABERTOS") ||
     uppercaseCategory.includes("ESPORTES") || uppercaseCategory.includes("SPORTS") ||
-    uppercaseCategory.includes("NOTICIAS") || uppercaseCategory.includes("NEWS") ||
-    uppercaseCategory.includes("GLOBO") || uppercaseCategory.includes("PREMIERE") ||
-    uppercaseCategory.includes("COMBATE") || uppercaseCategory.includes("DAZN") ||
-    uppercaseCategory.includes("RADIO") || uppercaseCategory.includes("RÁDIO") ||
-    uppercaseName.includes("24H") || uppercaseName.includes("CANAL") || uppercaseName.includes("AO VIVO");
+    uppercaseCategory.includes("NOTICIAS") || uppercaseCategory.includes("NEWS");
 
-  if ((isExplicitMovieCategory || hasMovieGenre) && !isLiveIndicative) {
+  if (isPureVodCategory && !isLinearCategoryIndicative && !isLiveStreamUrl) {
     return "MOVIE";
   }
 
-  // 4. Provedores de Streaming (Netflix, Prime, Disney, etc.)
+  // 5. Provedores de Streaming VOD (Netflix, Prime, Disney, etc.)
   const isVodStreamingProvider = 
     uppercaseCategory.includes("NETFLIX") ||
     uppercaseCategory.includes("AMAZON") ||
@@ -828,54 +840,11 @@ function determineType(name, category, url) {
     uppercaseCategory.includes("PARAMOUNT+") ||
     uppercaseCategory.includes("GLOBOPLAY");
 
-  if (isVodStreamingProvider) {
-    if (isLiveIndicative) return "LIVE";
-    if (hasSeriesPattern || uppercaseCategory.includes("SÉRIE") || uppercaseCategory.includes("SERIE")) return "SERIES";
+  if (isVodStreamingProvider && !isLinearCategoryIndicative && !hasLiveFeedMarker && !isLiveStreamUrl) {
     return "MOVIE";
   }
 
-  // 5. Extensões de arquivo VOD (.mp4, .mkv, .avi)
-  const isVodExtension = uppercaseUrl.endsWith(".MP4") || uppercaseUrl.endsWith(".MKV") || uppercaseUrl.endsWith(".AVI");
-  if (isVodExtension) {
-    return hasSeriesPattern ? "SERIES" : "MOVIE";
-  }
-
-  // 5.1 Ano no título (ex: "Filme Exemplo (2023)") sem indicação de canal linear
-  const hasYearPattern = /\b\((?:19|20)\d{2}\)\b/.test(uppercaseName) || /\b\[(?:19|20)\d{2}\]\b/.test(uppercaseName);
-  if (hasYearPattern && !isLiveIndicative) {
-    return "MOVIE";
-  }
-
-  // 6. Categorias lineares autênticas de TV Ao Vivo
-  const isLiveCategory = 
-    uppercaseCategory.startsWith("CANAIS") ||
-    uppercaseCategory.startsWith("CANAL") ||
-    uppercaseCategory.startsWith("TV") ||
-    uppercaseCategory.startsWith("AO VIVO") ||
-    uppercaseCategory.startsWith("AOVIVO") ||
-    uppercaseCategory.startsWith("24H") ||
-    uppercaseCategory.startsWith("24 HORAS") ||
-    uppercaseCategory.startsWith("TV ABERTA") ||
-    uppercaseCategory.startsWith("ABERTOS") ||
-    uppercaseCategory.startsWith("NOTICIAS") ||
-    uppercaseCategory.startsWith("ESPORTES") ||
-    uppercaseCategory.startsWith("GLOBO") ||
-    uppercaseCategory.startsWith("PREMIERE") ||
-    uppercaseCategory.startsWith("COMBATE") ||
-    uppercaseCategory.startsWith("DAZN") ||
-    uppercaseCategory.includes("CANAIS |") ||
-    uppercaseCategory.includes("CANAL |") ||
-    uppercaseCategory.includes("TV |") ||
-    uppercaseCategory.includes("CANAIS:") ||
-    uppercaseCategory.includes("CANAL:") ||
-    uppercaseCategory.includes("24H |") ||
-    uppercaseCategory.includes("AO VIVO |") ||
-    uppercaseCategory.includes("CANAIS 4K") ||
-    uppercaseCategory.includes("CANAIS FHD");
-
-  if (isLiveCategory) return "LIVE";
-
-  // 7. Padrão residual
+  // 6. Padrão residual: todo o resto de canais / streams IPTV é LIVE
   return "LIVE";
 }
 
@@ -2898,11 +2867,17 @@ let lastStallSignalAt = 0;
 let lastBufferProgressAt = 0;
 let lastBufferedEnd = 0;
 
+function isCurrentItemVod() {
+  if (!activeItem) return false;
+  const cType = activeItem.contentType || activeItem.type || currentContentType;
+  if (cType === 'MOVIE' || cType === 'SERIES') return true;
+  const u = String(activeItem.url || '').toLowerCase();
+  return u.includes('/movie/') || u.includes('/series/') || u.includes('.mp4') || u.includes('.mkv') || u.includes('.avi');
+}
+
 function startStallWatchdog(streamKey) {
   stopStallWatchdog();
   const chave = String(streamKey || (activeItem && activeItem.url) || '');
-  // Zera o contador só quando muda o canal/URL. Antes cada reinício da mesma URL
-  // zerava as tentativas e o app ficava reconectando para sempre a cada ~2s.
   if (watchdogStreamKey !== chave) {
     watchdogStreamKey = chave;
     lastVideoCurrentTime = -1;
@@ -2942,12 +2917,16 @@ function startStallWatchdog(streamKey) {
     video.addEventListener('error', (e) => {
       if (!video.currentSrc && !video.src) return; // troca de canal, não erro
       console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
-      triggerAutoReconnect('Erro nativo de reprodução');
+      if (!isCurrentItemVod()) {
+        triggerAutoReconnect('Erro nativo de reprodução');
+      }
     });
   }
 
   stallWatchdogInterval = setInterval(() => {
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
+    const isVod = isCurrentItemVod();
+    const stallThreshold = isVod ? 30 : 6; // VOD tolera buffer de rede sem reiniciar o filme
     const nowTime = video.currentTime;
     if (Math.abs(nowTime - lastVideoCurrentTime) >= 0.25) {
       stallCount = 0;
@@ -3494,9 +3473,9 @@ function playStream(item, forcedUrl) {
   updateRealResolution(item);
 
   if (favoriteUrls.has(item.url)) {
-    $('btnFavorite').textContent = '★ Favoritado';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(true);
   } else {
-    $('btnFavorite').textContent = '⭐ Favoritar';
+    if (typeof updateFavoriteBtnUI === 'function') updateFavoriteBtnUI(false);
   }
 
   showChannelBanner(item.name);
@@ -3522,8 +3501,7 @@ function playStream(item, forcedUrl) {
       try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
       safeVideoPlay(video);
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     });
@@ -3565,13 +3543,10 @@ function playStream(item, forcedUrl) {
       mpegtsPlayer.play().then(() => {
         addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
         hidePlayerReconnectBadge();
-        if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-        if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+        if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
         if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
         updateRealResolution(item);
       }).catch(err => {
-        // "play() request was interrupted by a new load request" é troca de canal,
-        // não falha de stream: não pode jogar o player para o fallback.
         if (isPlayInterruption(err)) return;
         addDevLog(`[MPEGTS Error] ${err && err.message}. Tentando MPEG-TS nativo...`, 'warn');
         if (!fallbackToNativeTs(item)) fallbackToHls(item);
@@ -3580,7 +3555,6 @@ function playStream(item, forcedUrl) {
         const msg = String(detail || '') + ' ' + String((info && (info.msg || info.reason)) || '');
         if (/interrupt|abort/i.test(msg)) return;
         addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
-        // Erro de rede/HTTP do mpegts: o provedor recusou esta requisição.
         if (/HttpStatus|NetworkError|NETWORK_/i.test(msg)) {
           if (mk21MpegtsBlocked.size > 400) mk21MpegtsBlocked.clear();
           mk21MpegtsBlocked.add(item.url);
@@ -3593,22 +3567,16 @@ function playStream(item, forcedUrl) {
       fallbackToHls(item);
     }
   } else {
-    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas
+    // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas e suporte direto a VOD
     addDevLog('[Player Engine] Usando decodificação nativa acelerada por hardware...', 'info');
     video.innerHTML = '';
-    const src = document.createElement('source');
-    src.src = streamUrl;
-    if (isM3U8) src.type = 'application/x-mpegURL';
-    else if (isTS) src.type = 'video/mp2t';
-    else src.type = 'video/mp4';
-    video.appendChild(src);
+    video.src = streamUrl;
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
     safeVideoPlay(video).then(() => {
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
-      if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-      if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+      if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
@@ -3839,26 +3807,69 @@ function bindFsHudButtons() {
   if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); pokeFsHud(); };
   if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); pokeFsHud(); };
   if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); pokeFsHud(); };
+  if ($('fsBtnQuality')) $('fsBtnQuality').onclick = function () { if (typeof mk21OpenQualityModal === 'function') mk21OpenQualityModal(true); };
+  if ($('fsBtnBuffer')) $('fsBtnBuffer').onclick = function () { cycleBufferMode(); pokeFsHud(); };
+  if ($('fsBtnServer')) $('fsBtnServer').onclick = function () { if (typeof openServerPicker === 'function') openServerPicker(); };
   if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function () { if (typeof openAudioSubsModal === 'function') openAudioSubsModal(); };
   if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
 }
 bindFsHudButtons();
 
+function updatePlayPauseBtnUI(isPlaying) {
+  const btn = $('btnPlayPause');
+  if (btn) {
+    btn.title = isPlaying ? 'Pausar' : 'Reproduzir';
+    btn.innerHTML = isPlaying 
+      ? '<svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+      : '<svg style="width:22px;height:22px;fill:currentColor;" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  }
+  const fsBtn = $('fsBtnPlay');
+  if (fsBtn) {
+    fsBtn.textContent = isPlaying ? '⏸️ Pausar' : '▶️ Reproduzir';
+  }
+}
+
+function updateFavoriteBtnUI(isFav) {
+  const btn = $('btnFavorite');
+  if (btn) {
+    btn.title = isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos';
+    btn.innerHTML = isFav
+      ? '<svg style="width:22px;height:22px;fill:#ffd54f;" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>'
+      : '<svg style="width:22px;height:22px;fill:rgba(255,255,255,0.7);" viewBox="0 0 24 24"><path d="M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"/></svg>';
+  }
+  const fsBtn = $('fsBtnFav');
+  if (fsBtn) {
+    fsBtn.textContent = isFav ? '★ Favoritado' : '⭐ Favoritar';
+  }
+}
+
+function cycleBufferMode() {
+  const modes = ['auto', 'fast', 'stable'];
+  const current = mk21BufferMode();
+  const next = modes[(modes.indexOf(current) + 1) % modes.length];
+  localStorage.setItem('mk21_buffer_mode', next);
+  const info = MK21_BUFFER_MODES[next];
+  const msg = '⚡ Fluidez: ' + (info ? info.label : next);
+  if (typeof showToast === 'function') {
+    showToast(msg);
+  } else if (typeof showChannelBanner === 'function') {
+    showChannelBanner(msg);
+  }
+}
+
 $('videoContainer').ondblclick = () => toggleFullscreen();
-$('btnFullscreen').onclick = () => toggleFullscreen();
+if ($('btnFullscreen')) $('btnFullscreen').onclick = () => toggleFullscreen();
 
 function togglePlayPause() {
   const v = $('tvPlayer');
   if (!v) return;
   if (v.paused) {
     v.play().catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏯️ Pausar';
-    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '⏯️ Pausar';
+    updatePlayPauseBtnUI(true);
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
-    if ($('fsBtnPlay')) $('fsBtnPlay').textContent = '▶ Reproduzir';
+    updatePlayPauseBtnUI(false);
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -3869,7 +3880,6 @@ function applyPlaybackSpeed(rate) {
   currentPlaybackSpeed = rate;
   try {
     video.playbackRate = rate;
-    // Áudio sem chipmunk ao acelerar (webOS / Chromium)
     video.preservesPitch = true;
     video.mozPreservesPitch = true;
     video.webkitPreservesPitch = true;
@@ -3886,13 +3896,20 @@ function cyclePlaybackSpeed() {
   showChannelBanner('⚡ Velocidade: ' + currentPlaybackSpeed + 'x (áudio normal)');
 }
 
-$('btnPlayPause').onclick = togglePlayPause;
-$('btnFavorite').onclick = () => {
+if ($('btnPlayPause')) $('btnPlayPause').onclick = togglePlayPause;
+if ($('btnFavorite')) $('btnFavorite').onclick = () => {
   if (activeItem) toggleFav(activeItem.url);
 };
+if ($('btnSpeed')) $('btnSpeed').onclick = cyclePlaybackSpeed;
 
-// VELOCIDADE DE REPRODUÇÃO ATÉ 4X NO PLAYER PRINCIPAL E PRÉVIO (COM PRESERVAÇÃO DE ÁUDIO)
-$('btnSpeed').onclick = cyclePlaybackSpeed;
+// BINDING DIRETO DOS NOVOS BOTÕES DO MINI PLAYER: QUALIDADE, BUFFER E FONTE
+if ($('btnQuality')) $('btnQuality').onclick = () => {
+  if (typeof mk21OpenQualityModal === 'function') mk21OpenQualityModal(false);
+};
+if ($('btnBufferMode')) $('btnBufferMode').onclick = cycleBufferMode;
+if ($('btnQuickServer')) $('btnQuickServer').onclick = () => {
+  if (typeof openServerPicker === 'function') openServerPicker();
+};
 
 // MODAL INTERATIVO DE ÁUDIO E LEGENDAS (TEXTTRACK)
 function openAudioSubsModal() {
@@ -5332,11 +5349,11 @@ function togglePlayPause() {
   if (!v) return;
   if (v.paused) {
     v.play().catch(() => {});
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '⏸ Pausar';
+    if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
     showChannelBanner('▶ Reproduzindo');
   } else {
     v.pause();
-    if ($('btnPlayPause')) $('btnPlayPause').textContent = '▶ Reproduzir';
+    if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(false);
     showChannelBanner('⏸ Pausado');
   }
 }
@@ -5449,7 +5466,19 @@ function mk21MoveFocus(direction) {
 
   if (best) {
     best.focus();
-    try { best.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+    try {
+      best.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.documentElement.scrollLeft !== 0) {
+        document.documentElement.scrollLeft = 0;
+      }
+      const colPl = document.querySelector('.col-player');
+      if (colPl && colPl.scrollTop !== 0) {
+        colPl.scrollTop = 0;
+      }
+    } catch (e) {}
     // mantém índices legados sincronizados
     try {
       if (best.id && typeof headerElements !== 'undefined' && headerElements.indexOf(best.id) !== -1) {
@@ -5464,7 +5493,11 @@ function mk21MoveFocus(direction) {
         activeZone = 'channels';
         const its = Array.from(($('listItems') || document).querySelectorAll('.list-item-btn'));
         const ix = its.indexOf(best);
-        if (ix >= 0) focusedItemIdx = ix;
+        if (ix >= 0) {
+          focusedItemIdx = ix;
+          const badge = $('badgeItemsCount');
+          if (badge && its.length > 0) badge.textContent = (ix + 1) + ' / ' + its.length;
+        }
       } else if (best.classList.contains('cfg-menu-item')) {
         activeZone = 'settings';
       }
@@ -6356,6 +6389,16 @@ function initSmartTVApp() {
 
   setupGlobalListeners();
   setupVirtualKeyboardHandling();
+
+  const creds = getSharedCredentials();
+  const hasAuth = !!(creds.user && creds.pass) || !!localStorage.getItem('mk21_auth_token');
+
+  if (hasAuth) {
+    // Inicialização idêntica ao APK: foca no cache local imediatamente sem tela de login
+    unlockHomeInterface(true);
+  } else {
+    showLoginInterface();
+  }
 }
 
 function populateServerSelect() {
@@ -6551,13 +6594,73 @@ function handleOfflineBypass() {
   unlockHomeInterface(true);
 }
 
+async function getBestAvailableCache(preferredId) {
+  try {
+    let data = await getStoredData(preferredId);
+    if (data && data.LIVE && data.LIVE.length > 0) return data;
+  } catch (e) {}
+  try {
+    let fast = getFastCache(preferredId);
+    if (fast && fast.LIVE && fast.LIVE.length > 0) return fast;
+  } catch (e) {}
+  try {
+    let univ = getFastCache('universal');
+    if (univ && univ.LIVE && univ.LIVE.length > 0) return univ;
+  } catch (e) {}
+  try {
+    for (let s of SERVERS) {
+      if (s.id && s.id !== preferredId) {
+        let alt = await getStoredData(s.id);
+        if (alt && alt.LIVE && alt.LIVE.length > 0) return alt;
+        let altFast = getFastCache(s.id);
+        if (altFast && altFast.LIVE && altFast.LIVE.length > 0) return altFast;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function loadInitialCacheAndSyncInBackground() {
+  if (SERVERS.length === 0) SERVERS = [...DEFAULT_SERVERS];
+  if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
+  const srv = SERVERS[currentServerIndex];
+  if ($('txtActiveServer')) $('txtActiveServer').textContent = cleanServerName(srv.name);
+  if ($('hudLoadingOverlay')) $('hudLoadingOverlay').classList.add('hidden');
+  hideSplash();
+
+  let cached = await getBestAvailableCache(srv.id);
+  if (cached && cached.LIVE && cached.LIVE.length > 0) {
+    allCatalog = {
+      LIVE: cached.LIVE || [],
+      MOVIE: cached.MOVIE || [],
+      SERIES: cached.SERIES || []
+    };
+    buildCurrentCategories();
+    renderCategoriesList();
+    selectCategory('ALL');
+    renderItemsList();
+    updateServerSyncBadge(100, true);
+    setTimeout(() => { resumeLastChannelIfPossible(); }, 100);
+    setTimeout(() => {
+      activeZone = 'channels';
+      const firstBtn = $('listItems') ? $('listItems').querySelector('.list-item-btn') : null;
+      if (firstBtn) { try { firstBtn.focus(); } catch (e) {} }
+    }, 200);
+    setTimeout(() => { loadServer(true, { silent: true }); }, 1200);
+    return;
+  }
+  loadServer(false);
+}
+
 function unlockHomeInterface(shouldLoad = true) {
   AppState.isLoggedIn = true;
   const login = document.getElementById('login-container');
   if (login) login.style.display = 'none';
 
   const home = document.getElementById('home-container');
-  if (home) home.style.display = 'block';
+  if (home) { home.style.display = 'flex'; home.classList.remove('hidden'); }
+  if ($('sectionSettings')) $('sectionSettings').classList.add('hidden');
+  if ($('sectionUnified')) $('sectionUnified').classList.remove('hidden');
 
   if (typeof window.initHomeGrid === 'function') {
     try { window.initHomeGrid(); } catch (e) {}
@@ -6572,7 +6675,12 @@ function unlockHomeInterface(shouldLoad = true) {
   });
 
   if (shouldLoad) {
-    try { loadServer(true); } catch (eLoad) { console.error('Erro ao chamar loadServer:', eLoad); }
+    try {
+      loadInitialCacheAndSyncInBackground();
+    } catch (eLoad) {
+      console.error('Erro ao inicializar cache:', eLoad);
+      try { loadServer(false); } catch (eFallback) {}
+    }
   }
 }
 
