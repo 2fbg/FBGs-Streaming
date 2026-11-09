@@ -2894,6 +2894,9 @@ function triggerAutoReconnect(cause) {
 }
 
 let watchdogStreamKey = '';
+let lastStallSignalAt = 0;
+let lastBufferProgressAt = 0;
+let lastBufferedEnd = 0;
 
 function startStallWatchdog(streamKey) {
   stopStallWatchdog();
@@ -2903,6 +2906,9 @@ function startStallWatchdog(streamKey) {
   if (watchdogStreamKey !== chave) {
     watchdogStreamKey = chave;
     lastVideoCurrentTime = -1;
+    lastStallSignalAt = 0;
+    lastBufferProgressAt = Date.now();
+    lastBufferedEnd = 0;
     stallCount = 0;
     autoReconnectAttempts = 0;
     isAutoReconnecting = false;
@@ -2914,21 +2920,27 @@ function startStallWatchdog(streamKey) {
 
   if (!video._mk21EventsBound) {
     video._mk21EventsBound = true;
-    video.addEventListener('waiting', () => {
-      stallCount += 2;
-      if (stallCount >= 4) triggerAutoReconnect('Buffer esgotado (waiting)');
-    });
-    video.addEventListener('stalled', () => {
-      stallCount += 2;
-      if (stallCount >= 4) triggerAutoReconnect('Stream estagnado (stalled)');
-    });
+    // 2.6.0: waiting/stalled acontecem normalmente na troca de segmento do HLS.
+    // Antes, dois eventos seguidos somavam 4 e derrubavam o canal para reconexão
+    // a cada engasgo — o que aparecia como player "travando sem parar".
+    const marcarEngasgo = () => {
+      lastStallSignalAt = Date.now();
+      if (stallCount < 1) stallCount = 1;
+    };
+    video.addEventListener('waiting', marcarEngasgo);
+    video.addEventListener('stalled', marcarEngasgo);
+    video.addEventListener('seeking', marcarEngasgo);
     video.addEventListener('playing', () => {
       stallCount = 0;
       autoReconnectAttempts = 0;
       isAutoReconnecting = false;
       hidePlayerReconnectBadge();
     });
+    video.addEventListener('progress', () => {
+      lastBufferProgressAt = Date.now();
+    });
     video.addEventListener('error', (e) => {
+      if (!video.currentSrc && !video.src) return; // troca de canal, não erro
       console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
       triggerAutoReconnect('Erro nativo de reprodução');
     });
@@ -2937,22 +2949,69 @@ function startStallWatchdog(streamKey) {
   stallWatchdogInterval = setInterval(() => {
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
     const nowTime = video.currentTime;
-    if (Math.abs(nowTime - lastVideoCurrentTime) < 0.2) {
-      stallCount++;
-      if (stallCount >= 4) { // 4 segundos sem avanço no tempo
-        console.warn('[SmartPlayer Watchdog] Travamento detectado no stream ao vivo.');
-        triggerAutoReconnect('Stream congelado');
-      }
-    } else {
+    if (Math.abs(nowTime - lastVideoCurrentTime) >= 0.25) {
       stallCount = 0;
       lastVideoCurrentTime = nowTime;
+      return;
+    }
+    // Sem avanço no tempo: só conta se o player não estiver baixando nada.
+    // Em MSE (hls.js/mpegts.js) o evento 'progress' quase não dispara, então a
+    // referência é o fim do buffer: se ele cresce, a rede está entregando.
+    let fimBuffer = 0;
+    try { if (video.buffered && video.buffered.length) fimBuffer = video.buffered.end(video.buffered.length - 1); } catch (e) {}
+    if (fimBuffer > lastBufferedEnd + 0.05) {
+      lastBufferedEnd = fimBuffer;
+      lastBufferProgressAt = Date.now();
+    }
+    const baixando = Date.now() - lastBufferProgressAt < 3000;
+    if (baixando && stallCount < 3) {
+      lastVideoCurrentTime = nowTime;
+      return;
+    }
+    stallCount++;
+    if (stallCount >= mk21StallTolerance()) {
+      console.warn('[SmartPlayer Watchdog] Travamento real detectado no stream.');
+      stallCount = 0;
+      triggerAutoReconnect('Stream congelado');
     }
   }, 1000);
 }
 
 // ==================== LIVE DIAGNOSTIC DEV LOGGER (SMART TV) ====================
 let sessionDevLogs = [];
-const MAX_DEV_LOGS = 300;
+const MAX_DEV_LOGS = 400;
+let mk21DevLogsPaused = false;
+
+const MK21_LOG_COLORS = { error: '#ef4444', warn: '#eab308', success: '#22c55e', debug: '#94a3b8', info: '#93c5fd' };
+
+function mk21LogContainer() {
+  return $('devLogsContainer') || document.querySelector('.devlogs-screen');
+}
+
+function mk21LogLine(entry) {
+  const color = MK21_LOG_COLORS[entry.type] || '#cbd5e1';
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML =
+    '<span class="log-time">[' + entry.time + ']</span> ' +
+    '<span class="log-type" style="color:' + color + '">' + String(entry.type || 'info').toUpperCase() + '</span>' +
+    '<span style="color:' + color + '">' + escapeHtml(entry.msg) + '</span>';
+  return line;
+}
+
+function mk21RefreshDevLogsBadge() {
+  const badge = $('devLogsCountBadge');
+  if (badge) badge.textContent = sessionDevLogs.length + ' entradas';
+}
+
+function mk21RenderAllDevLogs() {
+  const container = mk21LogContainer();
+  if (!container) return;
+  container.replaceChildren();
+  sessionDevLogs.forEach(entry => container.appendChild(mk21LogLine(entry)));
+  container.scrollTop = container.scrollHeight;
+  mk21RefreshDevLogsBadge();
+}
 
 function addDevLog(msg, type = 'info') {
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
@@ -2961,27 +3020,14 @@ function addDevLog(msg, type = 'info') {
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
 
   try {
-    const container = $('devLogsContainer');
+    const container = mk21LogContainer();
     if (container) {
-      if (container.innerHTML.includes('[Console inicializado.')) {
-        container.innerHTML = '';
-      }
-      const line = document.createElement('div');
-      line.style.marginBottom = '4px';
-      line.style.wordBreak = 'break-word';
-      
-      let color = '#cbd5e1';
-      if (type === 'error') color = '#ef4444';
-      else if (type === 'warn') color = '#eab308';
-      else if (type === 'success') color = '#22c55e';
-      else if (type === 'debug') color = '#94a3b8';
-
-      line.innerHTML = `<span style="color:#64748b;">[${time}]</span> <span style="color:${color}; font-weight:600;">${escapeHtml(msg)}</span>`;
-      container.appendChild(line);
-      container.scrollTop = container.scrollHeight;
+      const vazio = container.querySelector('div[style*="64748b"]');
+      if (vazio) container.replaceChildren();
+      container.appendChild(mk21LogLine(entry));
+      if (!mk21DevLogsPaused) container.scrollTop = container.scrollHeight;
     }
-    const badge = $('devLogsCountBadge');
-    if (badge) badge.textContent = `${sessionDevLogs.length} entradas`;
+    mk21RefreshDevLogsBadge();
   } catch (e) {}
 
   if (type === 'error') console.error('[MK21-TV]', msg);
@@ -2995,46 +3041,128 @@ function escapeHtml(str) {
   })[m]);
 }
 
+// Tela de logs refeita pelo JS (chega pela OTA, sem precisar reinstalar o IPK):
+// ocupa a tela toda, fonte grande e com o contexto do stream no topo.
+function mk21EnsureDevLogsModal() {
+  let modal = $('modalDevLogs');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modalDevLogs';
+    document.body.appendChild(modal);
+  }
+  modal.className = 'app-modal devlogs-modal hidden';
+  modal.innerHTML =
+    '<div class="modal-content devlogs-card">' +
+      '<div class="devlogs-head">' +
+        '<span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>' +
+        '<div class="devlogs-actions">' +
+          '<button id="btnTogglePauseDevLogs" class="ctrl-btn" style="padding:10px 16px; font-size:15px;" tabindex="0">⏸ Pausar rolagem</button>' +
+          '<button id="btnClearDevLogs" class="ctrl-btn" style="padding:10px 16px; font-size:15px;" tabindex="0">🗑️ Limpar</button>' +
+          '<button id="btnExportDevLogs" class="ctrl-btn primary" style="padding:10px 16px; font-size:15px;" tabindex="0">💾 Salvar arquivo</button>' +
+          '<button id="btnCloseDevLogs" class="ctrl-btn" style="padding:10px 16px; font-size:15px;" tabindex="0">✕ Fechar</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="devlogs-info" id="devLogsInfo"></div>' +
+      '<div id="devLogsContainer" class="devlogs-screen"></div>' +
+      '<div class="devlogs-foot">' +
+        '<span id="devLogsHint">Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>' +
+        '<span id="devLogsCountBadge">0 entradas</span>' +
+      '</div>' +
+    '</div>';
+  return modal;
+}
+
+function mk21UpdateDevLogsInfo() {
+  const box = $('devLogsInfo');
+  if (!box) return;
+  let srv = '--';
+  try { srv = cleanServerName((SERVERS[currentServerIndex] || {}).name || '--'); } catch (e) {}
+  const v = $('tvPlayer');
+  let buf = '--';
+  try {
+    if (v && v.buffered && v.buffered.length > 0) {
+      const fimBuffer = v.buffered.end(v.buffered.length - 1);
+      buf = Math.max(0, Math.round(fimBuffer - (v.currentTime || 0))) + 's';
+    }
+  } catch (e) {}
+  const engine = (typeof hlsInstance !== 'undefined' && hlsInstance) ? 'hls.js'
+    : ((typeof mpegtsPlayer !== 'undefined' && mpegtsPlayer) ? 'mpegts.js' : 'nativo');
+  const img = (v && v.videoHeight) ? (v.videoWidth + 'x' + v.videoHeight) : '--';
+  let versao = '--';
+  try { versao = CURRENT_APP_VERSION; } catch (e) {}
+  const itens = [
+    ['Versão', 'v' + versao],
+    ['Fonte', srv],
+    ['Canal', activeItem ? activeItem.name : 'nenhum'],
+    ['Engine', engine],
+    ['Imagem', img],
+    ['Buffer', buf],
+    ['Rede', navigator.onLine ? 'online' : 'offline'],
+    ['Tela', innerWidth + 'x' + innerHeight],
+    ['Buffer pref', (MK21_BUFFER_MODES[mk21BufferMode()] || {}).label || '--']
+  ];
+  box.innerHTML = itens.map(p => '<span>' + p[0] + ' <b>' + escapeHtml(String(p[1])) + '</b></span>').join('');
+}
+
 function toggleDevLogsModal() {
-  const modal = $('modalDevLogs');
-  if (!modal) return;
+  const modal = mk21EnsureDevLogsModal();
+  mk21UltimoAlvoRolagem = null;
   const isHidden = modal.classList.contains('hidden');
   if (isHidden) {
     modal.classList.remove('hidden');
+    mk21UpdateDevLogsInfo();
+    mk21RenderAllDevLogs();
     addDevLog('[UI] Console de logs aberto', 'info');
-    const closeBtn = $('btnCloseDevLogs');
-    if (closeBtn) closeBtn.focus();
+    const pauseBtn = $('btnTogglePauseDevLogs');
+    if (pauseBtn) pauseBtn.focus();
   } else {
     modal.classList.add('hidden');
-    activeZone = 'channels';
+    activeZone = currentContentType === 'SETTINGS' ? 'settings' : 'channels';
     focusActiveElement();
   }
 }
 
 function initDevLogs() {
+  mk21EnsureDevLogsModal();
   if ($('btnHeaderLogs')) $('btnHeaderLogs').onclick = toggleDevLogsModal;
   if ($('btnCloseDevLogs')) $('btnCloseDevLogs').onclick = toggleDevLogsModal;
+  if ($('btnTogglePauseDevLogs')) {
+    $('btnTogglePauseDevLogs').onclick = () => {
+      mk21DevLogsPaused = !mk21DevLogsPaused;
+      const btn = $('btnTogglePauseDevLogs');
+      if (btn) {
+        btn.textContent = mk21DevLogsPaused ? '▶️ Retomar rolagem' : '⏸ Pausar rolagem';
+        btn.classList.toggle('primary', mk21DevLogsPaused);
+      }
+      const hint = $('devLogsHint');
+      if (hint) hint.textContent = mk21DevLogsPaused
+        ? 'Rolagem automática pausada: a tela fica parada para você ler (ou fotografar) sem os logs fugirem.'
+        : 'Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.';
+    };
+  }
   if ($('btnClearDevLogs')) $('btnClearDevLogs').onclick = () => {
     sessionDevLogs = [];
-    const container = $('devLogsContainer');
-    if (container) container.innerHTML = '<div style="color:#64748b;">[Logs limpos com sucesso.]</div>';
-    const badge = $('devLogsCountBadge');
-    if (badge) badge.textContent = '0 entradas';
+    const container = mk21LogContainer();
+    if (container) container.replaceChildren();
+    mk21RefreshDevLogsBadge();
+    addDevLog('[Logs] Histórico limpo.', 'info');
   };
   if ($('btnExportDevLogs')) $('btnExportDevLogs').onclick = () => {
     try {
       const text = [
-        'MK21 Smart TV - Logs de diagnóstico',
-        `Data: ${new Date().toISOString()}`,
+        'MK21 Smart TV - Logs de diagnostico',
+        'Data: ' + new Date().toISOString(),
+        'Versao: ' + CURRENT_APP_VERSION,
+        'Tela: ' + innerWidth + 'x' + innerHeight,
         'Credenciais e caminhos autenticados foram mascarados.',
         '',
-        ...sessionDevLogs.map(l => `[${l.time}] [${l.type.toUpperCase()}] ${redactDiagnosticLog(l.msg)}`)
+        ...sessionDevLogs.map(l => '[' + l.time + '] [' + String(l.type).toUpperCase() + '] ' + redactDiagnosticLog(l.msg))
       ].join('\n');
       localStorage.setItem('mk21_last_exported_logs', text);
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `mk21-tv-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+      a.download = 'mk21-tv-logs-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3043,9 +3171,6 @@ function initDevLogs() {
     } catch (e) {
       addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
     }
-  };
-  if ($('btnGitHubDevLogs')) $('btnGitHubDevLogs').onclick = () => {
-    window.open('https://github.com/2fbg/FBGs-Streaming/upload/main/logs', '_blank', 'noopener,noreferrer');
   };
 }
 
@@ -3114,22 +3239,33 @@ const MK21_BUFFER_MODES = {
   auto: {
     label: 'Automático (recomendado)',
     hint: 'Equilíbrio entre zapping rápido e estabilidade.',
-    hls: { maxBufferLength: 15, maxMaxBufferLength: 30, liveSyncDurationCount: 3, backBufferLength: 10 },
-    mpegts: { liveBufferLatencyChasing: true, stashInitialSize: 128 * 1024 }
+    // 2.6.0: buffer padrao maior e sem cacar atraso (o chasing reinicia o
+    // player a cada oscilacao da rede, o que aparecia como travamento).
+    hls: { maxBufferLength: 20, maxMaxBufferLength: 40, liveSyncDurationCount: 3, backBufferLength: 10, maxBufferSize: 20 * 1000 * 1000 },
+    mpegts: { liveBufferLatencyChasing: false, liveBufferLatencyMaxLatency: 30, stashInitialSize: 256 * 1024 },
+    stallTolerance: 10
   },
   fast: {
     label: 'Rápido / Zapping veloz',
     hint: 'Troca de canal quase instantânea. Usa internet boa.',
-    hls: { maxBufferLength: 8, maxMaxBufferLength: 16, liveSyncDurationCount: 2, backBufferLength: 4 },
-    mpegts: { liveBufferLatencyChasing: true, stashInitialSize: 64 * 1024 }
+    hls: { maxBufferLength: 10, maxMaxBufferLength: 20, liveSyncDurationCount: 2, backBufferLength: 4, maxBufferSize: 12 * 1000 * 1000 },
+    mpegts: { liveBufferLatencyChasing: false, liveBufferLatencyMaxLatency: 20, stashInitialSize: 96 * 1024 },
+    stallTolerance: 6
   },
   stable: {
     label: 'Estável / Internet fraca',
     hint: 'Buffer maior: demora um pouco a abrir, mas quase não trava.',
-    hls: { maxBufferLength: 30, maxMaxBufferLength: 60, liveSyncDurationCount: 4, backBufferLength: 30 },
-    mpegts: { liveBufferLatencyChasing: false, stashInitialSize: 512 * 1024 }
+    hls: { maxBufferLength: 30, maxMaxBufferLength: 60, liveSyncDurationCount: 4, backBufferLength: 20, maxBufferSize: 30 * 1000 * 1000 },
+    mpegts: { liveBufferLatencyChasing: false, liveBufferLatencyMaxLatency: 45, stashInitialSize: 512 * 1024 },
+    stallTolerance: 16
   }
 };
+
+// Quantos segundos de video parado antes de considerar travamento de verdade.
+function mk21StallTolerance() {
+  const modo = MK21_BUFFER_MODES[mk21BufferMode()];
+  return (modo && modo.stallTolerance) || 10;
+}
 
 function mk21BufferMode() {
   const mode = localStorage.getItem('mk21_buffer_mode') || 'auto';
@@ -3140,17 +3276,24 @@ function mk21HlsOptions() {
   const mode = MK21_BUFFER_MODES[mk21BufferMode()];
   return Object.assign({
     enableWorker: true,
-    lowLatencyMode: true,
+    // lowLatencyMode ligado fazia o hls.js perseguir o "ao vivo" pulando
+    // fragmentos, o que na TV aparece como engasgo a cada poucos segundos.
+    lowLatencyMode: false,
     startFragPrefetch: true,
-    maxBufferSize: 25 * 1000 * 1000,
-    fragLoadingTimeOut: 15000,
+    maxBufferSize: 20 * 1000 * 1000,
+    maxStarvationDelay: 6,
+    maxLoadingDelay: 6,
+    abrEwmaDefaultEstimate: 1200000,
+    fragLoadingTimeOut: 20000,
     manifestLoadingTimeOut: 15000,
     levelLoadingTimeOut: 15000,
-    fragLoadingMaxRetry: 4,
+    fragLoadingMaxRetry: 5,
     manifestLoadingMaxRetry: 4,
     levelLoadingMaxRetry: 4,
-    fragLoadingRetryDelay: 1000,
-    manifestLoadingRetryDelay: 1000
+    fragLoadingRetryDelay: 800,
+    manifestLoadingRetryDelay: 1000,
+    fragLoadingMaxRetryTimeout: 12000,
+    levelLoadingMaxRetryTimeout: 8000
   }, mode.hls);
 }
 
@@ -4092,9 +4235,17 @@ function renderSettings(sec) {
 
 // ==================== 2.5.4 — PAINÉIS NOVOS DE CONFIGURAÇÕES ====================
 
+// Os paineis de Qualidade/Buffer/Fonte sao os mesmos nas Configuracoes e no
+// painel rapido do player (2.6.0). Este ponteiro decide onde eles desenham.
+let mk21PanelTarget = null;
+function mk21SettingsBox() {
+  return mk21PanelTarget || $('settingsDetailBox');
+}
+
+
 // SERVIDOR / FONTE
 function renderServerPanel() {
-  const box = $('settingsDetailBox');
+  const box = mk21SettingsBox();
   const atual = SERVERS[currentServerIndex] || SERVERS[0] || { name: 'Nenhum' };
   const rows = SERVERS.map((srv, i) => {
     const ativo = i === currentServerIndex;
@@ -4139,7 +4290,7 @@ function renderServerPanel() {
 
 // BUFFER / FLUIDEZ
 function renderBufferPanel() {
-  const box = $('settingsDetailBox');
+  const box = mk21SettingsBox();
   const atual = mk21BufferMode();
   const rows = Object.keys(MK21_BUFFER_MODES).map(key => {
     const m = MK21_BUFFER_MODES[key];
@@ -4942,7 +5093,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.5.5';
+const BASE_PACKAGE_VERSION = '2.6.0';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5199,7 +5350,10 @@ function mk21IsVisible(el) {
     const s = window.getComputedStyle(el);
     if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
   } catch (e) {}
-  return el.offsetParent !== null || el === document.activeElement;
+  if (el.offsetParent !== null || el === document.activeElement) return true;
+  // Elementos com position:fixed (todos os modais) tem offsetParent nulo.
+  try { return window.getComputedStyle(el).position === 'fixed'; } catch (e) {}
+  return false;
 }
 
 function mk21GetOpenModal() {
@@ -5344,6 +5498,169 @@ function focusActiveElement() {
   }
 }
 
+// ==================== 2.6.0 — VOLTAR, SAIR E ROLAGEM ====================
+let mk21ExitArmed = false;
+
+function mk21CloseModalWithFocus(modal) {
+  if (!modal) return;
+  modal.classList.add('hidden');
+  mk21UltimoAlvoRolagem = null;
+  if (modal.id === 'modalPlayerOptions' || modal.id === 'modalQuality') mk21PanelTarget = null;
+  activeZone = (typeof currentContentType !== 'undefined' && currentContentType === 'SETTINGS') ? 'settings' : 'channels';
+  try { focusActiveElement(); } catch (e) {}
+}
+
+function mk21AskExit() {
+  const m = $('modalExitConfirm');
+  if (!m) { mk21ExitApp(); return; }
+  m.classList.remove('hidden');
+  const cancel = $('btnExitCancel');
+  if (cancel) { try { cancel.focus(); } catch (e) {} }
+}
+
+function mk21ExitApp() {
+  mk21ExitArmed = true;
+  try {
+    if (window.webOS && typeof webOS.platformBack === 'function') { webOS.platformBack(); return; }
+  } catch (e) {}
+  try { window.close(); } catch (e) {}
+}
+
+// Decide o que o Voltar faz: modal -> busca -> tela cheia -> tela inicial -> sair
+function mk21HandleBack() {
+  const hud = $('hudLoadingOverlay');
+  if (hud && !hud.classList.contains('hidden')) {
+    if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
+    hud.classList.add('hidden');
+    hideSplash();
+    showChannelBanner('⚠️ Carregamento cancelado');
+    return true;
+  }
+
+  const exitModal = $('modalExitConfirm');
+  if (exitModal && !exitModal.classList.contains('hidden')) {
+    exitModal.classList.add('hidden');
+    activeZone = 'header';
+    try { focusActiveElement(); } catch (e) {}
+    return true;
+  }
+
+  const aberto = mk21GetOpenModal();
+  if (aberto) {
+    mk21CloseModalWithFocus(aberto);
+    return true;
+  }
+
+  const busca = $('inputSearch');
+  if ((document.activeElement && document.activeElement.id === 'inputSearch') ||
+      (busca && busca.value.trim().length > 0) || activeZone === 'search') {
+    try { closeSearchMode(true); } catch (e) {}
+    return true;
+  }
+
+  if (isAppFullscreen()) {
+    try { toggleFullscreen(false); } catch (e) {}
+    return true;
+  }
+
+  if (typeof currentContentType !== 'undefined' && currentContentType !== 'LIVE') {
+    // Volta para a tela principal (TV AO VIVO) em vez de fechar o app.
+    try { switchContentType('LIVE'); } catch (e) {}
+    activeZone = 'channels';
+    try { focusActiveElement(); } catch (e) {}
+    return true;
+  }
+
+  // Ja esta na tela principal: pede confirmacao antes de sair.
+  mk21AskExit();
+  return true;
+}
+
+// O webOS trata o Voltar pelo history do DOM. Mantendo sempre um estado na
+// pilha, o botao Voltar cai no popstate (e nao fecha o app de surpresa).
+function mk21ArmBackHistory() {
+  try {
+    if (!history.state || !history.state.mk21) history.pushState({ mk21: 1 }, '');
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', function () {
+    if (mk21ExitArmed) return;
+    mk21HandleBack();
+    mk21ArmBackHistory();
+  });
+}
+
+// ---- Rolagem (roda do Magic Remote / mouse / teclas Page Up e Page Down)
+let mk21UltimoAlvoRolagem = null;
+
+function mk21FindScrollable(el) {
+  let node = el;
+  while (node && node !== document.body && node.nodeType === 1) {
+    let st = null;
+    try { st = window.getComputedStyle(node); } catch (e) {}
+    if (st && /(auto|scroll)/.test(st.overflowY) && node.scrollHeight > node.clientHeight + 4) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function mk21ScrollableInside(root) {
+  if (!root) return null;
+  let melhor = null;
+  const candidatos = root.querySelectorAll('div, ul, ol, section, .modal-content');
+  for (let i = 0; i < candidatos.length; i++) {
+    const el = candidatos[i];
+    let st = null;
+    try { st = window.getComputedStyle(el); } catch (e) {}
+    if (!st || !/(auto|scroll)/.test(st.overflowY)) continue;
+    if (el.scrollHeight <= el.clientHeight + 4) continue;
+    if (!melhor || el.clientHeight > melhor.clientHeight) melhor = el;
+  }
+  return melhor;
+}
+
+function mk21ActiveScrollTarget() {
+  const foco = document.activeElement;
+  const doFoco = foco ? mk21FindScrollable(foco) : null;
+  if (doFoco) { mk21UltimoAlvoRolagem = doFoco; return doFoco; }
+  const modal = mk21GetOpenModal();
+  if (modal) {
+    const noModal = mk21FindScrollable(modal) || mk21ScrollableInside(modal);
+    if (noModal) return noModal;
+  }
+  if (mk21UltimoAlvoRolagem && document.body.contains(mk21UltimoAlvoRolagem) &&
+      !mk21UltimoAlvoRolagem.closest('.hidden')) return mk21UltimoAlvoRolagem;
+  return mk21FindScrollable($('listItems')) || null;
+}
+
+function mk21ScrollActive(direcao, pixels) {
+  const alvo = mk21ActiveScrollTarget();
+  if (!alvo) return false;
+  const passo = pixels || Math.max(120, Math.round(alvo.clientHeight * 0.7));
+  const antes = alvo.scrollTop;
+  alvo.scrollTop = antes + (direcao * passo);
+  return alvo.scrollTop !== antes;
+}
+
+function mk21OnWheel(e) {
+  if (document.body.classList.contains('is-fullscreen')) return;
+  const alvo = mk21ActiveScrollTarget();
+  if (!alvo) return;
+  const delta = (e.deltaY || 0) * 3.2;
+  if (!delta) return;
+  const antes = alvo.scrollTop;
+  alvo.scrollTop = antes + delta;
+  if (alvo.scrollTop !== antes) {
+    mk21UltimoAlvoRolagem = alvo;
+    e.preventDefault();
+  }
+}
+
+window.addEventListener('wheel', mk21OnWheel, { passive: false });
+window.addEventListener('mousewheel', mk21OnWheel, { passive: false });
+
 document.addEventListener('keydown', function (e) {
   const key = e.key || '';
   const code = e.code || '';
@@ -5486,78 +5803,20 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // Back / Return (webOS 461, Tizen 10009)
+  // Back / Return (webOS 461, Tizen 10009, Android TV 4/27) — 2.6.0
+  // Toda a decisao (fechar modal, voltar de tela, sair) fica em mk21HandleBack.
   if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
-    if ($('hudLoadingOverlay') && !$('hudLoadingOverlay').classList.contains('hidden')) {
-      e.preventDefault();
-      if (activePlaylistController) { try { activePlaylistController.abort(); } catch(e){} }
-      $('hudLoadingOverlay').classList.add('hidden');
-      hideSplash();
-      showChannelBanner('⚠️ Carregamento cancelado pelo usuário');
-      return;
-    }
-    // A pesquisa funciona como uma área modal: Voltar nunca alcança o player/tela atrás.
-    if ((ae && ae.id === 'inputSearch') || activeZone === 'search') {
-      e.preventDefault();
-      e.stopPropagation();
-      closeSearchMode(true);
-      return;
-    }
-    if ($('inputSearch') && $('inputSearch').value.trim().length > 0) {
-      e.preventDefault();
-      e.stopPropagation();
-      closeSearchMode(true);
-      return;
-    }
+    e.preventDefault();
+    e.stopPropagation();
+    mk21HandleBack();
+    return;
+  }
 
-    // deixa handlers legados de modal se existirem
-    if ($('modalPin') && !$('modalPin').classList.contains('hidden')) {
-      e.preventDefault();
-      $('modalPin').classList.add('hidden');
-      activeZone = 'channels';
-      focusActiveElement();
-      return;
-    }
-    if ($('modalServerPicker') && !$('modalServerPicker').classList.contains('hidden')) {
-      e.preventDefault();
-      $('modalServerPicker').classList.add('hidden');
-      activeZone = 'header';
-      focusActiveElement();
-      return;
-    }
-    if ($('modalSeriesEpisodes') && !$('modalSeriesEpisodes').classList.contains('hidden')) {
-      e.preventDefault();
-      $('modalSeriesEpisodes').classList.add('hidden');
-      activeZone = 'channels';
-      focusActiveElement();
-      return;
-    }
-    if ($('modalExitConfirm') && !$('modalExitConfirm').classList.contains('hidden')) {
-      e.preventDefault();
-      $('modalExitConfirm').classList.add('hidden');
-      activeZone = 'settings';
-      focusActiveElement();
-      return;
-    }
-    // Qualquer modal restante (áudio, atualização etc.) captura o Back sem atingir a tela atrás.
-    const openModal = mk21GetOpenModal();
-    if (openModal) {
-      e.preventDefault();
-      openModal.classList.add('hidden');
-      activeZone = 'settings';
-      focusActiveElement();
-      return;
-    }
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-      e.preventDefault();
-      if (typeof toggleFullscreen === 'function') toggleFullscreen(false);
-      return;
-    }
-    if (typeof currentContentType !== 'undefined' && currentContentType !== 'LIVE') {
-      e.preventDefault();
-      if (typeof switchContentType === 'function') switchContentType('LIVE');
-      return;
-    }
+  // Rolagem por pagina (botao de rolagem do Magic Remote em modo 5-way)
+  if (k === 33 || k === 34) {
+    e.preventDefault();
+    mk21ScrollActive(k === 33 ? -1 : 1);
+    return;
   }
 
   // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
@@ -5857,11 +6116,12 @@ $('btnClosePin').onclick = () => {
 };
 
 // MODAL SAÍDA
-$('btnExitCancel').onclick = () => $('modalExitConfirm').classList.add('hidden');
-$('btnExitConfirm').onclick = () => {
-  if (window.webOS && webOS.platformBack) webOS.platformBack();
-  else window.close();
+$('btnExitCancel').onclick = () => {
+  $('modalExitConfirm').classList.add('hidden');
+  activeZone = 'header';
+  try { focusActiveElement(); } catch (e) {}
 };
+$('btnExitConfirm').onclick = mk21ExitApp;
 
 // MODAL OMNISEARCH & EPG GUIDE EVENT LISTENERS
 if ($('btnCloseOmnisearch')) $('btnCloseOmnisearch').onclick = closeOmnisearch;
@@ -6089,6 +6349,10 @@ function initSmartTVApp() {
   // 2.5.4: a tela de login (preta, centralizada e com a identidade MK21) volta a
   // ser a entrada do app. Antes, um token salvo pulava direto para a grade.
   showLoginInterface();
+
+  // 2.6.0: deixa o Voltar do controle dentro do app (volta de tela) e so
+  // pede confirmacao para sair quando ja estamos na tela principal.
+  mk21ArmBackHistory();
 
   setupGlobalListeners();
   setupVirtualKeyboardHandling();
@@ -6436,26 +6700,104 @@ function mk21RenderQualityOptions() {
   });
 }
 
-function mk21OpenQualityModal() {
-  const modal = mk21EnsureQualityModal();
-  mk21RenderQualityOptions();
-  modal.classList.remove('hidden');
-  const first = modal.querySelector('.quality-option');
-  if (first) first.focus();
-  addDevLog('[UI] Qualidade de vídeo aberta', 'info');
+// ==================== 2.6.0 — PAINEL DE OPÇÕES DO PLAYER ====================
+// Um único painel com abas Qualidade / Buffer / Fonte, aberto pelo botão de
+// qualidade do player (janela e tela cheia). Antes, qualidade abria um modal
+// que só tinha as faixas, e buffer/fonte só existiam no menu de Configurações.
+const MK21_PLAYER_OPTION_TABS = [
+  ['qualidade', '🎞️ Qualidade'],
+  ['buffer', '⚡ Buffer'],
+  ['fonte', '📡 Fonte']
+];
+let mk21PlayerOptionsTab = 'qualidade';
+
+function mk21EnsurePlayerOptionsModal() {
+  let modal = $('modalPlayerOptions');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'modalPlayerOptions';
+  modal.className = 'app-modal hidden';
+  modal.innerHTML =
+    '<div class="modal-content" style="width: 920px; max-width: 94vw; max-height: 86vh; display: flex; flex-direction: column;">' +
+      '<div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">' +
+        '<span style="font-size: 22px; font-weight: 800; color: #ffd54f;">⚙️ Opções do player</span>' +
+        '<button id="btnClosePlayerOptions" class="ctrl-btn" tabindex="0" style="padding: 6px 14px;">✕ Fechar</button>' +
+      '</div>' +
+      '<div class="player-options-tabs" id="playerOptionsTabs"></div>' +
+      '<div id="playerOptionsBody"></div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  if ($('btnClosePlayerOptions')) $('btnClosePlayerOptions').onclick = mk21ClosePlayerOptions;
+  return modal;
 }
 
-function mk21CloseQualityModal() {
-  const modal = $('modalQuality');
+function mk21RenderPlayerOptionsTabs() {
+  const bar = $('playerOptionsTabs');
+  if (!bar) return;
+  bar.replaceChildren();
+  MK21_PLAYER_OPTION_TABS.forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'player-options-tab' + (mk21PlayerOptionsTab === item[0] ? ' active' : '');
+    btn.tabIndex = 0;
+    btn.textContent = item[1];
+    btn.onclick = () => {
+      mk21PlayerOptionsTab = item[0];
+      mk21RenderPlayerOptionsTabs();
+      mk21RenderPlayerOptionsBody();
+      const novoAtivo = document.querySelector('.player-options-tab.active');
+      if (novoAtivo) novoAtivo.focus();
+    };
+    bar.appendChild(btn);
+  });
+}
+
+function mk21RenderPlayerOptionsBody() {
+  const body = $('playerOptionsBody');
+  if (!body) return;
+  mk21PanelTarget = body;
+  try {
+    if (mk21PlayerOptionsTab === 'buffer') renderBufferPanel();
+    else if (mk21PlayerOptionsTab === 'fonte') renderServerPanel();
+    else renderQualityPanel();
+  } catch (e) {
+    addDevLog('[UI] Falha ao montar opções do player: ' + (e && e.message), 'error');
+  }
+}
+
+function mk21OpenPlayerOptions(tab) {
+  const modal = mk21EnsurePlayerOptionsModal();
+  mk21PlayerOptionsTab = tab || 'qualidade';
+  modal.classList.remove('hidden');
+  activeZone = 'modalPlayerOptions';
+  mk21RenderPlayerOptionsTabs();
+  mk21RenderPlayerOptionsBody();
+  addDevLog('[UI] Opções do player: ' + mk21PlayerOptionsTab, 'info');
+  const ativo = document.querySelector('.player-options-tab.active');
+  if (ativo) ativo.focus();
+}
+
+function mk21ClosePlayerOptions() {
+  const modal = $('modalPlayerOptions');
   if (modal) modal.classList.add('hidden');
+  mk21PanelTarget = null;
   const fullscreen = (typeof isAppFullscreen === 'function') && isAppFullscreen();
   const target = fullscreen ? $('fsBtnQuality') : $('btnQuality');
   if (target && target.focus) target.focus();
 }
 
+// Compatibilidade com os nomes antigos (modal de qualidade)
+function mk21OpenQualityModal() {
+  mk21OpenPlayerOptions('qualidade');
+}
+
+function mk21CloseQualityModal() {
+  mk21ClosePlayerOptions();
+}
+
 /* ------------------------------------------------- painel nas configurações */
 function renderQualityPanel() {
-  const box = $('settingsDetailBox');
+  const box = mk21SettingsBox();
   if (!box) return;
   const pref = mk21QualityPref();
   const heights = mk21QualityHeights();

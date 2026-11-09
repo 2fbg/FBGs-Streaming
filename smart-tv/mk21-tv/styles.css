@@ -2711,3 +2711,265 @@ body.osk-open .login-card {
     font-size: 14px;
   }
 }
+
+/* ==========================================================================
+   2.6.0 — ÁREA ÚTIL, ROLAGEM VISÍVEL E CONTROLE MAGIC
+   ========================================================================== */
+
+/* A barra de atalhos do controle é fixa (52px). O corpo do app precisa descontar
+   essa altura, senão os últimos botões de cada painel ficam atrás dela. */
+.app-body {
+  height: calc(100vh - 52px) !important;
+  max-height: calc(100vh - 52px) !important;
+  padding-bottom: 6px !important;
+  box-sizing: border-box;
+}
+
+.content-section {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Rolagem sempre visível e com alvo grande (dedo/controle) */
+.pane-scroll,
+.col-player,
+.settings-left-menu,
+.settings-detail-panel,
+.omnisearch-body,
+#devLogsContainer,
+.modal-content,
+.epg-guide-modal #epgScheduleList {
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 transparent;
+}
+
+.pane-scroll::-webkit-scrollbar,
+.col-player::-webkit-scrollbar,
+.settings-left-menu::-webkit-scrollbar,
+.settings-detail-panel::-webkit-scrollbar,
+.omnisearch-body::-webkit-scrollbar,
+#devLogsContainer::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar {
+  width: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pane-scroll::-webkit-scrollbar-thumb,
+.col-player::-webkit-scrollbar-thumb,
+.settings-left-menu::-webkit-scrollbar-thumb,
+.settings-detail-panel::-webkit-scrollbar-thumb,
+.omnisearch-body::-webkit-scrollbar-thumb,
+#devLogsContainer::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* O player cresce junto com a coluna e nunca empurra os controles para fora */
+.col-player {
+  overflow-y: auto !important;
+  min-height: 0;
+  scroll-behavior: smooth;
+}
+
+.video-box {
+  max-height: 46vh;
+  flex: 0 0 auto;
+}
+
+.player-controls {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(19, 22, 34, 0) 0%, #131622 40%);
+  padding-bottom: 6px;
+}
+
+/* Painel de opções do player (Qualidade / Buffer / Fonte) */
+.player-options-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.player-options-tab {
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: #181b28;
+  color: #cbd5e1;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.player-options-tab.active {
+  border-color: #ffd54f;
+  color: #ffd54f;
+  background: rgba(255, 213, 79, 0.12);
+}
+
+.player-options-tab:focus {
+  outline: none;
+  border-color: #ffd54f;
+  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.35);
+}
+
+#playerOptionsBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+/* Tela de logs em tela cheia e com fonte grande (para fotografar da TV) */
+.devlogs-modal {
+  z-index: 100000 !important;
+}
+
+.devlogs-card {
+  width: 96vw !important;
+  max-width: 96vw !important;
+  height: 92vh !important;
+  max-height: 92vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #05070d !important;
+  border: 2px solid rgba(59, 130, 246, 0.55) !important;
+  border-radius: 14px !important;
+  padding: 16px 20px !important;
+  box-sizing: border-box;
+}
+
+.devlogs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.devlogs-title {
+  color: #ffd54f;
+  font-weight: 800;
+  font-size: 22px;
+}
+
+.devlogs-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.devlogs-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 15px;
+  color: #94a3b8;
+  margin-bottom: 10px;
+}
+
+.devlogs-info b {
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+.devlogs-screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #03050a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: "Courier New", monospace, sans-serif;
+  font-size: 19px;
+  line-height: 1.6;
+  color: #dbeafe;
+  user-select: text;
+}
+
+.devlogs-screen .log-line {
+  margin-bottom: 6px;
+  word-break: break-word;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding-bottom: 4px;
+}
+
+.devlogs-screen .log-time {
+  color: #64748b;
+}
+
+.devlogs-screen .log-type {
+  display: inline-block;
+  min-width: 74px;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.devlogs-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  color: #94a3b8;
+  margin-top: 10px;
+}
+
+/* Menu de configurações mais compacto para caber em 720p sem cortar itens */
+@media (max-height: 800px) {
+  .cfg-menu-item {
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+  .settings-left-menu {
+    gap: 6px;
+    padding: 10px;
+  }
+  .video-box {
+    max-height: 40vh;
+  }
+  .epg-card {
+    padding: 10px 14px;
+  }
+}
+
+/* Modais sempre acima do player em tela cheia (que usa z-index 999999) */
+.app-modal { z-index: 1000000; }
+.devlogs-modal { z-index: 1000100 !important; }
+#modalPlayerOptions .modal-content { overflow: hidden; }
+
+/* Cabecalho do painel de opcoes: o botao Fechar nao deve esticar */
+#modalPlayerOptions .modal-header > span { flex: 1 1 auto; }
+#modalPlayerOptions .modal-header .ctrl-btn { flex: 0 0 auto; }
+
+/* Os 6 botoes do player estouravam a coluna (o ultimo ficava cortado fora da
+   tela em 1024/1280). Agora eles quebram em duas linhas e encolhem. */
+.player-controls {
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  row-gap: 8px !important;
+  overflow-x: visible !important;
+}
+
+.player-controls .ctrl-btn {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  flex: 0 0 46px !important;
+}
+
+.player-controls .ctrl-btn svg {
+  width: 20px !important;
+  height: 20px !important;
+}

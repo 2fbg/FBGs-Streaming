@@ -1,6 +1,6 @@
 {
   "id": "com.mk21.tv",
-  "version": "2.5.5",
+  "version": "2.6.0",
   "bgColor": "#000000",
   "vendor": "MK21",
   "type": "web",
@@ -14,5 +14,7 @@
     "network"
   ],
   "supportTouchMode": false,
-  "disableBackHistoryFilter": true
+  "disableBackHistoryFilter": true,
+  "disableBackHistoryAPI": true,
+  "handlesBack": true
 }
