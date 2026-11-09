@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.7.0">
-  <link rel="stylesheet" href="css/style.css?v=2.7.0">
+  <link rel="stylesheet" href="styles.css?v=2.7.1">
+  <link rel="stylesheet" href="css/style.css?v=2.7.1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -17,6 +17,14 @@
     }
     if (typeof mpegts === 'undefined') {
       document.write('<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"><\/script>');
+    }
+  </script>
+  <script>
+    // Fase 2: no Tizen o AVPlay vem de $WEBAPIS/webapis/webapis.js, que precisa
+    // existir ANTES do bundle (app.js). Em webOS/navegador o caminho nao existe,
+    // entao so injetamos quando o aparelho se identifica como Tizen/Samsung.
+    if (typeof webapis === 'undefined' && /Tizen|SMART-TV|Samsung/i.test(navigator.userAgent)) {
+      document.write('<script src="$WEBAPIS/webapis/webapis.js"><\/script>');
     }
   </script>
 </head>
@@ -85,7 +93,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.7.0 • Smart TV (webOS & Tizen)
+          MK21 PLAY OTT • v2.7.1 • Smart TV (webOS & Tizen)
         </div>
       </form>
     </div>
@@ -592,8 +600,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.7.0, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.7.0') {
+        // Se a versão OTA armazenada for anterior a 2.7.1, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.7.1') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -616,7 +624,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.7.0';
+              fallback.src = 'app.js?v=2.7.1';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -633,7 +641,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.7.0';
+      s.src = 'app.js?v=2.7.1';
       document.body.appendChild(s);
     })();
   </script>

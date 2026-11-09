@@ -1,21 +1,21 @@
 {
   "name": "MK21 Streaming",
-  "version": "2.7.0",
-  "build": 270,
-  "versionCode": 270,
-  "tagName": "v2.7.0",
-  "title": "MK21 Play v2.7.0",
+  "version": "2.7.1",
+  "build": 271,
+  "versionCode": 271,
+  "tagName": "v2.7.1",
+  "title": "MK21 Play v2.7.1",
   "theme": "MK21 Red/Black/White",
   "platforms": {
-    "web": "2.7.0",
-    "android": "2.7.0",
-    "webos": "2.7.0",
-    "tizen": "2.7.0"
+    "web": "2.7.1",
+    "android": "2.7.1",
+    "webos": "2.7.1",
+    "tizen": "2.7.1"
   },
-  "releaseDate": "2026-11-09T12:00:00Z",
-  "releaseNotes": "MK21 Play 2.7.0: Player Factory multiplataforma (Tizen AVPlay / webOS nativo / HLS fallback) com deteccao automatica de plataforma, buffer configuravel em segundos, faixas de audio normalizadas e failover por erro fatal. Corrige o ciclo de vida do AVPlay (close apos falha de prepare, evita o player travar ate reiniciar) e o play do hls.js (so depois do manifesto).",
-  "body": "MK21 Play 2.7.0: Player Factory multiplataforma (Tizen AVPlay / webOS nativo / HLS fallback) com deteccao automatica de plataforma, buffer configuravel em segundos, faixas de audio normalizadas e failover por erro fatal. Corrige o ciclo de vida do AVPlay (close apos falha de prepare, evita o player travar ate reiniciar) e o play do hls.js (so depois do manifesto).",
-  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.7.0_all.ipk",
+  "releaseDate": "2026-11-09T18:00:00Z",
+  "releaseNotes": "MK21 Play 2.7.1 (local): migra o playStream para a PlayerFactory atras do flag playerEngine (rollback instantaneo), empacota o app como IIFE unico para a OTA e converte os seeks para milissegundos. Aguardando validacao em TV real (8/8).",
+  "body": "MK21 Play 2.7.1 (local): migra o playStream para a PlayerFactory atras do flag playerEngine (rollback instantaneo), empacota o app como IIFE unico para a OTA e converte os seeks para milissegundos. Aguardando validacao em TV real (8/8).",
+  "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.7.1_all.ipk",
   "apkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "downloadUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/mk21.apk",
   "apkSha256": "84f821a2cd99d132374f926cf9b590f6ac2a4cc8c3f88315ca0446e36fef91f9",
@@ -25,6 +25,7 @@
   "updatedAt": "2026-11-09",
   "sha256": "84f821a2cd99d132374f926cf9b590f6ac2a4cc8c3f88315ca0446e36fef91f9",
   "breakingChanges": "",
-  "versionName": "2.7.0",
-  "changelog": "MK21 Play 2.7.0: Player Factory multiplataforma (Tizen AVPlay / webOS nativo / HLS fallback) com deteccao automatica de plataforma, buffer configuravel em segundos, faixas de audio normalizadas e failover por erro fatal. Corrige o ciclo de vida do AVPlay (close apos falha de prepare, evita o player travar ate reiniciar) e o play do hls.js (so depois do manifesto)."
+  "versionName": "2.7.1",
+  "changelog": "MK21 Play 2.7.1 (local): migra o playStream para a PlayerFactory atras do flag playerEngine (rollback instantaneo), empacota o app como IIFE unico para a OTA e converte os seeks para milissegundos. Aguardando validacao em TV real (8/8).",
+  "playerEngine": "legacy"
 }

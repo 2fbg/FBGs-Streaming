@@ -4,6 +4,13 @@ import type { PlayOptions, TrackInfo, TracksReadyPayload } from '../types/player
 import { BasePlayer } from './BasePlayer';
 import { log } from '../utils/logger';
 
+/**
+ * hls.js só faz sentido para manifesto .m3u8. Progressivo (.mp4/.webm/.mov) e
+ * DASH vão para o caminho nativo do <video> — jogar um .mp4 no hls.js falha
+ * com "no supported sources" no <video>.
+ */
+const isHlsUrl = (url: string): boolean => /\.m3u8([?#]|$)/i.test(url) || /[?&]format=m3u8/i.test(url);
+
 const HLS_CONFIG: Partial<HlsConfig> = {
   maxBufferLength: 30, // ~30s de buffer à frente
   maxMaxBufferLength: 60, // teto para redes muito instáveis
@@ -23,7 +30,7 @@ export class HLSFallbackPlayer extends BasePlayer {
   public readonly platform = 'browser' as const;
 
   private hls: Hls | null = null;
-  private usingNativeHls = false;
+  private usingNativeMedia = false;
   private audioTracks: TrackInfo[] = [];
   private subtitleTracks: TrackInfo[] = [];
 
@@ -40,12 +47,17 @@ export class HLSFallbackPlayer extends BasePlayer {
       this.stop();
       this.setState('preparing');
 
-      if (Hls.isSupported()) {
+      const hlsUrl = isHlsUrl(url);
+      const usaHlsJs = hlsUrl && Hls.isSupported();
+      const hlsNativo = hlsUrl && !!this.element.canPlayType('application/vnd.apple.mpegurl');
+
+      if (usaHlsJs) {
         this.playWithHlsJs(url, options);
         // Com MSE o <video> só ganha mídia depois do manifesto: dar play()
         // antes disso rejeita com NotSupportedError e vira erro fatal.
         await this.waitForManifest();
-      } else if (this.element.canPlayType('application/vnd.apple.mpegurl')) {
+      } else if (hlsNativo || !hlsUrl) {
+        // HLS nativo (Safari/firmwares antigos) ou progressivo (.mp4/.webm).
         this.playNative(url, options);
       } else {
         throw new Error('[FBG2] Nenhum engine HLS disponível neste dispositivo.');
@@ -63,6 +75,8 @@ export class HLSFallbackPlayer extends BasePlayer {
 
       await this.element.play();
       this.setState('playing');
+      // Faixas de um progressivo/nativo só existem depois do loadedmetadata.
+      if (!usaHlsJs) this.emitTracks();
       this.emit('playing');
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -83,10 +97,20 @@ export class HLSFallbackPlayer extends BasePlayer {
   }
 
   public resume(): void {
-    this.element.play().catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      this.emit('error', { code: 'HLS_RESUME', message, fatal: false, raw: err });
-    });
+    const playing = (): void => {
+      // Sem isto o estado fica 'paused' e o próximo toggle chama resume de novo.
+      this.setState('playing');
+      this.emit('playing');
+    };
+    const p = this.element.play();
+    if (p && typeof p.then === 'function') {
+      p.then(playing).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.emit('error', { code: 'HLS_RESUME', message, fatal: false, raw: err });
+      });
+      return;
+    }
+    playing();
   }
 
   public seek(timeMs: number): void {
@@ -102,7 +126,7 @@ export class HLSFallbackPlayer extends BasePlayer {
       this.hls.destroy();
       this.hls = null;
     }
-    this.usingNativeHls = false;
+    this.usingNativeMedia = false;
     this.element.pause();
     this.element.removeAttribute('src');
     try {
@@ -288,10 +312,10 @@ export class HLSFallbackPlayer extends BasePlayer {
   }
 
   private playNative(url: string, _options: PlayOptions): void {
-    this.usingNativeHls = true;
+    this.usingNativeMedia = true;
     this.element.src = url;
     this.element.load();
-    log.info('Usando HLS nativo (sem MSE).');
+    log.info('Usando reprodução nativa (sem MSE):', url);
   }
 
   private handleWaiting = (): void => {
@@ -311,11 +335,11 @@ export class HLSFallbackPlayer extends BasePlayer {
 
   private handleVideoError = (): void => {
     const err = this.element.error;
-    if (this.usingNativeHls && err) {
+    if (this.usingNativeMedia && err) {
       this.setState('error');
       this.emit('error', {
         code: err.code,
-        message: `HLS nativo error: code ${err.code}`,
+        message: `midia nativa error: code ${err.code}`,
         fatal: true,
         raw: err,
       });

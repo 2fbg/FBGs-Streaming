@@ -147,6 +147,37 @@ describe('HLSFallbackPlayer', () => {
     expect(player.getState()).toBe('error');
   });
 
+  it('manda progressivo (.mp4) para o caminho nativo, sem hls.js', async () => {
+    const player = new HLSFallbackPlayer(video);
+    await player.play('https://cdn.example.com/filme.mp4');
+
+    // hls.js só entende manifesto .m3u8; um .mp4 nele dá "no supported sources".
+    expect(fakeHls.instances).toHaveLength(0);
+    expect(video.getAttribute('src')).toBe('https://cdn.example.com/filme.mp4');
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    expect(player.getState()).toBe('playing');
+  });
+
+  it('resume volta a emitir "playing" (o toggle não fica preso em paused)', async () => {
+    const player = new HLSFallbackPlayer(video);
+    const onPlaying = jest.fn();
+    player.on('playing', onPlaying);
+
+    const pending = player.play('https://cdn.example.com/live.m3u8');
+    await Promise.resolve();
+    lastInstance().emit('manifestParsed');
+    await pending;
+    onPlaying.mockClear();
+
+    player.pause();
+    expect(player.getState()).toBe('paused');
+
+    player.resume();
+    await Promise.resolve();
+    expect(player.getState()).toBe('playing');
+    expect(onPlaying).toHaveBeenCalledTimes(1);
+  });
+
   it('destroy emite "destroyed" e derruba o hls.js', () => {
     const player = new HLSFallbackPlayer(video);
     const onDestroyed = jest.fn();

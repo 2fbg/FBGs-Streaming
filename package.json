@@ -1,16 +1,18 @@
 {
   "name": "fbgs-streaming",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "private": true,
   "description": "MK21 Streaming Web & OTT IPTV Platform",
   "scripts": {
     "start": "npx serve .",
     "typecheck": "tsc --noEmit",
     "test": "jest src/players",
-    "test:players": "jest src/players"
+    "test:players": "jest src/players",
+    "build:tv": "node esbuild.config.mjs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "esbuild": "^0.28.2",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "ts-jest": "^29.4.15",

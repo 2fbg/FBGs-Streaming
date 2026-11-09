@@ -83,10 +83,19 @@ export class WebOSVideoPlayer extends BasePlayer {
   }
 
   public resume(): void {
-    this.element.play().catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      this.emit('error', { code: 'WEBOS_RESUME', message, fatal: false, raw: err });
-    });
+    const playing = (): void => {
+      this.setState('playing');
+      this.emit('playing');
+    };
+    const p = this.element.play();
+    if (p && typeof p.then === 'function') {
+      p.then(playing).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.emit('error', { code: 'WEBOS_RESUME', message, fatal: false, raw: err });
+      });
+      return;
+    }
+    playing();
   }
 
   public seek(timeMs: number): void {
