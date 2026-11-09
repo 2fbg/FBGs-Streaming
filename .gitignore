@@ -28,3 +28,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
+
+# Node toolchain (Player Factory)
+node_modules/
+coverage/
+dist/
