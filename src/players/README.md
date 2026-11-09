@@ -66,18 +66,15 @@ player.on('tracksReady', (payload) => {
 | AVPlay singleton | duas instâncias colidiam | factory reaproveita a instância do mesmo `<video>`; `releaseTizen()` libera |
 | Estado/buffer | ausentes na interface | `getState()`, `getBufferedMs()`, `setVolume()`, `setSubtitleTrack()` |
 
-## Estado da migração (Seção 5.2 da especificação)
+## Estado da migração
 
-O app que roda nas TVs hoje é `smart-tv/mk21-tv/app.js` — JavaScript puro, com o
-player integrado ao watchdog, aos modos de buffer e ao OTA (que baixa apenas
-`app.js` e `styles.css`). Trocar esse caminho pela factory exige empacotar o
-TypeScript num bundle e reescrever ~300 linhas de `playStream`, então **não foi
-feito nesta entrega**: o pacote está isolado, tipado e testado, pronto para ser
-consumido quando houver um passo de build no pipeline do app.
+**Fase 2 concluída no build (2.7.1).** O app da TV consome a factory através de
+`smart-tv/mk21-tv/src/player-service.js`; `app.js` é gerado por `npm run build:tv`
+(IIFE, ~178 KB) e a OTA continua entregando só `app.js` + `styles.css`.
 
-Pré-requisitos para ligar no app:
+O motor entra por flag — `localStorage.FBG2_PLAYER_LEGACY=1` → `FBG2_PLAYER_ENGINE`
+→ `playerEngine` do `version.json` → default. Até a validação em TV real (8/8), o
+`version.json` publicado fica em `"playerEngine": "legacy"`; no aparelho, para
+testar a factory: `localStorage.setItem('FBG2_PLAYER_ENGINE','factory')` e recarregar.
 
-1. Bundle (esbuild/rollup) gerando um IIFE que exponha `window.FBG2Player`.
-2. `<script src="$WEBAPIS/webapis/webapis.js"></script>` antes do bundle no
-   `index.html` do Tizen (`smart-tv/tizen/config.xml` já declara os privilégios).
-3. Migrar `seek` dos call sites para **milissegundos**.
+Detalhes, mapa do legado e checklist: `smart-tv/mk21-tv/MIGRACAO-FASE2-NOTAS.md`.
