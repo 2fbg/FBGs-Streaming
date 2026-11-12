@@ -128,12 +128,12 @@ if (!Element.prototype.replaceChildren) {
 
 // 3. CONFIGURAÇÃO DOS SERVIDORES MK21 (NOMES LIMPOS SEM ÍCONES)
 const DEFAULT_SERVERS = [
-  { id: 'vlog', name: 'VLOG', url: 'http://myopbx.beer' },
-  { id: 'tannix', name: 'TANNIX', url: 'http://poptvcdn.online' },
-  { id: 'lubtv', name: 'LUB TV', url: 'http://pottermax.sbs' },
-  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://app.vivoxi.xyz' },
+  { id: 'vlog', name: 'VLOG', url: 'http://tocombox21.cyou' },
+  { id: 'tannix', name: 'TANNIX', url: 'http://ovo54.sbs' },
+  { id: 'lubtv', name: 'LUB TV', url: 'http://coxinhasemflango.shop' },
+  { id: 'mk21pro', name: 'MK21 PRÓ', url: 'http://app.tigerouro.shop' },
   { id: 'cb6000', name: 'CB6000', url: 'http://cdn.caterlune.top' },
-  { id: 'cinelon', name: 'CINELON', url: 'http://coliseuop.site' },
+  { id: 'cinelon', name: 'CINELON', url: 'http://parcerialife.lat' },
   { id: 'multttv', name: 'MULTT TV', url: 'http://dali-as.skin' }
 ];
 
@@ -152,8 +152,8 @@ try {
 
 
 // Credenciais compartilhadas (Xtream) — válidas para TODOS os servidores
-const SHARED_IPTV_USER = '601334065';
-const SHARED_IPTV_PASS = '820866576';
+const SHARED_IPTV_USER = '766119467';
+const SHARED_IPTV_PASS = '447915468';
 
 function getSharedCredentials() {
   try {
@@ -5265,7 +5265,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.7.1';
+const BASE_PACKAGE_VERSION = '2.7.2';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
