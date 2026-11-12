@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.7.2">
-  <link rel="stylesheet" href="css/style.css?v=2.7.2">
+  <link rel="stylesheet" href="styles.css?v=2.7.4">
+  <link rel="stylesheet" href="css/style.css?v=2.7.4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -626,7 +626,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.7.2';
+              fallback.src = 'app.js?v=2.7.4';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -643,7 +643,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.7.2';
+      s.src = 'app.js?v=2.7.4';
       document.body.appendChild(s);
     })();
   </script>

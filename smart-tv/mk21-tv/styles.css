@@ -3331,3 +3331,85 @@ body.osk-open .login-card {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ==========================================
+   CSS DE EMERGÊNCIA: FONTES E SCROLLBAR (MK21 v2.7.4)
+   ========================================== */
+
+/* 1. Protege a fonte de TODOS os botões, itens de servidor, logs e rodapé */
+button, .btn, [class*="btn"], [class*="server"], [class*="log"], 
+.cat-item-btn, .footer-item, .list-item, .modal-button, .color-shortcut-item, 
+.action-btn, .server-pill, .server-manager-row, .server-info-name, .remote-key-pill {
+  font-size: clamp(13px, 1.05vw, 18px) !important;
+  line-height: 1.4 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-height: 44px !important; /* Tamanho seguro para foco na TV */
+  box-sizing: border-box !important;
+}
+
+/* Rodapé elástico anti-corte */
+.remote-color-bar {
+  gap: clamp(10px, 1.8vw, 36px) !important;
+  padding: 0 16px !important;
+  overflow: hidden !important;
+}
+
+.color-shortcut-item {
+  font-size: clamp(12px, 0.95vw, 16px) !important;
+  min-height: auto !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+/* 2. Força a scrollbar a aparecer em qualquer container que tenha rolagem */
+div[style*="overflow"], .pane-scroll, .list-container, 
+.modal-body, .server-list, .servers-manager-list, .log-container, 
+#serverItemsGrid, #devLogsContainer, #listCategories, #listItems, #settingsPanel {
+  overflow-y: scroll !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* 3. Reafirma a scrollbar laranja de alto contraste (Global) */
+::-webkit-scrollbar {
+  width: 14px !important;
+  height: 14px !important;
+  display: block !important;
+  background: #080a10 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+::-webkit-scrollbar-track {
+  background: #080a10 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ff9800 !important;
+  border-radius: 6px !important;
+  border: 2px solid #000000 !important;
+  min-height: 40px !important;
+  box-shadow: 0 0 10px rgba(255, 152, 0, 0.6) !important;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: #ffa726 !important;
+}
+
+/* 4. Garante que o container de lista exiba a barra com foco ativo no webOS */
+.pane-scroll:focus-within::-webkit-scrollbar,
+.server-list:focus-within::-webkit-scrollbar,
+.servers-manager-list:focus-within::-webkit-scrollbar,
+#listCategories:focus-within::-webkit-scrollbar,
+#listItems:focus-within::-webkit-scrollbar,
+#serverItemsGrid:focus-within::-webkit-scrollbar,
+#devLogsContainer:focus-within::-webkit-scrollbar {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
