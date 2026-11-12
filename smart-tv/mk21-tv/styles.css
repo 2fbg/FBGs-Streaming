@@ -3305,3 +3305,29 @@ body.osk-open .login-card {
 #tvPlayer {
   transition: object-fit 0.2s ease-in-out;
 }
+
+/* Banner de Notificação (Toast MK21) */
+#mk21-toast-banner {
+  position: fixed;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: rgba(0, 0, 0, 0.88);
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border-left: 4px solid #ff9800;
+  font-size: 18px;
+  font-weight: bold;
+  z-index: 999999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.7);
+}
+
+#mk21-toast-banner.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

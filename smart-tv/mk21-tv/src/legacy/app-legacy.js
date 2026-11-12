@@ -3819,12 +3819,37 @@ function mk21SetBotaoTocando(tocando) {
   if (fs) fs.textContent = tocando ? '⏸️ Pausar' : '▶️ Reproduzir';
 }
 
+let toastTimer = null;
 function showChannelBanner(text) {
   const overlay = $('channelOverlay');
-  overlay.textContent = text;
-  overlay.classList.remove('hidden');
-  clearTimeout(overlay._timer);
-  overlay._timer = setTimeout(() => overlay.classList.add('hidden'), 3500);
+  if (overlay) {
+    overlay.textContent = text;
+    overlay.classList.remove('hidden');
+    clearTimeout(overlay._timer);
+    overlay._timer = setTimeout(() => overlay.classList.add('hidden'), 3500);
+  }
+  let banner = $('mk21-toast-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'mk21-toast-banner';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = text;
+  banner.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    if (banner) banner.classList.remove('visible');
+  }, 2500);
+}
+
+function initFocus() {
+  setTimeout(() => {
+    const firstItem = document.querySelector('.cat-item-btn') || document.querySelector('.pane-scroll') || $('listCategories');
+    if (firstItem) {
+      firstItem.setAttribute('tabindex', '0');
+      firstItem.focus();
+    }
+  }, 150);
 }
 
 // TROCA DE CANAIS COM SETAS CIMA E BAIXO

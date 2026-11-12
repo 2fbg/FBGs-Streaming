@@ -10,8 +10,11 @@
   "largeIcon": "largeIcon.png",
   "splashBackground": "splash.png",
   "resolution": "1920x1080",
+  "support360Display": false,
   "requiredPermissions": [
-    "network"
+    "network",
+    "activity.operation",
+    "media.operation"
   ],
   "supportTouchMode": false,
   "disableBackHistoryFilter": true,
