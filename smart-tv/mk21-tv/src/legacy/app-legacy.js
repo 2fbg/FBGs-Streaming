@@ -673,8 +673,11 @@ function pokeFsHud() {
   showFsHud(true);
   clearTimeout(fsHudHideTimer);
   fsHudHideTimer = setTimeout(function () {
-    if (isAppFullscreen()) showFsHud(false);
-  }, 4500);
+    if (isAppFullscreen()) {
+      const activeModal = (typeof mk21GetOpenModal === 'function') ? mk21GetOpenModal() : null;
+      if (!activeModal) showFsHud(false);
+    }
+  }, 5500);
 }
 
 
@@ -686,7 +689,7 @@ let activeItem = null;
 let hlsInstance = null;
 let currentSortOrder = 'DEFAULT'; // 'DEFAULT' | 'RECENT' | 'AZ' | 'ZA' | 'YEAR'
 let currentPlaybackSpeed = 1;
-const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+const speedOptions = [0.5, 1, 1.5, 2, 4];
 
 // Categorias e Itens da Aba Ativa
 let currentCategoriesMap = {};
@@ -2426,9 +2429,9 @@ function saveProgress(contentId, currentTime, duration) {
 // v1.2.0 FASE 2: TECLAS COLORIDAS & TECLAS NUMÉRICAS (0-9)
 // ==========================================================================
 const ASPECT_MODES = [
-  { id: 'fit', label: 'Proporção: Original (Ajustar)', objectFit: 'contain' },
-  { id: 'fill', label: 'Proporção: 16:9 (Esticar)', objectFit: 'fill' },
-  { id: 'zoom', label: 'Proporção: Zoom (Cortar Bordas)', objectFit: 'cover' }
+  { id: 'contain', label: 'Proporção: Original (16:9)', short: 'Normal', objectFit: 'contain' },
+  { id: 'cover', label: 'Proporção: Zoom (Preencher)', short: 'Zoom', objectFit: 'cover' },
+  { id: 'fill', label: 'Proporção: Esticar (Distorcer)', short: 'Esticar', objectFit: 'fill' }
 ];
 let currentAspectIdx = 0;
 
@@ -2439,6 +2442,9 @@ function cycleAspectRatio() {
   const mode = ASPECT_MODES[currentAspectIdx];
   video.style.objectFit = mode.objectFit;
   showChannelBanner(mode.label);
+  const btnText = '📐 ' + mode.short;
+  if ($('fsBtnAspect')) $('fsBtnAspect').textContent = btnText;
+  if ($('btnAspect')) $('btnAspect').textContent = btnText;
   if ($('diagAspect')) $('diagAspect').textContent = mode.label;
 }
 
@@ -3872,6 +3878,20 @@ function showFsHud(show) {
   }
 }
 
+function mk21TeleportModalForFullscreen(modal, open) {
+  if (!modal) return;
+  const box = $('videoContainer');
+  if (open && isAppFullscreen() && box) {
+    if (modal.parentElement !== box) {
+      box.appendChild(modal);
+    }
+  } else if (!open || !isAppFullscreen()) {
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
+  }
+}
+
 function toggleFullscreen(force) {
   const box = $('videoContainer');
   const v = $('tvPlayer');
@@ -3887,12 +3907,15 @@ function toggleFullscreen(force) {
     pokeFsHud();
     addDevLog('[Player] Modo Tela Cheia ATIVADO', 'info');
     try {
-      if (box.requestFullscreen) {
+      const root = document.documentElement;
+      if (root.requestFullscreen) {
+        root.requestFullscreen().catch(() => {});
+      } else if (root.webkitRequestFullscreen) {
+        root.webkitRequestFullscreen();
+      } else if (box.requestFullscreen) {
         box.requestFullscreen().catch(() => {});
       } else if (box.webkitRequestFullscreen) {
         box.webkitRequestFullscreen();
-      } else if (v && v.webkitRequestFullscreen) {
-        v.webkitRequestFullscreen();
       }
     } catch (e) {
       addDevLog('[Player] Fullscreen API fallback ativo (CSS is-fullscreen aplicado): ' + e.message, 'debug');
@@ -3901,6 +3924,13 @@ function toggleFullscreen(force) {
       if ($('fsBtnPlay')) $('fsBtnPlay').focus();
     }, 200);
   } else {
+    // Retorna todos os modais para o document.body
+    ['modalPlayerOptions', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalSeriesEpisodes', 'modalDevLogs', 'modalStreamDiagnostics'].forEach(id => {
+      const m = $(id);
+      if (m && m.parentElement !== document.body) {
+        document.body.appendChild(m);
+      }
+    });
     box.classList.remove('is-fullscreen');
     document.body.classList.remove('is-fullscreen');
     showFsHud(false);
@@ -3918,7 +3948,8 @@ function toggleFullscreen(force) {
 }
 
 function bindFsHudButtons() {
-  if ($('fsBtnPrev')) $('fsBtnPrev').onclick = function () {
+  if ($('fsBtnPrev')) $('fsBtnPrev').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     if (currentContentType === 'LIVE') {
       playPreviousChannel();
     } else {
@@ -3927,7 +3958,8 @@ function bindFsHudButtons() {
     }
     pokeFsHud();
   };
-  if ($('fsBtnNext')) $('fsBtnNext').onclick = function () {
+  if ($('fsBtnNext')) $('fsBtnNext').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
     if (currentContentType === 'LIVE') {
       playNextChannel();
     } else {
@@ -3936,14 +3968,47 @@ function bindFsHudButtons() {
     }
     pokeFsHud();
   };
-  if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function () { togglePlayPause(); pokeFsHud(); };
-  if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function () { cyclePlaybackSpeed(); pokeFsHud(); };
-  if ($('fsBtnFav')) $('fsBtnFav').onclick = function () { if (activeItem) toggleFav(activeItem.url); pokeFsHud(); };
-  if ($('fsBtnQuality')) $('fsBtnQuality').onclick = function () { if (typeof mk21OpenQualityModal === 'function') mk21OpenQualityModal(true); };
-  if ($('fsBtnBuffer')) $('fsBtnBuffer').onclick = function () { cycleBufferMode(); pokeFsHud(); };
-  if ($('fsBtnServer')) $('fsBtnServer').onclick = function () { if (typeof openServerPicker === 'function') openServerPicker(); };
-  if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function () { if (typeof openAudioSubsModal === 'function') openAudioSubsModal(); };
-  if ($('fsBtnBack')) $('fsBtnBack').onclick = function () { toggleFullscreen(false); };
+  if ($('fsBtnPlay')) $('fsBtnPlay').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    togglePlayPause();
+    pokeFsHud();
+  };
+  if ($('fsBtnSpeed')) $('fsBtnSpeed').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    cyclePlaybackSpeed();
+    pokeFsHud();
+  };
+  if ($('fsBtnAspect')) $('fsBtnAspect').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    cycleAspectRatio();
+    pokeFsHud();
+  };
+  if ($('fsBtnFav')) $('fsBtnFav').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (activeItem) toggleFav(activeItem.url);
+    pokeFsHud();
+  };
+  if ($('fsBtnQuality')) $('fsBtnQuality').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (typeof mk21OpenQualityModal === 'function') mk21OpenQualityModal(true);
+  };
+  if ($('fsBtnBuffer')) $('fsBtnBuffer').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    cycleBufferMode();
+    pokeFsHud();
+  };
+  if ($('fsBtnServer')) $('fsBtnServer').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (typeof openServerPicker === 'function') openServerPicker();
+  };
+  if ($('fsBtnAudio')) $('fsBtnAudio').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (typeof openAudioSubsModal === 'function') openAudioSubsModal();
+  };
+  if ($('fsBtnBack')) $('fsBtnBack').onclick = function (e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    toggleFullscreen(false);
+  };
 }
 bindFsHudButtons();
 
@@ -4051,6 +4116,7 @@ if ($('btnQuickServer')) $('btnQuickServer').onclick = () => {
 function openAudioSubsModal() {
   const modal = $('modalAudioSubs');
   if (!modal) return;
+  mk21TeleportModalForFullscreen(modal, true);
   modal.classList.remove('hidden');
   activeZone = 'modalAudioSubs';
 
@@ -4189,8 +4255,16 @@ function openAudioSubsModal() {
 }
 
 $('btnCloseAudioSubs').onclick = () => {
-  $('modalAudioSubs').classList.add('hidden');
-  activeZone = 'player';
+  const modal = $('modalAudioSubs');
+  if (modal) {
+    modal.classList.add('hidden');
+    mk21TeleportModalForFullscreen(modal, false);
+  }
+  const fullscreen = isAppFullscreen();
+  activeZone = fullscreen ? 'player' : 'channels';
+  const target = fullscreen ? $('fsBtnAudio') : $('btnAudioTrack');
+  if (target && target.focus) target.focus();
+  if (fullscreen) pokeFsHud();
 };
 
 if ($('btnAudioTrack')) $('btnAudioTrack').onclick = openAudioSubsModal;
@@ -5056,11 +5130,14 @@ function saveServersToStorage() {
 }
 
 function openServerPicker() {
+  const modal = $('modalServerPicker');
+  if (!modal) return;
+  mk21TeleportModalForFullscreen(modal, true);
   renderServerPickerList();
-  $('modalServerPicker').classList.remove('hidden');
+  modal.classList.remove('hidden');
   activeZone = 'modalServerPicker';
   focusedServerRowIdx = 0;
-  const first = $('serverItemsGrid').querySelector('.btn-server-connect');
+  const first = $('serverItemsGrid') ? $('serverItemsGrid').querySelector('.btn-server-connect') : null;
   if (first) first.focus();
 }
 
@@ -5248,8 +5325,16 @@ if ($('btnLoadOfflineCache')) {
 
 $('btnHeaderServer').onclick = openServerPicker;
 $('btnCloseServerPicker').onclick = () => {
-  $('modalServerPicker').classList.add('hidden');
-  activeZone = 'channels';
+  const modal = $('modalServerPicker');
+  if (modal) {
+    modal.classList.add('hidden');
+    mk21TeleportModalForFullscreen(modal, false);
+  }
+  const fullscreen = isAppFullscreen();
+  activeZone = fullscreen ? 'player' : 'channels';
+  const target = fullscreen ? $('fsBtnServer') : $('btnHeaderServer');
+  if (target && target.focus) target.focus();
+  if (fullscreen) pokeFsHud();
 };
 
 // 14. GERENCIADOR DE ATUALIZAÇÕES DIRETAS NO APLICATIVO (OTA SMART TV)
@@ -6016,15 +6101,31 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // webOS Channel Up / Down (KeyCodes 427 / 428) e setas em tela cheia (Item 4)
-  if (k === 427 || key === 'ChannelUp') {
+  // webOS Channel Up / Down (KeyCodes 427 / 428) e controle remoto de TV
+  if (k === 427 || key === 'ChannelUp' || code === 'ChannelUp') {
     e.preventDefault();
-    if (currentContentType === 'LIVE') playPreviousChannel();
+    e.stopPropagation();
+    if (currentContentType === 'LIVE') {
+      playNextChannel();
+    } else {
+      mk21SeekBy(30000);
+      showChannelBanner('⏩ +30s');
+      updateVodProgressTimeline();
+    }
+    if (isAppFullscreen()) pokeFsHud();
     return;
   }
-  if (k === 428 || key === 'ChannelDown') {
+  if (k === 428 || key === 'ChannelDown' || code === 'ChannelDown') {
     e.preventDefault();
-    if (currentContentType === 'LIVE') playNextChannel();
+    e.stopPropagation();
+    if (currentContentType === 'LIVE') {
+      playPreviousChannel();
+    } else {
+      mk21SeekBy(-30000);
+      showChannelBanner('⏪ -30s');
+      updateVodProgressTimeline();
+    }
+    if (isAppFullscreen()) pokeFsHud();
     return;
   }
 
@@ -7038,22 +7139,29 @@ function mk21RenderPlayerOptionsBody() {
 function mk21OpenPlayerOptions(tab) {
   const modal = mk21EnsurePlayerOptionsModal();
   mk21PlayerOptionsTab = tab || 'qualidade';
+  mk21TeleportModalForFullscreen(modal, true);
   modal.classList.remove('hidden');
   activeZone = 'modalPlayerOptions';
   mk21RenderPlayerOptionsTabs();
   mk21RenderPlayerOptionsBody();
   addDevLog('[UI] Opções do player: ' + mk21PlayerOptionsTab, 'info');
-  const ativo = document.querySelector('.player-options-tab.active');
-  if (ativo) ativo.focus();
+  setTimeout(() => {
+    const ativo = modal.querySelector('.player-options-tab.active') || modal.querySelector('button');
+    if (ativo && ativo.focus) ativo.focus();
+  }, 50);
 }
 
 function mk21ClosePlayerOptions() {
   const modal = $('modalPlayerOptions');
-  if (modal) modal.classList.add('hidden');
+  if (modal) {
+    modal.classList.add('hidden');
+    mk21TeleportModalForFullscreen(modal, false);
+  }
   mk21PanelTarget = null;
   const fullscreen = (typeof isAppFullscreen === 'function') && isAppFullscreen();
   const target = fullscreen ? $('fsBtnQuality') : $('btnQuality');
   if (target && target.focus) target.focus();
+  if (fullscreen) pokeFsHud();
 }
 
 // Compatibilidade com os nomes antigos (modal de qualidade)
