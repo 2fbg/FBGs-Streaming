@@ -16,8 +16,9 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v1.4.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.7.8 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
+const CatalogUtils = require('../../core/CatalogUtils.js');
 const $ = id => document.getElementById(id);
 
 // Fase 2: o legado deixou de viver no escopo global (agora e um IIFE bundlado).
@@ -616,9 +617,62 @@ function slimItem(it) {
 let currentServerIndex = 0;
 let serverLoadGeneration = 0;
 let activePlaylistController = null;
+let loginAuthAbortController = null;
+let mk21AutoAdvanceTimer = null;
+let mk21ForceFreshAfterLogin = false;
+let mk21BgSyncTimer = null;
 let currentContentType = 'LIVE'; // 'LIVE', 'MOVIE', 'SERIES', 'FAVORITES', 'CONTINUE', 'SETTINGS'
 let allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
 let favoriteUrls = new Set();
+
+const MK21_BG_SYNC_KEY = 'mk21_bg_sync_frequency';
+
+function getBgSyncFrequency() {
+  try {
+    return CatalogUtils.normalizeBgSyncFrequency(localStorage.getItem(MK21_BG_SYNC_KEY) || '6h');
+  } catch (e) {
+    return '6h';
+  }
+}
+
+function setBgSyncFrequency(freq) {
+  const normalized = CatalogUtils.normalizeBgSyncFrequency(freq);
+  try { localStorage.setItem(MK21_BG_SYNC_KEY, normalized); } catch (e) {}
+  scheduleBackgroundSync();
+  return normalized;
+}
+
+function getCatalogMetricsSnapshot() {
+  const epgObj = (typeof epgCache !== 'undefined' && epgCache) ? epgCache : null;
+  return CatalogUtils.computeCatalogMetrics(allCatalog, epgObj, Boolean(window.serverXmltvUrl));
+}
+
+function resetListAndAuthState(options = {}) {
+  const preserveCatalog = Boolean(options && options.preserveCatalog);
+  if (mk21AutoAdvanceTimer) {
+    clearTimeout(mk21AutoAdvanceTimer);
+    mk21AutoAdvanceTimer = null;
+  }
+  if (activePlaylistController) {
+    try { activePlaylistController.abort(); } catch (e) {}
+    activePlaylistController = null;
+  }
+  if (loginAuthAbortController) {
+    try { loginAuthAbortController.abort(); } catch (e) {}
+    loginAuthAbortController = null;
+  }
+  serverLoadGeneration++;
+  loadInFlight = false;
+  if (typeof mk21AutoServerTries !== 'undefined') mk21AutoServerTries = 0;
+  if (typeof indexedOffsets !== 'undefined') indexedOffsets = {};
+  if (!preserveCatalog) {
+    allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    if (typeof currentCategoriesMap !== 'undefined') currentCategoriesMap = { ALL: [] };
+    if (typeof currentCategoryKeys !== 'undefined') currentCategoryKeys = ['ALL'];
+    if (typeof currentFilteredItems !== 'undefined') currentFilteredItems = [];
+  }
+  if (typeof resetLoadingHud === 'function') resetLoadingHud();
+}
 
 // Fluidez: preferências leves do usuário
 function saveLastChannel(item) {
@@ -1162,8 +1216,11 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
     if (signal && signal.addEventListener) signal.addEventListener('abort', onAbort, { once: true });
     try {
       const res = await fetch(url, c ? { signal: c.signal, mode: 'cors' } : { mode: 'cors' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
+      const rawText = await res.text();
+      if (!res.ok && res.status !== 401 && res.status !== 403) {
+        throw new Error('HTTP ' + res.status);
+      }
+      return CatalogUtils.parseSafeJsonResponse(rawText, res.status);
     } finally {
       if (timer) clearTimeout(timer);
       if (signal && signal.removeEventListener) signal.removeEventListener('abort', onAbort);
@@ -1332,6 +1389,13 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     try {
       const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
       const res = await fetch(targetUrl, options);
+      if (res.status === 401 || res.status === 403) {
+        const authErr = new Error('Credenciais inválidas ou bloqueadas pelo servidor (HTTP ' + res.status + ').');
+        authErr.isAuthError = true;
+        authErr.status = res.status;
+        addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status + ' (credenciais)', 'error');
+        throw authErr;
+      }
       if (!res.ok) {
         const httpErr = new Error('HTTP ' + res.status);
         addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status, 'warn');
@@ -1408,7 +1472,10 @@ function resetLoadingHud() {
   if (error) { error.textContent = ''; error.classList.add('hidden'); }
   if (retry) {
     retry.classList.add('hidden');
-    retry.onclick = () => loadServer(true);
+    retry.onclick = () => {
+      resetListAndAuthState({ preserveCatalog: true });
+      loadServer(true);
+    };
   }
   const spinner = hud && hud.querySelector('.spinner-ring');
   if (spinner) spinner.style.display = '';
@@ -1422,12 +1489,14 @@ function showLoadingFailure(error, serverName) {
   const actions = $('hudLoadingActions');
   if (!hud) return;
   if (card) card.classList.add('is-error');
-  if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Não foi possível carregar a lista';
+  if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = (error && error.isAuthError)
+    ? 'Falha na autenticação do servidor'
+    : 'Não foi possível carregar a lista';
   if ($('hudLoadingSub')) $('hudLoadingSub').textContent = `Servidor: ${serverName || 'atual'}`;
   if ($('hudProgressBar')) $('hudProgressBar').style.width = '0%';
   if ($('hudProgressPercent')) $('hudProgressPercent').textContent = 'Falha';
   if (errorBox) {
-    const detail = error && error.message ? error.message : 'A conexão foi interrompida antes da lista terminar.';
+    const detail = CatalogUtils.formatFriendlyLoadError(error);
     errorBox.textContent = `${detail} Seus dados não foram apagados.`;
     errorBox.classList.remove('hidden');
   }
@@ -1446,7 +1515,10 @@ function showLoadingFailure(error, serverName) {
   }
   if (retry) {
     retry.classList.remove('hidden');
-    retry.onclick = () => loadServer(true);
+    retry.onclick = () => {
+      resetListAndAuthState({ preserveCatalog: true });
+      loadServer(true);
+    };
     setTimeout(() => retry.focus(), 0);
   }
   hud.classList.remove('hidden');
@@ -1472,7 +1544,15 @@ async function getCatalogIndexMeta(serverId) {
 
 async function loadServer(forceRefresh = false, options = {}) {
   const silent = !!(options && options.silent);
+  const bgLowPriority = !!(options && options.backgroundLowPriority);
   if (silent && loadInFlight) return;
+  if (mk21AutoAdvanceTimer) {
+    clearTimeout(mk21AutoAdvanceTimer);
+    mk21AutoAdvanceTimer = null;
+  }
+  if (!options || !options.fromAutoAdvance) {
+    mk21AutoServerTries = 0;
+  }
   const loadId = ++serverLoadGeneration;
   if (activePlaylistController) { try { activePlaylistController.abort(); } catch (e) {} }
   activePlaylistController = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -1773,19 +1853,29 @@ async function loadServer(forceRefresh = false, options = {}) {
       const live = allCatalog.LIVE.length;
       $('txtCurrentCategoryTitle').textContent = '📺 Catálogo: ' + live.toLocaleString('pt-BR') + ' canais • ' + allCatalog.MOVIE.length.toLocaleString('pt-BR') + ' filmes • ' + allCatalog.SERIES.length.toLocaleString('pt-BR') + ' séries';
     }
-    if (silent && published !== totalLoaded) {
+    if (typeof mk21UpdateCatalogMetricsUI === 'function') {
+      mk21UpdateCatalogMetricsUI();
+    }
+    if (silent && !bgLowPriority && published !== totalLoaded) {
       published = totalLoaded;
       showChannelBanner('✓ Catálogo sincronizado: ' + totalLoaded.toLocaleString('pt-BR') + ' itens');
+    } else if (bgLowPriority) {
+      addDevLog('[Sync Segundo Plano] Catálogo atualizado silenciosamente (' + totalLoaded + ' itens).', 'success');
     }
+    scheduleBackgroundSync();
   } catch (err) {
-    loadInFlight = false;
+    if (loadId === serverLoadGeneration) loadInFlight = false;
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
 
     const partialLive = allCatalog && Array.isArray(allCatalog.LIVE) ? allCatalog.LIVE.length : 0;
     if (silent) {
-      // Falhou a sincronização: mantém a tela e o canal atual, avisa sem drama.
+      // Falhou a sincronização: mantém a tela e o canal atual sem travar ou interromper a UI.
       updateServerSyncBadge(100, true);
+      if (bgLowPriority) {
+        addDevLog('[Sync Segundo Plano] Falha silenciosa: ' + CatalogUtils.formatFriendlyLoadError(err), 'warn');
+        return;
+      }
       if ($('txtServerSyncBadge')) {
         $('txtServerSyncBadge').textContent = 'offline';
         $('txtServerSyncBadge').classList.remove('hidden', 'done');
@@ -1808,7 +1898,7 @@ async function loadServer(forceRefresh = false, options = {}) {
       showChannelBanner(`⚠️ Lista parcial: ${partialLive} canais carregados. Tente atualizar novamente.`);
       if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = `📺 ${partialLive} canais disponíveis (parcial)`;
       if (hud) hud.classList.add('hidden');
-    } else if (mk21AutoAdvanceServer(err, srv)) {
+    } else if (!(err && err.isAuthError) && mk21AutoAdvanceServer(err, srv, loadId)) {
       // 2.5.3: o módulo já avisou na tela e vai tentar o próximo servidor.
     } else {
       showLoadingFailure(err, srv.name);
@@ -1819,7 +1909,9 @@ async function loadServer(forceRefresh = false, options = {}) {
       }
     }
   } finally {
-    loadInFlight = false;
+    if (loadId === serverLoadGeneration) {
+      loadInFlight = false;
+    }
   }
 }
 
@@ -4232,6 +4324,11 @@ function mk21SetBotaoTocando(tocando) {
 
 let toastTimer = null;
 function showChannelBanner(text) {
+  if (!AppState || !AppState.isLoggedIn) {
+    const existingBanner = $('mk21-toast-banner');
+    if (existingBanner) existingBanner.classList.remove('visible');
+    return;
+  }
   const overlay = $('channelOverlay');
   if (overlay) {
     overlay.textContent = text;
@@ -4978,6 +5075,14 @@ function mk21SettingsBox() {
 function renderServerPanel() {
   const box = mk21SettingsBox();
   const atual = SERVERS[currentServerIndex] || SERVERS[0] || { name: 'Nenhum' };
+  const metrics = getCatalogMetricsSnapshot();
+  const curFreq = getBgSyncFrequency();
+  const bgFreqChoices = [
+    ['manual', 'Manual'],
+    ['1h', '1 hora'],
+    ['6h', '6 horas'],
+    ['24h', '24 horas']
+  ];
   const rows = SERVERS.map((srv, i) => {
     const ativo = i === currentServerIndex;
     return `
@@ -4986,16 +5091,43 @@ function renderServerPanel() {
         <strong style="color:${ativo ? '#4caf50' : '#888'}; font-size:15px;">${ativo ? 'EM USO' : 'CONECTAR'}</strong>
       </button>`;
   }).join('');
+  const bgButtonsHtml = bgFreqChoices.map(([key, label]) =>
+    `<button type="button" class="bgsync-opt-btn cfg-bgsync-btn ${curFreq === key ? 'active' : ''}" data-bgsync="${key}" tabindex="0">${label}</button>`
+  ).join('');
   box.innerHTML = `
     <h3 style="margin:0 0 10px 0; font-size:24px;">📡 Servidor / Fonte</h3>
-    <p style="color:#aaa; margin:0 0 18px 0;">Fonte em uso: <strong style="color:#4caf50;">${cleanServerName(atual.name)}</strong>. Se um canal falhar, o app já testa as fontes alternativas sozinho.</p>
-    <div style="display:flex; flex-direction:column; gap:10px; max-width:620px;">${rows}</div>
+    <p style="color:#aaa; margin:0 0 14px 0;">Fonte em uso: <strong style="color:#4caf50;">${cleanServerName(atual.name)}</strong>. Se um canal falhar, o app já testa as fontes alternativas sozinho.</p>
+    <div class="server-metrics-grid" style="max-width:660px;">
+      <div class="server-metric-card"><span class="server-metric-label">📺 Canais</span><strong class="server-metric-value">${metrics.totalChannels.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">🎬 Filmes (VOD)</span><strong class="server-metric-value">${metrics.totalVOD.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">🍿 Séries</span><strong class="server-metric-value">${metrics.totalSeries.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">📡 EPG / Grupos</span><strong class="server-metric-value">${(metrics.totalEPG || metrics.totalGroups).toLocaleString('pt-BR')}</strong></div>
+    </div>
+    <div class="server-bgsync-bar" style="max-width:660px;">
+      <div class="server-bgsync-info">
+        <span class="server-bgsync-title">🔄 Atualização em segundo plano</span>
+        <span class="server-bgsync-sub">Frequência silenciosa (prioridade baixa)</span>
+      </div>
+      <div class="server-bgsync-options">${bgButtonsHtml}</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px; max-width:660px;">${rows}</div>
     <div style="display:flex; gap:12px; margin-top:18px; flex-wrap:wrap;">
       <button id="cfgOpenServerManager" class="ctrl-btn primary" style="padding:14px 22px;" tabindex="0">⚙️ Gerenciar listas e adicionar servidor</button>
       <button id="cfgRefreshServer" class="ctrl-btn" style="padding:14px 22px;" tabindex="0">🔄 Atualizar catálogo agora</button>
     </div>
     <div id="msgServerChanged" style="margin-top:14px; color:#4caf50; font-weight:bold; font-size:15px; display:none;"></div>
   `;
+  box.querySelectorAll('.cfg-bgsync-btn').forEach(btn => {
+    btn.onclick = () => {
+      const freq = setBgSyncFrequency(btn.getAttribute('data-bgsync'));
+      renderServerPanel();
+      const msg = $('msgServerChanged');
+      if (msg) {
+        msg.textContent = '✅ Sincronização em segundo plano: ' + (CatalogUtils.BG_SYNC_LABELS[freq] || freq);
+        msg.style.display = 'block';
+      }
+    };
+  });
   box.querySelectorAll('.cfg-srv-choice').forEach(btn => {
     btn.onclick = () => {
       const idx = parseInt(btn.getAttribute('data-srv'), 10) || 0;
@@ -5013,10 +5145,12 @@ function renderServerPanel() {
     };
   });
   if ($('cfgOpenServerManager')) $('cfgOpenServerManager').onclick = () => {
-    const modal = $('modalServerPicker');
-    if (modal) { modal.classList.remove('hidden'); activeZone = 'modalServerPicker'; renderServerPickerList(); }
+    openServerPicker();
   };
-  if ($('cfgRefreshServer')) $('cfgRefreshServer').onclick = () => loadServer(true);
+  if ($('cfgRefreshServer')) $('cfgRefreshServer').onclick = () => {
+    resetListAndAuthState({ preserveCatalog: true });
+    loadServer(true);
+  };
 }
 
 // BUFFER / FLUIDEZ
@@ -5614,19 +5748,108 @@ function saveServersToStorage() {
   } catch (e) {}
 }
 
+function mk21EnsureServerManagerExtras() {
+  const modal = $('modalServerPicker');
+  if (!modal) return;
+  const body = modal.querySelector('.server-manager-body');
+  if (!body) return;
+  if (!$('serverMetricsSummary')) {
+    const metricsDiv = document.createElement('div');
+    metricsDiv.id = 'serverMetricsSummary';
+    metricsDiv.className = 'server-metrics-grid';
+    metricsDiv.setAttribute('aria-live', 'polite');
+    metricsDiv.innerHTML =
+      '<div class="server-metric-card"><span class="server-metric-label">📺 Canais</span><strong id="metricTotalChannels" class="server-metric-value">0</strong></div>' +
+      '<div class="server-metric-card"><span class="server-metric-label">🎬 Filmes (VOD)</span><strong id="metricTotalVod" class="server-metric-value">0</strong></div>' +
+      '<div class="server-metric-card"><span class="server-metric-label">🍿 Séries</span><strong id="metricTotalSeries" class="server-metric-value">0</strong></div>' +
+      '<div class="server-metric-card"><span class="server-metric-label">📡 EPG / Grupos</span><strong id="metricTotalEpg" class="server-metric-value">0</strong></div>';
+    body.insertBefore(metricsDiv, body.firstChild);
+  }
+  if (!$('serverBgSyncControl')) {
+    const bgDiv = document.createElement('div');
+    bgDiv.id = 'serverBgSyncControl';
+    bgDiv.className = 'server-bgsync-bar';
+    bgDiv.innerHTML =
+      '<div class="server-bgsync-info">' +
+        '<span class="server-bgsync-title">🔄 Atualização em segundo plano</span>' +
+        '<span id="txtServerSyncLast" class="server-bgsync-sub">Sincronização silenciosa (sem travar a TV)</span>' +
+      '</div>' +
+      '<div class="server-bgsync-options">' +
+        '<button type="button" class="bgsync-opt-btn" data-bgsync="manual" tabindex="0">Manual</button>' +
+        '<button type="button" class="bgsync-opt-btn" data-bgsync="1h" tabindex="0">1h</button>' +
+        '<button type="button" class="bgsync-opt-btn" data-bgsync="6h" tabindex="0">6h</button>' +
+        '<button type="button" class="bgsync-opt-btn" data-bgsync="24h" tabindex="0">24h</button>' +
+      '</div>';
+    const summary = $('serverMetricsSummary');
+    if (summary && summary.nextSibling) body.insertBefore(bgDiv, summary.nextSibling);
+    else body.insertBefore(bgDiv, body.firstChild);
+  }
+}
+
+function mk21UpdateCatalogMetricsUI() {
+  mk21EnsureServerManagerExtras();
+  const metrics = getCatalogMetricsSnapshot();
+  if ($('metricTotalChannels')) $('metricTotalChannels').textContent = metrics.totalChannels.toLocaleString('pt-BR');
+  if ($('metricTotalVod')) $('metricTotalVod').textContent = metrics.totalVOD.toLocaleString('pt-BR');
+  if ($('metricTotalSeries')) $('metricTotalSeries').textContent = metrics.totalSeries.toLocaleString('pt-BR');
+  if ($('metricTotalEpg')) {
+    $('metricTotalEpg').textContent = metrics.totalEPG > 0
+      ? (metrics.totalEPG.toLocaleString('pt-BR') + ' EPG')
+      : (metrics.totalGroups.toLocaleString('pt-BR') + ' grupos');
+  }
+
+  const curFreq = getBgSyncFrequency();
+  const bgBar = $('serverBgSyncControl');
+  if (bgBar) {
+    bgBar.querySelectorAll('.bgsync-opt-btn').forEach(btn => {
+      const key = btn.getAttribute('data-bgsync');
+      btn.classList.toggle('active', key === curFreq);
+      if (!btn.dataset.mk21Bound) {
+        btn.dataset.mk21Bound = '1';
+        btn.onclick = () => {
+          const saved = setBgSyncFrequency(key);
+          mk21UpdateCatalogMetricsUI();
+          showChannelBanner('🔄 Atualização em segundo plano: ' + (CatalogUtils.BG_SYNC_LABELS[saved] || saved));
+        };
+      }
+    });
+  }
+  const srv = SERVERS[currentServerIndex];
+  const lastSyncEl = $('txtServerSyncLast');
+  if (lastSyncEl) {
+    let lastTs = 0;
+    try { if (srv) lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+    const freqLabel = CatalogUtils.BG_SYNC_LABELS[curFreq] || curFreq;
+    if (lastTs > 0) {
+      const dt = new Date(lastTs);
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mm = String(dt.getMinutes()).padStart(2, '0');
+      lastSyncEl.textContent = 'Frequência: ' + freqLabel + ' • Última sinc.: ' + hh + ':' + mm;
+    } else {
+      lastSyncEl.textContent = 'Frequência: ' + freqLabel + ' (prioridade baixa, sem travar a UI)';
+    }
+  }
+}
+
 function openServerPicker() {
   const modal = $('modalServerPicker');
   if (!modal) return;
   mk21TeleportModalForFullscreen(modal, true);
+  mk21UpdateCatalogMetricsUI();
   renderServerPickerList();
   modal.classList.remove('hidden');
   activeZone = 'modalServerPicker';
   focusedServerRowIdx = 0;
-  const first = $('serverItemsGrid') ? $('serverItemsGrid').querySelector('.btn-server-connect') : null;
+  const grid = $('serverItemsGrid');
+  if (grid && typeof mk21UpdateVisualScrollbarFor === 'function') {
+    setTimeout(() => mk21UpdateVisualScrollbarFor(grid), 40);
+  }
+  const first = grid ? grid.querySelector('.btn-server-connect') : null;
   if (first) first.focus();
 }
 
 function renderServerPickerList() {
+  mk21UpdateCatalogMetricsUI();
   const container = $('serverItemsGrid');
   container.innerHTML = '';
 
@@ -5658,12 +5881,14 @@ function renderServerPickerList() {
     btnConnect.onclick = () => {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
-      
+      resetListAndAuthState({ preserveCatalog: true });
+
       // Exibe porcentagem no lugar do botão antes de fechar
       btnConnect.textContent = 'Carregando 25%...';
       setTimeout(() => { btnConnect.textContent = 'Carregando 65%...'; }, 200);
       setTimeout(() => {
         $('modalServerPicker').classList.add('hidden');
+        mk21TeleportModalForFullscreen($('modalServerPicker'), false);
         activeZone = 'channels';
         activeItem = null;
         loadServer(false);
@@ -5691,6 +5916,9 @@ function renderServerPickerList() {
 
     container.appendChild(row);
   });
+  if (typeof mk21UpdateVisualScrollbarFor === 'function') {
+    mk21UpdateVisualScrollbarFor(container);
+  }
 }
 
 function editServer(index) {
@@ -5837,7 +6065,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.7.7';
+const BASE_PACKAGE_VERSION = '2.7.8';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6903,7 +7131,10 @@ function startNativeVoiceSearch() {
 
 
 // 15. MODAIS EXTRAS (PIN & SAÍDA)
-$('btnRefreshList').onclick = () => loadServer(true);
+$('btnRefreshList').onclick = () => {
+  resetListAndAuthState({ preserveCatalog: true });
+  loadServer(true);
+};
 // Adulto só via botão azul do controle / Configurações
 // $('btnHeaderAdult') removido do cabeçalho;
 
@@ -7408,8 +7639,11 @@ function populateServerSelect() {
   };
 }
 
-function showLoginInterface() {
+function showLoginInterface(initialFeedback, isError) {
   AppState.isLoggedIn = false;
+
+  const toastBanner = $('mk21-toast-banner');
+  if (toastBanner) toastBanner.classList.remove('visible');
 
   const home = document.getElementById('home-container');
   const login = document.getElementById('login-container');
@@ -7417,7 +7651,14 @@ function showLoginInterface() {
 
   if (home) home.style.display = 'none';
   if (login) login.style.display = 'flex';
-  if (fb) { fb.textContent = ''; fb.style.display = 'none'; }
+  if (fb) {
+    fb.textContent = '';
+    fb.style.display = 'none';
+    fb.classList.remove('is-error', 'is-info', 'is-success');
+  }
+  if (initialFeedback) {
+    displayFeedback(initialFeedback, Boolean(isError));
+  }
 
   populateServerSelect();
 
@@ -7444,23 +7685,20 @@ function logout() {
   try {
     if (typeof stopCurrentPlayer === 'function') stopCurrentPlayer(true);
   } catch (e) {}
-  if (activePlaylistController) {
-    try { activePlaylistController.abort(); } catch (e) {}
+  if (mk21BgSyncTimer) {
+    clearTimeout(mk21BgSyncTimer);
+    mk21BgSyncTimer = null;
   }
-
+  resetListAndAuthState();
   clearCredentialsFromStorage();
   activeItem = null;
-  allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
   AppState.isLoggedIn = false;
 
   const hud = $('hudLoadingOverlay');
   if (hud) hud.classList.add('hidden');
   document.querySelectorAll('.app-modal, .modal-overlay').forEach(m => m.classList.add('hidden'));
 
-  showLoginInterface();
-  if (typeof showChannelBanner === 'function') {
-    showChannelBanner('Sessão encerrada. Informe suas credenciais para entrar.');
-  }
+  showLoginInterface('Sessão encerrada. Informe suas credenciais para entrar.', false);
 }
 
 function updateFocusableElements() {
@@ -7546,46 +7784,88 @@ async function handleLoginSubmit() {
     return;
   }
 
-  displayFeedback('Autenticando e salvando credenciais...', false);
+  // Aborta requisição de login ou playlist anterior e limpa estado preso antes de tentar novamente
+  resetListAndAuthState({ preserveCatalog: false });
+
+  loginAuthAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const currentController = loginAuthAbortController;
+  const timer = currentController ? setTimeout(() => currentController.abort(), 7000) : null;
+
+  displayFeedback('Autenticando e validando credenciais...', false);
 
   const activeSrv = SERVERS[currentServerIndex] || SERVERS[0];
   let authToken = 'mk21_session_ok';
 
   if (activeSrv && activeSrv.url) {
     try {
-      const c = new AbortController();
-      const timer = setTimeout(() => c.abort(), 6000);
-      const authUrl = `${activeSrv.url}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+      const cleanBase = activeSrv.url.replace(/\/+$/, '');
+      const authUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
       const response = await fetch(authUrl, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
-        signal: c.signal
+        signal: currentController ? currentController.signal : undefined
       });
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+
+      // Se esta tentativa foi substituída por outra mais recente, interrompe silenciosamente
+      if (loginAuthAbortController !== currentController) return;
+
+      const rawText = await response.text();
+      if (response.status === 401 || response.status === 403) {
+        displayFeedback('Credenciais inválidas neste servidor. Verifique usuário e senha.', true);
+        setFocusByIndex(1);
+        return;
+      }
 
       if (response.ok) {
-        const data = await response.json();
+        const data = CatalogUtils.parseSafeJsonResponse(rawText, response.status);
         if (data && data.user_info) {
-          if (data.user_info.auth === 1) {
-            authToken = data.user_info.token || 'mk21_auth_ok';
-          } else if (data.user_info.auth === 0) {
+          if (Number(data.user_info.auth) === 0) {
             displayFeedback('Usuário ou senha inválidos no servidor.', true);
             setFocusByIndex(1);
             return;
           }
+          const st = String(data.user_info.status || '').toLowerCase();
+          if (st === 'expired' || st === 'disabled' || st === 'banned') {
+            displayFeedback('Acesso ' + data.user_info.status + ' neste servidor. Verifique seu plano.', true);
+            setFocusByIndex(1);
+            return;
+          }
+          if (Number(data.user_info.auth) === 1) {
+            authToken = data.user_info.token || 'mk21_auth_ok';
+          }
         }
       }
     } catch (eAuth) {
-      console.warn('[Login] Validação online indisponível ou CORS, salvando credenciais localmente:', eAuth);
+      if (timer) clearTimeout(timer);
+      if (eAuth && eAuth.name === 'AbortError' && loginAuthAbortController !== currentController) {
+        return;
+      }
+      if (eAuth && eAuth.isAuthError) {
+        displayFeedback(eAuth.message || 'Usuário ou senha inválidos no servidor.', true);
+        setFocusByIndex(1);
+        return;
+      }
+      console.warn('[Login] Validação online indisponível (M3U direto / CORS), seguindo para validação de lista:', eAuth);
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (loginAuthAbortController === currentController) {
+        loginAuthAbortController = null;
+      }
     }
+  } else if (timer) {
+    clearTimeout(timer);
   }
 
+  const prevCreds = getSavedCredentials();
+  const credsChanged = !prevCreds || prevCreds.user !== user || prevCreds.pass !== pass || prevCreds.serverIndex !== currentServerIndex;
+  mk21ForceFreshAfterLogin = credsChanged || Boolean($('hudLoadingError') && !$('hudLoadingError').classList.contains('hidden'));
   saveCredentialsToStorage(user, pass, currentServerIndex);
   try {
     localStorage.setItem('mk21_auth_token', authToken);
   } catch (eStore) {}
 
-  displayFeedback('Credenciais salvas! Carregando catálogo...', false);
+  displayFeedback('Credenciais salvas! Carregando catálogo...', false, 'success');
   unlockHomeInterface(true);
 }
 
@@ -7597,6 +7877,7 @@ async function handleOfflineBypass() {
     setFocusByIndex(1);
     return;
   }
+  mk21ForceFreshAfterLogin = false;
   unlockHomeInterface(true);
 }
 
@@ -7626,6 +7907,55 @@ async function getBestAvailableCache(preferredId) {
   return null;
 }
 
+function runLowPriorityBackgroundSync() {
+  if (!AppState.isLoggedIn || loadInFlight) return;
+  const freq = getBgSyncFrequency();
+  if (freq === 'manual') return;
+  const srv = SERVERS[currentServerIndex];
+  if (!srv) return;
+  const intervalMs = CatalogUtils.getBgSyncIntervalMs(freq);
+  if (intervalMs <= 0) return;
+
+  let lastSync = 0;
+  try { lastSync = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+  if (lastSync > 0 && (Date.now() - lastSync) < intervalMs) {
+    scheduleBackgroundSync();
+    return;
+  }
+
+  const dispatchLowPriority = () => {
+    if (!AppState.isLoggedIn || loadInFlight) return;
+    loadServer(true, { silent: true, backgroundLowPriority: true }).catch(() => {});
+  };
+
+  if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(dispatchLowPriority, { timeout: 5000 });
+  } else {
+    setTimeout(dispatchLowPriority, 1000);
+  }
+}
+
+function scheduleBackgroundSync() {
+  if (mk21BgSyncTimer) {
+    clearTimeout(mk21BgSyncTimer);
+    mk21BgSyncTimer = null;
+  }
+  if (!AppState.isLoggedIn) return;
+  const freq = getBgSyncFrequency();
+  const intervalMs = CatalogUtils.getBgSyncIntervalMs(freq);
+  if (!intervalMs || intervalMs <= 0) return;
+
+  const srv = SERVERS[currentServerIndex];
+  let lastSync = 0;
+  try { if (srv) lastSync = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+  const elapsed = lastSync > 0 ? Math.max(0, Date.now() - lastSync) : 0;
+  const delay = Math.max(60000, Math.min(intervalMs, intervalMs - elapsed));
+
+  mk21BgSyncTimer = setTimeout(() => {
+    runLowPriorityBackgroundSync();
+  }, delay);
+}
+
 async function loadInitialCacheAndSyncInBackground() {
   if (SERVERS.length === 0) SERVERS = [...DEFAULT_SERVERS];
   if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
@@ -7634,8 +7964,11 @@ async function loadInitialCacheAndSyncInBackground() {
   if ($('hudLoadingOverlay')) $('hudLoadingOverlay').classList.add('hidden');
   hideSplash();
 
-  let cached = await getBestAvailableCache(srv.id);
-  if (cached && cached.LIVE && cached.LIVE.length > 0) {
+  const shouldForceFresh = mk21ForceFreshAfterLogin;
+  mk21ForceFreshAfterLogin = false;
+
+  let cached = !shouldForceFresh ? await getBestAvailableCache(srv.id) : null;
+  if (cached && cached.LIVE && cached.LIVE.length > 0 && !shouldForceFresh) {
     allCatalog = {
       LIVE: cached.LIVE || [],
       MOVIE: cached.MOVIE || [],
@@ -7646,16 +7979,18 @@ async function loadInitialCacheAndSyncInBackground() {
     selectCategory('ALL');
     renderItemsList();
     updateServerSyncBadge(100, true);
+    if (typeof mk21UpdateCatalogMetricsUI === 'function') mk21UpdateCatalogMetricsUI();
     setTimeout(() => { resumeLastChannelIfPossible(); }, 100);
     setTimeout(() => {
       activeZone = 'channels';
       const firstBtn = $('listItems') ? $('listItems').querySelector('.list-item-btn') : null;
       if (firstBtn) { try { firstBtn.focus(); } catch (e) {} }
     }, 200);
-    setTimeout(() => { loadServer(true, { silent: true }); }, 1200);
+    setTimeout(() => { loadServer(true, { silent: true, backgroundLowPriority: true }); }, 1200);
+    scheduleBackgroundSync();
     return;
   }
-  loadServer(false);
+  loadServer(shouldForceFresh);
 }
 
 function unlockHomeInterface(shouldLoad = true) {
@@ -7694,14 +8029,18 @@ function unlockHomeInterface(shouldLoad = true) {
       try { loadServer(false); } catch (eFallback) {}
     }
   }
+  scheduleBackgroundSync();
 }
 
-function displayFeedback(msg, isError) {
+function displayFeedback(msg, isError, tone) {
   const fb = document.getElementById('login-feedback');
   if (fb) {
     fb.textContent = msg;
     fb.style.display = 'block';
-    fb.style.color = isError ? '#FF5252' : '#FFFFFF';
+    fb.classList.remove('is-error', 'is-info', 'is-success');
+    const resolvedTone = tone || (isError ? 'error' : 'info');
+    fb.classList.add('is-' + resolvedTone);
+    fb.style.color = '';
   }
 }
 
@@ -7956,7 +8295,8 @@ function renderQualityPanel() {
 }
 
 /* ------------------------------------------------- troca automática servidor */
-function mk21AutoAdvanceServer(err, failedServer) {
+function mk21AutoAdvanceServer(err, failedServer, expectedLoadId) {
+  if (err && err.isAuthError) return false;
   if (!Array.isArray(SERVERS) || SERVERS.length < 2) return false;
   if (mk21AutoServerTries >= SERVERS.length - 1) {
     mk21AutoServerTries = 0;
@@ -7975,8 +8315,11 @@ function mk21AutoAdvanceServer(err, failedServer) {
   if (typeof saveServersToStorage === 'function') {
     try { saveServersToStorage(); } catch (e) {}
   }
-  setTimeout(() => {
-    if (typeof loadServer === 'function') loadServer(true);
+  if (mk21AutoAdvanceTimer) clearTimeout(mk21AutoAdvanceTimer);
+  mk21AutoAdvanceTimer = setTimeout(() => {
+    mk21AutoAdvanceTimer = null;
+    if (typeof expectedLoadId === 'number' && expectedLoadId !== serverLoadGeneration) return;
+    if (typeof loadServer === 'function') loadServer(true, { fromAutoAdvance: true });
   }, 1500);
   return true;
 }

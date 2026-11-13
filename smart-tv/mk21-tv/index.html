@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.7.7">
-  <link rel="stylesheet" href="css/style.css?v=2.7.7">
+  <link rel="stylesheet" href="styles.css?v=2.7.8">
+  <link rel="stylesheet" href="css/style.css?v=2.7.8">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -33,6 +33,7 @@
   <!-- 1. MODAL DE LOGIN FULLSCREEN (PRETO ABSOLUTO + IDENTIDADE MK21) -->
   <div id="login-container" class="login-modal-fullscreen" style="display: none;">
     <div class="login-card" id="login-card">
+      <div class="login-neon-line" aria-hidden="true"><div class="login-neon-beam"></div></div>
       <div class="brand-header">
         <img src="assets/logo.png" alt="MK21 Play" class="brand-logo" onerror="this.src='icon.png'">
         <div class="brand-wordmark">MK<span>21</span> PLAY</div>
@@ -95,8 +96,8 @@
           </button>
         </div>
 
-        <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.7.7 • Smart TV (webOS &amp; Tizen)
+        <div class="login-version" style="margin-top: 10px;">
+          MK21 PLAY OTT • v2.7.8 • Smart TV (webOS &amp; Tizen)
         </div>
       </form>
     </div>
@@ -311,19 +312,53 @@
       </div>
 
       <div class="server-manager-body">
+        <!-- Totalizador do Catálogo Após Parsing -->
+        <div id="serverMetricsSummary" class="server-metrics-grid" aria-live="polite">
+          <div class="server-metric-card">
+            <span class="server-metric-label">📺 Canais</span>
+            <strong id="metricTotalChannels" class="server-metric-value">0</strong>
+          </div>
+          <div class="server-metric-card">
+            <span class="server-metric-label">🎬 Filmes (VOD)</span>
+            <strong id="metricTotalVod" class="server-metric-value">0</strong>
+          </div>
+          <div class="server-metric-card">
+            <span class="server-metric-label">🍿 Séries</span>
+            <strong id="metricTotalSeries" class="server-metric-value">0</strong>
+          </div>
+          <div class="server-metric-card">
+            <span class="server-metric-label">📡 EPG / Grupos</span>
+            <strong id="metricTotalEpg" class="server-metric-value">0</strong>
+          </div>
+        </div>
+
+        <!-- Frequência de Atualização em Segundo Plano (Baixa Prioridade) -->
+        <div id="serverBgSyncControl" class="server-bgsync-bar">
+          <div class="server-bgsync-info">
+            <span class="server-bgsync-title">🔄 Atualização em segundo plano</span>
+            <span id="txtServerSyncLast" class="server-bgsync-sub">Sincronização silenciosa (sem travar a TV)</span>
+          </div>
+          <div class="server-bgsync-options">
+            <button type="button" class="bgsync-opt-btn" data-bgsync="manual" tabindex="0">Manual</button>
+            <button type="button" class="bgsync-opt-btn" data-bgsync="1h" tabindex="0">1h</button>
+            <button type="button" class="bgsync-opt-btn" data-bgsync="6h" tabindex="0">6h</button>
+            <button type="button" class="bgsync-opt-btn" data-bgsync="24h" tabindex="0">24h</button>
+          </div>
+        </div>
+
         <h4 style="margin: 0; color: #cbd5e1; font-size: 18px;">Servidores e Listas Cadastrados:</h4>
         <!-- Lista de Servidores com Conectar, Editar e Excluir -->
-        <div id="serverItemsGrid" class="servers-manager-list scrollable-container"></div>
+        <div id="serverItemsGrid" class="servers-manager-list scrollable-container" tabindex="0"></div>
 
         <!-- Formulário de Inclusão e Edição Manual -->
         <div class="add-server-card">
           <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
           <input type="hidden" id="inputEditServerIndex" value="-1">
-          <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-            <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
-            <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+          <div class="add-server-inputs-row">
+            <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; min-width: 0; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+            <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; min-width: 0; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <div class="add-server-actions-row">
             <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 10px 22px;" tabindex="0">💾 Salvar e Conectar</button>
             <button id="btnLoadOfflineCache" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; color: #ffd54f; border-color: #ffd54f;" tabindex="0">📂 Carregar Cache Offline</button>
             <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">Cancelar Edição</button>
@@ -611,8 +646,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.7.7, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.7.7') {
+        // Se a versão OTA armazenada for anterior a 2.7.8, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.7.8') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -635,7 +670,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.7.7';
+              fallback.src = 'app.js?v=2.7.8';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -652,7 +687,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.7.7';
+      s.src = 'app.js?v=2.7.8';
       document.body.appendChild(s);
     })();
   </script>

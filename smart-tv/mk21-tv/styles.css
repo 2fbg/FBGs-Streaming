@@ -958,27 +958,31 @@ video {
 
 /* MODAL GERENCIADOR DE SERVIDORES & MANUTENÇÃO */
 .server-manager-modal {
-  width: 920px;
-  max-width: 96vw;
+  width: 1000px;
+  max-width: 94vw;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden !important;
 }
 
 .server-manager-body {
   overflow-y: auto;
+  overflow-x: hidden !important;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-right: 4px;
+  padding-right: 12px;
 }
 
 .servers-manager-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 280px;
+  max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden !important;
+  position: relative;
+  padding-right: 18px !important;
+  margin: 8px 0 12px 0;
 }
 
 .server-manager-row {
@@ -3731,4 +3735,327 @@ div[style*="overflow"], .pane-scroll, .list-container,
   box-shadow: 0 0 12px rgba(255, 213, 79, 0.95);
 }
 
+/* ==========================================
+   v2.7.8 — LOGIN GPU NEON ANIMATION + ZERO SCROLLBAR + INLINE FEEDBACK
+   ========================================== */
+#login-container.login-modal-fullscreen {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  padding: 12px 16px !important;
+}
 
+#login-container .login-card {
+  max-height: calc(100vh - 24px) !important;
+  overflow: hidden !important;
+  padding: 26px 40px 20px !important;
+  gap: 10px !important;
+  position: relative !important;
+}
+
+#login-container .brand-header {
+  margin-bottom: 2px !important;
+}
+
+#login-container .brand-logo {
+  height: 68px !important;
+  max-width: 260px !important;
+}
+
+#login-container .brand-wordmark {
+  margin-top: 6px !important;
+  font-size: 24px !important;
+}
+
+#login-container .brand-tagline {
+  margin-top: 4px !important;
+  font-size: 12px !important;
+}
+
+#login-container .input-group {
+  margin-bottom: 9px !important;
+  gap: 5px !important;
+}
+
+#login-container .input-field,
+#login-container select.input-field {
+  height: 48px !important;
+  font-size: 18px !important;
+}
+
+#login-container .action-group {
+  gap: 10px !important;
+  margin-top: 8px !important;
+}
+
+#login-container .btn-primary,
+#login-container .btn-secondary {
+  height: 48px !important;
+  font-size: 16px !important;
+}
+
+@media (max-height: 760px) {
+  #login-container .login-card {
+    padding: 18px 32px 14px !important;
+    gap: 8px !important;
+  }
+  #login-container .brand-logo {
+    height: 52px !important;
+  }
+  #login-container .brand-wordmark {
+    font-size: 21px !important;
+  }
+  #login-container .input-field,
+  #login-container select.input-field,
+  #login-container .btn-primary,
+  #login-container .btn-secondary {
+    height: 44px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* Linha vermelha superior com feixe neon GPU-accelerated (apenas transform + opacity) */
+.login-neon-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(255, 0, 0, 0.22);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.login-neon-beam {
+  position: absolute;
+  top: -18px;
+  left: -25%;
+  width: 150%;
+  height: 39px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 0, 0.25) 25%, #ff1e2d 46%, #ff8a80 50%, #ff1e2d 54%, rgba(255, 0, 0, 0.25) 75%, transparent 100%);
+  background-image: conic-gradient(from 0deg, transparent 0deg, #ff0000 55deg, #ff6b6b 90deg, #ff0000 125deg, transparent 180deg, transparent 360deg);
+  -webkit-animation: mk21NeonSweep 3.2s linear infinite;
+  animation: mk21NeonSweep 3.2s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* Fallback OTA caso o HTML antigo ainda não tenha .login-neon-line */
+#login-container .login-card::before {
+  height: 3px !important;
+  background: linear-gradient(90deg, transparent 0%, #ff0000 30%, #ff7a7a 50%, #ff0000 70%, transparent 100%) !important;
+  -webkit-animation: mk21CardLineGlow 2.8s ease-in-out infinite;
+  animation: mk21CardLineGlow 2.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@-webkit-keyframes mk21NeonSweep {
+  0% { -webkit-transform: translate3d(-45%, 0, 0) rotate(0deg); opacity: 0.72; }
+  50% { -webkit-transform: translate3d(0%, 0, 0) rotate(180deg); opacity: 1; }
+  100% { -webkit-transform: translate3d(45%, 0, 0) rotate(360deg); opacity: 0.72; }
+}
+
+@keyframes mk21NeonSweep {
+  0% { transform: translate3d(-45%, 0, 0) rotate(0deg); opacity: 0.72; }
+  50% { transform: translate3d(0%, 0, 0) rotate(180deg); opacity: 1; }
+  100% { transform: translate3d(45%, 0, 0) rotate(360deg); opacity: 0.72; }
+}
+
+@-webkit-keyframes mk21CardLineGlow {
+  0% { -webkit-transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+  50% { -webkit-transform: translate3d(18%, 0, 0); opacity: 1; }
+  100% { -webkit-transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+}
+
+@keyframes mk21CardLineGlow {
+  0% { transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+  50% { transform: translate3d(18%, 0, 0); opacity: 1; }
+  100% { transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+}
+
+#login-container .feedback-message {
+  margin: 4px 0 2px 0 !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+}
+
+#login-container .feedback-message.is-error {
+  background: rgba(229, 9, 20, 0.22) !important;
+  color: #ff8a8a !important;
+  border: 1px solid rgba(255, 77, 77, 0.65) !important;
+}
+
+#login-container .feedback-message.is-info {
+  background: rgba(59, 130, 246, 0.16) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(96, 165, 250, 0.45) !important;
+}
+
+#login-container .feedback-message.is-success {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #86efac !important;
+  border: 1px solid rgba(74, 222, 128, 0.5) !important;
+}
+
+/* ==========================================
+   v2.7.8 — GERENCIADOR DE SERVIDORES: TOTALIZADOR + BACKGROUND SYNC + ZERO OVERFLOW X
+   ========================================== */
+.server-manager-row {
+  margin-bottom: 8px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.server-manager-row .server-info-url {
+  max-width: 100% !important;
+}
+
+.server-metrics-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.server-metric-card {
+  flex: 1 1 0;
+  min-width: 0;
+  background: #141826;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-right: 10px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.server-metric-card:last-child {
+  margin-right: 0;
+}
+
+.server-metric-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.server-metric-value {
+  font-size: 22px;
+  font-weight: 900;
+  color: #ffd54f;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.server-bgsync-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #141826;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.server-bgsync-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-right: 12px;
+}
+
+.server-bgsync-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.server-bgsync-sub {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.server-bgsync-options {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.bgsync-opt-btn {
+  padding: 8px 14px;
+  margin-left: 8px;
+  background: #1f2437;
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bgsync-opt-btn:first-child {
+  margin-left: 0;
+}
+
+.bgsync-opt-btn.active {
+  background: #e50914;
+  border-color: #ff6b6b;
+  color: #ffffff;
+}
+
+.bgsync-opt-btn:focus,
+.bgsync-opt-btn:focus-visible {
+  outline: none !important;
+  border-color: #ffffff !important;
+  background: #ff9800 !important;
+  color: #000000 !important;
+  box-shadow: 0 0 14px rgba(255, 152, 0, 0.75) !important;
+}
+
+.add-server-inputs-row {
+  display: flex;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.add-server-inputs-row > input:first-child {
+  margin-right: 12px;
+}
+
+.add-server-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.add-server-actions-row > button {
+  margin: 0 8px 6px 0 !important;
+}
+
+#serverItemsGrid {
+  overflow-x: hidden !important;
+}
+
+#serverItemsGrid::-webkit-scrollbar:horizontal,
+.server-manager-body::-webkit-scrollbar:horizontal {
+  height: 0 !important;
+  display: none !important;
+}
