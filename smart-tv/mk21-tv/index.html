@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.7.4">
-  <link rel="stylesheet" href="css/style.css?v=2.7.4">
+  <link rel="stylesheet" href="styles.css?v=2.7.5">
+  <link rel="stylesheet" href="css/style.css?v=2.7.5">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -30,11 +30,12 @@
 </head>
 <body class="mk21-tv-body">
 
-  <!-- 1. MODAL DE LOGIN FULLSCREEN (SEM SPLASH SCREEN) -->
+  <!-- 1. MODAL DE LOGIN FULLSCREEN (PRETO ABSOLUTO + IDENTIDADE MK21) -->
   <div id="login-container" class="login-modal-fullscreen" style="display: none;">
     <div class="login-card" id="login-card">
       <div class="brand-header">
         <img src="assets/logo.png" alt="MK21 Play" class="brand-logo" onerror="this.src='icon.png'">
+        <div class="brand-wordmark">MK<span>21</span> PLAY</div>
         <div class="brand-tagline">MAIS QUE UM NÚMERO É RESULTADO</div>
       </div>
 
@@ -59,6 +60,7 @@
             id="user-input" 
             class="focusable input-field" 
             tabindex="2" 
+            value=""
             placeholder="Digite seu usuário"
             inputmode="text"
             autocomplete="off" 
@@ -69,13 +71,14 @@
         </div>
 
         <div class="input-group">
-          <label for="pass-input">Senha</label>
+          <label for="pass-input">Senha / Token</label>
           <input 
             type="password" 
             id="pass-input" 
             class="focusable input-field" 
             tabindex="3" 
-            placeholder="Digite sua senha"
+            value=""
+            placeholder="Digite sua senha ou token"
             inputmode="text"
             autocomplete="off"
           >
@@ -85,7 +88,7 @@
 
         <div class="action-group">
           <button type="button" id="btn-login" class="focusable btn-primary" tabindex="4">
-            ENTRAR
+            ENTRAR E LEMBRAR
           </button>
           <button type="button" id="btn-offline" class="focusable btn-secondary" tabindex="5">
             MODO OFFLINE
@@ -93,7 +96,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.7.2 • Smart TV (webOS & Tizen)
+          MK21 PLAY OTT • v2.7.5 • Smart TV (webOS &amp; Tizen)
         </div>
       </form>
     </div>
@@ -135,6 +138,9 @@
       <button id="btnRefreshList" class="action-btn header-focusable" title="Atualizar lista agora" tabindex="0">
         <i class="fa-solid fa-rotate"></i> Atualizar
       </button>
+      <button id="btnHeaderLogout" class="action-btn header-focusable" title="Sair da conta e trocar credenciais" tabindex="0" style="background:#2a1215; border-color:rgba(229,9,20,0.45); color:#ffb4b4;">
+        <i class="fa-solid fa-right-from-bracket"></i> Sair
+      </button>
       <div id="liveClock" class="clock-display">00:00:00</div>
     </div>
   </header>
@@ -151,7 +157,7 @@
           <span id="txtCatHeaderTitle">📁 Categorias</span>
           <span id="badgeCatCount" class="counter-badge">0</span>
         </div>
-        <ul id="listCategories" class="pane-scroll" tabindex="0"></ul>
+        <ul id="listCategories" class="pane-scroll scrollable-container" tabindex="0"></ul>
       </div>
 
       <!-- COLUNA 2: ITENS / CANAIS / FILMES (36%) -->
@@ -163,7 +169,7 @@
           <span id="txtCurrentCategoryTitle">📺 Todos os Canais</span>
           <span id="badgeItemsCount" class="counter-badge">0</span>
         </div>
-        <ul id="listItems" class="pane-scroll" tabindex="0"></ul>
+        <ul id="listItems" class="pane-scroll scrollable-container" tabindex="0"></ul>
       </div>
 
       <!-- COLUNA 3: PLAYER DE VÍDEO & INFORMAÇÕES (40%) -->
@@ -250,7 +256,7 @@
 
     <!-- SEÇÃO CONFIGURAÇÕES (CLONE VIZZION PLAY DAS FOTOS) -->
     <section id="sectionSettings" class="content-section hidden">
-      <div class="settings-left-menu">
+      <div class="settings-left-menu scrollable-container">
         <button id="cfgBtnInfo" class="cfg-menu-item active" tabindex="0">⚙️ Informação geral</button>
         <button id="cfgBtnFonte" class="cfg-menu-item" tabindex="0">🔤 Tamanho da fonte</button>
         <button id="cfgBtnFiltro" class="cfg-menu-item" tabindex="0">📦 Filtrar conteúdo</button>
@@ -270,7 +276,7 @@
         </div>
       </div>
 
-      <div id="settingsDetailBox" class="settings-detail-panel"></div>
+      <div id="settingsDetailBox" class="settings-detail-panel scrollable-container"></div>
     </section>
 
   </main>
@@ -307,7 +313,7 @@
       <div class="server-manager-body">
         <h4 style="margin: 0; color: #cbd5e1; font-size: 18px;">Servidores e Listas Cadastrados:</h4>
         <!-- Lista de Servidores com Conectar, Editar e Excluir -->
-        <div id="serverItemsGrid" class="servers-manager-list"></div>
+        <div id="serverItemsGrid" class="servers-manager-list scrollable-container"></div>
 
         <!-- Formulário de Inclusão e Edição Manual -->
         <div class="add-server-card">
@@ -526,7 +532,7 @@
           <button id="btnCloseDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0">✕ Fechar</button>
         </div>
       </div>
-      <div id="devLogsContainer" style="background:#05070d; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; height: 380px; overflow-y: auto; font-family: monospace, Courier, sans-serif; font-size: 13px; line-height: 1.5; color: #cbd5e1; user-select: text;">
+      <div id="devLogsContainer" class="scrollable-container" style="background:#05070d; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; height: 380px; overflow-y: auto; font-family: monospace, Courier, sans-serif; font-size: 13px; line-height: 1.5; color: #cbd5e1; user-select: text;">
         <div style="color:#64748b;">[Console inicializado. Logs do player, rede, codecs e controle remoto aparecerão aqui...]</div>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px; font-size: 12px; color: #94a3b8;">
@@ -575,7 +581,7 @@
           <button id="tabOmniSeries" class="omnisearch-tab-btn" tabindex="0">🍿 Séries (<span id="countOmniSeries">0</span>)</button>
         </div>
       </div>
-      <div class="omnisearch-body">
+      <div class="omnisearch-body scrollable-container">
         <div id="omnisearchResultsGrid" class="omnisearch-results-grid"></div>
         <div id="omnisearchEmptyState" style="text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 16px;">
           Digite uma palavra-chave para buscar instantaneamente em todo o catálogo.
@@ -591,7 +597,7 @@
         <span id="txtEpgGuideTitle" style="color:#ffd54f; font-size:20px; font-weight:800;">🔵 Programação do Canal (EPG)</span>
         <button id="btnCloseEpgGuide" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
       </div>
-      <div id="epgScheduleList" style="padding:20px; max-height:480px; overflow-y:auto;">
+      <div id="epgScheduleList" class="scrollable-container" style="padding:20px; max-height:480px; overflow-y:auto;">
         <div style="text-align:center; padding:30px; color:#aaa;">Carregando grade de programação...</div>
       </div>
     </div>
@@ -602,8 +608,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.7.1, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.7.2') {
+        // Se a versão OTA armazenada for anterior a 2.7.5, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.7.5') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -626,7 +632,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.7.4';
+              fallback.src = 'app.js?v=2.7.5';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -643,7 +649,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.7.4';
+      s.src = 'app.js?v=2.7.5';
       document.body.appendChild(s);
     })();
   </script>

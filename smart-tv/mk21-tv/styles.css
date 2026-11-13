@@ -3408,8 +3408,100 @@ div[style*="overflow"], .pane-scroll, .list-container,
 #listCategories:focus-within::-webkit-scrollbar,
 #listItems:focus-within::-webkit-scrollbar,
 #serverItemsGrid:focus-within::-webkit-scrollbar,
-#devLogsContainer:focus-within::-webkit-scrollbar {
+#devLogsContainer:focus-within::-webkit-scrollbar,
+.scrollable-container:focus-within::-webkit-scrollbar {
   display: block !important;
   opacity: 1 !important;
   visibility: visible !important;
 }
+
+/* ==========================================
+   v2.7.5 — WEBOS CHROMIUM SCROLLBAR FORCE-VISIBLE + LOGIN POLISH
+   ========================================== */
+.scrollable-container,
+.force-scroll-visible,
+#listItems.force-scroll-visible,
+#listCategories.force-scroll-visible,
+#serverList.force-scroll-visible,
+#serverItemsGrid.force-scroll-visible,
+#devLogsContainer.force-scroll-visible {
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #ff9800 #080a10 !important;
+}
+
+.scrollable-container::-webkit-scrollbar,
+.force-scroll-visible::-webkit-scrollbar,
+#listItems.force-scroll-visible::-webkit-scrollbar,
+#listCategories.force-scroll-visible::-webkit-scrollbar,
+#serverList.force-scroll-visible::-webkit-scrollbar,
+#serverItemsGrid.force-scroll-visible::-webkit-scrollbar,
+#devLogsContainer.force-scroll-visible::-webkit-scrollbar {
+  width: 14px !important;
+  height: 14px !important;
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: #080a10 !important;
+}
+
+.scrollable-container::-webkit-scrollbar-track,
+.force-scroll-visible::-webkit-scrollbar-track {
+  background: #080a10 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb,
+.force-scroll-visible::-webkit-scrollbar-thumb {
+  background: #ff9800 !important;
+  background-color: #ff9800 !important;
+  border-radius: 8px !important;
+  border: 2px solid #000000 !important;
+  min-height: 48px !important;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.75) !important;
+}
+
+/* Login v2.7.5: Preto Absoluto + Identidade Visual MK21 */
+#login-container.login-modal-fullscreen {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+#login-container .login-card {
+  background: #050505 !important;
+  border: 2px solid #e50914 !important;
+  box-shadow: 0 0 42px rgba(229, 9, 20, 0.28), 0 24px 64px rgba(0, 0, 0, 1) !important;
+}
+
+#login-container .brand-wordmark {
+  margin-top: 8px !important;
+  font-size: 26px !important;
+  font-weight: 900 !important;
+  letter-spacing: 4px !important;
+  color: #ffffff !important;
+}
+
+#login-container .brand-wordmark span {
+  color: #e50914 !important;
+}
+
+#login-container .input-field {
+  background: #0f0f12 !important;
+  border: 2px solid #242429 !important;
+  color: #ffffff !important;
+}
+
+#login-container .input-field::placeholder {
+  color: #6b7280 !important;
+}
+
+#btnHeaderLogout:hover,
+#btnHeaderLogout:focus {
+  background: #e50914 !important;
+  color: #ffffff !important;
+  border-color: #ffd54f !important;
+}
+

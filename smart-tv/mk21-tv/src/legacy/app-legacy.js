@@ -28,6 +28,8 @@ window.mk21App = {
   stopCurrentPlayer: function (abort) { return stopCurrentPlayer(abort); },
   switchContentType: function (type) { return switchContentType(type); },
   openAudioSubsModal: function () { return openAudioSubsModal(); },
+  logout: function () { return logout(); },
+  initWebOSScrollFix: function () { return initWebOSScrollFix(); },
   get activeItem() { return activeItem; },
   get playerService() { return window.FBG2PlayerService; }
 };
@@ -151,31 +153,66 @@ try {
 } catch (e) {}
 
 
-// Credenciais compartilhadas (Xtream) — válidas para TODOS os servidores
-const SHARED_IPTV_USER = '766119467';
-const SHARED_IPTV_PASS = '447915468';
+// Persistência de credenciais no localStorage (sem credenciais hardcoded)
+const MK21_CREDENTIALS_KEY = 'mk21_credentials';
 
-function getSharedCredentials() {
+function getSavedCredentials() {
   try {
-    const u = localStorage.getItem('mk21_username') || localStorage.getItem('mk21_user') || localStorage.getItem('iptv_user');
-    const p = localStorage.getItem('mk21_password') || localStorage.getItem('mk21_pass') || localStorage.getItem('iptv_pass');
-    // Se vazio, demo ou inválido, usa as credenciais oficiais compartilhadas
-    const user = (u && u !== 'demo' && String(u).length > 2) ? u : SHARED_IPTV_USER;
-    const pass = (p && p !== 'demo' && String(p).length > 2) ? p : SHARED_IPTV_PASS;
-    return { user, pass };
-  } catch (e) {
-    return { user: SHARED_IPTV_USER, pass: SHARED_IPTV_PASS };
-  }
+    const raw = localStorage.getItem(MK21_CREDENTIALS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.user === 'string' && typeof parsed.pass === 'string') {
+      const user = parsed.user.trim();
+      const pass = parsed.pass.trim();
+      if (user.length > 0 && pass.length > 0) {
+        return {
+          user: user,
+          pass: pass,
+          serverIndex: typeof parsed.serverIndex === 'number' ? parsed.serverIndex : null
+        };
+      }
+    }
+  } catch (e) {}
+  return null;
 }
 
-function ensureSharedCredentialsStored() {
+function saveCredentialsToStorage(user, pass, serverIndex) {
+  const cleanUser = String(user || '').trim();
+  const cleanPass = String(pass || '').trim();
+  const payload = {
+    user: cleanUser,
+    pass: cleanPass,
+    serverIndex: typeof serverIndex === 'number' ? serverIndex : currentServerIndex,
+    savedAt: Date.now()
+  };
   try {
-    const c = getSharedCredentials();
-    localStorage.setItem('mk21_username', c.user);
-    localStorage.setItem('mk21_password', c.pass);
-    localStorage.setItem('mk21_user', c.user);
-    localStorage.setItem('mk21_pass', c.pass);
+    localStorage.setItem(MK21_CREDENTIALS_KEY, JSON.stringify(payload));
+    localStorage.setItem('mk21_user', cleanUser);
+    localStorage.setItem('mk21_username', cleanUser);
+    localStorage.setItem('iptv_user', cleanUser);
+    localStorage.setItem('mk21_pass', cleanPass);
+    localStorage.setItem('mk21_password', cleanPass);
+    localStorage.setItem('iptv_pass', cleanPass);
   } catch (e) {}
+}
+
+function clearCredentialsFromStorage() {
+  try {
+    localStorage.removeItem(MK21_CREDENTIALS_KEY);
+    localStorage.removeItem('mk21_auth_token');
+    localStorage.removeItem('mk21_user');
+    localStorage.removeItem('mk21_username');
+    localStorage.removeItem('iptv_user');
+    localStorage.removeItem('mk21_pass');
+    localStorage.removeItem('mk21_password');
+    localStorage.removeItem('iptv_pass');
+  } catch (e) {}
+}
+
+function getSharedCredentials() {
+  const saved = getSavedCredentials();
+  if (saved) return saved;
+  return { user: '', pass: '' };
 }
 
 const ADULT_KEYWORDS = [
@@ -710,7 +747,7 @@ let activeModalSeriesData = null;
 
 const headerElements = [
   'tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings',
-  'btnHeaderServer', 'btnRefreshList'
+  'btnHeaderServer', 'btnHeaderLogs', 'btnRefreshList', 'btnHeaderLogout'
 ];
 
 // RELÓGIO
@@ -960,14 +997,16 @@ function groupSeriesItems(items) {
 // LEITOR INCREMENTAL DE LISTAS M3U: não mantém texto bruto nem array de 300k linhas
 async function streamPlaylistContent(url, signal, onItem, onProgress) {
   let targetUrl = url;
-  ensureSharedCredentialsStored();
-  const creds = getSharedCredentials();
+  const creds = getSavedCredentials() || { user: '', pass: '' };
   const savedUser = creds.user;
   const savedPass = creds.pass;
   if (!targetUrl.includes('get.php') && !targetUrl.includes('.m3u') && !targetUrl.includes('.ts') && !targetUrl.includes('.m3u8')) {
+    if (!savedUser || !savedPass) {
+      throw new Error('Credenciais ausentes. Faça login novamente.');
+    }
     targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(savedUser)}&password=${encodeURIComponent(savedPass)}&type=m3u_plus&output=ts`;
   }
-  console.log('[MK21] Streaming da lista:', targetUrl.replace(savedPass, '***'));
+  console.log('[MK21] Streaming da lista:', savedPass ? targetUrl.replace(savedPass, '***') : targetUrl);
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
   try {
@@ -2139,7 +2178,7 @@ async function updateSmartTvEpg(item) {
     const sIdMatch = item.url.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
     if (sIdMatch && sIdMatch[1]) streamId = sIdMatch[1];
   }
-  const _ec = getSharedCredentials();
+  const _ec = getSavedCredentials() || { user: '', pass: '' };
   const user = _ec.user;
   const pass = _ec.pass;
 
@@ -4379,7 +4418,8 @@ const MK21_SETTINGS_SPEC = [
   ['cfgBtnQualidadeVideo', '🎞️ Qualidade de vídeo'],
   ['cfgBtnBuffer', '⚡ Buffer e fluidez'],
   ['cfgBtnAdulto', '🔞 Restrição adulto'],
-  ['cfgBtnPin', '🔒 Alterar código pin']
+  ['cfgBtnPin', '🔒 Alterar código pin'],
+  ['cfgBtnLogout', '🚪 Sair da Conta (Logout)']
 ];
 const CFG_BUTTONS = MK21_SETTINGS_SPEC.map(item => item[0]);
 
@@ -4435,18 +4475,29 @@ CFG_BUTTONS.forEach(bId => {
 });
 
 function renderSettings(sec) {
+  if (sec === 'logout') {
+    logout();
+    return;
+  }
   const box = $('settingsDetailBox');
   if (sec === 'info') {
+    const activeCreds = getSavedCredentials();
+    const activeUserLabel = activeCreds && activeCreds.user ? activeCreds.user : 'Sessão Offline / Visitante';
     box.innerHTML = `
       <h3 style="margin:0 0 16px 0; font-size:24px; border-bottom:1px solid #333; padding-bottom:8px;">Informações da Conta</h3>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px;">
         <div style="background:#1a1e2d; padding:12px 16px; border-radius:8px;">
-          <div style="font-size:14px; color:#888;">Status da Licença</div>
-          <div style="font-size:18px; font-weight:700; color:#4caf50;">Ativo (Plano Vitalício)</div>
+          <div style="font-size:14px; color:#888;">Usuário Conectado</div>
+          <div style="font-size:18px; font-weight:700; color:#4caf50;">${activeUserLabel}</div>
         </div>
-        <div style="background:#1a1e2d; padding:12px 16px; border-radius:8px;">
-          <div style="font-size:14px; color:#888;">Vencimento</div>
-          <div style="font-size:18px; font-weight:700; color:#fff;">14.12.2027</div>
+        <div style="background:#1a1e2d; padding:12px 16px; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <div>
+            <div style="font-size:14px; color:#888;">Sessão Local</div>
+            <div style="font-size:16px; font-weight:700; color:#fff;">Salva no dispositivo</div>
+          </div>
+          <button id="btnAccountLogout" class="ctrl-btn" style="padding:10px 18px; background:#7f1d1d; border-color:#ef4444; color:#fff; flex:0 0 auto;" tabindex="0">
+            🚪 Sair
+          </button>
         </div>
       </div>
       <h3 style="margin:0 0 16px 0; font-size:24px; border-bottom:1px solid #333; padding-bottom:8px;">Informação do Dispositivo</h3>
@@ -4477,6 +4528,8 @@ function renderSettings(sec) {
 
     const btnUp = $('btnOpenUpdateModal');
     if (btnUp) btnUp.onclick = () => openAppUpdateModal(true);
+    const btnAccLogout = $('btnAccountLogout');
+    if (btnAccLogout) btnAccLogout.onclick = () => logout();
   } else if (sec === 'speedtest') {
     runSpeedTest();
   } else if (sec === 'fonte') {
@@ -4990,6 +5043,7 @@ function renderClearStoragePanel() {
     try {
       // Limpa só chaves de app, não tudo cegamente
       const keep = {
+        mk21_credentials: localStorage.getItem('mk21_credentials'),
         mk21_username: localStorage.getItem('mk21_username'),
         mk21_password: localStorage.getItem('mk21_password'),
         mk21_user: localStorage.getItem('mk21_user'),
@@ -5006,7 +5060,6 @@ function renderClearStoragePanel() {
       Object.keys(keep).forEach(function (k) {
         if (keep[k] != null) localStorage.setItem(k, keep[k]);
       });
-      try { ensureSharedCredentialsStored(); } catch (e) {}
   try { restoreSortOrder(); } catch (e) {}
       localStorage.removeItem('mk21_ota_app_js');
       localStorage.removeItem('mk21_ota_styles_css');
@@ -5375,7 +5428,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.7.2';
+const BASE_PACKAGE_VERSION = '2.7.5';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6516,9 +6569,6 @@ if (typeof document !== 'undefined') {
 }
 
 window.addEventListener('load', () => {
-  ensureSharedCredentialsStored();
-  // OTA ativo preservado na TV para manter atualizações persistentes
-
   try {
     const savedFont = localStorage.getItem('mk21_font_size');
     if (savedFont) applyFontSize(savedFont);
@@ -6529,33 +6579,24 @@ window.addEventListener('load', () => {
     if (saved !== null && SERVERS[saved]) currentServerIndex = parseInt(saved, 10);
   } catch (e) {}
 
-    try {
-      const tmdbToggle = $('cfgToggleTmdb');
-      if (tmdbToggle) {
-        tmdbToggle.checked = localStorage.getItem('mk21_use_tmdb') !== 'false';
-        tmdbToggle.onchange = () => {
-          localStorage.setItem('mk21_use_tmdb', tmdbToggle.checked);
-        };
-      }
-    } catch (e) {}
+  try {
+    const tmdbToggle = $('cfgToggleTmdb');
+    if (tmdbToggle) {
+      tmdbToggle.checked = localStorage.getItem('mk21_use_tmdb') !== 'false';
+      tmdbToggle.onchange = () => {
+        localStorage.setItem('mk21_use_tmdb', tmdbToggle.checked);
+      };
+    }
+  } catch (e) {}
 
-    try {
-      initDevLogs();
-      addDevLog('[App] MK21 Play inicializado com sucesso', 'success');
-    } catch (e) {}
+  try {
+    if ($('btnHeaderLogout')) $('btnHeaderLogout').onclick = () => logout();
+  } catch (e) {}
 
-  const hasAuthToken = !!localStorage.getItem('mk21_auth_token');
-  if (hasAuthToken) {
-    loadServer();
-
-    const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
-    scheduleFrame(function () {
-      activeZone = 'header';
-      focusedHeaderIdx = 0;
-      if ($('tabLive')) $('tabLive').focus();
-      else focusActiveElement();
-    });
-  }
+  try {
+    initDevLogs();
+    addDevLog('[App] MK21 Play v' + CURRENT_APP_VERSION + ' inicializado', 'success');
+  } catch (e) {}
 });
 
 /** v1.4.1 - Phased Loading & Omnisearch Synergy **/
@@ -6666,10 +6707,74 @@ const TVKeys = {
   BACK: [461, 10009, 27, 'Escape', 'GoBack'] // 461 = Tecla Back do webOS, 10009 = Tizen
 };
 
+// ============================================================================
+// 2.7.5 · WEBOS SCROLLBAR FIX (DETECÇÃO USER-AGENT + REFLOW EM FOCUSIN)
+// ============================================================================
+const WEBOS_SCROLL_SELECTOR = [
+  '.scrollable-container',
+  '.pane-scroll',
+  '#listItems',
+  '#listCategories',
+  '#serverList',
+  '#serverItemsGrid',
+  '#devLogsContainer',
+  '.settings-left-menu',
+  '.settings-detail-panel',
+  '.servers-manager-list',
+  '.omnisearch-body',
+  '#epgScheduleList'
+].join(', ');
+
+function forceRevealScrollbar(container) {
+  if (!container) return;
+  try {
+    const savedScrollTop = container.scrollTop;
+    container.classList.remove('force-scroll-visible');
+    container.style.setProperty('overflow-y', 'hidden', 'important');
+    // Força reflow síncrono no Chromium do webOS para invalidar cache da barra oculta
+    void container.offsetHeight;
+    container.style.setProperty('overflow-y', 'scroll', 'important');
+    container.classList.add('force-scroll-visible');
+    if (container.scrollTop !== savedScrollTop) {
+      container.scrollTop = savedScrollTop;
+    }
+  } catch (e) {}
+}
+
+function initWebOSScrollFix() {
+  if (typeof navigator === 'undefined' || typeof document === 'undefined') return;
+  const ua = navigator.userAgent || '';
+  const isWebOS = /webos|web0s|netcast/i.test(ua) || typeof window.webOS !== 'undefined';
+  if (!isWebOS) return;
+
+  if (window.__mk21WebOSScrollFixActive) return;
+  window.__mk21WebOSScrollFixActive = true;
+
+  let lastActiveContainer = null;
+
+  document.addEventListener('focusin', function (e) {
+    const target = e.target;
+    if (!target || typeof target.closest !== 'function') return;
+    const container = target.closest(WEBOS_SCROLL_SELECTOR);
+    if (!container) return;
+
+    if (lastActiveContainer && lastActiveContainer !== container) {
+      lastActiveContainer.classList.remove('force-scroll-visible');
+    }
+    lastActiveContainer = container;
+    forceRevealScrollbar(container);
+  }, true);
+
+  // Revela imediatamente nas listas principais caso já visíveis após render
+  const initialContainers = document.querySelectorAll(WEBOS_SCROLL_SELECTOR);
+  initialContainers.forEach(function (el) {
+    if (el.offsetParent !== null) forceRevealScrollbar(el);
+  });
+}
+
 function initSmartTVApp() {
-  // 2.5.4: a tela de login (preta, centralizada e com a identidade MK21) volta a
-  // ser a entrada do app. Antes, um token salvo pulava direto para a grade.
-  showLoginInterface();
+  // Ativa detecção e correção de scrollbar no Chromium do webOS
+  initWebOSScrollFix();
 
   // 2.6.0: deixa o Voltar do controle dentro do app (volta de tela) e so
   // pede confirmacao para sair quando ja estamos na tela principal.
@@ -6678,11 +6783,15 @@ function initSmartTVApp() {
   setupGlobalListeners();
   setupVirtualKeyboardHandling();
 
-  const creds = getSharedCredentials();
-  const hasAuth = !!(creds.user && creds.pass) || !!localStorage.getItem('mk21_auth_token');
+  if ($('btnHeaderLogout')) $('btnHeaderLogout').onclick = () => logout();
 
-  if (hasAuth) {
-    // Inicialização idêntica ao APK: foca no cache local imediatamente sem tela de login
+  // Verifica sessão persistida exclusivamente em mk21_credentials no localStorage
+  const savedCreds = getSavedCredentials();
+  if (savedCreds && savedCreds.user && savedCreds.pass) {
+    if (typeof savedCreds.serverIndex === 'number' && SERVERS[savedCreds.serverIndex]) {
+      currentServerIndex = savedCreds.serverIndex;
+      try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
+    }
     unlockHomeInterface(true);
   } else {
     showLoginInterface();
@@ -6711,30 +6820,24 @@ function showLoginInterface() {
 
   const home = document.getElementById('home-container');
   const login = document.getElementById('login-container');
+  const fb = document.getElementById('login-feedback');
 
   if (home) home.style.display = 'none';
   if (login) login.style.display = 'flex';
+  if (fb) { fb.textContent = ''; fb.style.display = 'none'; }
 
   populateServerSelect();
 
-  // Pré-preenche com credenciais existentes para poupar digitação com controle remoto
-  try {
-    const userField = document.getElementById('user-input');
-    const passField = document.getElementById('pass-input');
-    const creds = getSharedCredentials();
-    if (userField && !userField.value) userField.value = creds.user || '';
-    if (passField && !passField.value) passField.value = creds.pass || '';
-  } catch (e) {}
+  // Campos sempre iniciam vazios quando não há sessão salva (sem credenciais hardcoded)
+  const userField = document.getElementById('user-input');
+  const passField = document.getElementById('pass-input');
+  if (userField) userField.value = '';
+  if (passField) passField.value = '';
 
   updateFocusableElements();
 
-  // Foco inicial: com credenciais preenchidas vai direto para ENTRAR (um OK no controle);
-  // sem credenciais, foco no campo de Servidor.
   setTimeout(() => {
-    const uf = document.getElementById('user-input');
-    const pf = document.getElementById('pass-input');
-    const ready = uf && pf && uf.value && pf.value;
-    setFocusByIndex(ready ? 3 : 0);
+    setFocusByIndex(1); // Foco inicial no campo Usuário
   }, 120);
 
   // Event Listeners dos botões
@@ -6744,8 +6847,31 @@ function showLoginInterface() {
   if (btnOffline) btnOffline.onclick = handleOfflineBypass;
 }
 
+function logout() {
+  try {
+    if (typeof stopCurrentPlayer === 'function') stopCurrentPlayer(true);
+  } catch (e) {}
+  if (activePlaylistController) {
+    try { activePlaylistController.abort(); } catch (e) {}
+  }
+
+  clearCredentialsFromStorage();
+  activeItem = null;
+  allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+  AppState.isLoggedIn = false;
+
+  const hud = $('hudLoadingOverlay');
+  if (hud) hud.classList.add('hidden');
+  document.querySelectorAll('.app-modal, .modal-overlay').forEach(m => m.classList.add('hidden'));
+
+  showLoginInterface();
+  if (typeof showChannelBanner === 'function') {
+    showChannelBanner('Sessão encerrada. Informe suas credenciais para entrar.');
+  }
+}
+
 function updateFocusableElements() {
-  // Coleta na ordem estrita: Servidor -> Usuário -> Senha -> Entrar -> Offline
+  // Coleta na ordem estrita: Servidor -> Usuário -> Senha -> Entrar e Lembrar -> Offline
   AppState.focusableElements = [
     document.getElementById('server-select'),
     document.getElementById('user-input'),
@@ -6822,12 +6948,12 @@ async function handleLoginSubmit() {
   const pass = passInput ? passInput.value.trim() : '';
 
   if (!user || !pass) {
-    displayFeedback('Informe o usuário e a senha.', true);
-    setFocusByIndex(user ? 1 : 0);
+    displayFeedback('Informe o usuário e a senha / token.', true);
+    setFocusByIndex(user ? 2 : 1);
     return;
   }
 
-  displayFeedback('Autenticando MK21...', false);
+  displayFeedback('Autenticando e salvando credenciais...', false);
 
   const activeSrv = SERVERS[currentServerIndex] || SERVERS[0];
   let authToken = 'mk21_session_ok';
@@ -6851,34 +6977,33 @@ async function handleLoginSubmit() {
             authToken = data.user_info.token || 'mk21_auth_ok';
           } else if (data.user_info.auth === 0) {
             displayFeedback('Usuário ou senha inválidos no servidor.', true);
-            setFocusByIndex(0);
+            setFocusByIndex(1);
             return;
           }
         }
       }
     } catch (eAuth) {
-      console.warn('[Login] Validação online indisponível ou CORS, prosseguindo com credenciais:', eAuth);
+      console.warn('[Login] Validação online indisponível ou CORS, salvando credenciais localmente:', eAuth);
     }
   }
 
+  saveCredentialsToStorage(user, pass, currentServerIndex);
   try {
     localStorage.setItem('mk21_auth_token', authToken);
-    localStorage.setItem('mk21_user', user);
-    localStorage.setItem('mk21_username', user);
-    localStorage.setItem('iptv_user', user);
-    localStorage.setItem('mk21_pass', pass);
-    localStorage.setItem('mk21_password', pass);
-    localStorage.setItem('iptv_pass', pass);
   } catch (eStore) {}
 
-  displayFeedback('Conectado! Carregando catálogo...', false);
+  displayFeedback('Credenciais salvas! Carregando catálogo...', false);
   unlockHomeInterface(true);
 }
 
-function handleOfflineBypass() {
-  try {
-    localStorage.setItem('mk21_auth_token', 'mk21_offline_mode');
-  } catch (e) {}
+async function handleOfflineBypass() {
+  const srv = SERVERS[currentServerIndex] || SERVERS[0];
+  const cached = srv ? await getBestAvailableCache(srv.id) : null;
+  if (!cached || !cached.LIVE || cached.LIVE.length === 0) {
+    displayFeedback('Nenhum catálogo em cache local. Informe usuário e senha para conectar.', true);
+    setFocusByIndex(1);
+    return;
+  }
   unlockHomeInterface(true);
 }
 
@@ -6956,6 +7081,12 @@ function unlockHomeInterface(shouldLoad = true) {
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
+    if (window.__mk21WebOSScrollFixActive) {
+      ['#listCategories', '#listItems'].forEach(function (sel) {
+        const el = document.querySelector(sel);
+        if (el) forceRevealScrollbar(el);
+      });
+    }
     activeZone = 'header';
     focusedHeaderIdx = 0;
     if ($('tabLive')) $('tabLive').focus();
