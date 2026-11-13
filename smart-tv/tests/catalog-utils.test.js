@@ -1,8 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  BG_SYNC_LABELS,
   normalizeBgSyncFrequency,
   getBgSyncIntervalMs,
+  shouldSyncServer,
   computeCatalogMetrics,
   parseSafeJsonResponse,
   formatFriendlyLoadError
@@ -53,13 +55,34 @@ test('formatFriendlyLoadError translates raw JSON syntax errors to readable Port
   assert.match(friendly, /HTML inválido/i);
 });
 
-test('normalizeBgSyncFrequency and getBgSyncIntervalMs handle valid and fallback values', () => {
+test('normalizeBgSyncFrequency and shouldSyncServer match APK options and legacy aliases', () => {
+  assert.equal(normalizeBgSyncFrequency('startup'), 'startup');
+  assert.equal(normalizeBgSyncFrequency('daily'), 'daily');
+  assert.equal(normalizeBgSyncFrequency('weekly'), 'weekly');
   assert.equal(normalizeBgSyncFrequency('manual'), 'manual');
-  assert.equal(normalizeBgSyncFrequency('1H'), '1h');
-  assert.equal(normalizeBgSyncFrequency('invalid'), '6h');
+  assert.equal(normalizeBgSyncFrequency('Uma vez ao dia'), 'daily');
+  assert.equal(normalizeBgSyncFrequency('Uma vez por semana'), 'weekly');
+  assert.equal(normalizeBgSyncFrequency('1H'), 'startup');
+  assert.equal(normalizeBgSyncFrequency('6h'), 'daily');
+  assert.equal(normalizeBgSyncFrequency('24h'), 'daily');
+  assert.equal(normalizeBgSyncFrequency('invalid'), 'daily');
+
+  assert.equal(BG_SYNC_LABELS.startup, 'A cada inicialização');
+  assert.equal(BG_SYNC_LABELS.daily, 'Uma vez ao dia');
+  assert.equal(BG_SYNC_LABELS.weekly, 'Uma vez por semana');
+  assert.equal(BG_SYNC_LABELS.manual, 'Desativado (Apenas manual)');
 
   assert.equal(getBgSyncIntervalMs('manual'), 0);
-  assert.equal(getBgSyncIntervalMs('1h'), 3600000);
-  assert.equal(getBgSyncIntervalMs('6h'), 21600000);
-  assert.equal(getBgSyncIntervalMs('24h'), 86400000);
+  assert.equal(getBgSyncIntervalMs('startup'), 0);
+  assert.equal(getBgSyncIntervalMs('daily'), 86400000);
+  assert.equal(getBgSyncIntervalMs('weekly'), 604800000);
+
+  const now = 1700000000000;
+  assert.equal(shouldSyncServer(0, 'manual', now), false);
+  assert.equal(shouldSyncServer(0, 'daily', now), true);
+  assert.equal(shouldSyncServer(now - 1000, 'startup', now), true);
+  assert.equal(shouldSyncServer(now - 3600000, 'daily', now), false);
+  assert.equal(shouldSyncServer(now - 90000000, 'daily', now), true);
+  assert.equal(shouldSyncServer(now - 86400000, 'weekly', now), false);
+  assert.equal(shouldSyncServer(now - 700000000, 'weekly', now), true);
 });

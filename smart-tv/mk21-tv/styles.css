@@ -3904,26 +3904,91 @@ div[style*="overflow"], .pane-scroll, .list-container,
 }
 
 /* ==========================================
-   v2.7.8 — GERENCIADOR DE SERVIDORES: TOTALIZADOR + BACKGROUND SYNC + ZERO OVERFLOW X
+   v2.7.9 — GERENCIADOR MAXIMIZADO + TOTAIS POR SERVIDOR + DIÁLOGOS APK
    ========================================== */
-.server-manager-row {
-  margin-bottom: 8px !important;
-  width: 100% !important;
-  max-width: 100% !important;
+.server-manager-modal,
+.server-manager-modal.server-manager-maximized {
+  width: 96vw !important;
+  max-width: 1760px !important;
+  height: 92vh !important;
+  max-height: 92vh !important;
+  padding: 20px 26px !important;
+  background: linear-gradient(160deg, #0d1019 0%, #07090f 100%) !important;
+  border: 2px solid rgba(255, 152, 0, 0.45) !important;
+  border-radius: 18px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   box-sizing: border-box !important;
 }
 
-.server-manager-row .server-info-url {
-  max-width: 100% !important;
+.server-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px !important;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  flex-shrink: 0;
+}
+
+.server-header-title-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.server-header-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.server-header-active-pill {
+  margin-left: 14px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(76, 175, 80, 0.18);
+  border: 1px solid rgba(76, 175, 80, 0.45);
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.server-header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.server-header-actions > button {
+  margin-left: 10px !important;
+  padding: 8px 16px !important;
+  font-size: 14px !important;
+}
+
+.server-manager-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
+  padding-right: 0 !important;
 }
 
 .server-metrics-grid {
   display: flex;
   flex-wrap: nowrap;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   width: 100%;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .server-metric-card {
@@ -3932,7 +3997,7 @@ div[style*="overflow"], .pane-scroll, .list-container,
   background: #141826;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 8px 14px;
   margin-right: 10px;
   display: flex;
   flex-direction: column;
@@ -3944,114 +4009,330 @@ div[style*="overflow"], .pane-scroll, .list-container,
 }
 
 .server-metric-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .server-metric-value {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 900;
   color: #ffd54f;
   line-height: 1.15;
   white-space: nowrap;
 }
 
-.server-bgsync-bar {
+/* Barra APK de Sincronização e Carregamento (4 cards clicáveis) */
+.server-apk-sync-grid {
   display: flex;
-  align-items: center;
+  flex-wrap: nowrap;
   justify-content: space-between;
-  background: #141826;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  padding: 10px 14px;
   margin-bottom: 12px;
+  width: 100%;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-.server-bgsync-info {
+.apk-setting-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  background: #161515;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-right: 10px;
+  color: #ffffff;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.apk-setting-card:last-child {
+  margin-right: 0;
+}
+
+.apk-setting-card:hover,
+.apk-setting-card:focus,
+.apk-setting-card:focus-visible {
+  background: #1f2230 !important;
+  border-color: #ffd54f !important;
+  outline: none !important;
+}
+
+.apk-setting-icon {
+  font-size: 20px;
+  margin-right: 12px;
+  color: #ffd54f;
+  flex-shrink: 0;
+}
+
+.apk-setting-texts {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  margin-right: 12px;
+  flex: 1;
 }
 
-.server-bgsync-title {
-  font-size: 16px;
+.apk-setting-title {
+  font-size: 14px;
   font-weight: 800;
   color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apk-setting-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Workspace 2 Colunas no Gerenciador Maximizado */
+.server-manager-workspace {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.server-list-pane {
+  flex: 2 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-right: 18px;
+}
+
+.server-pane-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 800;
+  color: #e2e8f0;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .server-bgsync-sub {
   font-size: 13px;
   color: #94a3b8;
-  margin-top: 2px;
+  font-weight: 600;
 }
 
-.server-bgsync-options {
+#serverItemsGrid,
+.servers-manager-list {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 18px !important;
+  margin: 0 !important;
+  position: relative;
+}
+
+.server-manager-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 16px !important;
+  margin-bottom: 10px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  background: #141824 !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 10px !important;
+  min-height: 78px !important;
+}
+
+.server-manager-row.active-server {
+  border-color: #e50914 !important;
+  background: rgba(229, 9, 20, 0.14) !important;
+}
+
+.server-info-col {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-right: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-info-top-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.server-info-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-right: 10px;
+}
+
+.server-row-sync-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.server-manager-row .server-info-url {
+  max-width: 100% !important;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Totais Individuais por Servidor na Própria Linha */
+.server-row-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.srv-metric-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: 2px 6px 2px 0;
+  white-space: nowrap;
+}
+
+.srv-metric-pill.has-data {
+  color: #ffd54f;
+  background: rgba(255, 213, 79, 0.10);
+  border-color: rgba(255, 213, 79, 0.28);
+}
+
+.srv-metric-pill.is-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.server-row-actions {
   display: flex;
   align-items: center;
   flex-shrink: 0;
 }
 
-.bgsync-opt-btn {
-  padding: 8px 14px;
-  margin-left: 8px;
-  background: #1f2437;
-  color: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  font-size: 15px;
+.server-row-actions > button {
+  margin-left: 6px !important;
+}
+
+.server-row-actions > button:first-child {
+  margin-left: 0 !important;
+}
+
+.btn-server-sync-one {
+  padding: 8px 11px;
+  background: #1b2838;
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.bgsync-opt-btn:first-child {
-  margin-left: 0;
-}
-
-.bgsync-opt-btn.active {
-  background: #e50914;
-  border-color: #ff6b6b;
+.btn-server-sync-one:focus,
+.btn-server-sync-one:hover {
+  background: #2563eb;
   color: #ffffff;
 }
 
-.bgsync-opt-btn:focus,
-.bgsync-opt-btn:focus-visible {
-  outline: none !important;
-  border-color: #ffffff !important;
-  background: #ff9800 !important;
-  color: #000000 !important;
-  box-shadow: 0 0 14px rgba(255, 152, 0, 0.75) !important;
+/* Painel Direito: Formulário de Adição/Edição */
+.server-form-pane {
+  flex: 0 0 360px;
+  width: 360px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.add-server-inputs-row {
+.server-form-pane .add-server-card {
+  margin-top: 0;
+  height: 100%;
+  box-sizing: border-box;
   display: flex;
+  flex-direction: column;
+}
+
+.add-server-inputs-col {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 12px;
+}
+
+.server-form-input {
   width: 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  margin-bottom: 10px;
+  background: #111421;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 15px;
 }
 
-.add-server-inputs-row > input:first-child {
-  margin-right: 12px;
-}
-
-.add-server-actions-row {
+.add-server-actions-col {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
 }
 
-.add-server-actions-row > button {
-  margin: 0 8px 6px 0 !important;
+.add-server-actions-col > button {
+  margin-bottom: 8px !important;
 }
 
-#serverItemsGrid {
-  overflow-x: hidden !important;
+.add-server-actions-col > button:last-child {
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 1060px) {
+  .server-manager-workspace {
+    flex-direction: column;
+  }
+  .server-list-pane {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+  .server-form-pane {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .server-apk-sync-grid {
+    flex-wrap: wrap;
+  }
+  .apk-setting-card {
+    flex: 1 1 46%;
+    margin-bottom: 8px;
+  }
 }
 
 #serverItemsGrid::-webkit-scrollbar:horizontal,
@@ -4059,3 +4340,241 @@ div[style*="overflow"], .pane-scroll, .list-container,
   height: 0 !important;
   display: none !important;
 }
+
+/* ==========================================
+   DIÁLOGOS ESTILO APK (RÁDIO & CARREGAMENTO EM ETAPAS)
+   ========================================== */
+#modalApkRadioPicker,
+#modalStagedLoading,
+#modalSortPicker {
+  z-index: 1000030 !important;
+}
+
+.apk-dialog-card {
+  width: 520px;
+  max-width: 90vw;
+  background: #14141a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  padding: 26px 26px 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.92);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.apk-dialog-title {
+  margin: 0 0 16px 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffd54f;
+}
+
+.apk-dialog-desc {
+  margin: -6px 0 16px 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.apk-radio-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.apk-radio-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 13px 16px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.apk-radio-option:last-child {
+  margin-bottom: 0;
+}
+
+.apk-radio-option:hover,
+.apk-radio-option:focus,
+.apk-radio-option:focus-visible {
+  background: rgba(255, 213, 79, 0.14) !important;
+  border-color: #ffd54f !important;
+  outline: none !important;
+}
+
+.apk-radio-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  margin-right: 18px;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.apk-radio-option.active .apk-radio-dot {
+  border-color: #e50914;
+}
+
+.apk-radio-option.active .apk-radio-dot::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e50914;
+}
+
+.apk-radio-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Carregamento em Etapas (Checkboxes estilo APK) */
+.apk-staged-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.apk-staged-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.apk-staged-row:last-child {
+  margin-bottom: 0;
+}
+
+.apk-staged-row:focus,
+.apk-staged-row:focus-visible {
+  background: rgba(255, 213, 79, 0.14) !important;
+  border-color: #ffd54f !important;
+  outline: none !important;
+}
+
+.apk-staged-texts {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  margin-right: 14px;
+}
+
+.apk-staged-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.apk-staged-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.apk-checkbox-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 2px solid #94a3b8;
+  background: transparent;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 900;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.apk-staged-row.checked .apk-checkbox-box {
+  background: #e50914;
+  border-color: #e50914;
+  color: #ffffff;
+}
+
+.apk-dialog-footer {
+  display: flex;
+}
+
+.apk-dialog-actions-row {
+  display: flex;
+}
+
+.apk-btn-cancel,
+.apk-btn-save {
+  flex: 1 1 0;
+  padding: 13px 18px;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.apk-btn-cancel {
+  background: #7c7e85;
+  color: #ffffff;
+}
+
+.apk-btn-save {
+  background: #e50914;
+  color: #ffffff;
+  margin-left: 12px;
+}
+
+.apk-btn-cancel:focus,
+.apk-btn-save:focus {
+  outline: 3px solid #ffd54f !important;
+  box-shadow: 0 0 18px rgba(255, 213, 79, 0.85) !important;
+}
+
+/* Grid de Cards APK dentro de Configurações -> Servidor / Fonte */
+.apk-cfg-cards-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -6px 14px -6px;
+}
+
+.apk-cfg-card-wrap {
+  width: 50%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.apk-cfg-card-wrap .apk-setting-card {
+  width: 100%;
+  margin-right: 0;
+  min-height: 68px;
+}
+

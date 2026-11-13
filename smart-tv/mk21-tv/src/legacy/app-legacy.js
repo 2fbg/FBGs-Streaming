@@ -16,8 +16,8 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.7.8 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
-// Prioridade Máxima no Ao Vivo, Carga em Segundo Plano, Categorias Fidedignas, Splash Screen Premium, Velocidade até 4x, Áudio/Legendas e D-Pad Total
+// MK21 PLAY v2.7.9 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 const $ = id => document.getElementById(id);
 
@@ -355,6 +355,9 @@ async function saveStoredData(id, payload) {
     saveFastCache(id, payload.LIVE, true);
   }
   const totalItems = ((payload && payload.LIVE) || []).length + ((payload && payload.MOVIE) || []).length + ((payload && payload.SERIES) || []).length;
+  if (typeof computeAndSaveServerMetrics === 'function') {
+    computeAndSaveServerMetrics(id, payload);
+  }
   if (totalItems > 40000) {
     // Catálogo muito grande: fica no índice paginado (IndexedDB por item), não num registro único.
     console.log('[MK21] catálogo grande (' + totalItems + '): cache completo no índice paginado');
@@ -609,6 +612,7 @@ function slimItem(it) {
     logo: it.logo ? String(it.logo).slice(0, 200) : '',
     tvgId: it.tvgId || '',
     tvgName: it.tvgName || '',
+    rating: it.rating || '',
     isAdult: !!it.isAdult
   };
 }
@@ -621,17 +625,25 @@ let loginAuthAbortController = null;
 let mk21AutoAdvanceTimer = null;
 let mk21ForceFreshAfterLogin = false;
 let mk21BgSyncTimer = null;
+let mk21BgAllSyncRunning = false;
 let currentContentType = 'LIVE'; // 'LIVE', 'MOVIE', 'SERIES', 'FAVORITES', 'CONTINUE', 'SETTINGS'
 let allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
 let favoriteUrls = new Set();
 
 const MK21_BG_SYNC_KEY = 'mk21_bg_sync_frequency';
+const MK21_SYNC_ALL_KEY = 'mk21_sync_all_lists';
+const MK21_HIDE_BG_PROGRESS_KEY = 'mk21_hide_bg_progress';
+const MK21_FG_LIVE_KEY = 'mk21_fg_live';
+const MK21_FG_MOVIES_KEY = 'mk21_fg_movies';
+const MK21_FG_SERIES_KEY = 'mk21_fg_series';
+const MK21_SRV_METRICS_PREFIX = 'mk21_srv_metrics_';
+const mk21ServerMetricsCache = Object.create(null);
 
 function getBgSyncFrequency() {
   try {
-    return CatalogUtils.normalizeBgSyncFrequency(localStorage.getItem(MK21_BG_SYNC_KEY) || '6h');
+    return CatalogUtils.normalizeBgSyncFrequency(localStorage.getItem(MK21_BG_SYNC_KEY) || 'daily');
   } catch (e) {
-    return '6h';
+    return 'daily';
   }
 }
 
@@ -639,7 +651,120 @@ function setBgSyncFrequency(freq) {
   const normalized = CatalogUtils.normalizeBgSyncFrequency(freq);
   try { localStorage.setItem(MK21_BG_SYNC_KEY, normalized); } catch (e) {}
   scheduleBackgroundSync();
+  if (typeof updateApkSyncLabelsUI === 'function') updateApkSyncLabelsUI();
   return normalized;
+}
+
+function getSyncAllListsBackground() {
+  try {
+    const raw = localStorage.getItem(MK21_SYNC_ALL_KEY);
+    return raw === null ? true : raw !== 'false';
+  } catch (e) {
+    return true;
+  }
+}
+
+function setSyncAllListsBackground(enabled) {
+  const val = Boolean(enabled);
+  try { localStorage.setItem(MK21_SYNC_ALL_KEY, val ? 'true' : 'false'); } catch (e) {}
+  if (typeof updateApkSyncLabelsUI === 'function') updateApkSyncLabelsUI();
+  return val;
+}
+
+function getHideBackgroundProgress() {
+  try {
+    return localStorage.getItem(MK21_HIDE_BG_PROGRESS_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function setHideBackgroundProgress(hidden) {
+  const val = Boolean(hidden);
+  try { localStorage.setItem(MK21_HIDE_BG_PROGRESS_KEY, val ? 'true' : 'false'); } catch (e) {}
+  if (typeof updateApkSyncLabelsUI === 'function') updateApkSyncLabelsUI();
+  return val;
+}
+
+function getStagedLoadingPrefs() {
+  try {
+    let live = localStorage.getItem(MK21_FG_LIVE_KEY) !== 'false';
+    const movies = localStorage.getItem(MK21_FG_MOVIES_KEY) === 'true';
+    const series = localStorage.getItem(MK21_FG_SERIES_KEY) === 'true';
+    if (!live && !movies && !series) live = true;
+    return { live, movies, series };
+  } catch (e) {
+    return { live: true, movies: false, series: false };
+  }
+}
+
+function setStagedLoadingPrefs(prefs) {
+  let live = Boolean(prefs && prefs.live);
+  const movies = Boolean(prefs && prefs.movies);
+  const series = Boolean(prefs && prefs.series);
+  if (!live && !movies && !series) live = true;
+  try {
+    localStorage.setItem(MK21_FG_LIVE_KEY, live ? 'true' : 'false');
+    localStorage.setItem(MK21_FG_MOVIES_KEY, movies ? 'true' : 'false');
+    localStorage.setItem(MK21_FG_SERIES_KEY, series ? 'true' : 'false');
+  } catch (e) {}
+  if (typeof updateApkSyncLabelsUI === 'function') updateApkSyncLabelsUI();
+  return { live, movies, series };
+}
+
+function getStagedLoadingSummary(prefs) {
+  const p = prefs || getStagedLoadingPrefs();
+  const names = [];
+  if (p.live) names.push('Canais');
+  if (p.movies) names.push('Filmes');
+  if (p.series) names.push('Séries');
+  if (names.length === 3) return 'Todos no 1º Plano';
+  if (names.length === 0) return '1º Plano: Canais';
+  return '1º Plano: ' + names.join(', ');
+}
+
+function getPerServerMetrics(serverId) {
+  if (!serverId) return null;
+  if (mk21ServerMetricsCache[serverId]) return mk21ServerMetricsCache[serverId];
+  try {
+    const raw = localStorage.getItem(MK21_SRV_METRICS_PREFIX + serverId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      mk21ServerMetricsCache[serverId] = parsed;
+      return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function savePerServerMetrics(serverId, metricsObj) {
+  if (!serverId || !metricsObj) return null;
+  const record = {
+    totalChannels: Number(metricsObj.totalChannels) || 0,
+    totalVOD: Number(metricsObj.totalVOD) || 0,
+    totalSeries: Number(metricsObj.totalSeries) || 0,
+    totalGroups: Number(metricsObj.totalGroups) || 0,
+    totalEPG: Number(metricsObj.totalEPG) || 0,
+    totalItems: Number(metricsObj.totalItems) || 0,
+    updatedAt: Number(metricsObj.updatedAt) || Date.now()
+  };
+  mk21ServerMetricsCache[serverId] = record;
+  try {
+    localStorage.setItem(MK21_SRV_METRICS_PREFIX + serverId, JSON.stringify(record));
+  } catch (e) {}
+  return record;
+}
+
+function computeAndSaveServerMetrics(serverId, catalogObj, epgObj, hasXmltv) {
+  if (!serverId || !catalogObj) return null;
+  const computed = CatalogUtils.computeCatalogMetrics(catalogObj, epgObj || null, Boolean(hasXmltv));
+  computed.updatedAt = Date.now();
+  const saved = savePerServerMetrics(serverId, computed);
+  if (typeof updateServerRowMetricsBadge === 'function') {
+    updateServerRowMetricsBadge(serverId, saved);
+  }
+  return saved;
 }
 
 function getCatalogMetricsSnapshot() {
@@ -1292,6 +1417,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
             logo: m.stream_icon || '',
             tvgId: '',
             tvgName: itemName,
+            rating: m.rating_5based || m.rating || '',
             url: `${cleanBase}/movie/${encUser}/${encPass}/${m.stream_id}.${ext}`,
             contentType: 'MOVIE',
             isAdult: isAdult(itemName) || isAdult(grp) || Number(m.is_adult) === 1
@@ -1326,6 +1452,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
             logo: sr.cover || '',
             tvgId: '',
             tvgName: itemName,
+            rating: sr.rating_5based || sr.rating || '',
             url: `${cleanBase}/series/${encUser}/${encPass}/${sr.series_id}.xtream`,
             contentType: 'SERIES',
             isAdult: isAdult(itemName) || isAdult(grp)
@@ -1432,11 +1559,19 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
 }
 
 // ATUALIZAÇÃO DA PORCENTAGEM DE SINCRONIZAÇÃO AO LADO DO SERVIDOR
-function updateServerSyncBadge(pct, isFinished = false) {
+function updateServerSyncBadge(pct, isFinished = false, options = {}) {
   const badge = $('txtServerSyncBadge');
   const txt = $('txtActiveServer');
   const srv = SERVERS[currentServerIndex];
   const srvName = srv ? srv.name : 'Servidor';
+  const isBg = Boolean(options && options.background);
+  const hideBg = isBg && getHideBackgroundProgress();
+
+  if (hideBg) {
+    if (badge) badge.classList.add('hidden');
+    if (txt) txt.textContent = cleanServerName(srvName);
+    return;
+  }
 
   if (isFinished) {
     if (badge) {
@@ -1682,6 +1817,15 @@ async function loadServer(forceRefresh = false, options = {}) {
   try {
     // No modo silencioso montamos um catálogo novo e trocamos por baixo, sem piscar a tela.
     const target = { LIVE: [], MOVIE: [], SERIES: [] };
+    const deferredStage = { LIVE: [], MOVIE: [], SERIES: [] };
+    const stagedPrefs = getStagedLoadingPrefs();
+    const isForegroundType = (t) => {
+      if (t === 'LIVE') return stagedPrefs.live;
+      if (t === 'MOVIE') return stagedPrefs.movies;
+      if (t === 'SERIES') return stagedPrefs.series;
+      return true;
+    };
+
     if (!silent) allCatalog = target;
     indexedOffsets = {};
 
@@ -1719,14 +1863,20 @@ async function loadServer(forceRefresh = false, options = {}) {
     };
 
     const revealLive = () => {
-      if (liveVisible || loadId !== serverLoadGeneration || target.LIVE.length === 0) return;
+      if (liveVisible || loadId !== serverLoadGeneration) return;
+      const hasAnyFg = target.LIVE.length > 0 || target.MOVIE.length > 0 || target.SERIES.length > 0;
+      if (!hasAnyFg) return;
       liveVisible = true;
       if (hudSafetyTimer) { clearTimeout(hudSafetyTimer); hudSafetyTimer = null; }
 
       allCatalog = target;
-      saveFastCache(srv.id, allCatalog.LIVE, true);
+      if (allCatalog.LIVE.length > 0) saveFastCache(srv.id, allCatalog.LIVE, true);
 
-      updateSplash(80, 'Canais ao vivo disponíveis (' + allCatalog.LIVE.length + ')');
+      updateSplash(80, 'Conteúdo inicial liberado (' + (allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) + ')');
+      if (allCatalog.LIVE.length === 0 && currentContentType === 'LIVE') {
+        if (allCatalog.MOVIE.length > 0) currentContentType = 'MOVIE';
+        else if (allCatalog.SERIES.length > 0) currentContentType = 'SERIES';
+      }
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
@@ -1737,7 +1887,39 @@ async function loadServer(forceRefresh = false, options = {}) {
       hideSplash();
 
       if (hud) hud.classList.add('hidden');
-      showChannelBanner('📺 Ao Vivo liberado! Baixando catálogo completo em segundo plano...');
+      if (!getHideBackgroundProgress()) {
+        showChannelBanner('📺 1º Plano liberado! Demais etapas carregando em segundo plano...');
+      }
+    };
+
+    const flushDeferredStageIncrementally = async () => {
+      const pendingItems = []
+        .concat(deferredStage.LIVE)
+        .concat(deferredStage.MOVIE)
+        .concat(deferredStage.SERIES);
+      if (pendingItems.length === 0) return;
+
+      const BATCH = 450;
+      for (let offset = 0; offset < pendingItems.length; offset += BATCH) {
+        if (loadId !== serverLoadGeneration) return;
+        const end = Math.min(pendingItems.length, offset + BATCH);
+        for (let k = offset; k < end; k++) {
+          const item = pendingItems[k];
+          const t = item.contentType;
+          indexWriter.add(item);
+          if (target[t]) {
+            if (t === 'LIVE' && liveGrouper) {
+              const grouped = liveGrouper.add(item);
+              if (grouped.isNew) target[t].push(grouped.item);
+            } else {
+              target[t].push(item);
+            }
+          }
+        }
+        const stagePct = Math.min(99, Math.round((end / pendingItems.length) * 100));
+        updateServerSyncBadge(stagePct, false, { background: true });
+        await new Promise(r => setTimeout(r, 16));
+      }
     };
 
     await streamPlaylistContent(
@@ -1759,6 +1941,12 @@ async function loadServer(forceRefresh = false, options = {}) {
         const adultItem = slim.isAdult || isAdult(slim.name) || isAdult(slim.group);
         slim.isAdult = !!adultItem;
 
+        // Carregamento em Etapas (APK): itens fora do 1º Plano vão para fila incremental de 2º Plano
+        if (!silent && !isForegroundType(type)) {
+          if (deferredStage[type]) deferredStage[type].push(slim);
+          return;
+        }
+
         indexWriter.add(slim);
         if (target[type]) {
           if (type === 'LIVE' && liveGrouper) {
@@ -1772,9 +1960,10 @@ async function loadServer(forceRefresh = false, options = {}) {
         if (silent) {
           publishSilent(false);
         } else {
+          const fgCount = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
           if (type !== 'LIVE' && target.LIVE.length > 0 && !liveVisible) {
             revealLive();
-          } else if (type === 'LIVE' && target.LIVE.length >= 8 && !liveVisible) {
+          } else if (fgCount >= 8 && !liveVisible) {
             revealLive();
           } else if (!liveVisible && target.LIVE.length > 0 && target.LIVE.length % 50 === 0) {
             saveFastCache(srv.id, target.LIVE);
@@ -1787,7 +1976,8 @@ async function loadServer(forceRefresh = false, options = {}) {
         if (now - lastProgressUi < 250) return;
         lastProgressUi = now;
 
-        const itemsCount = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+        const itemsCount = target.LIVE.length + target.MOVIE.length + target.SERIES.length +
+          deferredStage.LIVE.length + deferredStage.MOVIE.length + deferredStage.SERIES.length;
         let pct = 50;
         if (total && total > 0) {
           pct = Math.min(99, Math.max(10, Math.round((received / total) * 100)));
@@ -1801,11 +1991,11 @@ async function loadServer(forceRefresh = false, options = {}) {
           }
         }
 
-        updateServerSyncBadge(pct, false);
+        updateServerSyncBadge(pct, false, { background: silent });
 
         if (!silent) {
           if (!liveVisible) {
-            updateSplash(pct, 'Lendo lista — ' + target.LIVE.length + ' canais ao vivo');
+            updateSplash(pct, 'Lendo 1º plano — ' + target.LIVE.length + ' canais ao vivo');
           }
           if (hud && !liveVisible) {
             if ($('hudProgressBar')) $('hudProgressBar').style.width = pct + '%';
@@ -1815,14 +2005,35 @@ async function loadServer(forceRefresh = false, options = {}) {
       }
     );
 
-    loadInFlight = false;
     if (loadId !== serverLoadGeneration) return;
 
-    const targetTotal = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
-    if (targetTotal === 0) {
+    const fgTotal = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+    const deferredTotal = deferredStage.LIVE.length + deferredStage.MOVIE.length + deferredStage.SERIES.length;
+    if ((fgTotal + deferredTotal) === 0) {
       throw new Error('Lista do servidor retornou vazia (0 itens)');
     }
 
+    // Libera a tela com os itens de 1º plano imediatamente antes da etapa incremental de 2º plano
+    allCatalog = target;
+    if (!silent && fgTotal > 0) {
+      revealLive();
+      buildCurrentCategories();
+      renderCategoriesList();
+      if (!liveVisible) selectCategory('ALL');
+      if (hud) {
+        if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
+        if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
+        hud.classList.add('hidden');
+      }
+    }
+
+    // Processa etapas de 2º plano (VOD/Séries ou Canais diferidos) em lotes leves sem travar a UI
+    if (deferredTotal > 0) {
+      await flushDeferredStageIncrementally();
+      if (loadId !== serverLoadGeneration) return;
+    }
+
+    loadInFlight = false;
     allCatalog = target;
     if (!silent) revealLive();
     publishSilent(true);
@@ -1836,14 +2047,15 @@ async function loadServer(forceRefresh = false, options = {}) {
       if ($('hudProgressPercent')) $('hudProgressPercent').textContent = '100%';
       hud.classList.add('hidden');
     }
-    updateServerSyncBadge(100, true);
+    updateServerSyncBadge(100, true, { background: silent || bgLowPriority });
     mk21AutoServerTries = 0;
     try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
     await indexWriter.finish();
     saveFastCache(srv.id, allCatalog.LIVE, true);
     saveStoredData(srv.id, allCatalog);
+    computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
     // Redesenha a aba atual com o catálogo completo (o reveal ao vivo acontece
-    // nos primeiros 8 canais para abrir a tela rápido).
+    // nos primeiros itens de 1º plano para abrir a tela rápido).
     if (currentContentType === 'LIVE' || currentContentType === 'MOVIE' || currentContentType === 'SERIES' || currentContentType === 'CONTINUE') {
       buildCurrentCategories();
       renderCategoriesList();
@@ -1856,7 +2068,7 @@ async function loadServer(forceRefresh = false, options = {}) {
     if (typeof mk21UpdateCatalogMetricsUI === 'function') {
       mk21UpdateCatalogMetricsUI();
     }
-    if (silent && !bgLowPriority && published !== totalLoaded) {
+    if (silent && !bgLowPriority && published !== totalLoaded && !getHideBackgroundProgress()) {
       published = totalLoaded;
       showChannelBanner('✓ Catálogo sincronizado: ' + totalLoaded.toLocaleString('pt-BR') + ' itens');
     } else if (bgLowPriority) {
@@ -2051,21 +2263,28 @@ function renderItemsList(preserveScroll) {
     items = items.filter(c => !c.isAdult);
   }
 
-  // Aplicar ordenação (Padrão / Recente / A-Z / Z-A / Ano)
+  // Aplicar ordenação (Número / Adição / Qualificação / A-Z / Z-A / Ano)
   function mk21ExtractYear(name) {
     const m = String(name || '').match(/\b((?:19|20)\d{2})\b/);
     return m ? parseInt(m[1], 10) : 0;
+  }
+  function mk21ExtractRating(item) {
+    const r = parseFloat(item && (item.rating || item.rating_5based));
+    return Number.isFinite(r) ? r : 0;
   }
   if (currentSortOrder === 'AZ') {
     items = items.slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
   } else if (currentSortOrder === 'ZA') {
     items = items.slice().sort((a, b) => b.name.localeCompare(a.name, 'pt-BR', { sensitivity: 'base' }));
   } else if (currentSortOrder === 'RECENT') {
-    // Ordem da lista invertida (últimos da playlist primeiro)
+    // Ordem da lista invertida (últimos adicionados primeiro)
     items = items.slice().reverse();
-  } else if (currentSortOrder === 'YEAR') {
-    // Por ano no título (mais recente primeiro); sem ano no fim
+  } else if (currentSortOrder === 'RATING' || currentSortOrder === 'YEAR') {
+    // Por qualificação numérica ou ano de lançamento (maior primeiro)
     items = items.slice().sort((a, b) => {
+      const ra = mk21ExtractRating(a);
+      const rb = mk21ExtractRating(b);
+      if (ra !== rb) return rb - ra;
       const ya = mk21ExtractYear(a.name);
       const yb = mk21ExtractYear(b.name);
       if (ya && yb && ya !== yb) return yb - ya;
@@ -2074,7 +2293,7 @@ function renderItemsList(preserveScroll) {
       return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
     });
   }
-  // DEFAULT: mantém ordem original da categoria
+  // DEFAULT: mantém ordem original (por número)
 
   currentFilteredItems = items;
   $('badgeItemsCount').textContent = currentFilteredItems.length;
@@ -2241,16 +2460,17 @@ function renderItemsList(preserveScroll) {
   }
 }
 
-// MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO
+// MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO (ESTILO APK)
 function updateSortOrderButtonLabel() {
   const btn = $('btnSortOrder');
   if (!btn) return;
   const labels = {
-    DEFAULT: '↕️ Padrão',
-    RECENT: '🕒 Recentes',
+    DEFAULT: '↕️ Número',
+    RECENT: '🕒 Adição',
+    RATING: '⭐ Qualificação',
+    YEAR: '⭐ Qualificação',
     AZ: '🔤 A - Z',
-    ZA: '🔤 Z - A',
-    YEAR: '📅 Ano'
+    ZA: '🔤 Z - A'
   };
   btn.textContent = labels[currentSortOrder] || '↕️ Classificação';
 }
@@ -2258,27 +2478,34 @@ function updateSortOrderButtonLabel() {
 function openSortPickerModal() {
   const modal = $('modalSortPicker');
   if (!modal) return;
+  mk21TeleportModalForFullscreen(modal, true);
   modal.classList.remove('hidden');
   activeZone = 'modalSortPicker';
+  const normalizedOrder = currentSortOrder === 'YEAR' ? 'RATING' : currentSortOrder;
   const btns = modal.querySelectorAll('.sort-choice-btn');
   btns.forEach(b => {
-    b.classList.toggle('active', b.dataset.order === currentSortOrder);
+    const isMatch = b.dataset.order === normalizedOrder;
+    b.classList.toggle('active', isMatch);
     b.onclick = () => {
       currentSortOrder = b.dataset.order;
       updateSortOrderButtonLabel();
       persistSortOrder();
       renderItemsList();
       closeSortPickerModal();
-      showChannelBanner('Classificação: ' + (b.textContent.trim()));
+      const lbl = b.querySelector('.apk-radio-label') ? b.querySelector('.apk-radio-label').textContent.trim() : b.textContent.trim();
+      showChannelBanner('Ordenação: ' + lbl);
     };
   });
-  const activeBtn = modal.querySelector(`.sort-choice-btn[data-order="${currentSortOrder}"]`) || btns[0];
+  const activeBtn = modal.querySelector(`.sort-choice-btn[data-order="${normalizedOrder}"]`) || btns[0];
   if (activeBtn) activeBtn.focus();
 }
 
 function closeSortPickerModal() {
   const modal = $('modalSortPicker');
-  if (modal) modal.classList.add('hidden');
+  if (modal) {
+    modal.classList.add('hidden');
+    mk21TeleportModalForFullscreen(modal, false);
+  }
   activeZone = 'channels';
   if ($('btnSortOrder')) $('btnSortOrder').focus();
 }
@@ -5071,63 +5298,147 @@ function mk21SettingsBox() {
 }
 
 
-// SERVIDOR / FONTE
+// SERVIDOR / FONTE (TOTAIS GERAIS + TOTAIS POR SERVIDOR + DIÁLOGOS APK)
+function formatSyncTimestampShort(ts) {
+  if (!ts || ts <= 0) return 'Ainda não sinc.';
+  try {
+    const dt = new Date(ts);
+    const dd = String(dt.getDate()).padStart(2, '0');
+    const mo = String(dt.getMonth() + 1).padStart(2, '0');
+    const hh = String(dt.getHours()).padStart(2, '0');
+    const mm = String(dt.getMinutes()).padStart(2, '0');
+    return `${dd}/${mo} ${hh}:${mm}`;
+  } catch (e) {
+    return 'Sincronizado';
+  }
+}
+
+function buildPerServerMetricsPillsHtml(metrics) {
+  if (!metrics || (metrics.totalChannels + metrics.totalVOD + metrics.totalSeries) === 0) {
+    return '<span class="srv-metric-pill is-empty">Sem cache local — clique em 🔄 Sync</span>';
+  }
+  const ch = Number(metrics.totalChannels || 0).toLocaleString('pt-BR');
+  const vod = Number(metrics.totalVOD || 0).toLocaleString('pt-BR');
+  const ser = Number(metrics.totalSeries || 0).toLocaleString('pt-BR');
+  const grp = Number((metrics.totalEPG || metrics.totalGroups) || 0).toLocaleString('pt-BR');
+  return (
+    `<span class="srv-metric-pill has-data">📺 ${ch} Canais</span>` +
+    `<span class="srv-metric-pill has-data">🎬 ${vod} Filmes</span>` +
+    `<span class="srv-metric-pill has-data">🍿 ${ser} Séries</span>` +
+    `<span class="srv-metric-pill">📡 ${grp} ${metrics.totalEPG > 0 ? 'EPG' : 'Grupos'}</span>`
+  );
+}
+
+function updateServerRowMetricsBadge(serverId, metrics) {
+  if (!serverId) return;
+  const html = buildPerServerMetricsPillsHtml(metrics);
+  document.querySelectorAll(`[data-srv-metrics-id="${serverId}"]`).forEach(el => {
+    el.innerHTML = html;
+  });
+}
+
 function renderServerPanel() {
   const box = mk21SettingsBox();
   const atual = SERVERS[currentServerIndex] || SERVERS[0] || { name: 'Nenhum' };
   const metrics = getCatalogMetricsSnapshot();
+  if (atual && atual.id && metrics.totalItems > 0) {
+    computeAndSaveServerMetrics(atual.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
+  }
   const curFreq = getBgSyncFrequency();
-  const bgFreqChoices = [
-    ['manual', 'Manual'],
-    ['1h', '1 hora'],
-    ['6h', '6 horas'],
-    ['24h', '24 horas']
-  ];
+  const freqLabel = CatalogUtils.BG_SYNC_LABELS[curFreq] || 'Uma vez ao dia';
+  const syncAllLabel = getSyncAllListsBackground() ? 'Todas em 2º plano' : 'Apenas lista ativa';
+  const progressLabel = getHideBackgroundProgress() ? 'Ocultar (Silencioso)' : 'Mostrar na tela inicial';
+  const stagedLabel = getStagedLoadingSummary();
+
   const rows = SERVERS.map((srv, i) => {
     const ativo = i === currentServerIndex;
+    const srvMetrics = (ativo && metrics.totalItems > 0) ? metrics : getPerServerMetrics(srv.id);
+    let lastTs = 0;
+    try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
     return `
-      <button class="list-item-btn cfg-srv-choice ${ativo ? 'active' : ''}" data-srv="${i}" style="padding:16px 20px; display:flex; justify-content:space-between; align-items:center;" tabindex="0">
-        <span>${ativo ? '🟢' : '⚪'} Fonte ${i + 1}: ${cleanServerName(srv.name)}</span>
-        <strong style="color:${ativo ? '#4caf50' : '#888'}; font-size:15px;">${ativo ? 'EM USO' : 'CONECTAR'}</strong>
-      </button>`;
+      <div class="server-manager-row ${ativo ? 'active-server' : ''}" style="margin-bottom:10px;">
+        <div class="server-info-col">
+          <div class="server-info-top-line">
+            <span class="server-info-name">${ativo ? '🟢' : '⚪'} Fonte ${i + 1}: ${cleanServerName(srv.name)}${ativo ? ' [✓ ATIVA]' : ''}</span>
+            <span class="server-row-sync-meta">• ${formatSyncTimestampShort(lastTs)}</span>
+          </div>
+          <div class="server-row-metrics" data-srv-metrics-id="${srv.id}">${buildPerServerMetricsPillsHtml(srvMetrics)}</div>
+        </div>
+        <div class="server-row-actions">
+          <button type="button" class="btn-server-sync-one cfg-srv-sync-one" data-srv="${i}" tabindex="0">🔄 Sync</button>
+          <button type="button" class="btn-server-connect cfg-srv-choice ${ativo ? 'active' : ''}" data-srv="${i}" tabindex="0">${ativo ? '✓ EM USO' : '🔗 CONECTAR'}</button>
+        </div>
+      </div>`;
   }).join('');
-  const bgButtonsHtml = bgFreqChoices.map(([key, label]) =>
-    `<button type="button" class="bgsync-opt-btn cfg-bgsync-btn ${curFreq === key ? 'active' : ''}" data-bgsync="${key}" tabindex="0">${label}</button>`
-  ).join('');
+
   box.innerHTML = `
-    <h3 style="margin:0 0 10px 0; font-size:24px;">📡 Servidor / Fonte</h3>
-    <p style="color:#aaa; margin:0 0 14px 0;">Fonte em uso: <strong style="color:#4caf50;">${cleanServerName(atual.name)}</strong>. Se um canal falhar, o app já testa as fontes alternativas sozinho.</p>
-    <div class="server-metrics-grid" style="max-width:660px;">
-      <div class="server-metric-card"><span class="server-metric-label">📺 Canais</span><strong class="server-metric-value">${metrics.totalChannels.toLocaleString('pt-BR')}</strong></div>
-      <div class="server-metric-card"><span class="server-metric-label">🎬 Filmes (VOD)</span><strong class="server-metric-value">${metrics.totalVOD.toLocaleString('pt-BR')}</strong></div>
-      <div class="server-metric-card"><span class="server-metric-label">🍿 Séries</span><strong class="server-metric-value">${metrics.totalSeries.toLocaleString('pt-BR')}</strong></div>
+    <h3 style="margin:0 0 8px 0; font-size:24px;">📡 Servidor / Fonte</h3>
+    <p style="color:#aaa; margin:0 0 12px 0; font-size:15px;">Fonte ativa: <strong style="color:#4caf50;">${cleanServerName(atual.name)}</strong>. Configure a sincronização ou confira os totais individuais por servidor.</p>
+    <div class="server-metrics-grid" style="max-width:860px;">
+      <div class="server-metric-card"><span class="server-metric-label">📺 Canais (Geral)</span><strong class="server-metric-value">${metrics.totalChannels.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">🎬 Filmes VOD (Geral)</span><strong class="server-metric-value">${metrics.totalVOD.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">🍿 Séries (Geral)</span><strong class="server-metric-value">${metrics.totalSeries.toLocaleString('pt-BR')}</strong></div>
       <div class="server-metric-card"><span class="server-metric-label">📡 EPG / Grupos</span><strong class="server-metric-value">${(metrics.totalEPG || metrics.totalGroups).toLocaleString('pt-BR')}</strong></div>
     </div>
-    <div class="server-bgsync-bar" style="max-width:660px;">
-      <div class="server-bgsync-info">
-        <span class="server-bgsync-title">🔄 Atualização em segundo plano</span>
-        <span class="server-bgsync-sub">Frequência silenciosa (prioridade baixa)</span>
+    <div class="apk-cfg-cards-grid" style="max-width:860px;">
+      <div class="apk-cfg-card-wrap">
+        <button type="button" id="cfgBtnSyncFreq" class="apk-setting-card" tabindex="0">
+          <span class="apk-setting-icon">🔄</span>
+          <span class="apk-setting-texts">
+            <strong class="apk-setting-title">Frequência</strong>
+            <span class="apk-setting-sub">${freqLabel}</span>
+          </span>
+        </button>
       </div>
-      <div class="server-bgsync-options">${bgButtonsHtml}</div>
+      <div class="apk-cfg-card-wrap">
+        <button type="button" id="cfgBtnSyncAll" class="apk-setting-card" tabindex="0">
+          <span class="apk-setting-icon">🌐</span>
+          <span class="apk-setting-texts">
+            <strong class="apk-setting-title">Sincronizar todas</strong>
+            <span class="apk-setting-sub">${syncAllLabel}</span>
+          </span>
+        </button>
+      </div>
+      <div class="apk-cfg-card-wrap">
+        <button type="button" id="cfgBtnHideProgress" class="apk-setting-card" tabindex="0">
+          <span class="apk-setting-icon">👁️</span>
+          <span class="apk-setting-texts">
+            <strong class="apk-setting-title">Progresso de carga</strong>
+            <span class="apk-setting-sub">${progressLabel}</span>
+          </span>
+        </button>
+      </div>
+      <div class="apk-cfg-card-wrap">
+        <button type="button" id="cfgBtnStagedLoad" class="apk-setting-card" tabindex="0">
+          <span class="apk-setting-icon">📑</span>
+          <span class="apk-setting-texts">
+            <strong class="apk-setting-title">Carregamento em etapas</strong>
+            <span class="apk-setting-sub">${stagedLabel}</span>
+          </span>
+        </button>
+      </div>
     </div>
-    <div style="display:flex; flex-direction:column; gap:10px; max-width:660px;">${rows}</div>
-    <div style="display:flex; gap:12px; margin-top:18px; flex-wrap:wrap;">
-      <button id="cfgOpenServerManager" class="ctrl-btn primary" style="padding:14px 22px;" tabindex="0">⚙️ Gerenciar listas e adicionar servidor</button>
-      <button id="cfgRefreshServer" class="ctrl-btn" style="padding:14px 22px;" tabindex="0">🔄 Atualizar catálogo agora</button>
+    <div style="max-width:860px;">${rows}</div>
+    <div style="display:flex; flex-wrap:wrap; margin-top:16px;">
+      <button id="cfgOpenServerManager" class="ctrl-btn primary" style="padding:13px 20px; margin-right:10px; margin-bottom:8px;" tabindex="0">⚙️ Gerenciador Maximizado</button>
+      <button id="cfgSyncAllServersNow" class="ctrl-btn" style="padding:13px 20px; margin-right:10px; margin-bottom:8px;" tabindex="0">🔄 Sincronizar Todas Agora</button>
+      <button id="cfgRefreshServer" class="ctrl-btn" style="padding:13px 20px; margin-bottom:8px;" tabindex="0">↻ Recarregar Fonte Ativa</button>
     </div>
-    <div id="msgServerChanged" style="margin-top:14px; color:#4caf50; font-weight:bold; font-size:15px; display:none;"></div>
+    <div id="msgServerChanged" style="margin-top:12px; color:#4caf50; font-weight:bold; font-size:15px; display:none;"></div>
   `;
-  box.querySelectorAll('.cfg-bgsync-btn').forEach(btn => {
+
+  if ($('cfgBtnSyncFreq')) $('cfgBtnSyncFreq').onclick = () => openSyncFrequencyModal($('cfgBtnSyncFreq'), renderServerPanel);
+  if ($('cfgBtnSyncAll')) $('cfgBtnSyncAll').onclick = () => openSyncAllListsModal($('cfgBtnSyncAll'), renderServerPanel);
+  if ($('cfgBtnHideProgress')) $('cfgBtnHideProgress').onclick = () => openHideProgressModal($('cfgBtnHideProgress'), renderServerPanel);
+  if ($('cfgBtnStagedLoad')) $('cfgBtnStagedLoad').onclick = () => openStagedLoadingModal($('cfgBtnStagedLoad'), renderServerPanel);
+
+  box.querySelectorAll('.cfg-srv-sync-one').forEach(btn => {
     btn.onclick = () => {
-      const freq = setBgSyncFrequency(btn.getAttribute('data-bgsync'));
-      renderServerPanel();
-      const msg = $('msgServerChanged');
-      if (msg) {
-        msg.textContent = '✅ Sincronização em segundo plano: ' + (CatalogUtils.BG_SYNC_LABELS[freq] || freq);
-        msg.style.display = 'block';
-      }
+      const idx = parseInt(btn.getAttribute('data-srv'), 10) || 0;
+      syncSingleServerInBackground(idx, btn);
     };
   });
+
   box.querySelectorAll('.cfg-srv-choice').forEach(btn => {
     btn.onclick = () => {
       const idx = parseInt(btn.getAttribute('data-srv'), 10) || 0;
@@ -5144,13 +5455,13 @@ function renderServerPanel() {
       loadServer(true);
     };
   });
-  if ($('cfgOpenServerManager')) $('cfgOpenServerManager').onclick = () => {
-    openServerPicker();
-  };
+  if ($('cfgOpenServerManager')) $('cfgOpenServerManager').onclick = () => openServerPicker();
+  if ($('cfgSyncAllServersNow')) $('cfgSyncAllServersNow').onclick = () => syncAllConfiguredServersInBackground(true);
   if ($('cfgRefreshServer')) $('cfgRefreshServer').onclick = () => {
     resetListAndAuthState({ preserveCatalog: true });
     loadServer(true);
   };
+  hydrateAllServerMetricsFromCache();
 }
 
 // BUFFER / FLUIDEZ
@@ -5748,9 +6059,378 @@ function saveServersToStorage() {
   } catch (e) {}
 }
 
+function ensureApkDialogsInDom() {
+  if (!$('modalApkRadioPicker')) {
+    const radioModal = document.createElement('div');
+    radioModal.id = 'modalApkRadioPicker';
+    radioModal.className = 'app-modal hidden';
+    radioModal.innerHTML =
+      '<div class="apk-dialog-card">' +
+        '<h3 id="apkRadioTitle" class="apk-dialog-title">Selecionar Opção</h3>' +
+        '<div id="apkRadioOptions" class="apk-radio-list"></div>' +
+        '<div class="apk-dialog-footer">' +
+          '<button type="button" id="btnCancelApkRadio" class="apk-btn-cancel" tabindex="0">CANCELAR</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(radioModal);
+  }
+  if (!$('modalStagedLoading')) {
+    const stagedModal = document.createElement('div');
+    stagedModal.id = 'modalStagedLoading';
+    stagedModal.className = 'app-modal hidden';
+    stagedModal.innerHTML =
+      '<div class="apk-dialog-card">' +
+        '<h3 class="apk-dialog-title">Carregamento em Etapas</h3>' +
+        '<p class="apk-dialog-desc">Selecione quais conteúdos carregar em Primeiro Plano. Os demais serão carregados em Segundo Plano de forma silenciosa e incremental para não travar o aplicativo.</p>' +
+        '<div class="apk-staged-list">' +
+          '<button type="button" id="btnStageLive" class="apk-staged-row" data-stage="live" tabindex="0"><span class="apk-staged-texts"><strong class="apk-staged-title">Canais (Ao Vivo)</strong><span class="apk-staged-sub">Carga instantânea de canais de TV</span></span><span class="apk-checkbox-box" aria-hidden="true">✓</span></button>' +
+          '<button type="button" id="btnStageMovies" class="apk-staged-row" data-stage="movies" tabindex="0"><span class="apk-staged-texts"><strong class="apk-staged-title">Filmes (VOD)</strong><span class="apk-staged-sub">Carregar catálogo de filmes na inicialização</span></span><span class="apk-checkbox-box" aria-hidden="true">✓</span></button>' +
+          '<button type="button" id="btnStageSeries" class="apk-staged-row" data-stage="series" tabindex="0"><span class="apk-staged-texts"><strong class="apk-staged-title">Séries (VOD)</strong><span class="apk-staged-sub">Carregar catálogo de séries na inicialização</span></span><span class="apk-checkbox-box" aria-hidden="true">✓</span></button>' +
+        '</div>' +
+        '<div class="apk-dialog-actions-row">' +
+          '<button type="button" id="btnCancelStagedLoading" class="apk-btn-cancel" tabindex="0">CANCELAR</button>' +
+          '<button type="button" id="btnSaveStagedLoading" class="apk-btn-save" tabindex="0">SALVAR</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(stagedModal);
+  }
+}
+
+function updateApkSyncLabelsUI() {
+  const freq = getBgSyncFrequency();
+  const freqLabel = CatalogUtils.BG_SYNC_LABELS[freq] || 'Uma vez ao dia';
+  const syncAllLabel = getSyncAllListsBackground() ? 'Todas em 2º plano' : 'Apenas lista ativa';
+  const progressLabel = getHideBackgroundProgress() ? 'Ocultar (Silencioso)' : 'Mostrar na tela inicial';
+  const stagedLabel = getStagedLoadingSummary();
+
+  if ($('txtSrvSyncFreqVal')) $('txtSrvSyncFreqVal').textContent = freqLabel;
+  if ($('txtSrvSyncScopeVal')) $('txtSrvSyncScopeVal').textContent = syncAllLabel;
+  if ($('txtSrvSyncProgressVal')) $('txtSrvSyncProgressVal').textContent = progressLabel;
+  if ($('txtSrvStagedLoadVal')) $('txtSrvStagedLoadVal').textContent = stagedLabel;
+
+  const activeSrv = SERVERS[currentServerIndex] || SERVERS[0];
+  if ($('txtServerManagerActiveBadge') && activeSrv) {
+    $('txtServerManagerActiveBadge').textContent = 'Ativa: ' + cleanServerName(activeSrv.name);
+  }
+}
+
+function closeApkSubModal(modal, returnFocusEl) {
+  if (!modal) return;
+  modal.classList.add('hidden');
+  mk21TeleportModalForFullscreen(modal, false);
+  modal._onCloseCallback = null;
+  if (returnFocusEl && typeof returnFocusEl.focus === 'function' && document.body.contains(returnFocusEl)) {
+    setTimeout(() => { try { returnFocusEl.focus(); } catch (e) {} }, 20);
+  } else if ($('modalServerPicker') && !$('modalServerPicker').classList.contains('hidden')) {
+    activeZone = 'modalServerPicker';
+    const first = $('modalServerPicker').querySelector('button:not([disabled])');
+    if (first) try { first.focus(); } catch (e) {}
+  }
+}
+
+function openApkRadioPickerModal({ title, options, currentValue, onSelect, returnFocusEl }) {
+  ensureApkDialogsInDom();
+  const modal = $('modalApkRadioPicker');
+  if (!modal) return;
+  mk21TeleportModalForFullscreen(modal, true);
+  if ($('apkRadioTitle')) $('apkRadioTitle').textContent = title || 'Selecionar Opção';
+  const listEl = $('apkRadioOptions');
+  if (listEl) {
+    listEl.innerHTML = '';
+    options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'apk-radio-option' + (opt.value === currentValue ? ' active' : '');
+      btn.setAttribute('tabindex', '0');
+
+      const dot = document.createElement('span');
+      dot.className = 'apk-radio-dot';
+      dot.setAttribute('aria-hidden', 'true');
+
+      const label = document.createElement('span');
+      label.className = 'apk-radio-label';
+      label.textContent = opt.label;
+
+      btn.appendChild(dot);
+      btn.appendChild(label);
+      btn.onclick = () => {
+        if (typeof onSelect === 'function') onSelect(opt.value, opt.label);
+        closeApkSubModal(modal, returnFocusEl);
+      };
+      listEl.appendChild(btn);
+    });
+  }
+  const closeFn = () => closeApkSubModal(modal, returnFocusEl);
+  modal._onCloseCallback = closeFn;
+  if ($('btnCancelApkRadio')) $('btnCancelApkRadio').onclick = closeFn;
+  modal.classList.remove('hidden');
+  const activeBtn = listEl ? (listEl.querySelector('.apk-radio-option.active') || listEl.querySelector('.apk-radio-option')) : null;
+  if (activeBtn) setTimeout(() => { try { activeBtn.focus(); } catch (e) {} }, 20);
+}
+
+function openSyncFrequencyModal(returnFocusEl, onChanged) {
+  openApkRadioPickerModal({
+    title: 'Frequência de Sincronização',
+    currentValue: getBgSyncFrequency(),
+    returnFocusEl,
+    options: [
+      { value: 'startup', label: 'A cada inicialização' },
+      { value: 'daily', label: 'Uma vez ao dia' },
+      { value: 'weekly', label: 'Uma vez por semana' },
+      { value: 'manual', label: 'Desativado (Apenas manual)' }
+    ],
+    onSelect: (val, label) => {
+      setBgSyncFrequency(val);
+      mk21UpdateCatalogMetricsUI();
+      if (typeof onChanged === 'function') onChanged();
+      showChannelBanner('🔄 Frequência salva: ' + label);
+    }
+  });
+}
+
+function openSyncAllListsModal(returnFocusEl, onChanged) {
+  openApkRadioPickerModal({
+    title: 'Sincronizar Todas as Listas',
+    currentValue: getSyncAllListsBackground() ? 'all' : 'active',
+    returnFocusEl,
+    options: [
+      { value: 'all', label: 'Sincronizar Todas em 2º Plano' },
+      { value: 'active', label: 'Sincronizar Apenas Lista Ativa' }
+    ],
+    onSelect: (val, label) => {
+      setSyncAllListsBackground(val === 'all');
+      mk21UpdateCatalogMetricsUI();
+      if (typeof onChanged === 'function') onChanged();
+      showChannelBanner('🌐 Modo de sincronização: ' + label);
+    }
+  });
+}
+
+function openHideProgressModal(returnFocusEl, onChanged) {
+  openApkRadioPickerModal({
+    title: 'Progresso em Segundo Plano',
+    currentValue: getHideBackgroundProgress() ? 'hide' : 'show',
+    returnFocusEl,
+    options: [
+      { value: 'show', label: 'Mostrar Progresso na Tela Inicial' },
+      { value: 'hide', label: 'Ocultar Progresso (Silencioso)' }
+    ],
+    onSelect: (val, label) => {
+      setHideBackgroundProgress(val === 'hide');
+      mk21UpdateCatalogMetricsUI();
+      if (typeof onChanged === 'function') onChanged();
+      showChannelBanner('👁️ Progresso: ' + label);
+    }
+  });
+}
+
+function openStagedLoadingModal(returnFocusEl, onChanged) {
+  ensureApkDialogsInDom();
+  const modal = $('modalStagedLoading');
+  if (!modal) return;
+  mk21TeleportModalForFullscreen(modal, true);
+  const draft = { ...getStagedLoadingPrefs() };
+  const btnLive = $('btnStageLive');
+  const btnMovies = $('btnStageMovies');
+  const btnSeries = $('btnStageSeries');
+
+  const syncVisual = () => {
+    if (btnLive) btnLive.classList.toggle('checked', Boolean(draft.live));
+    if (btnMovies) btnMovies.classList.toggle('checked', Boolean(draft.movies));
+    if (btnSeries) btnSeries.classList.toggle('checked', Boolean(draft.series));
+  };
+  const toggleKey = (key) => {
+    const next = !draft[key];
+    const remaining = (key === 'live' ? next : draft.live) ||
+      (key === 'movies' ? next : draft.movies) ||
+      (key === 'series' ? next : draft.series);
+    if (!remaining) {
+      showChannelBanner('⚠️ Mantenha ao menos um tipo selecionado em 1º Plano');
+      return;
+    }
+    draft[key] = next;
+    syncVisual();
+  };
+
+  if (btnLive) btnLive.onclick = () => toggleKey('live');
+  if (btnMovies) btnMovies.onclick = () => toggleKey('movies');
+  if (btnSeries) btnSeries.onclick = () => toggleKey('series');
+  syncVisual();
+
+  const closeFn = () => closeApkSubModal(modal, returnFocusEl);
+  modal._onCloseCallback = closeFn;
+  if ($('btnCancelStagedLoading')) $('btnCancelStagedLoading').onclick = closeFn;
+  if ($('btnSaveStagedLoading')) {
+    $('btnSaveStagedLoading').onclick = () => {
+      const saved = setStagedLoadingPrefs(draft);
+      mk21UpdateCatalogMetricsUI();
+      closeApkSubModal(modal, returnFocusEl);
+      if (typeof onChanged === 'function') onChanged();
+      showChannelBanner('📑 Carregamento em etapas salvo (' + getStagedLoadingSummary(saved) + ')');
+    };
+  }
+  modal.classList.remove('hidden');
+  if (btnLive) setTimeout(() => { try { btnLive.focus(); } catch (e) {} }, 20);
+}
+
+async function hydrateAllServerMetricsFromCache() {
+  for (let i = 0; i < SERVERS.length; i++) {
+    const srv = SERVERS[i];
+    if (!srv || !srv.id) continue;
+    if (i === currentServerIndex && (allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) > 0) {
+      computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
+      continue;
+    }
+    const existing = getPerServerMetrics(srv.id);
+    if (existing && (existing.totalChannels + existing.totalVOD + existing.totalSeries) > 0) {
+      updateServerRowMetricsBadge(srv.id, existing);
+      continue;
+    }
+    try {
+      const cached = await getStoredData(srv.id);
+      if (cached && ((cached.LIVE && cached.LIVE.length) || (cached.MOVIE && cached.MOVIE.length) || (cached.SERIES && cached.SERIES.length))) {
+        computeAndSaveServerMetrics(srv.id, cached, null, false);
+      }
+    } catch (e) {}
+  }
+}
+
+async function syncSingleServerInBackground(idx, triggerBtn) {
+  const srv = SERVERS[idx];
+  if (!srv) return false;
+  if (idx === currentServerIndex) {
+    if (triggerBtn) triggerBtn.textContent = '⏳ Sync...';
+    showChannelBanner('🔄 Sincronizando fonte ativa (' + cleanServerName(srv.name) + ')...');
+    try {
+      await loadServer(true, { silent: true });
+    } finally {
+      if (triggerBtn && document.body.contains(triggerBtn)) triggerBtn.textContent = '🔄 Sync';
+    }
+    return true;
+  }
+
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = '⏳ ...';
+  }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), 50000) : null;
+  try {
+    const target = { LIVE: [], MOVIE: [], SERIES: [] };
+    const indexWriter = await createCatalogIndexWriter(srv.id);
+    const liveGrouper = window.MK21AlternativeSources ? MK21AlternativeSources.createGrouper() : null;
+    await streamPlaylistContent(
+      srv.url,
+      controller && controller.signal,
+      (item) => {
+        const slim = slimItem(item);
+        const type = slim.contentType;
+        slim.isAdult = !!(slim.isAdult || isAdult(slim.name) || isAdult(slim.group));
+        indexWriter.add(slim);
+        if (target[type]) {
+          if (type === 'LIVE' && liveGrouper) {
+            const grouped = liveGrouper.add(slim);
+            if (grouped.isNew) target[type].push(grouped.item);
+          } else {
+            target[type].push(slim);
+          }
+        }
+      },
+      null
+    );
+    const total = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+    if (total > 0) {
+      await indexWriter.finish();
+      saveFastCache(srv.id, target.LIVE, true);
+      await saveStoredData(srv.id, target);
+      try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
+      const m = computeAndSaveServerMetrics(srv.id, target, null, false);
+      updateServerRowMetricsBadge(srv.id, m);
+      addDevLog('[Sync Lista] ' + cleanServerName(srv.name) + ': ' + total + ' itens salvos.', 'success');
+      if (!getHideBackgroundProgress()) {
+        showChannelBanner('✓ ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens sincronizados');
+      }
+    }
+    return true;
+  } catch (err) {
+    addDevLog('[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + CatalogUtils.formatFriendlyLoadError(err), 'warn');
+    if (triggerBtn && !getHideBackgroundProgress()) {
+      showChannelBanner('⚠️ Falha ao sincronizar ' + cleanServerName(srv.name));
+    }
+    return false;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (triggerBtn && document.body.contains(triggerBtn)) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = '🔄 Sync';
+    }
+  }
+}
+
+async function syncAllConfiguredServersInBackground(forceAll = false) {
+  if (mk21BgAllSyncRunning || !AppState.isLoggedIn) return;
+  const freq = getBgSyncFrequency();
+  if (!forceAll && freq === 'manual') return;
+
+  mk21BgAllSyncRunning = true;
+  const btnAll = $('btnSyncAllServersNow') || $('cfgSyncAllServersNow');
+  if (btnAll) {
+    btnAll.disabled = true;
+    btnAll.textContent = '⏳ Sincronizando...';
+  }
+  try {
+    const syncAll = forceAll || getSyncAllListsBackground();
+    const order = [currentServerIndex];
+    if (syncAll) {
+      for (let i = 0; i < SERVERS.length; i++) {
+        if (i !== currentServerIndex) order.push(i);
+      }
+    }
+    if (forceAll && !getHideBackgroundProgress()) {
+      showChannelBanner('🔄 Sincronizando ' + order.length + ' servidor(es) em segundo plano...');
+    }
+
+    for (let k = 0; k < order.length; k++) {
+      const idx = order[k];
+      const srv = SERVERS[idx];
+      if (!srv) continue;
+      let lastTs = 0;
+      try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+      if (!forceAll && !CatalogUtils.shouldSyncServer(lastTs, freq)) continue;
+
+      await syncSingleServerInBackground(idx, null);
+      if (k < order.length - 1) {
+        await new Promise(r => setTimeout(r, 2500));
+      }
+    }
+
+    if ($('modalServerPicker') && !$('modalServerPicker').classList.contains('hidden')) {
+      renderServerPickerList();
+    }
+    if (currentContentType === 'SETTINGS' && $('cfgOpenServerManager')) {
+      renderServerPanel();
+    }
+  } finally {
+    mk21BgAllSyncRunning = false;
+    if ($('btnSyncAllServersNow')) {
+      $('btnSyncAllServersNow').disabled = false;
+      $('btnSyncAllServersNow').textContent = '🔄 Sincronizar Todas Agora';
+    }
+    if ($('cfgSyncAllServersNow')) {
+      $('cfgSyncAllServersNow').disabled = false;
+      $('cfgSyncAllServersNow').textContent = '🔄 Sincronizar Todas Agora';
+    }
+  }
+}
+
 function mk21EnsureServerManagerExtras() {
+  ensureApkDialogsInDom();
   const modal = $('modalServerPicker');
   if (!modal) return;
+  const card = modal.querySelector('.server-manager-modal');
+  if (card && !card.classList.contains('server-manager-maximized')) {
+    card.classList.add('server-manager-maximized');
+  }
   const body = modal.querySelector('.server-manager-body');
   if (!body) return;
   if (!$('serverMetricsSummary')) {
@@ -5759,30 +6439,48 @@ function mk21EnsureServerManagerExtras() {
     metricsDiv.className = 'server-metrics-grid';
     metricsDiv.setAttribute('aria-live', 'polite');
     metricsDiv.innerHTML =
-      '<div class="server-metric-card"><span class="server-metric-label">📺 Canais</span><strong id="metricTotalChannels" class="server-metric-value">0</strong></div>' +
-      '<div class="server-metric-card"><span class="server-metric-label">🎬 Filmes (VOD)</span><strong id="metricTotalVod" class="server-metric-value">0</strong></div>' +
-      '<div class="server-metric-card"><span class="server-metric-label">🍿 Séries</span><strong id="metricTotalSeries" class="server-metric-value">0</strong></div>' +
+      '<div class="server-metric-card"><span class="server-metric-label">📺 Canais (Geral)</span><strong id="metricTotalChannels" class="server-metric-value">0</strong></div>' +
+      '<div class="server-metric-card"><span class="server-metric-label">🎬 Filmes VOD (Geral)</span><strong id="metricTotalVod" class="server-metric-value">0</strong></div>' +
+      '<div class="server-metric-card"><span class="server-metric-label">🍿 Séries (Geral)</span><strong id="metricTotalSeries" class="server-metric-value">0</strong></div>' +
       '<div class="server-metric-card"><span class="server-metric-label">📡 EPG / Grupos</span><strong id="metricTotalEpg" class="server-metric-value">0</strong></div>';
     body.insertBefore(metricsDiv, body.firstChild);
   }
-  if (!$('serverBgSyncControl')) {
-    const bgDiv = document.createElement('div');
+  // Migra barra legada em OTA caso o index.html antigo ainda tenha o markup anterior
+  const existingBar = $('serverBgSyncControl');
+  if (!existingBar || !existingBar.classList.contains('server-apk-sync-grid')) {
+    const bgDiv = existingBar || document.createElement('div');
     bgDiv.id = 'serverBgSyncControl';
-    bgDiv.className = 'server-bgsync-bar';
+    bgDiv.className = 'server-apk-sync-grid';
     bgDiv.innerHTML =
-      '<div class="server-bgsync-info">' +
-        '<span class="server-bgsync-title">🔄 Atualização em segundo plano</span>' +
-        '<span id="txtServerSyncLast" class="server-bgsync-sub">Sincronização silenciosa (sem travar a TV)</span>' +
-      '</div>' +
-      '<div class="server-bgsync-options">' +
-        '<button type="button" class="bgsync-opt-btn" data-bgsync="manual" tabindex="0">Manual</button>' +
-        '<button type="button" class="bgsync-opt-btn" data-bgsync="1h" tabindex="0">1h</button>' +
-        '<button type="button" class="bgsync-opt-btn" data-bgsync="6h" tabindex="0">6h</button>' +
-        '<button type="button" class="bgsync-opt-btn" data-bgsync="24h" tabindex="0">24h</button>' +
-      '</div>';
-    const summary = $('serverMetricsSummary');
-    if (summary && summary.nextSibling) body.insertBefore(bgDiv, summary.nextSibling);
-    else body.insertBefore(bgDiv, body.firstChild);
+      '<button type="button" id="btnSrvCfgSyncFreq" class="apk-setting-card" tabindex="0"><span class="apk-setting-icon">🔄</span><span class="apk-setting-texts"><strong class="apk-setting-title">Frequência de Sincronização</strong><span id="txtSrvSyncFreqVal" class="apk-setting-sub">Uma vez ao dia</span></span></button>' +
+      '<button type="button" id="btnSrvCfgSyncScope" class="apk-setting-card" tabindex="0"><span class="apk-setting-icon">🌐</span><span class="apk-setting-texts"><strong class="apk-setting-title">Sincronizar Todas as Listas</strong><span id="txtSrvSyncScopeVal" class="apk-setting-sub">Todas em 2º plano</span></span></button>' +
+      '<button type="button" id="btnSrvCfgSyncProgress" class="apk-setting-card" tabindex="0"><span class="apk-setting-icon">👁️</span><span class="apk-setting-texts"><strong class="apk-setting-title">Progresso em Segundo Plano</strong><span id="txtSrvSyncProgressVal" class="apk-setting-sub">Mostrar na tela inicial</span></span></button>' +
+      '<button type="button" id="btnSrvCfgStagedLoad" class="apk-setting-card" tabindex="0"><span class="apk-setting-icon">📑</span><span class="apk-setting-texts"><strong class="apk-setting-title">Carregamento em Etapas</strong><span id="txtSrvStagedLoadVal" class="apk-setting-sub">1º Plano: Canais</span></span></button>';
+    if (!existingBar) {
+      const summary = $('serverMetricsSummary');
+      if (summary && summary.nextSibling) body.insertBefore(bgDiv, summary.nextSibling);
+      else body.insertBefore(bgDiv, body.firstChild);
+    }
+  }
+  if ($('btnSrvCfgSyncFreq') && !$('btnSrvCfgSyncFreq').dataset.mk21Bound) {
+    $('btnSrvCfgSyncFreq').dataset.mk21Bound = '1';
+    $('btnSrvCfgSyncFreq').onclick = () => openSyncFrequencyModal($('btnSrvCfgSyncFreq'));
+  }
+  if ($('btnSrvCfgSyncScope') && !$('btnSrvCfgSyncScope').dataset.mk21Bound) {
+    $('btnSrvCfgSyncScope').dataset.mk21Bound = '1';
+    $('btnSrvCfgSyncScope').onclick = () => openSyncAllListsModal($('btnSrvCfgSyncScope'));
+  }
+  if ($('btnSrvCfgSyncProgress') && !$('btnSrvCfgSyncProgress').dataset.mk21Bound) {
+    $('btnSrvCfgSyncProgress').dataset.mk21Bound = '1';
+    $('btnSrvCfgSyncProgress').onclick = () => openHideProgressModal($('btnSrvCfgSyncProgress'));
+  }
+  if ($('btnSrvCfgStagedLoad') && !$('btnSrvCfgStagedLoad').dataset.mk21Bound) {
+    $('btnSrvCfgStagedLoad').dataset.mk21Bound = '1';
+    $('btnSrvCfgStagedLoad').onclick = () => openStagedLoadingModal($('btnSrvCfgStagedLoad'));
+  }
+  if ($('btnSyncAllServersNow') && !$('btnSyncAllServersNow').dataset.mk21Bound) {
+    $('btnSyncAllServersNow').dataset.mk21Bound = '1';
+    $('btnSyncAllServersNow').onclick = () => syncAllConfiguredServersInBackground(true);
   }
 }
 
@@ -5797,36 +6495,17 @@ function mk21UpdateCatalogMetricsUI() {
       ? (metrics.totalEPG.toLocaleString('pt-BR') + ' EPG')
       : (metrics.totalGroups.toLocaleString('pt-BR') + ' grupos');
   }
+  updateApkSyncLabelsUI();
 
-  const curFreq = getBgSyncFrequency();
-  const bgBar = $('serverBgSyncControl');
-  if (bgBar) {
-    bgBar.querySelectorAll('.bgsync-opt-btn').forEach(btn => {
-      const key = btn.getAttribute('data-bgsync');
-      btn.classList.toggle('active', key === curFreq);
-      if (!btn.dataset.mk21Bound) {
-        btn.dataset.mk21Bound = '1';
-        btn.onclick = () => {
-          const saved = setBgSyncFrequency(key);
-          mk21UpdateCatalogMetricsUI();
-          showChannelBanner('🔄 Atualização em segundo plano: ' + (CatalogUtils.BG_SYNC_LABELS[saved] || saved));
-        };
-      }
-    });
-  }
   const srv = SERVERS[currentServerIndex];
   const lastSyncEl = $('txtServerSyncLast');
   if (lastSyncEl) {
     let lastTs = 0;
     try { if (srv) lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
-    const freqLabel = CatalogUtils.BG_SYNC_LABELS[curFreq] || curFreq;
     if (lastTs > 0) {
-      const dt = new Date(lastTs);
-      const hh = String(dt.getHours()).padStart(2, '0');
-      const mm = String(dt.getMinutes()).padStart(2, '0');
-      lastSyncEl.textContent = 'Frequência: ' + freqLabel + ' • Última sinc.: ' + hh + ':' + mm;
+      lastSyncEl.textContent = 'Totais por servidor • Ativa sinc.: ' + formatSyncTimestampShort(lastTs);
     } else {
-      lastSyncEl.textContent = 'Frequência: ' + freqLabel + ' (prioridade baixa, sem travar a UI)';
+      lastSyncEl.textContent = 'Totais individuais por servidor';
     }
   }
 }
@@ -5844,6 +6523,7 @@ function openServerPicker() {
   if (grid && typeof mk21UpdateVisualScrollbarFor === 'function') {
     setTimeout(() => mk21UpdateVisualScrollbarFor(grid), 40);
   }
+  hydrateAllServerMetricsFromCache();
   const first = grid ? grid.querySelector('.btn-server-connect') : null;
   if (first) first.focus();
 }
@@ -5853,39 +6533,69 @@ function renderServerPickerList() {
   const container = $('serverItemsGrid');
   container.innerHTML = '';
 
+  const activeCatalogMetrics = getCatalogMetricsSnapshot();
+
   SERVERS.forEach((srv, idx) => {
+    const isCurrent = idx === currentServerIndex;
     const row = document.createElement('div');
-    row.className = 'server-manager-row' + (idx === currentServerIndex ? ' active-server' : '');
+    row.className = 'server-manager-row' + (isCurrent ? ' active-server' : '');
 
     const infoCol = document.createElement('div');
     infoCol.className = 'server-info-col';
 
-    const nameLine = document.createElement('div');
+    const topLine = document.createElement('div');
+    topLine.className = 'server-info-top-line';
+
+    const nameLine = document.createElement('span');
     nameLine.className = 'server-info-name';
-    nameLine.textContent = cleanServerName(srv.name) + (idx === currentServerIndex ? '  [✓ ATIVO]' : '');
+    nameLine.textContent = cleanServerName(srv.name) + (isCurrent ? '  [✓ ATIVO]' : '');
+    topLine.appendChild(nameLine);
+
+    let lastTs = 0;
+    try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+    const syncMeta = document.createElement('span');
+    syncMeta.className = 'server-row-sync-meta';
+    syncMeta.textContent = '• ' + formatSyncTimestampShort(lastTs);
+    topLine.appendChild(syncMeta);
 
     const urlLine = document.createElement('div');
     urlLine.className = 'server-info-url';
     urlLine.textContent = srv.url;
 
-    infoCol.appendChild(nameLine);
+    const metricsStrip = document.createElement('div');
+    metricsStrip.className = 'server-row-metrics';
+    metricsStrip.setAttribute('data-srv-metrics-id', srv.id);
+    const srvMetrics = (isCurrent && activeCatalogMetrics.totalItems > 0)
+      ? activeCatalogMetrics
+      : getPerServerMetrics(srv.id);
+    metricsStrip.innerHTML = buildPerServerMetricsPillsHtml(srvMetrics);
+
+    infoCol.appendChild(topLine);
     infoCol.appendChild(urlLine);
+    infoCol.appendChild(metricsStrip);
 
     const actionsCol = document.createElement('div');
     actionsCol.className = 'server-row-actions';
 
+    const btnSyncOne = document.createElement('button');
+    btnSyncOne.type = 'button';
+    btnSyncOne.className = 'btn-server-sync-one';
+    btnSyncOne.setAttribute('tabindex', '0');
+    btnSyncOne.textContent = '🔄 Sync';
+    btnSyncOne.onclick = () => syncSingleServerInBackground(idx, btnSyncOne);
+
     const btnConnect = document.createElement('button');
-    btnConnect.className = 'btn-server-connect' + (idx === currentServerIndex ? ' active' : '');
+    btnConnect.type = 'button';
+    btnConnect.className = 'btn-server-connect' + (isCurrent ? ' active' : '');
     btnConnect.setAttribute('tabindex', '0');
-    btnConnect.textContent = idx === currentServerIndex ? '✓ Conectado' : '🔗 Conectar';
+    btnConnect.textContent = isCurrent ? '✓ Ativo' : '🔗 Conectar';
     btnConnect.onclick = () => {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
       resetListAndAuthState({ preserveCatalog: true });
 
-      // Exibe porcentagem no lugar do botão antes de fechar
-      btnConnect.textContent = 'Carregando 25%...';
-      setTimeout(() => { btnConnect.textContent = 'Carregando 65%...'; }, 200);
+      btnConnect.textContent = '25%...';
+      setTimeout(() => { btnConnect.textContent = '65%...'; }, 200);
       setTimeout(() => {
         $('modalServerPicker').classList.add('hidden');
         mk21TeleportModalForFullscreen($('modalServerPicker'), false);
@@ -5896,17 +6606,22 @@ function renderServerPickerList() {
     };
 
     const btnEdit = document.createElement('button');
+    btnEdit.type = 'button';
     btnEdit.className = 'btn-server-edit';
     btnEdit.setAttribute('tabindex', '0');
-    btnEdit.textContent = '✏️ Alterar';
+    btnEdit.textContent = '✏️';
+    btnEdit.title = 'Alterar servidor';
     btnEdit.onclick = () => editServer(idx);
 
     const btnDelete = document.createElement('button');
+    btnDelete.type = 'button';
     btnDelete.className = 'btn-server-delete';
     btnDelete.setAttribute('tabindex', '0');
-    btnDelete.textContent = '🗑️ Excluir';
+    btnDelete.textContent = '🗑️';
+    btnDelete.title = 'Excluir servidor';
     btnDelete.onclick = () => deleteServer(idx);
 
+    actionsCol.appendChild(btnSyncOne);
     actionsCol.appendChild(btnConnect);
     actionsCol.appendChild(btnEdit);
     actionsCol.appendChild(btnDelete);
@@ -5973,6 +6688,7 @@ $('btnAddServerSubmit').onclick = () => {
     try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
     $('btnCancelEditServer').click();
     $('modalServerPicker').classList.add('hidden');
+    mk21TeleportModalForFullscreen($('modalServerPicker'), false);
     activeZone = 'channels';
     activeItem = null;
     loadServer(true);
@@ -5996,6 +6712,7 @@ $('btnAddServerSubmit').onclick = () => {
   $('inputNewServerName').value = '';
   $('inputNewServerUrl').value = '';
   $('modalServerPicker').classList.add('hidden');
+  mk21TeleportModalForFullscreen($('modalServerPicker'), false);
   activeZone = 'channels';
   activeItem = null;
 
@@ -6025,10 +6742,12 @@ if ($('btnLoadOfflineCache')) {
         MOVIE: cached.MOVIE || [],
         SERIES: cached.SERIES || []
       };
+      computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
       buildCategoryIndex(allCatalog[currentContentType] || []);
       renderCategoriesList();
       renderItemsList();
       $('modalServerPicker').classList.add('hidden');
+      mk21TeleportModalForFullscreen($('modalServerPicker'), false);
       activeZone = 'channels';
       addDevLog(`[Cache] Catálogo restaurado do cache local (${liveN} canais, ${movN} filmes, ${serN} séries).`, 'success');
       alert(`Catálogo offline carregado com sucesso!\n${liveN} Canais, ${movN} Filmes, ${serN} Séries.`);
@@ -6046,8 +6765,8 @@ $('btnCloseServerPicker').onclick = () => {
     mk21TeleportModalForFullscreen(modal, false);
   }
   const fullscreen = isAppFullscreen();
-  activeZone = fullscreen ? 'player' : 'channels';
-  const target = fullscreen ? $('fsBtnServer') : $('btnHeaderServer');
+  activeZone = fullscreen ? 'player' : (currentContentType === 'SETTINGS' ? 'settings' : 'channels');
+  const target = fullscreen ? $('fsBtnServer') : (currentContentType === 'SETTINGS' ? $('cfgBtnQualidade') : $('btnHeaderServer'));
   if (target && target.focus) target.focus();
   if (fullscreen) pokeFsHud();
 };
@@ -6065,7 +6784,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.7.8';
+const BASE_PACKAGE_VERSION = '2.7.9';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6338,7 +7057,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['modalDevLogs', 'hudLoadingOverlay', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalApkRadioPicker', 'modalStagedLoading', 'modalDevLogs', 'hudLoadingOverlay', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -6368,8 +7087,15 @@ function mk21GetFocusables() {
     '.season-tab-btn',
     '.episode-item-btn',
     '.btn-server-connect',
+    '.btn-server-sync-one',
     '.btn-server-edit',
-    '.btn-server-delete'
+    '.btn-server-delete',
+    '.apk-setting-card',
+    '.apk-radio-option',
+    '.apk-staged-row',
+    '.apk-btn-cancel',
+    '.apk-btn-save',
+    '.sort-choice-btn'
   ].join(',');
   return Array.from(root.querySelectorAll(sel)).filter(function (el) {
     if (!mk21IsVisible(el)) return false;
@@ -6511,7 +7237,13 @@ let mk21ExitArmed = false;
 
 function mk21CloseModalWithFocus(modal) {
   if (!modal) return;
+  if (typeof modal._onCloseCallback === 'function') {
+    const cb = modal._onCloseCallback;
+    cb();
+    return;
+  }
   modal.classList.add('hidden');
+  mk21TeleportModalForFullscreen(modal, false);
   mk21UltimoAlvoRolagem = null;
   if (modal.id === 'modalPlayerOptions' || modal.id === 'modalQuality') mk21PanelTarget = null;
   if (isAppFullscreen()) {
@@ -6714,7 +7446,7 @@ document.addEventListener('keydown', function (e) {
   }
   if (activeModal) {
     const focusableElements = Array.from(activeModal.querySelectorAll(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), .modal-btn, .modal-button, .ctrl-btn, .pin-key, .btn-server-connect, .btn-server-edit, .btn-server-delete, .hud-ctrl-btn'
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), .modal-btn, .modal-button, .ctrl-btn, .pin-key, .btn-server-connect, .btn-server-sync-one, .btn-server-edit, .btn-server-delete, .hud-ctrl-btn, .apk-setting-card, .apk-radio-option, .apk-staged-row, .apk-btn-cancel, .apk-btn-save, .sort-choice-btn'
     )).filter(mk21IsVisible);
 
     if (focusableElements.length > 0) {
@@ -6730,11 +7462,12 @@ document.addEventListener('keydown', function (e) {
       if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
         e.preventDefault();
         e.stopPropagation();
-        activeModal.classList.add('hidden');
-        activeZone = 'channels';
-        focusActiveElement();
+        mk21CloseModalWithFocus(activeModal);
         return;
       }
+
+      const activeTag = ae ? ae.tagName : '';
+      const inInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
 
       // Mapeamento de teclas de navegação do modal
       const isTab = key === 'Tab' || k === 9;
@@ -6765,11 +7498,13 @@ document.addEventListener('keydown', function (e) {
 
       // Navegação D-Pad espacial restrita estritamente ao modal ativo
       if (k === 37 || key === 'ArrowLeft') {
+        if (inInput) return;
         e.preventDefault();
         mk21MoveFocus('left');
         return;
       }
       if (k === 39 || key === 'ArrowRight') {
+        if (inInput) return;
         e.preventDefault();
         mk21MoveFocus('right');
         return;
@@ -7908,30 +8643,19 @@ async function getBestAvailableCache(preferredId) {
 }
 
 function runLowPriorityBackgroundSync() {
-  if (!AppState.isLoggedIn || loadInFlight) return;
+  if (!AppState.isLoggedIn || loadInFlight || mk21BgAllSyncRunning) return;
   const freq = getBgSyncFrequency();
   if (freq === 'manual') return;
-  const srv = SERVERS[currentServerIndex];
-  if (!srv) return;
-  const intervalMs = CatalogUtils.getBgSyncIntervalMs(freq);
-  if (intervalMs <= 0) return;
-
-  let lastSync = 0;
-  try { lastSync = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
-  if (lastSync > 0 && (Date.now() - lastSync) < intervalMs) {
-    scheduleBackgroundSync();
-    return;
-  }
 
   const dispatchLowPriority = () => {
-    if (!AppState.isLoggedIn || loadInFlight) return;
-    loadServer(true, { silent: true, backgroundLowPriority: true }).catch(() => {});
+    if (!AppState.isLoggedIn || loadInFlight || mk21BgAllSyncRunning) return;
+    syncAllConfiguredServersInBackground(false).catch(() => {});
   };
 
   if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(dispatchLowPriority, { timeout: 5000 });
   } else {
-    setTimeout(dispatchLowPriority, 1000);
+    setTimeout(dispatchLowPriority, 1200);
   }
 }
 
@@ -7942,6 +8666,9 @@ function scheduleBackgroundSync() {
   }
   if (!AppState.isLoggedIn) return;
   const freq = getBgSyncFrequency();
+  if (freq === 'manual') return;
+  if (freq === 'startup') return; // Startup executa uma vez ao abrir o app
+
   const intervalMs = CatalogUtils.getBgSyncIntervalMs(freq);
   if (!intervalMs || intervalMs <= 0) return;
 
@@ -7974,6 +8701,7 @@ async function loadInitialCacheAndSyncInBackground() {
       MOVIE: cached.MOVIE || [],
       SERIES: cached.SERIES || []
     };
+    computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
     buildCurrentCategories();
     renderCategoriesList();
     selectCategory('ALL');
@@ -7986,7 +8714,20 @@ async function loadInitialCacheAndSyncInBackground() {
       const firstBtn = $('listItems') ? $('listItems').querySelector('.list-item-btn') : null;
       if (firstBtn) { try { firstBtn.focus(); } catch (e) {} }
     }, 200);
-    setTimeout(() => { loadServer(true, { silent: true, backgroundLowPriority: true }); }, 1200);
+
+    // Respeita a Frequência (A cada inicialização, Uma vez ao dia, Uma vez por semana, Manual)
+    const freq = getBgSyncFrequency();
+    let lastTs = 0;
+    try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+    if (freq === 'startup' || CatalogUtils.shouldSyncServer(lastTs, freq)) {
+      setTimeout(() => {
+        if (getSyncAllListsBackground()) {
+          syncAllConfiguredServersInBackground(false).catch(() => {});
+        } else {
+          loadServer(true, { silent: true, backgroundLowPriority: true }).catch(() => {});
+        }
+      }, 1500);
+    }
     scheduleBackgroundSync();
     return;
   }

@@ -3,23 +3,23 @@
   "packages": [
     {
       "id": "com.mk21.tv",
-      "version": "2.7.8",
+      "version": "2.7.9",
       "type": "web",
       "title": "MK21 Play",
       "appDescription": "MK21 Streaming OTT & IPTV Multi-Servidor para LG Smart TVs (webOS 3.0+)",
       "category": "Video & TV",
       "icon": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/icon.png",
-      "sourceUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.7.8_all.ipk",
+      "sourceUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.7.9_all.ipk",
       "manifest": {
         "id": "com.mk21.tv",
-        "version": "2.7.8",
+        "version": "2.7.9",
         "type": "web",
         "title": "MK21 Play",
         "icon": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/icon.png",
         "largeIcon": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/largeIcon.png",
-        "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.7.8_all.ipk",
+        "ipkUrl": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.7.9_all.ipk",
         "ipkHash": {
-          "sha256": "633bf350f5ffc40e0d1a28330d62094ef9c31d0ae53154b2419b20c99e2add6a"
+          "sha256": "7862cd3db9f7803a674a62f4490773bbd86f53ff3f9feefb7fb5f4310f4fe1f3"
         },
         "vendor": "MK21"
       }

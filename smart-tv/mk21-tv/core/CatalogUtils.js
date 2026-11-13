@@ -4,17 +4,29 @@
  */
 
 const BG_SYNC_INTERVALS_MS = {
-  manual: 0,
-  '1h': 3600000,
-  '6h': 21600000,
-  '24h': 86400000
+  startup: 0,
+  daily: 86400000,
+  weekly: 604800000,
+  manual: -1
 };
 
 const BG_SYNC_LABELS = {
-  manual: 'Manual',
-  '1h': 'A cada 1h',
-  '6h': 'A cada 6h',
-  '24h': 'A cada 24h'
+  startup: 'A cada inicialização',
+  daily: 'Uma vez ao dia',
+  weekly: 'Uma vez por semana',
+  manual: 'Desativado (Apenas manual)'
+};
+
+const LEGACY_FREQ_ALIASES = {
+  '1h': 'startup',
+  '6h': 'daily',
+  '24h': 'daily',
+  'a cada inicialização': 'startup',
+  'a cada inicializacao': 'startup',
+  'uma vez ao dia': 'daily',
+  'uma vez por semana': 'weekly',
+  'desativado (apenas manual)': 'manual',
+  'apenas manual': 'manual'
 };
 
 function normalizeBgSyncFrequency(freq) {
@@ -22,12 +34,27 @@ function normalizeBgSyncFrequency(freq) {
   if (Object.prototype.hasOwnProperty.call(BG_SYNC_INTERVALS_MS, clean)) {
     return clean;
   }
-  return '6h';
+  if (Object.prototype.hasOwnProperty.call(LEGACY_FREQ_ALIASES, clean)) {
+    return LEGACY_FREQ_ALIASES[clean];
+  }
+  return 'daily';
 }
 
 function getBgSyncIntervalMs(freq) {
   const key = normalizeBgSyncFrequency(freq);
-  return BG_SYNC_INTERVALS_MS[key] || 0;
+  const val = BG_SYNC_INTERVALS_MS[key];
+  return val > 0 ? val : 0;
+}
+
+function shouldSyncServer(lastSyncMs, freq, nowMs) {
+  const key = normalizeBgSyncFrequency(freq);
+  if (key === 'manual') return false;
+  const last = Number(lastSyncMs) || 0;
+  if (last <= 0) return true;
+  if (key === 'startup') return true;
+  const now = typeof nowMs === 'number' && Number.isFinite(nowMs) ? nowMs : Date.now();
+  const interval = getBgSyncIntervalMs(key);
+  return (now - last) >= interval;
 }
 
 function computeCatalogMetrics(catalog, epgCache, hasXmltv) {
@@ -127,6 +154,7 @@ module.exports = {
   BG_SYNC_LABELS,
   normalizeBgSyncFrequency,
   getBgSyncIntervalMs,
+  shouldSyncServer,
   computeCatalogMetrics,
   parseSafeJsonResponse,
   formatFriendlyLoadError
