@@ -124,6 +124,7 @@ html, body {
 .fa-floppy-disk:empty::before { content: "💾"; }
 .fa-expand:empty::before { content: "⛶"; }
 .fa-compress:empty::before { content: "🗗"; }
+.fa-right-from-bracket:empty::before { content: "🚪"; }
 
 .header-right {
   display: flex;
@@ -2726,17 +2727,16 @@ body.osk-open .login-card {
   left: auto !important;
   top: auto !important;
   bottom: auto !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
-  width: clamp(220px, 15vw, 260px) !important;
-  min-width: 210px !important;
+  height: calc(100vh - 60px) !important;
+  max-height: calc(100vh - 60px) !important;
+  width: 248px !important;
+  min-width: 224px !important;
   max-width: 270px !important;
-  flex: 0 0 clamp(220px, 15vw, 260px) !important;
+  flex: 0 0 248px !important;
   flex-direction: column !important;
   align-items: stretch !important;
   justify-content: flex-start !important;
-  gap: 8px !important;
-  padding: 12px 10px !important;
+  padding: 10px 10px !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   background: linear-gradient(180deg, #05070d 0%, #0b0f19 100%) !important;
@@ -2749,7 +2749,6 @@ body.osk-open .login-card {
 .app-header .header-left {
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 8px !important;
   width: 100% !important;
 }
 
@@ -2757,26 +2756,26 @@ body.osk-open .login-card {
   justify-content: flex-start !important;
   align-items: flex-start !important;
   flex-direction: column !important;
-  gap: 4px !important;
-  padding: 4px 6px 8px !important;
+  padding: 2px 6px 8px !important;
+  margin-bottom: 6px !important;
   border-bottom: 1px solid #161f2f !important;
 }
 
 .app-header .logo-title {
   margin-left: 0 !important;
-  font-size: 19px !important;
+  font-size: 20px !important;
   letter-spacing: 0.8px !important;
 }
 
 .app-header .tv-header-logo {
-  max-height: 42px !important;
+  max-height: 40px !important;
+  margin-bottom: 4px !important;
 }
 
 .app-header .main-tabs {
   flex-direction: column !important;
   align-items: stretch !important;
   width: 100% !important;
-  gap: 5px !important;
   overflow: visible !important;
   background: transparent !important;
   border: none !important;
@@ -2785,30 +2784,35 @@ body.osk-open .login-card {
 
 .app-header .tab-btn {
   width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
   justify-content: flex-start !important;
   text-align: left !important;
-  gap: 8px !important;
   padding: 9px 12px !important;
-  font-size: clamp(13px, 0.92vw, 15px) !important;
+  margin-bottom: 5px !important;
+  min-height: 42px !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
   font-weight: 700 !important;
   letter-spacing: 0.3px !important;
   border-radius: 10px !important;
   white-space: nowrap !important;
-  overflow: visible !important;
-  text-overflow: clip !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   flex: 0 0 auto !important;
 }
 
 .app-header .tab-btn i {
-  width: 18px !important;
+  width: 20px !important;
+  margin-right: 10px !important;
   text-align: center !important;
-  font-size: 15px !important;
+  font-size: 16px !important;
+  flex-shrink: 0 !important;
 }
 
 .app-header .header-right {
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 6px !important;
   width: 100% !important;
   margin-top: auto !important;
   padding-top: 8px !important;
@@ -2817,23 +2821,39 @@ body.osk-open .login-card {
 
 .app-header .header-right .action-btn {
   width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
   justify-content: center !important;
-  font-size: 13px !important;
-  padding: 8px 8px !important;
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+  padding: 9px 10px !important;
+  min-height: 44px !important;
+  margin-bottom: 6px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.app-header .header-right .action-btn i {
+  margin-right: 8px !important;
+  font-size: 16px !important;
+  flex-shrink: 0 !important;
 }
 
 .app-header #liveClock {
   width: 100% !important;
   text-align: center !important;
-  font-size: 17px !important;
-  padding: 4px 0 !important;
+  font-size: 19px !important;
+  padding: 2px 0 !important;
+  margin-top: 2px !important;
 }
 
 .app-body {
   flex: 1 1 0% !important;
   min-width: 0 !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
+  height: calc(100vh - 60px) !important;
+  max-height: calc(100vh - 60px) !important;
   display: flex !important;
   flex-direction: column !important;
   padding: 0 !important;
@@ -2877,7 +2897,7 @@ body.osk-open .login-card {
   box-sizing: border-box !important;
   width: 100% !important;
   height: 100% !important;
-  max-height: 100vh !important;
+  max-height: calc(100vh - 60px) !important;
   overflow: hidden !important;
 }
 
@@ -2908,33 +2928,40 @@ body.osk-open .login-card {
   box-sizing: border-box !important;
 }
 
-/* TVs com viewport menor (1280x720 e 1366x768): proporções dinâmicas */
+/* TVs com viewport menor (1280x720 e 1366x768): proporções dinâmicas sem clamp() */
 @media (max-width: 1366px) {
   .app-header {
-    width: 210px !important;
-    min-width: 200px !important;
-    flex: 0 0 210px !important;
-    padding: 10px 8px !important;
-    gap: 6px !important;
+    width: 224px !important;
+    min-width: 210px !important;
+    flex: 0 0 224px !important;
+    padding: 8px 8px !important;
   }
   .app-header .tab-btn {
-    font-size: 13px !important;
-    padding: 8px 10px !important;
-    gap: 8px !important;
+    font-size: 15px !important;
+    padding: 7px 10px !important;
+    min-height: 38px !important;
+    margin-bottom: 4px !important;
   }
   .app-header .tab-btn i {
-    width: 16px !important;
-    font-size: 14px !important;
+    width: 18px !important;
+    font-size: 15px !important;
+    margin-right: 8px !important;
+  }
+  .app-header .header-right .action-btn {
+    font-size: 16px !important;
+    padding: 7px 8px !important;
+    min-height: 40px !important;
+    margin-bottom: 5px !important;
   }
   .app-header .logo-title {
-    font-size: 17px !important;
+    font-size: 18px !important;
   }
   .cfg-menu-item {
-    font-size: 14px !important;
+    font-size: 15px !important;
     padding: 8px 10px !important;
   }
   .cfg-tmdb-toggle {
-    font-size: 13px !important;
+    font-size: 14px !important;
   }
   #sectionUnified:not(.hidden) {
     grid-template-columns: minmax(130px, 1.1fr) minmax(190px, 1.8fr) minmax(270px, 2fr) !important;
@@ -2950,19 +2977,27 @@ body.osk-open .login-card {
 
 @media (max-width: 1280px) {
   .app-header {
-    width: 195px !important;
-    min-width: 185px !important;
-    flex: 0 0 195px !important;
-    padding: 8px 6px !important;
+    width: 210px !important;
+    min-width: 200px !important;
+    flex: 0 0 210px !important;
+    padding: 6px 6px !important;
   }
   .app-header .tab-btn {
-    font-size: 12px !important;
-    padding: 7px 8px !important;
-    gap: 6px !important;
+    font-size: 14px !important;
+    padding: 6px 8px !important;
+    min-height: 36px !important;
+    margin-bottom: 4px !important;
   }
   .app-header .tab-btn i {
-    width: 14px !important;
-    font-size: 13px !important;
+    width: 16px !important;
+    font-size: 14px !important;
+    margin-right: 7px !important;
+  }
+  .app-header .header-right .action-btn {
+    font-size: 15px !important;
+    padding: 6px 8px !important;
+    min-height: 38px !important;
+    margin-bottom: 4px !important;
   }
   #sectionUnified:not(.hidden) {
     grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.7fr) minmax(240px, 2.1fr) !important;
@@ -2980,12 +3015,12 @@ body.osk-open .login-card {
    2.6.0 — ÁREA ÚTIL, ROLAGEM VISÍVEL E CONTROLE MAGIC
    ========================================================================== */
 
-/* A barra de atalhos do controle é fixa (52px). O corpo do app precisa descontar
+/* A barra de atalhos do controle é fixa (60px). O corpo do app precisa descontar
    essa altura, senão os últimos botões de cada painel ficam atrás dela. */
 .app-body {
-  height: calc(100vh - 52px) !important;
-  max-height: calc(100vh - 52px) !important;
-  padding-bottom: 6px !important;
+  height: calc(100vh - 60px) !important;
+  max-height: calc(100vh - 60px) !important;
+  padding-bottom: 4px !important;
   box-sizing: border-box;
 }
 
@@ -3140,36 +3175,56 @@ body.osk-open .login-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
   flex-wrap: wrap;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  padding-bottom: 10px;
-  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
 }
 
 .devlogs-title {
   color: #ffd54f;
   font-weight: 800;
-  font-size: 22px;
+  font-size: 24px;
+  margin-right: 16px;
 }
 
 .devlogs-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
   flex-wrap: wrap;
+}
+
+.devlogs-head .devlogs-actions .ctrl-btn {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  font-size: 16px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  padding: 10px 16px !important;
+  min-height: 44px !important;
+  margin-left: 10px !important;
+  margin-bottom: 4px !important;
 }
 
 .devlogs-info {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 22px;
-  font-size: 15px;
-  color: #94a3b8;
-  margin-bottom: 10px;
+  display: block !important;
+  font-size: 17px !important;
+  line-height: 1.75 !important;
+  color: #cbd5e1;
+  margin-bottom: 12px;
+}
+
+.devlogs-info span {
+  display: inline-block !important;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  margin: 0 10px 6px 0 !important;
 }
 
 .devlogs-info b {
-  color: #e2e8f0;
+  color: #ffd54f;
   font-weight: 700;
 }
 
@@ -3210,9 +3265,8 @@ body.osk-open .login-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  font-size: 15px;
-  color: #94a3b8;
+  font-size: 16px;
+  color: #cbd5e1;
   margin-top: 10px;
 }
 
@@ -3333,35 +3387,96 @@ body.osk-open .login-card {
 }
 
 /* ==========================================
-   CSS DE EMERGÊNCIA: FONTES E SCROLLBAR (MK21 v2.7.4)
+   CSS DE EMERGÊNCIA: FONTES E SCROLLBAR (MK21 v2.7.6 — Compatível Chromium webOS)
+   Nota: evita clamp() (Chromium 79+) e flex gap (Chromium 84+) em elementos críticos.
    ========================================== */
 
-/* 1. Protege a fonte de TODOS os botões, itens de servidor, logs e rodapé */
-button, .btn, [class*="btn"], [class*="server"], [class*="log"], 
-.cat-item-btn, .footer-item, .list-item, .modal-button, .color-shortcut-item, 
-.action-btn, .server-pill, .server-manager-row, .server-info-name, .remote-key-pill {
-  font-size: clamp(13px, 1.05vw, 18px) !important;
-  line-height: 1.4 !important;
+/* 1. Protege a fonte de botões, itens de servidor e controles de lista em px explícitos */
+.cat-item-btn, .footer-item, .list-item, .modal-button,
+.server-pill, .server-manager-row, .server-info-name {
+  font-size: 17px !important;
+  line-height: 1.35 !important;
   flex-shrink: 0 !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  min-height: 44px !important; /* Tamanho seguro para foco na TV */
+  min-height: 44px !important;
   box-sizing: border-box !important;
 }
 
-/* Rodapé elástico anti-corte */
-.remote-color-bar {
-  gap: clamp(10px, 1.8vw, 36px) !important;
-  padding: 0 16px !important;
+/* Rodapé elástico anti-corte com espaçamento por margin (compatível webOS 3/4/5) */
+#remoteColorBar.remote-color-bar {
+  height: 60px !important;
+  padding: 0 18px !important;
+  gap: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   overflow: hidden !important;
 }
 
-.color-shortcut-item {
-  font-size: clamp(12px, 0.95vw, 16px) !important;
-  min-height: auto !important;
+#remoteColorBar .color-shortcut-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 18px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  color: #f8fafc !important;
+  margin: 0 14px !important;
+  min-height: 0 !important;
   flex-shrink: 0 !important;
   white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+#remoteColorBar .color-key-dot {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  margin-right: 9px !important;
+  flex-shrink: 0 !important;
+}
+
+#remoteColorBar .remote-key-pill {
+  display: inline-block !important;
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  padding: 4px 10px !important;
+  margin-right: 9px !important;
+  min-height: 0 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 1366px) {
+  #remoteColorBar .color-shortcut-item {
+    font-size: 16px !important;
+    margin: 0 10px !important;
+  }
+  #remoteColorBar .remote-key-pill {
+    font-size: 14px !important;
+    padding: 3px 9px !important;
+    margin-right: 7px !important;
+  }
+}
+
+@media (max-width: 1280px) {
+  #remoteColorBar .color-shortcut-item {
+    font-size: 15px !important;
+    margin: 0 8px !important;
+  }
+  #remoteColorBar .color-key-dot {
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px !important;
+    margin-right: 6px !important;
+  }
+  #remoteColorBar .remote-key-pill {
+    font-size: 13px !important;
+    padding: 3px 8px !important;
+    margin-right: 6px !important;
+  }
 }
 
 /* 2. Força a scrollbar a aparecer em qualquer container que tenha rolagem */

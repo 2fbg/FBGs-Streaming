@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.7.5">
-  <link rel="stylesheet" href="css/style.css?v=2.7.5">
+  <link rel="stylesheet" href="styles.css?v=2.7.6">
+  <link rel="stylesheet" href="css/style.css?v=2.7.6">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -96,7 +96,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.7.5 • Smart TV (webOS &amp; Tizen)
+          MK21 PLAY OTT • v2.7.6 • Smart TV (webOS &amp; Tizen)
         </div>
       </form>
     </div>
@@ -480,8 +480,9 @@
       
       <!-- Ações de Escape para Smart TV caso o servidor demore -->
       <div id="hudLoadingActions" style="display: flex; gap: 12px; margin-top: 18px; justify-content: center; flex-wrap: wrap;">
-        <button id="btnHudChangeServer" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #e50914; color: #fff;" tabindex="0">🔴 Trocar Fonte (Servidor)</button>
-        <button id="btnHudCancelLoading" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px;" tabindex="0">↩️ Voltar ao App</button>
+        <button type="button" id="btnHudChangeServer" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #e50914; color: #fff;" tabindex="0">🔴 Trocar Fonte (Servidor)</button>
+        <button type="button" id="btnHudRelogin" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #ffd54f; color: #ffd54f;" tabindex="0">🔐 Trocar Login</button>
+        <button type="button" id="btnHudCancelLoading" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px;" tabindex="0">↩️ Voltar ao App</button>
       </div>
       <button id="btnRetryLoading" class="ctrl-btn primary hidden" type="button" tabindex="0">↻ Tentar novamente</button>
     </div>
@@ -522,22 +523,24 @@
   </div>
 
   <!-- Modal Console de Logs em Tempo Real (Dev / Homologação) -->
-  <div id="modalDevLogs" class="app-modal hidden">
-    <div class="modal-content" style="width: 860px; max-width: 95vw; background: #0c0f1a; border: 1px solid rgba(59, 130, 246, 0.5); border-radius: 14px; padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.9);">
-      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 12px;">
-        <span style="color:#ffd54f; font-weight:800; font-size:18px;"><i class="fa-solid fa-terminal"></i> Console de Logs em Tempo Real (Dev / Homologação)</span>
-        <div style="display:flex; gap:8px;">
-          <button id="btnClearDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-solid fa-trash"></i> Limpar</button>
-          <button id="btnExportDevLogs" class="ctrl-btn primary" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-solid fa-floppy-disk"></i> Salvar Logs</button>
-          <button id="btnCloseDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0">✕ Fechar</button>
+  <div id="modalDevLogs" class="app-modal devlogs-modal hidden">
+    <div class="modal-content devlogs-card">
+      <div class="modal-header devlogs-head">
+        <span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>
+        <div class="devlogs-actions">
+          <button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">⏸ Pausar</button>
+          <button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">🗑️ Limpar</button>
+          <button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">💾 Salvar</button>
+          <button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">✕ Fechar</button>
         </div>
       </div>
-      <div id="devLogsContainer" class="scrollable-container" style="background:#05070d; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; height: 380px; overflow-y: auto; font-family: monospace, Courier, sans-serif; font-size: 13px; line-height: 1.5; color: #cbd5e1; user-select: text;">
+      <div id="devLogsInfo" class="devlogs-info"></div>
+      <div id="devLogsContainer" class="devlogs-screen scrollable-container" tabindex="0">
         <div style="color:#64748b;">[Console inicializado. Logs do player, rede, codecs e controle remoto aparecerão aqui...]</div>
       </div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px; font-size: 12px; color: #94a3b8;">
-        <span>Salve o arquivo e anexe-o manualmente em 2fbg/FBGs-Streaming/logs.</span>
-        <span id="devLogsCountBadge" style="background:#1e293b; padding:2px 8px; border-radius:4px;">0 entradas</span>
+      <div class="devlogs-foot">
+        <span>Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>
+        <span id="devLogsCountBadge" style="background:#1e293b; padding:4px 12px; border-radius:6px;">0 entradas</span>
       </div>
     </div>
   </div>
@@ -608,8 +611,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.7.5, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.7.5') {
+        // Se a versão OTA armazenada for anterior a 2.7.6, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.7.6') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -632,7 +635,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.7.5';
+              fallback.src = 'app.js?v=2.7.6';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -649,7 +652,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.7.5';
+      s.src = 'app.js?v=2.7.6';
       document.body.appendChild(s);
     })();
   </script>

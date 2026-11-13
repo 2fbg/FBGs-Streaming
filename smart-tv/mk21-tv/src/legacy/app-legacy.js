@@ -143,14 +143,49 @@ function cleanServerName(name) {
   return String(name || '').replace(/^[^\w\dÀ-ÿ]+/i, '').trim() || name;
 }
 
-let SERVERS = [...DEFAULT_SERVERS];
-try {
-  const custom = localStorage.getItem('mk21_servers_list');
-  if (custom) {
+let SERVERS = DEFAULT_SERVERS.map(s => ({ ...s }));
+(function syncBuiltinServersFromStorage() {
+  try {
+    const custom = localStorage.getItem('mk21_servers_list');
+    if (!custom) return;
     const parsed = JSON.parse(custom);
-    if (Array.isArray(parsed) && parsed.length > 0) SERVERS = parsed;
-  }
-} catch (e) {}
+    if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+    const defaultsById = Object.create(null);
+    const defaultsByName = Object.create(null);
+    DEFAULT_SERVERS.forEach(def => {
+      defaultsById[def.id] = def;
+      defaultsByName[cleanServerName(def.name).toUpperCase()] = def;
+    });
+
+    const merged = [];
+    const seenIds = new Set();
+    parsed.forEach(entry => {
+      if (!entry || !entry.url) return;
+      const cleanName = cleanServerName(entry.name || '');
+      const def = defaultsById[entry.id] || defaultsByName[cleanName.toUpperCase()] || null;
+      if (def && !entry.isCustomOverride) {
+        // Sincroniza URLs oficiais caso o app tenha sido atualizado sobre um cache antigo
+        merged.push({ ...def });
+        seenIds.add(def.id);
+      } else {
+        merged.push(entry);
+        if (entry.id) seenIds.add(entry.id);
+      }
+    });
+
+    DEFAULT_SERVERS.forEach(def => {
+      if (!seenIds.has(def.id)) {
+        merged.push({ ...def });
+      }
+    });
+
+    if (merged.length > 0) {
+      SERVERS = merged;
+      localStorage.setItem('mk21_servers_list', JSON.stringify(SERVERS));
+    }
+  } catch (e) {}
+})();
 
 
 // Persistência de credenciais no localStorage (sem credenciais hardcoded)
@@ -994,102 +1029,342 @@ function groupSeriesItems(items) {
   return Object.values(map).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// LEITOR INCREMENTAL DE LISTAS M3U: não mantém texto bruto nem array de 300k linhas
+// LEITOR INCREMENTAL DE LISTAS M3U + FALLBACK XTREAM JSON API (player_api.php)
+async function parseM3uTextStream(res, onItem, onProgress) {
+  let itemCount = 0;
+  const wrappedOnItem = (item) => {
+    itemCount++;
+    onItem(item);
+  };
+
+  if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
+    const text = await res.text();
+    if (!text || text.length < 30) throw new Error('Lista M3U vazia');
+    const trimmedStart = text.trim().slice(0, 250).toLowerCase();
+    if (trimmedStart.includes('<!doctype html') || trimmedStart.includes('<html')) {
+      throw new Error('Servidor retornou página HTML em vez de M3U');
+    }
+    if (trimmedStart.includes('invalid username') || trimmedStart.includes('invalid password')) {
+      const authErr = new Error('Usuário ou senha inválidos no servidor');
+      authErr.isAuthError = true;
+      throw authErr;
+    }
+    const lines = text.split(/\r?\n/);
+    let meta = null;
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line.startsWith('#EXTM3U')) {
+        const xm = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
+        if (xm && xm[1]) window.serverXmltvUrl = xm[1].trim();
+      } else if (line.startsWith('#EXTINF:')) {
+        const comma = line.lastIndexOf(',');
+        const gm = line.match(/group-title="([^"]*)"/i);
+        const lm = line.match(/tvg-logo="([^"]*)"/i);
+        const im = line.match(/tvg-id="([^"]*)"/i);
+        const nm = line.match(/tvg-name="([^"]*)"/i);
+        meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
+      } else if (meta && /^https?:\/\//i.test(line)) {
+        const type = determineType(meta.name, meta.group, line);
+        wrappedOnItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
+        meta = null;
+      }
+    }
+    if (itemCount === 0) throw new Error('Lista M3U sem canais válidos');
+    return itemCount;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let headerSample = '';
+  let headerChecked = false;
+  let meta = null;
+  let received = 0;
+  const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
+  const quickAttr = (str, key) => {
+    const k = key + '="';
+    const idx = str.indexOf(k);
+    if (idx === -1) return '';
+    const start = idx + k.length;
+    const end = str.indexOf('"', start);
+    return end !== -1 ? str.slice(start, end).trim() : '';
+  };
+
+  const consume = (raw) => {
+    const line = raw.trim();
+    if (!line) return;
+    if (line.charCodeAt(0) === 35) {
+      if (line.startsWith('#EXTINF:')) {
+        const comma = line.lastIndexOf(',');
+        const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
+        meta = {
+          name: name,
+          group: quickAttr(line, 'group-title') || 'Geral',
+          logo: quickAttr(line, 'tvg-logo'),
+          tvgId: quickAttr(line, 'tvg-id'),
+          tvgName: quickAttr(line, 'tvg-name')
+        };
+      } else if (line.startsWith('#EXTM3U')) {
+        const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
+        if (xm) window.serverXmltvUrl = xm;
+      }
+    } else if (meta && (line.startsWith('http://') || line.startsWith('https://'))) {
+      const type = determineType(meta.name, meta.group, line);
+      wrappedOnItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
+      meta = null;
+    }
+  };
+
+  while (true) {
+    const part = await reader.read();
+    if (part.done) break;
+    received += part.value.byteLength || part.value.length || 0;
+    const chunk = decoder.decode(part.value, { stream: true });
+    if (!headerChecked) {
+      headerSample += chunk.slice(0, 320);
+      if (headerSample.length >= 60) {
+        headerChecked = true;
+        const low = headerSample.trim().toLowerCase();
+        if (low.includes('<!doctype html') || low.includes('<html')) {
+          try { reader.cancel(); } catch (e) {}
+          throw new Error('Servidor retornou página HTML em vez de M3U');
+        }
+        if (low.includes('invalid username') || low.includes('invalid password')) {
+          try { reader.cancel(); } catch (e) {}
+          const authErr = new Error('Usuário ou senha inválidos no servidor');
+          authErr.isAuthError = true;
+          throw authErr;
+        }
+      }
+    }
+    buffer += chunk;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) consume(line);
+    if (onProgress) onProgress(received, total);
+  }
+  buffer += decoder.decode();
+  if (buffer) consume(buffer);
+  if (itemCount === 0) throw new Error('Lista M3U vazia (0 itens)');
+  return itemCount;
+}
+
+async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onProgress) {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const encUser = encodeURIComponent(user);
+  const encPass = encodeURIComponent(pass);
+  const apiBase = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}`;
+
+  const fetchJsonWithTimeout = async (url, timeoutMs = 20000) => {
+    const c = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = c ? setTimeout(() => c.abort(), timeoutMs) : null;
+    const onAbort = () => { if (c) c.abort(); };
+    if (signal && signal.addEventListener) signal.addEventListener('abort', onAbort, { once: true });
+    try {
+      const res = await fetch(url, c ? { signal: c.signal, mode: 'cors' } : { mode: 'cors' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (signal && signal.removeEventListener) signal.removeEventListener('abort', onAbort);
+    }
+  };
+
+  addDevLog('[Rede] Tentando API Xtream em ' + cleanBase + '/player_api.php', 'info');
+  const authData = await fetchJsonWithTimeout(apiBase, 10000);
+  if (authData && authData.user_info && Number(authData.user_info.auth) === 0) {
+    const authErr = new Error('Usuário ou senha inválidos/expirados neste servidor.');
+    authErr.isAuthError = true;
+    throw authErr;
+  }
+
+  let totalEmitted = 0;
+  const liveExt = localStorage.getItem('mk21_stream_format') === 'hls' ? 'm3u8' : 'ts';
+
+  const [liveCats, liveStreams] = await Promise.all([
+    fetchJsonWithTimeout(apiBase + '&action=get_live_categories', 20000).catch(() => []),
+    fetchJsonWithTimeout(apiBase + '&action=get_live_streams', 30000)
+  ]);
+
+  const liveCatMap = Object.create(null);
+  if (Array.isArray(liveCats)) {
+    liveCats.forEach(c => { if (c && c.category_id != null) liveCatMap[String(c.category_id)] = c.category_name || 'Ao Vivo'; });
+  }
+  if (Array.isArray(liveStreams)) {
+    for (let i = 0; i < liveStreams.length; i++) {
+      const s = liveStreams[i];
+      if (!s || !s.stream_id) continue;
+      const grp = liveCatMap[String(s.category_id)] || s.category_name || 'Geral';
+      const itemName = s.name || ('Canal ' + s.stream_id);
+      onItem({
+        name: itemName,
+        group: grp,
+        logo: s.stream_icon || '',
+        tvgId: s.epg_channel_id || '',
+        tvgName: itemName,
+        url: `${cleanBase}/live/${encUser}/${encPass}/${s.stream_id}.${liveExt}`,
+        contentType: 'LIVE',
+        isAdult: isAdult(itemName) || isAdult(grp) || Number(s.is_adult) === 1
+      });
+      totalEmitted++;
+    }
+    if (onProgress) onProgress(40, 100);
+  }
+
+  const loadMovies = localStorage.getItem('mk21_filter_load_movies') !== 'false';
+  if (loadMovies) {
+    try {
+      const [vodCats, vodStreams] = await Promise.all([
+        fetchJsonWithTimeout(apiBase + '&action=get_vod_categories', 15000).catch(() => []),
+        fetchJsonWithTimeout(apiBase + '&action=get_vod_streams', 35000).catch(() => [])
+      ]);
+      const vodCatMap = Object.create(null);
+      if (Array.isArray(vodCats)) {
+        vodCats.forEach(c => { if (c && c.category_id != null) vodCatMap[String(c.category_id)] = c.category_name || 'Filmes'; });
+      }
+      if (Array.isArray(vodStreams)) {
+        for (let i = 0; i < vodStreams.length; i++) {
+          const m = vodStreams[i];
+          if (!m || !m.stream_id) continue;
+          const grp = vodCatMap[String(m.category_id)] || m.category_name || 'Filmes';
+          const ext = m.container_extension || 'mp4';
+          const itemName = m.name || ('Filme ' + m.stream_id);
+          onItem({
+            name: itemName,
+            group: grp,
+            logo: m.stream_icon || '',
+            tvgId: '',
+            tvgName: itemName,
+            url: `${cleanBase}/movie/${encUser}/${encPass}/${m.stream_id}.${ext}`,
+            contentType: 'MOVIE',
+            isAdult: isAdult(itemName) || isAdult(grp) || Number(m.is_adult) === 1
+          });
+          totalEmitted++;
+        }
+      }
+      if (onProgress) onProgress(75, 100);
+    } catch (eVod) {}
+  }
+
+  const loadSeries = localStorage.getItem('mk21_filter_load_series') !== 'false';
+  if (loadSeries) {
+    try {
+      const [serCats, seriesList] = await Promise.all([
+        fetchJsonWithTimeout(apiBase + '&action=get_series_categories', 15000).catch(() => []),
+        fetchJsonWithTimeout(apiBase + '&action=get_series', 35000).catch(() => [])
+      ]);
+      const serCatMap = Object.create(null);
+      if (Array.isArray(serCats)) {
+        serCats.forEach(c => { if (c && c.category_id != null) serCatMap[String(c.category_id)] = c.category_name || 'Séries'; });
+      }
+      if (Array.isArray(seriesList)) {
+        for (let i = 0; i < seriesList.length; i++) {
+          const sr = seriesList[i];
+          if (!sr || !sr.series_id) continue;
+          const grp = serCatMap[String(sr.category_id)] || sr.category_name || 'Séries';
+          const itemName = sr.name || ('Série ' + sr.series_id);
+          onItem({
+            name: itemName,
+            group: grp,
+            logo: sr.cover || '',
+            tvgId: '',
+            tvgName: itemName,
+            url: `${cleanBase}/series/${encUser}/${encPass}/${sr.series_id}.xtream`,
+            contentType: 'SERIES',
+            isAdult: isAdult(itemName) || isAdult(grp)
+          });
+          totalEmitted++;
+        }
+      }
+      if (onProgress) onProgress(95, 100);
+    } catch (eSer) {}
+  }
+
+  if (totalEmitted === 0) {
+    throw new Error('API Xtream respondeu vazia (0 itens)');
+  }
+  addDevLog('[Rede] Catálogo carregado via player_api.php (' + totalEmitted + ' itens)', 'success');
+  return totalEmitted;
+}
+
 async function streamPlaylistContent(url, signal, onItem, onProgress) {
-  let targetUrl = url;
+  const rawUrl = String(url || '').trim();
   const creds = getSavedCredentials() || { user: '', pass: '' };
   const savedUser = creds.user;
   const savedPass = creds.pass;
-  if (!targetUrl.includes('get.php') && !targetUrl.includes('.m3u') && !targetUrl.includes('.ts') && !targetUrl.includes('.m3u8')) {
-    if (!savedUser || !savedPass) {
-      throw new Error('Credenciais ausentes. Faça login novamente.');
-    }
-    targetUrl = `${targetUrl.replace(/\/+$/, '')}/get.php?username=${encodeURIComponent(savedUser)}&password=${encodeURIComponent(savedPass)}&type=m3u_plus&output=ts`;
-  }
-  console.log('[MK21] Streaming da lista:', savedPass ? targetUrl.replace(savedPass, '***') : targetUrl);
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
-  try {
-    const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
-    if (signal) options.signal = signal;
-    const res = await fetch(targetUrl, options);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
-      const text = await res.text();
-      if (!text || text.length < 50) throw new Error('Lista vazia ou inválida');
-      const lines = text.split(/\r?\n/);
-      let meta = null;
-      for (const raw of lines) {
-        const line = raw.trim();
-        if (line.startsWith('#EXTINF:')) {
-          const comma = line.lastIndexOf(',');
-          const gm = line.match(/group-title="([^"]*)"/i);
-          const lm = line.match(/tvg-logo="([^"]*)"/i);
-          const im = line.match(/tvg-id="([^"]*)"/i);
-          const nm = line.match(/tvg-name="([^"]*)"/i);
-          meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
-        } else if (meta && /^https?:\/\//i.test(line)) {
-          const type = determineType(meta.name, meta.group, line);
-          onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
-          meta = null;
-        }
-      }
-      return;
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    let meta = null;
-    let received = 0;
-    const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
-    const quickAttr = (str, key) => {
-      const k = key + '="';
-      const idx = str.indexOf(k);
-      if (idx === -1) return '';
-      const start = idx + k.length;
-      const end = str.indexOf('"', start);
-      return end !== -1 ? str.slice(start, end).trim() : '';
-    };
+  const isDirectM3u = rawUrl.includes('get.php') || rawUrl.includes('.m3u') || rawUrl.includes('.ts') || rawUrl.includes('.m3u8');
 
-    const consume = (raw) => {
-      const line = raw.trim();
-      if (!line) return;
-      if (line.charCodeAt(0) === 35) {
-        if (line.startsWith('#EXTINF:')) {
-          const comma = line.lastIndexOf(',');
-          const name = comma >= 0 ? line.slice(comma + 1).trim() : 'Item';
-          meta = {
-            name: name,
-            group: quickAttr(line, 'group-title') || 'Geral',
-            logo: quickAttr(line, 'tvg-logo'),
-            tvgId: quickAttr(line, 'tvg-id'),
-            tvgName: quickAttr(line, 'tvg-name')
-          };
-        } else if (line.startsWith('#EXTM3U')) {
-          const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
-          if (xm) window.serverXmltvUrl = xm;
-        }
-      } else if (meta && (line.startsWith('http://') || line.startsWith('https://'))) {
-        const type = determineType(meta.name, meta.group, line);
-        onItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
-        meta = null;
-      }
-    };
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      received += part.value.byteLength || part.value.length || 0;
-      buffer += decoder.decode(part.value, { stream: true });
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() || '';
-      for (const line of lines) consume(line);
-      if (onProgress) onProgress(received, total);
-    }
-    buffer += decoder.decode();
-    if (buffer) consume(buffer);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
+  if (!isDirectM3u && (!savedUser || !savedPass)) {
+    throw new Error('Credenciais ausentes. Faça login novamente.');
   }
+
+  const fmtPref = localStorage.getItem('mk21_stream_format') === 'hls' ? 'hls' : 'ts';
+  const cleanBase = rawUrl.replace(/\/+$/, '');
+  const encU = encodeURIComponent(savedUser);
+  const encP = encodeURIComponent(savedPass);
+
+  const candidateUrls = isDirectM3u
+    ? [rawUrl]
+    : [
+        `${cleanBase}/get.php?username=${encU}&password=${encP}&type=m3u_plus&output=${fmtPref}`,
+        `${cleanBase}/get.php?username=${encU}&password=${encP}&type=m3u_plus&output=mpegts`,
+        `${cleanBase}/get.php?username=${encU}&password=${encP}&type=m3uplus&output=ts`,
+        `${cleanBase}/get.php?username=${encU}&password=${encP}`
+      ];
+
+  let lastErr = null;
+  for (let i = 0; i < candidateUrls.length; i++) {
+    if (signal && signal.aborted) {
+      const ab = new Error('Aborted');
+      ab.name = 'AbortError';
+      throw ab;
+    }
+    const targetUrl = candidateUrls[i];
+    const safeUrlLog = redactDiagnosticLog(targetUrl);
+    console.log('[MK21] Streaming da lista:', safeUrlLog);
+    addDevLog('[Rede] Tentando lista: ' + safeUrlLog, 'debug');
+
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
+    const onParentAbort = () => { if (controller) controller.abort(); };
+    if (signal && signal.addEventListener) signal.addEventListener('abort', onParentAbort, { once: true });
+
+    try {
+      const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
+      const res = await fetch(targetUrl, options);
+      if (!res.ok) {
+        const httpErr = new Error('HTTP ' + res.status);
+        addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status, 'warn');
+        lastErr = httpErr;
+        continue;
+      }
+      const parsedCount = await parseM3uTextStream(res, onItem, onProgress);
+      addDevLog('[Rede] Lista M3U recebida (' + parsedCount + ' itens)', 'success');
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError' && signal && signal.aborted) throw err;
+      if (err && err.isAuthError) throw err;
+      lastErr = err;
+      addDevLog('[Rede] Falha em ' + safeUrlLog + ': ' + (err && err.message ? err.message : err), 'warn');
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (signal && signal.removeEventListener) signal.removeEventListener('abort', onParentAbort);
+    }
+  }
+
+  // Fallback para API JSON Xtream (player_api.php) quando get.php retorna 404 ou lista vazia
+  if (!isDirectM3u) {
+    try {
+      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress);
+      return;
+    } catch (apiErr) {
+      if (apiErr && apiErr.name === 'AbortError' && signal && signal.aborted) throw apiErr;
+      lastErr = apiErr;
+      addDevLog('[Rede] Fallback player_api.php falhou: ' + (apiErr && apiErr.message ? apiErr.message : apiErr), 'warn');
+    }
+  }
+
+  throw lastErr || new Error('Não foi possível baixar a lista do servidor');
 }
 
 // ATUALIZAÇÃO DA PORCENTAGEM DE SINCRONIZAÇÃO AO LADO DO SERVIDOR
@@ -1144,6 +1419,7 @@ function showLoadingFailure(error, serverName) {
   const card = hud && hud.querySelector('.hud-loading-card');
   const errorBox = $('hudLoadingError');
   const retry = $('btnRetryLoading');
+  const actions = $('hudLoadingActions');
   if (!hud) return;
   if (card) card.classList.add('is-error');
   if ($('hudLoadingTitle')) $('hudLoadingTitle').textContent = 'Não foi possível carregar a lista';
@@ -1154,6 +1430,19 @@ function showLoadingFailure(error, serverName) {
     const detail = error && error.message ? error.message : 'A conexão foi interrompida antes da lista terminar.';
     errorBox.textContent = `${detail} Seus dados não foram apagados.`;
     errorBox.classList.remove('hidden');
+  }
+  if (actions && !$('btnHudRelogin')) {
+    const loginBtn = document.createElement('button');
+    loginBtn.id = 'btnHudRelogin';
+    loginBtn.type = 'button';
+    loginBtn.className = 'ctrl-btn';
+    loginBtn.style.cssText = 'padding: 10px 18px; font-size: 15px; border-color: #ffd54f; color: #ffd54f;';
+    loginBtn.tabIndex = 0;
+    loginBtn.textContent = '🔐 Trocar Login';
+    actions.appendChild(loginBtn);
+  }
+  if ($('btnHudRelogin')) {
+    $('btnHudRelogin').onclick = () => logout();
   }
   if (retry) {
     retry.classList.remove('hidden');
@@ -1448,6 +1737,11 @@ async function loadServer(forceRefresh = false, options = {}) {
 
     loadInFlight = false;
     if (loadId !== serverLoadGeneration) return;
+
+    const targetTotal = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+    if (targetTotal === 0) {
+      throw new Error('Lista do servidor retornou vazia (0 itens)');
+    }
 
     allCatalog = target;
     if (!silent) revealLive();
@@ -1912,7 +2206,52 @@ if ($('inputSearch')) {
 }
 
 // 9. MODAL DE SÉRIES (SUBMENU DE TEMPORADAS E EPISÓDIOS COM ORDENAÇÃO NUMÉRICA)
-function openSeriesModal(seriesObj) {
+async function openSeriesModal(seriesObj) {
+  if (
+    seriesObj &&
+    Array.isArray(seriesObj.episodes) &&
+    seriesObj.episodes.length === 1 &&
+    seriesObj.episodes[0] &&
+    typeof seriesObj.episodes[0].url === 'string' &&
+    seriesObj.episodes[0].url.endsWith('.xtream')
+  ) {
+    const stubUrl = seriesObj.episodes[0].url;
+    const m = stubUrl.match(/^(https?:\/\/.+?)\/series\/([^/]+)\/([^/]+)\/(\d+)\.xtream$/);
+    if (m) {
+      try {
+        showChannelBanner('🍿 Carregando episódios...');
+        const infoUrl = `${m[1]}/player_api.php?username=${m[2]}&password=${m[3]}&action=get_series_info&series_id=${m[4]}`;
+        const res = await fetch(infoUrl, { mode: 'cors' });
+        if (res.ok) {
+          const info = await res.json();
+          const epsObj = info && info.episodes ? info.episodes : {};
+          const resolved = [];
+          Object.keys(epsObj).forEach(sNum => {
+            const list = Array.isArray(epsObj[sNum]) ? epsObj[sNum] : [];
+            list.forEach(ep => {
+              if (!ep || !ep.id) return;
+              const ext = ep.container_extension || 'mp4';
+              const epLabel = `S${String(sNum).padStart(2, '0')}E${String(ep.episode_num || 1).padStart(2, '0')} - ${ep.title || ('Episódio ' + (ep.episode_num || ''))}`;
+              resolved.push({
+                name: epLabel,
+                group: seriesObj.group || 'Séries',
+                logo: (ep.info && ep.info.movie_image) || seriesObj.logo || '',
+                url: `${m[1]}/series/${m[2]}/${m[3]}/${ep.id}.${ext}`,
+                contentType: 'SERIES',
+                isAdult: !!seriesObj.episodes[0].isAdult
+              });
+            });
+          });
+          if (resolved.length > 0) {
+            seriesObj.episodes = resolved;
+          }
+        }
+      } catch (eSerInfo) {
+        addDevLog('[Séries] Falha ao obter episódios Xtream: ' + (eSerInfo && eSerInfo.message), 'warn');
+      }
+    }
+  }
+
   activeModalSeriesData = seriesObj;
   $('seriesModalTitle').textContent = '🍿 ' + seriesObj.title;
 
@@ -3162,6 +3501,71 @@ function escapeHtml(str) {
   })[m]);
 }
 
+function mk21BindDevLogsButtons() {
+  const closeBtn = $('btnCloseDevLogs');
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      const modal = $('modalDevLogs');
+      if (modal && !modal.classList.contains('hidden')) toggleDevLogsModal();
+    };
+  }
+  const pauseBtn = $('btnTogglePauseDevLogs');
+  if (pauseBtn) {
+    pauseBtn.textContent = mk21DevLogsPaused ? '▶️ Retomar rolagem' : '⏸ Pausar rolagem';
+    pauseBtn.classList.toggle('primary', mk21DevLogsPaused);
+    pauseBtn.onclick = () => {
+      mk21DevLogsPaused = !mk21DevLogsPaused;
+      const btn = $('btnTogglePauseDevLogs');
+      if (btn) {
+        btn.textContent = mk21DevLogsPaused ? '▶️ Retomar rolagem' : '⏸ Pausar rolagem';
+        btn.classList.toggle('primary', mk21DevLogsPaused);
+      }
+      const hint = $('devLogsHint');
+      if (hint) hint.textContent = mk21DevLogsPaused
+        ? 'Rolagem automática pausada: a tela fica parada para você ler (ou fotografar) sem os logs fugirem.'
+        : 'Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.';
+    };
+  }
+  const clearBtn = $('btnClearDevLogs');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      sessionDevLogs = [];
+      const container = mk21LogContainer();
+      if (container) container.replaceChildren();
+      mk21RefreshDevLogsBadge();
+      addDevLog('[Logs] Histórico limpo.', 'info');
+    };
+  }
+  const exportBtn = $('btnExportDevLogs');
+  if (exportBtn) {
+    exportBtn.onclick = () => {
+      try {
+        const text = [
+          'MK21 Smart TV - Logs de diagnostico',
+          'Data: ' + new Date().toISOString(),
+          'Versao: ' + CURRENT_APP_VERSION,
+          'Tela: ' + innerWidth + 'x' + innerHeight,
+          'Credenciais e caminhos autenticados foram mascarados.',
+          '',
+          ...sessionDevLogs.map(l => '[' + l.time + '] [' + String(l.type).toUpperCase() + '] ' + redactDiagnosticLog(l.msg))
+        ].join('\n');
+        localStorage.setItem('mk21_last_exported_logs', text);
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'mk21-tv-logs-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        addDevLog('[Logs] Arquivo de log exportado e salvo com sucesso!', 'success');
+        showChannelBanner('✅ Logs exportados com sucesso!');
+      } catch (e) {
+        addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
+      }
+    };
+  }
+}
+
 // Tela de logs refeita pelo JS (chega pela OTA, sem precisar reinstalar o IPK):
 // ocupa a tela toda, fonte grande e com o contexto do stream no topo.
 function mk21EnsureDevLogsModal() {
@@ -3171,25 +3575,29 @@ function mk21EnsureDevLogsModal() {
     modal.id = 'modalDevLogs';
     document.body.appendChild(modal);
   }
-  modal.className = 'app-modal devlogs-modal hidden';
-  modal.innerHTML =
-    '<div class="modal-content devlogs-card">' +
-      '<div class="devlogs-head">' +
-        '<span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>' +
-        '<div class="devlogs-actions">' +
-          '<button id="btnTogglePauseDevLogs" class="ctrl-btn" style="padding:10px 16px; font-size:15px;" tabindex="0">⏸ Pausar rolagem</button>' +
-          '<button id="btnClearDevLogs" class="ctrl-btn" style="padding:10px 16px; font-size:15px;" tabindex="0">🗑️ Limpar</button>' +
-          '<button id="btnExportDevLogs" class="ctrl-btn primary" style="padding:10px 16px; font-size:15px;" tabindex="0">💾 Salvar arquivo</button>' +
-          '<button id="btnCloseDevLogs" class="ctrl-btn" style="padding:10px 16px; font-size:15px;" tabindex="0">✕ Fechar</button>' +
+  if (modal.dataset.mk21LogsReady !== '1') {
+    modal.className = 'app-modal devlogs-modal hidden';
+    modal.innerHTML =
+      '<div class="modal-content devlogs-card">' +
+        '<div class="devlogs-head">' +
+          '<span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>' +
+          '<div class="devlogs-actions">' +
+            '<button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">⏸ Pausar rolagem</button>' +
+            '<button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">🗑️ Limpar</button>' +
+            '<button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">💾 Salvar arquivo</button>' +
+            '<button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">✕ Fechar</button>' +
+          '</div>' +
         '</div>' +
-      '</div>' +
-      '<div class="devlogs-info" id="devLogsInfo"></div>' +
-      '<div id="devLogsContainer" class="devlogs-screen"></div>' +
-      '<div class="devlogs-foot">' +
-        '<span id="devLogsHint">Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>' +
-        '<span id="devLogsCountBadge">0 entradas</span>' +
-      '</div>' +
-    '</div>';
+        '<div class="devlogs-info" id="devLogsInfo"></div>' +
+        '<div id="devLogsContainer" class="devlogs-screen scrollable-container" tabindex="0"></div>' +
+        '<div class="devlogs-foot">' +
+          '<span id="devLogsHint">Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>' +
+          '<span id="devLogsCountBadge">0 entradas</span>' +
+        '</div>' +
+      '</div>';
+    modal.dataset.mk21LogsReady = '1';
+  }
+  mk21BindDevLogsButtons();
   return modal;
 }
 
@@ -3222,7 +3630,7 @@ function mk21UpdateDevLogsInfo() {
     ['Tela', innerWidth + 'x' + innerHeight],
     ['Buffer pref', (MK21_BUFFER_MODES[mk21BufferMode()] || {}).label || '--']
   ];
-  box.innerHTML = itens.map(p => '<span>' + p[0] + ' <b>' + escapeHtml(String(p[1])) + '</b></span>').join('');
+  box.innerHTML = itens.map(p => '<span>' + p[0] + ': <b>' + escapeHtml(String(p[1])) + '</b></span>').join('');
 }
 
 function toggleDevLogsModal() {
@@ -3231,68 +3639,30 @@ function toggleDevLogsModal() {
   const isHidden = modal.classList.contains('hidden');
   if (isHidden) {
     modal.classList.remove('hidden');
+    activeZone = 'modalDevLogs';
     mk21UpdateDevLogsInfo();
     mk21RenderAllDevLogs();
+    if (window.__mk21WebOSScrollFixActive && $('devLogsContainer')) {
+      forceRevealScrollbar($('devLogsContainer'));
+    }
     addDevLog('[UI] Console de logs aberto', 'info');
-    const pauseBtn = $('btnTogglePauseDevLogs');
-    if (pauseBtn) pauseBtn.focus();
+    setTimeout(() => {
+      const pauseBtn = $('btnTogglePauseDevLogs') || $('btnCloseDevLogs');
+      if (pauseBtn) pauseBtn.focus();
+    }, 30);
   } else {
     modal.classList.add('hidden');
     activeZone = currentContentType === 'SETTINGS' ? 'settings' : 'channels';
-    focusActiveElement();
+    const headerLogs = $('btnHeaderLogs');
+    if (headerLogs && mk21IsVisible(headerLogs)) headerLogs.focus();
+    else focusActiveElement();
   }
 }
 
 function initDevLogs() {
   mk21EnsureDevLogsModal();
   if ($('btnHeaderLogs')) $('btnHeaderLogs').onclick = toggleDevLogsModal;
-  if ($('btnCloseDevLogs')) $('btnCloseDevLogs').onclick = toggleDevLogsModal;
-  if ($('btnTogglePauseDevLogs')) {
-    $('btnTogglePauseDevLogs').onclick = () => {
-      mk21DevLogsPaused = !mk21DevLogsPaused;
-      const btn = $('btnTogglePauseDevLogs');
-      if (btn) {
-        btn.textContent = mk21DevLogsPaused ? '▶️ Retomar rolagem' : '⏸ Pausar rolagem';
-        btn.classList.toggle('primary', mk21DevLogsPaused);
-      }
-      const hint = $('devLogsHint');
-      if (hint) hint.textContent = mk21DevLogsPaused
-        ? 'Rolagem automática pausada: a tela fica parada para você ler (ou fotografar) sem os logs fugirem.'
-        : 'Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.';
-    };
-  }
-  if ($('btnClearDevLogs')) $('btnClearDevLogs').onclick = () => {
-    sessionDevLogs = [];
-    const container = mk21LogContainer();
-    if (container) container.replaceChildren();
-    mk21RefreshDevLogsBadge();
-    addDevLog('[Logs] Histórico limpo.', 'info');
-  };
-  if ($('btnExportDevLogs')) $('btnExportDevLogs').onclick = () => {
-    try {
-      const text = [
-        'MK21 Smart TV - Logs de diagnostico',
-        'Data: ' + new Date().toISOString(),
-        'Versao: ' + CURRENT_APP_VERSION,
-        'Tela: ' + innerWidth + 'x' + innerHeight,
-        'Credenciais e caminhos autenticados foram mascarados.',
-        '',
-        ...sessionDevLogs.map(l => '[' + l.time + '] [' + String(l.type).toUpperCase() + '] ' + redactDiagnosticLog(l.msg))
-      ].join('\n');
-      localStorage.setItem('mk21_last_exported_logs', text);
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'mk21-tv-logs-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      addDevLog('[Logs] Arquivo de log exportado e salvo com sucesso!', 'success');
-      showChannelBanner('✅ Logs exportados com sucesso!');
-    } catch (e) {
-      addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
-    }
-  };
+  mk21BindDevLogsButtons();
 }
 
 function redactDiagnosticLog(value) {
@@ -5332,6 +5702,7 @@ $('btnAddServerSubmit').onclick = () => {
   if (editIdx >= 0 && editIdx < SERVERS.length) {
     SERVERS[editIdx].name = '⭐ ' + name;
     SERVERS[editIdx].url = url;
+    SERVERS[editIdx].isCustomOverride = true;
     currentServerIndex = editIdx;
     saveServersToStorage();
     try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
@@ -5348,7 +5719,8 @@ $('btnAddServerSubmit').onclick = () => {
   const newServer = {
     id: 'custom_' + Date.now(),
     name: '⭐ ' + name,
-    url: url
+    url: url,
+    isCustomOverride: true
   };
 
   SERVERS.push(newServer);
@@ -5367,7 +5739,7 @@ $('btnAddServerSubmit').onclick = () => {
 };
 
 $('btnRestoreDefaultServers').onclick = () => {
-  SERVERS = [...DEFAULT_SERVERS];
+  SERVERS = DEFAULT_SERVERS.map(s => ({ ...s }));
   currentServerIndex = 0;
   saveServersToStorage();
   try { localStorage.setItem('mk21_last_server', 0); } catch (e) {}
@@ -5428,7 +5800,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.7.5';
+const BASE_PACKAGE_VERSION = '2.7.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -5701,7 +6073,7 @@ function mk21IsVisible(el) {
 }
 
 function mk21GetOpenModal() {
-  const modalIds = ['hudLoadingOverlay', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
+  const modalIds = ['modalDevLogs', 'hudLoadingOverlay', 'modalStreamDiagnostics', 'modalOmnisearch', 'modalEpgGuide', 'modalSortPicker', 'modalAudioSubs', 'modalServerPicker', 'modalPin', 'modalExitConfirm', 'modalSeriesEpisodes', 'modalAppUpdate'];
   for (let i = 0; i < modalIds.length; i++) {
     const modal = $(modalIds[i]);
     if (modal && !modal.classList.contains('hidden') && mk21IsVisible(modal)) return modal;
@@ -7377,6 +7749,8 @@ function mk21AutoAdvanceServer(err, failedServer) {
   addDevLog('[AutoServidor] ' + falhou + ' falhou (' + (err && err.message) + '); tentando ' + cleanServerName(next.name), 'warn');
   showChannelBanner('🔄 ' + falhou + ' falhou. Trocando para ' + cleanServerName(next.name) + '...');
   currentServerIndex = nextIndex;
+  if ($('txtActiveServer')) $('txtActiveServer').textContent = cleanServerName(next.name);
+  try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
   if (typeof saveServersToStorage === 'function') {
     try { saveServersToStorage(); } catch (e) {}
   }
