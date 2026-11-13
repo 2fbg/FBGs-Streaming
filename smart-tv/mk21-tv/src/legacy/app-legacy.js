@@ -1919,6 +1919,7 @@ function renderCategoriesList() {
   });
 
   ul.appendChild(fragment);
+  if (typeof mk21UpdateVisualScrollbarFor === 'function') mk21UpdateVisualScrollbarFor(ul);
 }
 
 function selectCategory(catKey) {
@@ -2140,6 +2141,7 @@ function renderItemsList(preserveScroll) {
 
   ul.appendChild(fragment);
   if (preserveScroll) { try { ul.scrollTop = scrollAnterior; } catch (e) {} }
+  if (typeof mk21UpdateVisualScrollbarFor === 'function') mk21UpdateVisualScrollbarFor(ul);
 
   // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
   if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
@@ -4292,6 +4294,10 @@ function showFsHud(show) {
     if (activeItem && $('fsHudTitle')) {
       $('fsHudTitle').textContent = (favoriteUrls.has(activeItem.url) ? '⭐ ' : '') + activeItem.name;
     }
+    const v = $('tvPlayer');
+    if ($('fsBtnPlay')) {
+      $('fsBtnPlay').textContent = (v && v.paused) ? '▶️ Reproduzir' : '⏸️ Pausar';
+    }
     if ($('fsBtnSpeed')) $('fsBtnSpeed').textContent = '⚡ ' + currentPlaybackSpeed + 'x';
     if ($('fsBtnFav') && activeItem) {
       $('fsBtnFav').textContent = favoriteUrls.has(activeItem.url) ? '★ Favoritado' : '⭐ Favoritar';
@@ -4308,6 +4314,12 @@ function showFsHud(show) {
     }
     updateVodProgressTimeline();
   } else {
+    // Move foco para elemento seguro antes de ocultar o HUD (evita foco preso em botão invisível no webOS)
+    const ae = document.activeElement;
+    if (ae && hud.contains(ae)) {
+      const safeEl = $('videoContainer') || document.body;
+      try { if (safeEl && typeof safeEl.focus === 'function') safeEl.focus(); } catch (e) {}
+    }
     hud.classList.add('hidden');
   }
 }
@@ -4443,6 +4455,31 @@ function bindFsHudButtons() {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     toggleFullscreen(false);
   };
+
+  // Mantém controles visíveis em tela cheia ao mover Magic Remote ou clicar no player
+  const box = $('videoContainer');
+  if (box && !box.dataset.mk21FsActivityBound) {
+    box.dataset.mk21FsActivityBound = '1';
+    let lastMoveAt = 0;
+    const onPointerActivity = function () {
+      if (!isAppFullscreen()) return;
+      const now = Date.now();
+      if (now - lastMoveAt < 250) return;
+      lastMoveAt = now;
+      pokeFsHud();
+    };
+    box.addEventListener('mousemove', onPointerActivity, { passive: true });
+    box.addEventListener('pointermove', onPointerActivity, { passive: true });
+    box.addEventListener('click', function (e) {
+      if (!isAppFullscreen()) return;
+      const hud = $('fsHudBar');
+      if (hud && e.target && hud.contains(e.target)) {
+        pokeFsHud();
+        return;
+      }
+      pokeFsHud();
+    });
+  }
 }
 bindFsHudButtons();
 
@@ -5800,7 +5837,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.7.6';
+const BASE_PACKAGE_VERSION = '2.7.7';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -6106,7 +6143,18 @@ function mk21GetFocusables() {
     '.btn-server-edit',
     '.btn-server-delete'
   ].join(',');
-  return Array.from(root.querySelectorAll(sel)).filter(mk21IsVisible);
+  return Array.from(root.querySelectorAll(sel)).filter(function (el) {
+    if (!mk21IsVisible(el)) return false;
+    // Se o próprio container rolável já contém filhos focáveis visíveis (ex.: #listItems, #listCategories),
+    // evita focar o wrapper no centro da coluna e permite navegar item por item com precisão.
+    if (el.classList && el.classList.contains('scrollable-container')) {
+      const hasFocusableChild = el.querySelector(
+        '.list-item-btn:not([disabled]), .cat-item-btn:not([disabled]), .cfg-menu-item:not([disabled]), .btn-server-connect:not([disabled])'
+      );
+      if (hasFocusableChild && mk21IsVisible(hasFocusableChild)) return false;
+    }
+    return true;
+  });
 }
 
 function mk21RectCenter(el) {
@@ -6238,6 +6286,13 @@ function mk21CloseModalWithFocus(modal) {
   modal.classList.add('hidden');
   mk21UltimoAlvoRolagem = null;
   if (modal.id === 'modalPlayerOptions' || modal.id === 'modalQuality') mk21PanelTarget = null;
+  if (isAppFullscreen()) {
+    activeZone = 'player';
+    pokeFsHud();
+    const target = ($('fsBtnPlay') && mk21IsVisible($('fsBtnPlay'))) ? $('fsBtnPlay') : $('videoContainer');
+    try { if (target) target.focus(); } catch (e) {}
+    return;
+  }
   activeZone = (typeof currentContentType !== 'undefined' && currentContentType === 'SETTINGS') ? 'settings' : 'channels';
   try { focusActiveElement(); } catch (e) {}
 }
@@ -6400,8 +6455,35 @@ document.addEventListener('keydown', function (e) {
   const k = e.keyCode || e.which || keyCodes[key] || keyCodes[code] || 0;
   const ae = document.activeElement;
 
+  // Modo de Interação de Rolagem ativo (.scroll-mode-active) em container focado
+  if (typeof mk21ScrollModeEl !== 'undefined' && mk21ScrollModeEl) {
+    if (!document.body.contains(mk21ScrollModeEl) || !mk21IsVisible(mk21ScrollModeEl)) {
+      mk21ToggleScrollMode(mk21ScrollModeEl, false);
+    } else if (k === 38 || key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      mk21ScrollModeEl.scrollTop = Math.max(0, mk21ScrollModeEl.scrollTop - 96);
+      if (typeof mk21UpdateVisualScrollbarFor === 'function') mk21UpdateVisualScrollbarFor(mk21ScrollModeEl);
+      return;
+    } else if (k === 40 || key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      mk21ScrollModeEl.scrollTop += 96;
+      if (typeof mk21UpdateVisualScrollbarFor === 'function') mk21UpdateVisualScrollbarFor(mk21ScrollModeEl);
+      return;
+    } else if (k === 13 || key === 'Enter' || k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+      e.preventDefault();
+      e.stopPropagation();
+      mk21ToggleScrollMode(mk21ScrollModeEl, false);
+      return;
+    }
+  }
+
   // 1.1 Focus Trap & Gestão de Foco para Smart TVs (webOS, Tizen, Android TV)
   const activeModal = mk21GetOpenModal();
+  if (isAppFullscreen() && !activeModal) {
+    pokeFsHud();
+  }
   if (activeModal) {
     const focusableElements = Array.from(activeModal.querySelectorAll(
       'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), .modal-btn, .modal-button, .ctrl-btn, .pin-key, .btn-server-connect, .btn-server-edit, .btn-server-delete, .hud-ctrl-btn'
@@ -6579,14 +6661,25 @@ document.addEventListener('keydown', function (e) {
     return;
   }
 
-  // Setas em tela cheia (Fullscreen) com mudança de canal e navegação nos botões
+  // Setas em tela cheia (Fullscreen) com navegação em 2 linhas de botões + zapping de canais
   if (isAppFullscreen()) {
     pokeFsHud();
     const hud = $('fsHudBar');
     const hudVisible = hud && !hud.classList.contains('hidden');
+    const inHudBtn = hudVisible && ae && ae.classList && ae.classList.contains('hud-ctrl-btn');
 
     if (k === 38 || key === 'ArrowUp') {
       e.preventDefault();
+      if (inHudBtn) {
+        const aeRect = ae.getBoundingClientRect();
+        const hasBtnAbove = Array.from(hud.querySelectorAll('.hud-ctrl-btn')).some(function (b) {
+          return b !== ae && mk21IsVisible(b) && (b.getBoundingClientRect().top + b.getBoundingClientRect().height / 2) < (aeRect.top + aeRect.height / 2 - 14);
+        });
+        if (hasBtnAbove) {
+          mk21MoveFocus('up');
+          return;
+        }
+      }
       if (currentContentType === 'LIVE') {
         playPreviousChannel();
       }
@@ -6594,6 +6687,16 @@ document.addEventListener('keydown', function (e) {
     }
     if (k === 40 || key === 'ArrowDown') {
       e.preventDefault();
+      if (inHudBtn) {
+        const aeRect = ae.getBoundingClientRect();
+        const hasBtnBelow = Array.from(hud.querySelectorAll('.hud-ctrl-btn')).some(function (b) {
+          return b !== ae && mk21IsVisible(b) && (b.getBoundingClientRect().top + b.getBoundingClientRect().height / 2) > (aeRect.top + aeRect.height / 2 + 14);
+        });
+        if (hasBtnBelow) {
+          mk21MoveFocus('down');
+          return;
+        }
+      }
       if (currentContentType === 'LIVE') {
         playNextChannel();
       }
@@ -6671,6 +6774,12 @@ document.addEventListener('keydown', function (e) {
       closeSearchMode(false);
       const firstChannel = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
       if (firstChannel) { firstChannel.focus(); activeZone = 'channels'; }
+      return;
+    }
+    if (ae && ae.classList && ae.classList.contains('scrollable-container')) {
+      e.preventDefault();
+      e.stopPropagation();
+      mk21ToggleScrollMode(ae);
       return;
     }
     e.preventDefault();
@@ -7097,6 +7206,92 @@ const WEBOS_SCROLL_SELECTOR = [
   '#epgScheduleList'
 ].join(', ');
 
+let mk21ScrollModeEl = null;
+
+function mk21ToggleScrollMode(container, force) {
+  if (!container) return false;
+  const activate = (typeof force === 'boolean') ? force : (mk21ScrollModeEl !== container);
+  if (mk21ScrollModeEl && mk21ScrollModeEl !== container) {
+    mk21ScrollModeEl.classList.remove('scroll-mode-active');
+    if (mk21ScrollModeEl._mk21ScrollRail) mk21ScrollModeEl._mk21ScrollRail.classList.remove('is-active');
+  }
+  if (activate) {
+    mk21ScrollModeEl = container;
+    container.classList.add('scroll-mode-active');
+    if (container._mk21ScrollRail) container._mk21ScrollRail.classList.add('is-active');
+    forceRevealScrollbar(container);
+    if (typeof showChannelBanner === 'function') {
+      showChannelBanner('📜 Modo Rolagem ATIVO (▲/▼ rolam · OK sai)');
+    }
+    return true;
+  }
+  container.classList.remove('scroll-mode-active');
+  if (container._mk21ScrollRail) container._mk21ScrollRail.classList.remove('is-active');
+  if (mk21ScrollModeEl === container) mk21ScrollModeEl = null;
+  return false;
+}
+
+function mk21EnsureVisualScrollbarRail(container) {
+  if (!container || typeof document === 'undefined') return null;
+  if (container._mk21ScrollRail && document.body.contains(container._mk21ScrollRail)) {
+    return container._mk21ScrollRail;
+  }
+  const host = (container.closest && container.closest('.col-pane')) || container;
+  if (!host) return null;
+  const rail = document.createElement('div');
+  rail.className = 'mk21-vscroll-rail is-hidden';
+  rail.setAttribute('aria-hidden', 'true');
+  const thumb = document.createElement('div');
+  thumb.className = 'mk21-vscroll-thumb';
+  rail.appendChild(thumb);
+  host.appendChild(rail);
+  container._mk21ScrollRail = rail;
+  container._mk21ScrollThumb = thumb;
+  container._mk21ScrollHost = host;
+  if (!container.dataset.mk21VisualScrollBound) {
+    container.dataset.mk21VisualScrollBound = '1';
+    container.addEventListener('scroll', function () {
+      mk21UpdateVisualScrollbarFor(container);
+    }, { passive: true });
+  }
+  return rail;
+}
+
+function mk21UpdateVisualScrollbarFor(container) {
+  if (!container || typeof window === 'undefined') return;
+  try {
+    const rail = mk21EnsureVisualScrollbarRail(container);
+    const thumb = container._mk21ScrollThumb;
+    const host = container._mk21ScrollHost;
+    if (!rail || !thumb || !host) return;
+    const clientH = container.clientHeight || 0;
+    const scrollH = container.scrollHeight || 0;
+    if (clientH <= 0 || scrollH <= clientH + 4) {
+      rail.classList.add('is-hidden');
+      return;
+    }
+    if (host !== container) {
+      const topOffset = Math.max(8, container.offsetTop + 4);
+      rail.style.top = topOffset + 'px';
+      rail.style.bottom = '8px';
+    } else {
+      const st = container.scrollTop || 0;
+      rail.style.top = (st + 6) + 'px';
+      rail.style.height = Math.max(24, clientH - 12) + 'px';
+      rail.style.bottom = 'auto';
+    }
+    const trackH = rail.clientHeight || Math.max(40, clientH - 12);
+    const thumbH = Math.max(44, Math.round((clientH / scrollH) * trackH));
+    const maxScroll = Math.max(1, scrollH - clientH);
+    const maxOffset = Math.max(0, trackH - thumbH);
+    const ratio = Math.min(1, Math.max(0, (container.scrollTop || 0) / maxScroll));
+    const y = Math.round(ratio * maxOffset);
+    thumb.style.height = thumbH + 'px';
+    thumb.style.transform = 'translate3d(0, ' + y + 'px, 0)';
+    rail.classList.remove('is-hidden');
+  } catch (e) {}
+}
+
 function forceRevealScrollbar(container) {
   if (!container) return;
   try {
@@ -7110,6 +7305,7 @@ function forceRevealScrollbar(container) {
     if (container.scrollTop !== savedScrollTop) {
       container.scrollTop = savedScrollTop;
     }
+    mk21UpdateVisualScrollbarFor(container);
   } catch (e) {}
 }
 
@@ -7117,6 +7313,31 @@ function initWebOSScrollFix() {
   if (typeof navigator === 'undefined' || typeof document === 'undefined') return;
   const ua = navigator.userAgent || '';
   const isWebOS = /webos|web0s|netcast/i.test(ua) || typeof window.webOS !== 'undefined';
+
+  if (!window.__mk21VisualScrollInit) {
+    window.__mk21VisualScrollInit = true;
+    document.addEventListener('focusin', function (e) {
+      const target = e.target;
+      if (!target || typeof target.closest !== 'function') return;
+      const container = target.closest(WEBOS_SCROLL_SELECTOR);
+      document.querySelectorAll('.mk21-vscroll-rail.is-active').forEach(function (r) {
+        r.classList.remove('is-active');
+      });
+      if (container) {
+        mk21UpdateVisualScrollbarFor(container);
+        if (container._mk21ScrollRail) container._mk21ScrollRail.classList.add('is-active');
+      }
+    }, true);
+    window.addEventListener('resize', function () {
+      document.querySelectorAll(WEBOS_SCROLL_SELECTOR).forEach(function (el) {
+        if (el.offsetParent !== null) mk21UpdateVisualScrollbarFor(el);
+      });
+    }, { passive: true });
+    document.querySelectorAll(WEBOS_SCROLL_SELECTOR).forEach(function (el) {
+      if (el.offsetParent !== null) mk21UpdateVisualScrollbarFor(el);
+    });
+  }
+
   if (!isWebOS) return;
 
   if (window.__mk21WebOSScrollFixActive) return;

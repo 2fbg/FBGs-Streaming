@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.7.6">
-  <link rel="stylesheet" href="css/style.css?v=2.7.6">
+  <link rel="stylesheet" href="styles.css?v=2.7.7">
+  <link rel="stylesheet" href="css/style.css?v=2.7.7">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -96,7 +96,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.7.6 • Smart TV (webOS &amp; Tizen)
+          MK21 PLAY OTT • v2.7.7 • Smart TV (webOS &amp; Tizen)
         </div>
       </form>
     </div>
@@ -256,7 +256,7 @@
 
     <!-- SEÇÃO CONFIGURAÇÕES (CLONE VIZZION PLAY DAS FOTOS) -->
     <section id="sectionSettings" class="content-section hidden">
-      <div class="settings-left-menu scrollable-container">
+      <div class="settings-left-menu scrollable-container" tabindex="0">
         <button id="cfgBtnInfo" class="cfg-menu-item active" tabindex="0">⚙️ Informação geral</button>
         <button id="cfgBtnFonte" class="cfg-menu-item" tabindex="0">🔤 Tamanho da fonte</button>
         <button id="cfgBtnFiltro" class="cfg-menu-item" tabindex="0">📦 Filtrar conteúdo</button>
@@ -276,7 +276,7 @@
         </div>
       </div>
 
-      <div id="settingsDetailBox" class="settings-detail-panel scrollable-container"></div>
+      <div id="settingsDetailBox" class="settings-detail-panel scrollable-container" tabindex="0"></div>
     </section>
 
   </main>
@@ -584,7 +584,7 @@
           <button id="tabOmniSeries" class="omnisearch-tab-btn" tabindex="0">🍿 Séries (<span id="countOmniSeries">0</span>)</button>
         </div>
       </div>
-      <div class="omnisearch-body scrollable-container">
+      <div class="omnisearch-body scrollable-container" tabindex="0">
         <div id="omnisearchResultsGrid" class="omnisearch-results-grid"></div>
         <div id="omnisearchEmptyState" style="text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 16px;">
           Digite uma palavra-chave para buscar instantaneamente em todo o catálogo.
@@ -600,7 +600,7 @@
         <span id="txtEpgGuideTitle" style="color:#ffd54f; font-size:20px; font-weight:800;">🔵 Programação do Canal (EPG)</span>
         <button id="btnCloseEpgGuide" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
       </div>
-      <div id="epgScheduleList" class="scrollable-container" style="padding:20px; max-height:480px; overflow-y:auto;">
+      <div id="epgScheduleList" class="scrollable-container" tabindex="0" style="padding:20px; max-height:480px; overflow-y:auto;">
         <div style="text-align:center; padding:30px; color:#aaa;">Carregando grade de programação...</div>
       </div>
     </div>
@@ -611,8 +611,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.7.6, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.7.6') {
+        // Se a versão OTA armazenada for anterior a 2.7.7, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.7.7') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -635,7 +635,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.7.6';
+              fallback.src = 'app.js?v=2.7.7';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -652,7 +652,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.7.6';
+      s.src = 'app.js?v=2.7.7';
       document.body.appendChild(s);
     })();
   </script>
