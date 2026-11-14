@@ -3,10 +3,10 @@
   --font-scale: 1;
   --primary-red: #e50914;
   --primary-hover: #ff1f2d;
-  --bg-dark: #0a0c14;
-  --header-bg: #0f121d;
-  --pane-bg: #131622;
-  --card-bg: #181c2a;
+  --bg-dark: #000000;
+  --header-bg: #000000;
+  --pane-bg: #090a10;
+  --card-bg: #10121a;
   --border-color: rgba(255, 255, 255, 0.08);
   --focus-ring: #ffd54f;
   --text-main: #ffffff;
@@ -19,10 +19,11 @@
   user-select: none;
 }
 
-body {
+html, body {
   margin: 0;
   padding: 0;
-  background: var(--bg-dark);
+  background: #000000 !important;
+  background-color: #000000 !important;
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   font-size: calc(20px * var(--font-scale, 1));
@@ -123,6 +124,7 @@ body {
 .fa-floppy-disk:empty::before { content: "💾"; }
 .fa-expand:empty::before { content: "⛶"; }
 .fa-compress:empty::before { content: "🗗"; }
+.fa-right-from-bracket:empty::before { content: "🚪"; }
 
 .header-right {
   display: flex;
@@ -211,10 +213,10 @@ body {
 /* ================= 3. SEÇÃO UNIFICADA 3 COLUNAS (TV, FILMES, SÉRIES) ================= */
 #sectionUnified {
   display: grid;
-  grid-template-columns: minmax(160px, 1.15fr) minmax(220px, 1.85fr) minmax(300px, 2fr);
+  grid-template-columns: minmax(180px, 1.2fr) minmax(240px, 1.8fr) minmax(320px, 2fr);
   gap: 12px;
   padding: 10px 14px;
-  background: #090b12;
+  background: #000000;
   height: calc(100vh - 60px);
   max-height: calc(100vh - 60px);
   overflow: hidden;
@@ -226,7 +228,8 @@ body {
 }
 
 .col-pane {
-  background: #131622;
+  position: relative;
+  background: #0d0f18;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   display: flex;
@@ -288,29 +291,33 @@ body {
   box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
 }
 
-/* Barra de Rolagem Visível e Otimizada para Smart TV (10-foot UI) */
+/* Barra de Rolagem Visível e Otimizada para Smart TV (10-foot UI LG webOS / Tizen) */
 ::-webkit-scrollbar {
   width: 14px !important;
   height: 14px !important;
   display: block !important;
-  background: rgba(0, 0, 0, 0.75) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: rgba(0, 0, 0, 0.95) !important;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(10, 14, 24, 0.95) !important;
+  background: #080a10 !important;
   border-radius: 8px !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #ff9800 !important;
+  background-color: #ff9800 !important;
   border-radius: 8px !important;
   border: 2px solid #000000 !important;
   min-height: 48px !important;
   box-shadow: 0 0 10px rgba(255, 152, 0, 0.6) !important;
 }
 
-::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
   background: #ffa726 !important;
 }
 
@@ -322,19 +329,68 @@ body {
   letter-spacing: 0.5px !important;
 }
 
-.pane-scroll {
+/* Containers de lista com barra de rolagem forçada e suporte a foco */
+.pane-scroll,
+#listCategories,
+#listItems,
+#settingsPanel,
+#epgTimeline,
+.settings-left-menu,
+.omnisearch-results-grid {
   list-style: none;
   margin: 0;
   padding: 8px;
   overflow-y: scroll !important;
   overflow-x: hidden !important;
   flex: 1;
-  scrollbar-width: thin;
-  scrollbar-color: #ff9800 #0a0e18;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #ff9800 #080a10 !important;
+}
+
+.pane-scroll::-webkit-scrollbar,
+#listCategories::-webkit-scrollbar,
+#listItems::-webkit-scrollbar,
+#settingsPanel::-webkit-scrollbar,
+#epgTimeline::-webkit-scrollbar,
+.settings-left-menu::-webkit-scrollbar,
+.omnisearch-results-grid::-webkit-scrollbar {
+  width: 14px !important;
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: #080a10 !important;
+}
+
+.pane-scroll::-webkit-scrollbar-track,
+#listCategories::-webkit-scrollbar-track,
+#listItems::-webkit-scrollbar-track,
+#settingsPanel::-webkit-scrollbar-track,
+#epgTimeline::-webkit-scrollbar-track,
+.settings-left-menu::-webkit-scrollbar-track,
+.omnisearch-results-grid::-webkit-scrollbar-track {
+  background: #080a10 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.pane-scroll::-webkit-scrollbar-thumb,
+#listCategories::-webkit-scrollbar-thumb,
+#listItems::-webkit-scrollbar-thumb,
+#settingsPanel::-webkit-scrollbar-thumb,
+#epgTimeline::-webkit-scrollbar-thumb,
+.settings-left-menu::-webkit-scrollbar-thumb,
+.omnisearch-results-grid::-webkit-scrollbar-thumb {
+  background: #ff9800 !important;
+  border-radius: 8px !important;
+  border: 2px solid #000000 !important;
+  min-height: 48px !important;
 }
 
 .pane-scroll li {
   margin-bottom: 6px;
+  flex-shrink: 0;
 }
 
 .list-item-btn {
@@ -344,13 +400,46 @@ body {
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 8px;
-  font-size: 19px;
+  font-size: clamp(15px, 1.15vw, 20px);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+
+.cat-item-btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: #181b28;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  font-size: clamp(14px, 1.1vw, 19px);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  min-height: 48px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cat-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
 }
 
 .list-item-btn.active {
@@ -869,27 +958,31 @@ video {
 
 /* MODAL GERENCIADOR DE SERVIDORES & MANUTENÇÃO */
 .server-manager-modal {
-  width: 920px;
-  max-width: 96vw;
+  width: 1000px;
+  max-width: 94vw;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden !important;
 }
 
 .server-manager-body {
   overflow-y: auto;
+  overflow-x: hidden !important;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-right: 4px;
+  padding-right: 12px;
 }
 
 .servers-manager-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 280px;
+  max-height: 220px;
   overflow-y: auto;
+  overflow-x: hidden !important;
+  position: relative;
+  padding-right: 18px !important;
+  margin: 8px 0 12px 0;
 }
 
 .server-manager-row {
@@ -1494,6 +1587,18 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   z-index: 50;
 }
 
+.scrollable-container:focus,
+#videoContainer:focus {
+  transform: none !important;
+  outline-offset: -3px !important;
+}
+
+.scrollable-container.scroll-mode-active {
+  outline: 3px solid #ffd54f !important;
+  outline-offset: -3px !important;
+  box-shadow: inset 0 0 0 3px #ff9800, 0 0 20px rgba(255, 152, 0, 0.45) !important;
+}
+
 .util-btn {
   padding: 10px 14px;
   min-width: 44px;
@@ -1512,18 +1617,35 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
 /* HUD tela cheia moderno (Glassmorphism 10-foot UI - Item 3) */
 .video-box { position: relative; }
 .fs-hud-bar {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  padding: 24px 30px 28px;
-  background: rgba(16, 17, 24, 0.90);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 20px 20px 0 0;
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.85);
-  z-index: 40;
-  display: flex; flex-direction: column; gap: 14px;
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  top: auto !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
+  padding: 18px 28px 22px !important;
+  background: linear-gradient(180deg, rgba(8, 10, 16, 0.15) 0%, rgba(8, 10, 16, 0.90) 22%, rgba(6, 8, 14, 0.98) 100%) !important;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 18px 18px 0 0 !important;
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.92) !important;
+  z-index: 1000010 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  transform: none !important;
+  pointer-events: auto !important;
 }
-.fs-hud-bar.hidden { display: none !important; }
+.fs-hud-bar > * + * {
+  margin-top: 10px !important;
+}
+.fs-hud-bar.hidden {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 .fs-hud-title {
   font-size: 24px;
   font-weight: 800;
@@ -1638,37 +1760,69 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   transition: width 0.25s linear;
 }
 .fs-hud-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  overflow: visible !important;
 }
-.hud-ctrl-btn {
-  min-height: 48px;
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 50px;
-  color: #ffffff;
-  font-size: 16px;
-  font-weight: 700;
+.fs-hud-actions .hud-ctrl-btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 46px !important;
+  padding: 10px 18px !important;
+  margin: 4px 6px !important;
+  background: rgba(24, 28, 42, 0.92) !important;
+  border: 2px solid rgba(255, 255, 255, 0.28) !important;
+  border-radius: 50px !important;
+  color: #ffffff !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
   cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
 }
-.hud-ctrl-btn:focus {
+.fs-hud-actions .hud-ctrl-btn:focus {
   background: #ff9800 !important;
   color: #000000 !important;
-  border-color: #ff9800 !important;
-  box-shadow: 0 0 20px rgba(255, 152, 0, 0.85) !important;
-  transform: scale(1.1);
-  outline: none;
+  border-color: #ffd54f !important;
+  box-shadow: 0 0 20px rgba(255, 152, 0, 0.95) !important;
+  transform: scale(1.06) !important;
+  outline: 3px solid #ffffff !important;
 }
-.hud-ctrl-btn.primary {
-  background: rgba(255, 152, 0, 0.35);
-  border-color: rgba(255, 152, 0, 0.6);
+.fs-hud-actions .hud-ctrl-btn.primary {
+  background: rgba(255, 152, 0, 0.35) !important;
+  border-color: rgba(255, 152, 0, 0.7) !important;
+}
+
+@media (max-width: 1366px) {
+  .fs-hud-actions .hud-ctrl-btn {
+    font-size: 15px !important;
+    padding: 8px 14px !important;
+    margin: 4px 5px !important;
+    min-height: 42px !important;
+  }
+}
+
+@media (max-width: 1280px) {
+  .fs-hud-bar {
+    padding: 14px 18px 16px !important;
+  }
+  .fs-hud-actions .hud-ctrl-btn {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+    margin: 3px 4px !important;
+    min-height: 40px !important;
+  }
 }
 
 .vod-time-row {
@@ -1681,7 +1835,12 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   font-variant-numeric: tabular-nums;
 }
 
-.video-box.is-fullscreen {
+.video-box.is-fullscreen,
+.video-box:fullscreen,
+.video-box:-webkit-full-screen,
+#videoContainer.is-fullscreen,
+#videoContainer:fullscreen,
+#videoContainer:-webkit-full-screen {
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
@@ -1689,16 +1848,30 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   bottom: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
-  background: #000 !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  aspect-ratio: auto !important;
+  background: #000000 !important;
   border-radius: 0 !important;
   z-index: 999999 !important;
   border: none !important;
   margin: 0 !important;
   padding: 0 !important;
 }
-.video-box.is-fullscreen video {
-  width: 100% !important;
-  height: 100% !important;
+.video-box.is-fullscreen video,
+.video-box:fullscreen video,
+.video-box:-webkit-full-screen video,
+#videoContainer.is-fullscreen video,
+#videoContainer:fullscreen video,
+#videoContainer:-webkit-full-screen video {
+  position: relative !important;
+  z-index: 1 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
   object-fit: contain !important;
 }
 
@@ -2607,17 +2780,16 @@ body.osk-open .login-card {
   left: auto !important;
   top: auto !important;
   bottom: auto !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
-  width: clamp(220px, 15vw, 260px) !important;
-  min-width: 210px !important;
+  height: calc(100vh - 60px) !important;
+  max-height: calc(100vh - 60px) !important;
+  width: 248px !important;
+  min-width: 224px !important;
   max-width: 270px !important;
-  flex: 0 0 clamp(220px, 15vw, 260px) !important;
+  flex: 0 0 248px !important;
   flex-direction: column !important;
   align-items: stretch !important;
   justify-content: flex-start !important;
-  gap: 8px !important;
-  padding: 12px 10px !important;
+  padding: 10px 10px !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   background: linear-gradient(180deg, #05070d 0%, #0b0f19 100%) !important;
@@ -2630,7 +2802,6 @@ body.osk-open .login-card {
 .app-header .header-left {
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 8px !important;
   width: 100% !important;
 }
 
@@ -2638,26 +2809,26 @@ body.osk-open .login-card {
   justify-content: flex-start !important;
   align-items: flex-start !important;
   flex-direction: column !important;
-  gap: 4px !important;
-  padding: 4px 6px 8px !important;
+  padding: 2px 6px 8px !important;
+  margin-bottom: 6px !important;
   border-bottom: 1px solid #161f2f !important;
 }
 
 .app-header .logo-title {
   margin-left: 0 !important;
-  font-size: 19px !important;
+  font-size: 20px !important;
   letter-spacing: 0.8px !important;
 }
 
 .app-header .tv-header-logo {
-  max-height: 42px !important;
+  max-height: 40px !important;
+  margin-bottom: 4px !important;
 }
 
 .app-header .main-tabs {
   flex-direction: column !important;
   align-items: stretch !important;
   width: 100% !important;
-  gap: 5px !important;
   overflow: visible !important;
   background: transparent !important;
   border: none !important;
@@ -2666,30 +2837,35 @@ body.osk-open .login-card {
 
 .app-header .tab-btn {
   width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
   justify-content: flex-start !important;
   text-align: left !important;
-  gap: 8px !important;
   padding: 9px 12px !important;
-  font-size: clamp(13px, 0.92vw, 15px) !important;
+  margin-bottom: 5px !important;
+  min-height: 42px !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
   font-weight: 700 !important;
   letter-spacing: 0.3px !important;
   border-radius: 10px !important;
   white-space: nowrap !important;
-  overflow: visible !important;
-  text-overflow: clip !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   flex: 0 0 auto !important;
 }
 
 .app-header .tab-btn i {
-  width: 18px !important;
+  width: 20px !important;
+  margin-right: 10px !important;
   text-align: center !important;
-  font-size: 15px !important;
+  font-size: 16px !important;
+  flex-shrink: 0 !important;
 }
 
 .app-header .header-right {
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 6px !important;
   width: 100% !important;
   margin-top: auto !important;
   padding-top: 8px !important;
@@ -2698,23 +2874,39 @@ body.osk-open .login-card {
 
 .app-header .header-right .action-btn {
   width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
   justify-content: center !important;
-  font-size: 13px !important;
-  padding: 8px 8px !important;
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+  padding: 9px 10px !important;
+  min-height: 44px !important;
+  margin-bottom: 6px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.app-header .header-right .action-btn i {
+  margin-right: 8px !important;
+  font-size: 16px !important;
+  flex-shrink: 0 !important;
 }
 
 .app-header #liveClock {
   width: 100% !important;
   text-align: center !important;
-  font-size: 17px !important;
-  padding: 4px 0 !important;
+  font-size: 19px !important;
+  padding: 2px 0 !important;
+  margin-top: 2px !important;
 }
 
 .app-body {
   flex: 1 1 0% !important;
   min-width: 0 !important;
-  height: 100vh !important;
-  max-height: 100vh !important;
+  height: calc(100vh - 60px) !important;
+  max-height: calc(100vh - 60px) !important;
   display: flex !important;
   flex-direction: column !important;
   padding: 0 !important;
@@ -2758,7 +2950,7 @@ body.osk-open .login-card {
   box-sizing: border-box !important;
   width: 100% !important;
   height: 100% !important;
-  max-height: 100vh !important;
+  max-height: calc(100vh - 60px) !important;
   overflow: hidden !important;
 }
 
@@ -2789,33 +2981,40 @@ body.osk-open .login-card {
   box-sizing: border-box !important;
 }
 
-/* TVs com viewport menor (1280x720 e 1366x768): proporções dinâmicas */
+/* TVs com viewport menor (1280x720 e 1366x768): proporções dinâmicas sem clamp() */
 @media (max-width: 1366px) {
   .app-header {
-    width: 210px !important;
-    min-width: 200px !important;
-    flex: 0 0 210px !important;
-    padding: 10px 8px !important;
-    gap: 6px !important;
+    width: 224px !important;
+    min-width: 210px !important;
+    flex: 0 0 224px !important;
+    padding: 8px 8px !important;
   }
   .app-header .tab-btn {
-    font-size: 13px !important;
-    padding: 8px 10px !important;
-    gap: 8px !important;
+    font-size: 15px !important;
+    padding: 7px 10px !important;
+    min-height: 38px !important;
+    margin-bottom: 4px !important;
   }
   .app-header .tab-btn i {
-    width: 16px !important;
-    font-size: 14px !important;
+    width: 18px !important;
+    font-size: 15px !important;
+    margin-right: 8px !important;
+  }
+  .app-header .header-right .action-btn {
+    font-size: 16px !important;
+    padding: 7px 8px !important;
+    min-height: 40px !important;
+    margin-bottom: 5px !important;
   }
   .app-header .logo-title {
-    font-size: 17px !important;
+    font-size: 18px !important;
   }
   .cfg-menu-item {
-    font-size: 14px !important;
+    font-size: 15px !important;
     padding: 8px 10px !important;
   }
   .cfg-tmdb-toggle {
-    font-size: 13px !important;
+    font-size: 14px !important;
   }
   #sectionUnified:not(.hidden) {
     grid-template-columns: minmax(130px, 1.1fr) minmax(190px, 1.8fr) minmax(270px, 2fr) !important;
@@ -2831,19 +3030,27 @@ body.osk-open .login-card {
 
 @media (max-width: 1280px) {
   .app-header {
-    width: 195px !important;
-    min-width: 185px !important;
-    flex: 0 0 195px !important;
-    padding: 8px 6px !important;
+    width: 210px !important;
+    min-width: 200px !important;
+    flex: 0 0 210px !important;
+    padding: 6px 6px !important;
   }
   .app-header .tab-btn {
-    font-size: 12px !important;
-    padding: 7px 8px !important;
-    gap: 6px !important;
+    font-size: 14px !important;
+    padding: 6px 8px !important;
+    min-height: 36px !important;
+    margin-bottom: 4px !important;
   }
   .app-header .tab-btn i {
-    width: 14px !important;
-    font-size: 13px !important;
+    width: 16px !important;
+    font-size: 14px !important;
+    margin-right: 7px !important;
+  }
+  .app-header .header-right .action-btn {
+    font-size: 15px !important;
+    padding: 6px 8px !important;
+    min-height: 38px !important;
+    margin-bottom: 4px !important;
   }
   #sectionUnified:not(.hidden) {
     grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.7fr) minmax(240px, 2.1fr) !important;
@@ -2856,3 +3063,1518 @@ body.osk-open .login-card {
     padding: 8px 12px !important;
   }
 }
+
+/* ==========================================================================
+   2.6.0 — ÁREA ÚTIL, ROLAGEM VISÍVEL E CONTROLE MAGIC
+   ========================================================================== */
+
+/* A barra de atalhos do controle é fixa (60px). O corpo do app precisa descontar
+   essa altura, senão os últimos botões de cada painel ficam atrás dela. */
+.app-body {
+  height: calc(100vh - 60px) !important;
+  max-height: calc(100vh - 60px) !important;
+  padding-bottom: 4px !important;
+  box-sizing: border-box;
+}
+
+.content-section {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Rolagem sempre visível e com alto contraste para Smart TV (10-foot UI) */
+.pane-scroll,
+#listCategories,
+#listItems,
+.settings-left-menu,
+.settings-detail-panel,
+.omnisearch-body,
+#devLogsContainer,
+.modal-content,
+.epg-guide-modal #epgScheduleList {
+  overflow-y: scroll !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #ff9800 rgba(10, 14, 24, 0.95) !important;
+}
+
+.pane-scroll::-webkit-scrollbar,
+#listCategories::-webkit-scrollbar,
+#listItems::-webkit-scrollbar,
+.settings-left-menu::-webkit-scrollbar,
+.settings-detail-panel::-webkit-scrollbar,
+.omnisearch-body::-webkit-scrollbar,
+#devLogsContainer::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar {
+  width: 14px !important;
+  height: 14px !important;
+  display: block !important;
+  background: rgba(10, 14, 24, 0.95) !important;
+}
+
+.pane-scroll::-webkit-scrollbar-track,
+#listCategories::-webkit-scrollbar-track,
+#listItems::-webkit-scrollbar-track,
+.settings-left-menu::-webkit-scrollbar-track,
+.settings-detail-panel::-webkit-scrollbar-track,
+.omnisearch-body::-webkit-scrollbar-track,
+#devLogsContainer::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track {
+  background: rgba(10, 14, 24, 0.95) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.pane-scroll::-webkit-scrollbar-thumb,
+#listCategories::-webkit-scrollbar-thumb,
+#listItems::-webkit-scrollbar-thumb,
+.settings-left-menu::-webkit-scrollbar-thumb,
+.settings-detail-panel::-webkit-scrollbar-thumb,
+.omnisearch-body::-webkit-scrollbar-thumb,
+#devLogsContainer::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb {
+  background: #ff9800 !important;
+  border-radius: 8px !important;
+  border: 2px solid #000000 !important;
+  min-height: 48px !important;
+  box-shadow: 0 0 10px rgba(255, 152, 0, 0.7) !important;
+}
+
+.pane-scroll::-webkit-scrollbar-thumb:hover,
+#listCategories::-webkit-scrollbar-thumb:hover,
+#listItems::-webkit-scrollbar-thumb:hover {
+  background: #ffa726 !important;
+}
+
+/* O mini player fica travado no topo e NUNCA rola para fora da tela */
+.col-player {
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.video-box:not(.is-fullscreen):not(:fullscreen):not(:-webkit-full-screen) {
+  max-height: 46vh !important;
+  flex: 0 0 auto !important;
+}
+
+.player-controls {
+  flex: 0 0 auto;
+  position: relative;
+  background: transparent;
+  padding-bottom: 6px;
+}
+
+/* Painel de opções do player (Qualidade / Buffer / Fonte) */
+.player-options-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.player-options-tab {
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: #181b28;
+  color: #cbd5e1;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.player-options-tab.active {
+  border-color: #ffd54f;
+  color: #ffd54f;
+  background: rgba(255, 213, 79, 0.12);
+}
+
+.player-options-tab:focus {
+  outline: none;
+  border-color: #ffd54f;
+  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.35);
+}
+
+#playerOptionsBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+/* Tela de logs em tela cheia e com fonte grande (para fotografar da TV) */
+.devlogs-modal {
+  z-index: 100000 !important;
+}
+
+.devlogs-card {
+  width: 96vw !important;
+  max-width: 96vw !important;
+  height: 92vh !important;
+  max-height: 92vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #05070d !important;
+  border: 2px solid rgba(59, 130, 246, 0.55) !important;
+  border-radius: 14px !important;
+  padding: 16px 20px !important;
+  box-sizing: border-box;
+}
+
+.devlogs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.devlogs-title {
+  color: #ffd54f;
+  font-weight: 800;
+  font-size: 24px;
+  margin-right: 16px;
+}
+
+.devlogs-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.devlogs-head .devlogs-actions .ctrl-btn {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  font-size: 16px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  padding: 10px 16px !important;
+  min-height: 44px !important;
+  margin-left: 10px !important;
+  margin-bottom: 4px !important;
+}
+
+.devlogs-info {
+  display: block !important;
+  font-size: 17px !important;
+  line-height: 1.75 !important;
+  color: #cbd5e1;
+  margin-bottom: 12px;
+}
+
+.devlogs-info span {
+  display: inline-block !important;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  margin: 0 10px 6px 0 !important;
+}
+
+.devlogs-info b {
+  color: #ffd54f;
+  font-weight: 700;
+}
+
+.devlogs-screen {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #03050a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: "Courier New", monospace, sans-serif;
+  font-size: 19px;
+  line-height: 1.6;
+  color: #dbeafe;
+  user-select: text;
+}
+
+.devlogs-screen .log-line {
+  margin-bottom: 6px;
+  word-break: break-word;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding-bottom: 4px;
+}
+
+.devlogs-screen .log-time {
+  color: #64748b;
+}
+
+.devlogs-screen .log-type {
+  display: inline-block;
+  min-width: 74px;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.devlogs-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #cbd5e1;
+  margin-top: 10px;
+}
+
+/* Menu de configurações mais compacto para caber em 720p sem cortar itens */
+@media (max-height: 800px) {
+  .cfg-menu-item {
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+  .settings-left-menu {
+    gap: 6px;
+    padding: 10px;
+  }
+  .video-box:not(.is-fullscreen):not(:fullscreen):not(:-webkit-full-screen) {
+    max-height: 40vh !important;
+  }
+  .epg-card {
+    padding: 10px 14px;
+  }
+}
+
+/* Modais sempre acima do player em tela cheia (que usa z-index 999999) */
+.app-modal { z-index: 1000000; }
+.devlogs-modal { z-index: 1000100 !important; }
+#modalPlayerOptions .modal-content { overflow: hidden; }
+
+/* Cabecalho do painel de opcoes: o botao Fechar nao deve esticar */
+#modalPlayerOptions .modal-header > span { flex: 1 1 auto; }
+#modalPlayerOptions .modal-header .ctrl-btn { flex: 0 0 auto; }
+
+/* Os 6 botoes do player estouravam a coluna (o ultimo ficava cortado fora da
+   tela em 1024/1280). Agora eles quebram em duas linhas e encolhem. */
+.player-controls {
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  row-gap: 8px !important;
+  overflow-x: visible !important;
+}
+
+.player-controls .ctrl-btn {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  flex: 0 0 46px !important;
+}
+
+.player-controls .ctrl-btn svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Texto nunca deve estourar os botoes redondos do player (o icone SVG manda) */
+.player-controls .ctrl-btn {
+  font-size: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Modais em tela cheia (garante exibição no Top Layer do webOS e Tizen) */
+.app-modal, .modal-overlay {
+  z-index: 1000100 !important;
+}
+
+#videoContainer .app-modal,
+#videoContainer .modal-overlay,
+#videoContainer #modalPlayerOptions,
+#videoContainer #modalAudioSubs,
+#videoContainer #modalServerPicker {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1000200 !important;
+  background: rgba(0, 0, 0, 0.9) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: auto !important;
+}
+
+#videoContainer .app-modal.hidden,
+#videoContainer .modal-overlay.hidden {
+  display: none !important;
+}
+
+#tvPlayer {
+  transition: object-fit 0.2s ease-in-out;
+}
+
+/* Banner de Notificação (Toast MK21) */
+#mk21-toast-banner {
+  position: fixed;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: rgba(0, 0, 0, 0.88);
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  border-left: 4px solid #ff9800;
+  font-size: 18px;
+  font-weight: bold;
+  z-index: 999999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.7);
+}
+
+#mk21-toast-banner.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ==========================================
+   CSS DE EMERGÊNCIA: FONTES E SCROLLBAR (MK21 v2.7.6 — Compatível Chromium webOS)
+   Nota: evita clamp() (Chromium 79+) e flex gap (Chromium 84+) em elementos críticos.
+   ========================================== */
+
+/* 1. Protege a fonte de botões, itens de servidor e controles de lista em px explícitos */
+.cat-item-btn, .footer-item, .list-item, .modal-button,
+.server-pill, .server-manager-row, .server-info-name {
+  font-size: 17px !important;
+  line-height: 1.35 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-height: 44px !important;
+  box-sizing: border-box !important;
+}
+
+/* Rodapé elástico anti-corte com espaçamento por margin (compatível webOS 3/4/5) */
+#remoteColorBar.remote-color-bar {
+  height: 60px !important;
+  padding: 0 18px !important;
+  gap: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+#remoteColorBar .color-shortcut-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 18px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  color: #f8fafc !important;
+  margin: 0 14px !important;
+  min-height: 0 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+#remoteColorBar .color-key-dot {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  margin-right: 9px !important;
+  flex-shrink: 0 !important;
+}
+
+#remoteColorBar .remote-key-pill {
+  display: inline-block !important;
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+  padding: 4px 10px !important;
+  margin-right: 9px !important;
+  min-height: 0 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 1366px) {
+  #remoteColorBar .color-shortcut-item {
+    font-size: 16px !important;
+    margin: 0 10px !important;
+  }
+  #remoteColorBar .remote-key-pill {
+    font-size: 14px !important;
+    padding: 3px 9px !important;
+    margin-right: 7px !important;
+  }
+}
+
+@media (max-width: 1280px) {
+  #remoteColorBar .color-shortcut-item {
+    font-size: 15px !important;
+    margin: 0 8px !important;
+  }
+  #remoteColorBar .color-key-dot {
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px !important;
+    margin-right: 6px !important;
+  }
+  #remoteColorBar .remote-key-pill {
+    font-size: 13px !important;
+    padding: 3px 8px !important;
+    margin-right: 6px !important;
+  }
+}
+
+/* 2. Força a scrollbar a aparecer em qualquer container que tenha rolagem */
+div[style*="overflow"], .pane-scroll, .list-container, 
+.modal-body, .server-list, .servers-manager-list, .log-container, 
+#serverItemsGrid, #devLogsContainer, #listCategories, #listItems, #settingsPanel {
+  overflow-y: scroll !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* 3. Reafirma a scrollbar laranja de alto contraste (Global) */
+::-webkit-scrollbar {
+  width: 14px !important;
+  height: 14px !important;
+  display: block !important;
+  background: #080a10 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+::-webkit-scrollbar-track {
+  background: #080a10 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ff9800 !important;
+  border-radius: 6px !important;
+  border: 2px solid #000000 !important;
+  min-height: 40px !important;
+  box-shadow: 0 0 10px rgba(255, 152, 0, 0.6) !important;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: #ffa726 !important;
+}
+
+/* 4. Garante que o container de lista exiba a barra com foco ativo no webOS */
+.pane-scroll:focus-within::-webkit-scrollbar,
+.server-list:focus-within::-webkit-scrollbar,
+.servers-manager-list:focus-within::-webkit-scrollbar,
+#listCategories:focus-within::-webkit-scrollbar,
+#listItems:focus-within::-webkit-scrollbar,
+#serverItemsGrid:focus-within::-webkit-scrollbar,
+#devLogsContainer:focus-within::-webkit-scrollbar,
+.scrollable-container:focus-within::-webkit-scrollbar {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* ==========================================
+   v2.7.5 — WEBOS CHROMIUM SCROLLBAR FORCE-VISIBLE + LOGIN POLISH
+   ========================================== */
+.scrollable-container,
+.force-scroll-visible,
+#listItems.force-scroll-visible,
+#listCategories.force-scroll-visible,
+#serverList.force-scroll-visible,
+#serverItemsGrid.force-scroll-visible,
+#devLogsContainer.force-scroll-visible {
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #ff9800 #080a10 !important;
+}
+
+.scrollable-container::-webkit-scrollbar,
+.force-scroll-visible::-webkit-scrollbar,
+#listItems.force-scroll-visible::-webkit-scrollbar,
+#listCategories.force-scroll-visible::-webkit-scrollbar,
+#serverList.force-scroll-visible::-webkit-scrollbar,
+#serverItemsGrid.force-scroll-visible::-webkit-scrollbar,
+#devLogsContainer.force-scroll-visible::-webkit-scrollbar {
+  width: 14px !important;
+  height: 14px !important;
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: #080a10 !important;
+}
+
+.scrollable-container::-webkit-scrollbar-track,
+.force-scroll-visible::-webkit-scrollbar-track {
+  background: #080a10 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+.scrollable-container::-webkit-scrollbar-thumb,
+.force-scroll-visible::-webkit-scrollbar-thumb {
+  background: #ff9800 !important;
+  background-color: #ff9800 !important;
+  border-radius: 8px !important;
+  border: 2px solid #000000 !important;
+  min-height: 48px !important;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.75) !important;
+}
+
+/* Login v2.7.5: Preto Absoluto + Identidade Visual MK21 */
+#login-container.login-modal-fullscreen {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+#login-container .login-card {
+  background: #050505 !important;
+  border: 2px solid #e50914 !important;
+  box-shadow: 0 0 42px rgba(229, 9, 20, 0.28), 0 24px 64px rgba(0, 0, 0, 1) !important;
+}
+
+#login-container .brand-wordmark {
+  margin-top: 8px !important;
+  font-size: 26px !important;
+  font-weight: 900 !important;
+  letter-spacing: 4px !important;
+  color: #ffffff !important;
+}
+
+#login-container .brand-wordmark span {
+  color: #e50914 !important;
+}
+
+#login-container .input-field {
+  background: #0f0f12 !important;
+  border: 2px solid #242429 !important;
+  color: #ffffff !important;
+}
+
+#login-container .input-field::placeholder {
+  color: #6b7280 !important;
+}
+
+#btnHeaderLogout:hover,
+#btnHeaderLogout:focus {
+  background: #e50914 !important;
+  color: #ffffff !important;
+  border-color: #ffd54f !important;
+}
+
+/* ==========================================
+   v2.7.7 — SCROLLBAR VISUAL 10-FOOT (LG webOS Chromium Fallback-Proof)
+   ========================================== */
+#listCategories,
+#listItems,
+.settings-left-menu,
+#settingsDetailBox,
+#devLogsContainer,
+.omnisearch-body,
+#epgScheduleList {
+  padding-right: 20px !important;
+}
+
+.settings-left-menu,
+#settingsDetailBox,
+#devLogsContainer,
+.omnisearch-body,
+#epgScheduleList {
+  position: relative;
+}
+
+.mk21-vscroll-rail {
+  position: absolute;
+  right: 4px;
+  top: 56px;
+  bottom: 8px;
+  width: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 30;
+  overflow: hidden;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.mk21-vscroll-rail.is-hidden {
+  opacity: 0 !important;
+}
+
+.mk21-vscroll-rail.is-active {
+  border-color: #ffd54f;
+  background: rgba(255, 152, 0, 0.20);
+}
+
+.mk21-vscroll-thumb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  min-height: 44px;
+  background: #ff9800;
+  border-radius: 5px;
+  box-shadow: 0 0 8px rgba(255, 152, 0, 0.85);
+  will-change: transform;
+}
+
+.mk21-vscroll-rail.is-active .mk21-vscroll-thumb {
+  background: #ffd54f;
+  box-shadow: 0 0 12px rgba(255, 213, 79, 0.95);
+}
+
+/* ==========================================
+   v2.7.8 — LOGIN GPU NEON ANIMATION + ZERO SCROLLBAR + INLINE FEEDBACK
+   ========================================== */
+#login-container.login-modal-fullscreen {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  padding: 12px 16px !important;
+}
+
+#login-container .login-card {
+  max-height: calc(100vh - 24px) !important;
+  overflow: hidden !important;
+  padding: 26px 40px 20px !important;
+  gap: 10px !important;
+  position: relative !important;
+}
+
+#login-container .brand-header {
+  margin-bottom: 2px !important;
+}
+
+#login-container .brand-logo {
+  height: 68px !important;
+  max-width: 260px !important;
+}
+
+#login-container .brand-wordmark {
+  margin-top: 6px !important;
+  font-size: 24px !important;
+}
+
+#login-container .brand-tagline {
+  margin-top: 4px !important;
+  font-size: 12px !important;
+}
+
+#login-container .input-group {
+  margin-bottom: 9px !important;
+  gap: 5px !important;
+}
+
+#login-container .input-field,
+#login-container select.input-field {
+  height: 48px !important;
+  font-size: 18px !important;
+}
+
+#login-container .action-group {
+  gap: 10px !important;
+  margin-top: 8px !important;
+}
+
+#login-container .btn-primary,
+#login-container .btn-secondary {
+  height: 48px !important;
+  font-size: 16px !important;
+}
+
+@media (max-height: 760px) {
+  #login-container .login-card {
+    padding: 18px 32px 14px !important;
+    gap: 8px !important;
+  }
+  #login-container .brand-logo {
+    height: 52px !important;
+  }
+  #login-container .brand-wordmark {
+    font-size: 21px !important;
+  }
+  #login-container .input-field,
+  #login-container select.input-field,
+  #login-container .btn-primary,
+  #login-container .btn-secondary {
+    height: 44px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* Linha vermelha superior com feixe neon GPU-accelerated (apenas transform + opacity) */
+.login-neon-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(255, 0, 0, 0.22);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.login-neon-beam {
+  position: absolute;
+  top: -18px;
+  left: -25%;
+  width: 150%;
+  height: 39px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 0, 0.25) 25%, #ff1e2d 46%, #ff8a80 50%, #ff1e2d 54%, rgba(255, 0, 0, 0.25) 75%, transparent 100%);
+  background-image: conic-gradient(from 0deg, transparent 0deg, #ff0000 55deg, #ff6b6b 90deg, #ff0000 125deg, transparent 180deg, transparent 360deg);
+  -webkit-animation: mk21NeonSweep 3.2s linear infinite;
+  animation: mk21NeonSweep 3.2s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* Fallback OTA caso o HTML antigo ainda não tenha .login-neon-line */
+#login-container .login-card::before {
+  height: 3px !important;
+  background: linear-gradient(90deg, transparent 0%, #ff0000 30%, #ff7a7a 50%, #ff0000 70%, transparent 100%) !important;
+  -webkit-animation: mk21CardLineGlow 2.8s ease-in-out infinite;
+  animation: mk21CardLineGlow 2.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@-webkit-keyframes mk21NeonSweep {
+  0% { -webkit-transform: translate3d(-45%, 0, 0) rotate(0deg); opacity: 0.72; }
+  50% { -webkit-transform: translate3d(0%, 0, 0) rotate(180deg); opacity: 1; }
+  100% { -webkit-transform: translate3d(45%, 0, 0) rotate(360deg); opacity: 0.72; }
+}
+
+@keyframes mk21NeonSweep {
+  0% { transform: translate3d(-45%, 0, 0) rotate(0deg); opacity: 0.72; }
+  50% { transform: translate3d(0%, 0, 0) rotate(180deg); opacity: 1; }
+  100% { transform: translate3d(45%, 0, 0) rotate(360deg); opacity: 0.72; }
+}
+
+@-webkit-keyframes mk21CardLineGlow {
+  0% { -webkit-transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+  50% { -webkit-transform: translate3d(18%, 0, 0); opacity: 1; }
+  100% { -webkit-transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+}
+
+@keyframes mk21CardLineGlow {
+  0% { transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+  50% { transform: translate3d(18%, 0, 0); opacity: 1; }
+  100% { transform: translate3d(-18%, 0, 0); opacity: 0.55; }
+}
+
+#login-container .feedback-message {
+  margin: 4px 0 2px 0 !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+}
+
+#login-container .feedback-message.is-error {
+  background: rgba(229, 9, 20, 0.22) !important;
+  color: #ff8a8a !important;
+  border: 1px solid rgba(255, 77, 77, 0.65) !important;
+}
+
+#login-container .feedback-message.is-info {
+  background: rgba(59, 130, 246, 0.16) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(96, 165, 250, 0.45) !important;
+}
+
+#login-container .feedback-message.is-success {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #86efac !important;
+  border: 1px solid rgba(74, 222, 128, 0.5) !important;
+}
+
+/* ==========================================
+   v2.7.9 — GERENCIADOR MAXIMIZADO + TOTAIS POR SERVIDOR + DIÁLOGOS APK
+   ========================================== */
+.server-manager-modal,
+.server-manager-modal.server-manager-maximized {
+  width: 96vw !important;
+  max-width: 1760px !important;
+  height: 92vh !important;
+  max-height: 92vh !important;
+  padding: 20px 26px !important;
+  background: linear-gradient(160deg, #0d1019 0%, #07090f 100%) !important;
+  border: 2px solid rgba(255, 152, 0, 0.45) !important;
+  border-radius: 18px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.server-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px !important;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  flex-shrink: 0;
+}
+
+.server-header-title-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.server-header-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.server-header-active-pill {
+  margin-left: 14px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(76, 175, 80, 0.18);
+  border: 1px solid rgba(76, 175, 80, 0.45);
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.server-header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.server-header-actions > button {
+  margin-left: 10px !important;
+  padding: 8px 16px !important;
+  font-size: 14px !important;
+}
+
+.server-manager-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
+  padding-right: 0 !important;
+}
+
+.server-metrics-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.server-metric-card {
+  flex: 1 1 0;
+  min-width: 0;
+  background: #141826;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-right: 10px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.server-metric-card:last-child {
+  margin-right: 0;
+}
+
+.server-metric-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.server-metric-value {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffd54f;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+/* Barra APK de Sincronização e Carregamento (4 cards clicáveis) */
+.server-apk-sync-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.apk-setting-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  background: #161515;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-right: 10px;
+  color: #ffffff;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.apk-setting-card:last-child {
+  margin-right: 0;
+}
+
+.apk-setting-card:hover,
+.apk-setting-card:focus,
+.apk-setting-card:focus-visible {
+  background: #1f2230 !important;
+  border-color: #ffd54f !important;
+  outline: none !important;
+}
+
+.apk-setting-icon {
+  font-size: 20px;
+  margin-right: 12px;
+  color: #ffd54f;
+  flex-shrink: 0;
+}
+
+.apk-setting-texts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.apk-setting-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apk-setting-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Workspace 2 Colunas no Gerenciador Maximizado */
+.server-manager-workspace {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.server-list-pane {
+  flex: 2 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-right: 18px;
+}
+
+.server-pane-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 800;
+  color: #e2e8f0;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.server-bgsync-sub {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+#serverItemsGrid,
+.servers-manager-list {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 18px !important;
+  margin: 0 !important;
+  position: relative;
+}
+
+.server-manager-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 16px !important;
+  margin-bottom: 10px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  background: #141824 !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 10px !important;
+  min-height: 78px !important;
+}
+
+.server-manager-row.active-server {
+  border-color: #e50914 !important;
+  background: rgba(229, 9, 20, 0.14) !important;
+}
+
+.server-info-col {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-right: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-info-top-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.server-info-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-right: 10px;
+}
+
+.server-row-sync-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.server-manager-row .server-info-url {
+  max-width: 100% !important;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Totais Individuais por Servidor na Própria Linha */
+.server-row-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.srv-metric-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin: 2px 6px 2px 0;
+  white-space: nowrap;
+}
+
+.srv-metric-pill.has-data {
+  color: #ffd54f;
+  background: rgba(255, 213, 79, 0.10);
+  border-color: rgba(255, 213, 79, 0.28);
+}
+
+.srv-metric-pill.is-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.server-row-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.server-row-actions > button {
+  margin-left: 6px !important;
+}
+
+.server-row-actions > button:first-child {
+  margin-left: 0 !important;
+}
+
+.btn-server-sync-one {
+  padding: 8px 11px;
+  background: #1b2838;
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-server-sync-one:focus,
+.btn-server-sync-one:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+/* Painel Direito: Formulário de Adição/Edição */
+.server-form-pane {
+  flex: 0 0 360px;
+  width: 360px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.server-form-pane .add-server-card {
+  margin-top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.add-server-inputs-col {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+}
+
+.server-form-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 14px;
+  margin-bottom: 10px;
+  background: #111421;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 15px;
+}
+
+.add-server-actions-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.add-server-actions-col > button {
+  margin-bottom: 8px !important;
+}
+
+.add-server-actions-col > button:last-child {
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 1060px) {
+  .server-manager-workspace {
+    flex-direction: column;
+  }
+  .server-list-pane {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+  .server-form-pane {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .server-apk-sync-grid {
+    flex-wrap: wrap;
+  }
+  .apk-setting-card {
+    flex: 1 1 46%;
+    margin-bottom: 8px;
+  }
+}
+
+#serverItemsGrid::-webkit-scrollbar:horizontal,
+.server-manager-body::-webkit-scrollbar:horizontal {
+  height: 0 !important;
+  display: none !important;
+}
+
+/* ==========================================
+   DIÁLOGOS ESTILO APK (RÁDIO & CARREGAMENTO EM ETAPAS)
+   ========================================== */
+#modalApkRadioPicker,
+#modalStagedLoading,
+#modalSortPicker {
+  z-index: 1000030 !important;
+}
+
+.apk-dialog-card {
+  width: 520px;
+  max-width: 90vw;
+  background: #14141a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  padding: 26px 26px 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.92);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.apk-dialog-title {
+  margin: 0 0 16px 0;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffd54f;
+}
+
+.apk-dialog-desc {
+  margin: -6px 0 16px 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.apk-radio-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.apk-radio-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 13px 16px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.apk-radio-option:last-child {
+  margin-bottom: 0;
+}
+
+.apk-radio-option:hover,
+.apk-radio-option:focus,
+.apk-radio-option:focus-visible {
+  background: rgba(255, 213, 79, 0.14) !important;
+  border-color: #ffd54f !important;
+  outline: none !important;
+}
+
+.apk-radio-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  margin-right: 18px;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.apk-radio-option.active .apk-radio-dot {
+  border-color: #e50914;
+}
+
+.apk-radio-option.active .apk-radio-dot::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e50914;
+}
+
+.apk-radio-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Carregamento em Etapas (Checkboxes estilo APK) */
+.apk-staged-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.apk-staged-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.apk-staged-row:last-child {
+  margin-bottom: 0;
+}
+
+.apk-staged-row:focus,
+.apk-staged-row:focus-visible {
+  background: rgba(255, 213, 79, 0.14) !important;
+  border-color: #ffd54f !important;
+  outline: none !important;
+}
+
+.apk-staged-texts {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  margin-right: 14px;
+}
+
+.apk-staged-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.apk-staged-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.apk-checkbox-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 2px solid #94a3b8;
+  background: transparent;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 900;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.apk-staged-row.checked .apk-checkbox-box {
+  background: #e50914;
+  border-color: #e50914;
+  color: #ffffff;
+}
+
+.apk-dialog-footer {
+  display: flex;
+}
+
+.apk-dialog-actions-row {
+  display: flex;
+}
+
+.apk-btn-cancel,
+.apk-btn-save {
+  flex: 1 1 0;
+  padding: 13px 18px;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.apk-btn-cancel {
+  background: #7c7e85;
+  color: #ffffff;
+}
+
+.apk-btn-save {
+  background: #e50914;
+  color: #ffffff;
+  margin-left: 12px;
+}
+
+.apk-btn-cancel:focus,
+.apk-btn-save:focus {
+  outline: 3px solid #ffd54f !important;
+  box-shadow: 0 0 18px rgba(255, 213, 79, 0.85) !important;
+}
+
+/* Grid de Cards APK dentro de Configurações -> Servidor / Fonte */
+.apk-cfg-cards-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -6px 14px -6px;
+}
+
+.apk-cfg-card-wrap {
+  width: 50%;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.apk-cfg-card-wrap .apk-setting-card {
+  width: 100%;
+  margin-right: 0;
+  min-height: 68px;
+}
+

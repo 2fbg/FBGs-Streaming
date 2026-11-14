@@ -270,11 +270,16 @@ Installed-Size: {installed_size}
     }
     pkg_bytes = json.dumps(packageinfo, indent=2).encode("utf-8")
 
+    # Fase 2: o fonte do app (src/) e as notas de migracao ficam fora do pacote;
+    # o cliente roda o bundle app.js gerado por `npm run build:tv`.
+    excluded_dirs = {"src", "node_modules", "tests", "__pycache__"}
+    excluded_files = {"MIGRACAO-FASE2-NOTAS.md", ".DS_Store"}
+
     def add_data(tar):
         # Add all files from src_dir, sorted for a stable member order
         for root, dirs, files in os.walk(src_dir):
-            dirs.sort()
-            files.sort()
+            dirs[:] = sorted(d for d in dirs if d not in excluded_dirs)
+            files = sorted(f for f in files if f not in excluded_files)
             rel_dir = os.path.relpath(root, src_dir)
             target_base = app_target_dir if rel_dir == "." else f"{app_target_dir}/{rel_dir}"
 
@@ -336,6 +341,7 @@ if __name__ == "__main__":
         os.path.join(root_dir, "version.json"),
         os.path.join(root_dir, "api", "version.json"),
         os.path.join(root_dir, "public", "version.json"),
+        os.path.join(root_dir, "public", "api", "version.json"),
         os.path.join(web_dir, "version.json"),
         os.path.join(web_dir, "api", "version.json"),
     ]

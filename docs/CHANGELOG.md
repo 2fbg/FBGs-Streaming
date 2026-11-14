@@ -2,6 +2,12 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.8.0] - 2026-11-14
+
+- **Hardening OTA & Assinatura Android:** `ApkSignatureVerifier` e `Mk21UpdateManager` passaram a validar SHA-256 em modo *fail-closed*, redirecionamentos HTTPS restritos a hosts GitHub oficiais e assinatura de certificado do APK antes da instalação; `validate.yml` exige assinatura de upload e checa sincronismo contra `app/build.gradle.kts` (`versionCode = 280`).
+- **Segurança de Proxies & Rede:** Proteção anti-SSRF/DNS-rebinding e CORS restrito no proxy Vercel (`api/proxy.js`), autenticação por token de sessão aleatório (`SecureRandom`) no `Mk21ProxyStation` e `LocalHttpServer`, sanitização contra XSS no receiver local e remoção de CAs de usuário do `network_security_config.xml` de release.
+- **Fonte Única Web & Limpeza:** Unificação de `index.html`, `sw.js` (`mk21-cache-v2.8.0`), `api/proxy.js` e manifestos a partir da raiz com `scripts/sync-web.mjs --check` no CI; remoção de `backups/`, `builds/archives/` e dezenas de `.ipk`/`.apk` históricos duplicados.
+
 ## [2.5.0] - 2026-11-06
 
 - **Identidade Visual:** Atualização da marca oficial MK21 ("Mais que um número é resultado") com tipografia metálica, glow rubi e restrição de altura máxima (50px).

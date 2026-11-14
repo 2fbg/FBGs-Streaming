@@ -13,13 +13,10 @@ import androidx.media3.common.MediaItem
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.pm.Signature
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
@@ -30,6 +27,11 @@ import com.example.data.model.PlaylistItem
 import com.example.data.model.ServerProfile
 import com.example.data.parser.M3UParser
 import com.example.data.service.PreferencesService
+import com.fbg.streaming.security.ApkSignatureVerifier
+import com.fbg.streaming.update.DownloadVerificationResult
+import com.fbg.streaming.update.Mk21UpdateManager
+import com.fbg.streaming.update.UpdateCheckOutcome
+import com.fbg.streaming.update.UpdateInfo
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import okhttp3.OkHttpClient
@@ -40,9 +42,6 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import com.example.BuildConfig
 
@@ -68,12 +67,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val preferencesService = PreferencesService(application)
     
     private val staticDefaultServers = listOf(
-        ServerProfile("server_1", "VLOG", "http://lumixx21.org"),
-        ServerProfile("server_2", "TANNIX", "http://assist.new21vod.xyz"),
-        ServerProfile("server_3", "LUB TV", "http://pottermax.sbs"),
-        ServerProfile("server_4", "MK21 PRÓ", "http://magmapuro.shop"),
+        ServerProfile("server_1", "VLOG", "http://tocombox21.cyou"),
+        ServerProfile("server_2", "TANNIX", "http://ovo54.sbs"),
+        ServerProfile("server_3", "LUB TV", "http://coxinhasemflango.shop"),
+        ServerProfile("server_4", "MK21 PRÓ", "http://app.tigerouro.shop"),
         ServerProfile("server_5", "CB6000", "http://cdn.caterlune.top"),
-        ServerProfile("server_6", "CINELON", "http://powerex.lat"),
+        ServerProfile("server_6", "CINELON", "http://parcerialife.lat"),
         ServerProfile("server_7", "MULTT TV", "http://dali-as.skin")
     )
 
@@ -521,30 +520,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val lowercaseBaseUrl = baseUrl.lowercase()
 
                 // Normalization block for predefined premium lists to prevent duplicates and keep names matching
-                if (lowercaseBaseUrl.contains("lumixx21.org") || lowercaseBaseUrl.contains("myopbx.beer") || lowercaseBaseUrl.contains("new-link.shop") || lowercaseBaseUrl.contains("opbx-w.shop") || lowercaseBaseUrl.contains("somentevlog.xyz") || lowercaseBaseUrl.contains("vlogmk.de") || lowercaseBaseUrl.contains("newphase.sbs")) {
-                    targetBaseUrl = "http://lumixx21.org"
+                if (lowercaseBaseUrl.contains("tocombox21") || lowercaseBaseUrl.contains("lumixx21.org") || lowercaseBaseUrl.contains("myopbx.beer") || lowercaseBaseUrl.contains("new-link.shop") || lowercaseBaseUrl.contains("opbx-w.shop") || lowercaseBaseUrl.contains("somentevlog.xyz") || lowercaseBaseUrl.contains("vlogmk.de") || lowercaseBaseUrl.contains("newphase.sbs") || lowercaseBaseUrl.contains("vlog")) {
+                    targetBaseUrl = "http://tocombox21.cyou"
                     targetName = "VLOG"
-                } else if (lowercaseBaseUrl.contains("alfatecloan.sbs") || lowercaseBaseUrl.contains("pitclear.sbs") || lowercaseBaseUrl.contains("triimundial.shop") || lowercaseBaseUrl.contains("lubtv.fun")) {
-                    targetBaseUrl = "http://alfatecloan.sbs"
+                } else if (lowercaseBaseUrl.contains("coxinhasemflango") || lowercaseBaseUrl.contains("pottermax") || lowercaseBaseUrl.contains("alfatecloan.sbs") || lowercaseBaseUrl.contains("pitclear.sbs") || lowercaseBaseUrl.contains("triimundial.shop") || lowercaseBaseUrl.contains("lubtv.fun") || lowercaseBaseUrl.contains("lub")) {
+                    targetBaseUrl = "http://coxinhasemflango.shop"
                     targetName = "LUB TV"
-                } else if (lowercaseBaseUrl.contains("powerex.lat") || lowercaseBaseUrl.contains("coliseuop.site") || lowercaseBaseUrl.contains("connstar.xyz") || lowercaseBaseUrl.contains("infinixparcerias.site") || lowercaseBaseUrl.contains("cinelontv.work") || lowercaseBaseUrl.contains("cinelon")) {
-                    targetBaseUrl = "http://powerex.lat"
+                } else if (lowercaseBaseUrl.contains("parcerialife") || lowercaseBaseUrl.contains("powerex.lat") || lowercaseBaseUrl.contains("coliseuop.site") || lowercaseBaseUrl.contains("connstar.xyz") || lowercaseBaseUrl.contains("infinixparcerias.site") || lowercaseBaseUrl.contains("cinelontv.work") || lowercaseBaseUrl.contains("cinelon")) {
+                    targetBaseUrl = "http://parcerialife.lat"
                     targetName = "CINELON21"
-                } else if (lowercaseBaseUrl.contains("assist.new21vod.xyz") || lowercaseBaseUrl.contains("poptvcdn.online") || lowercaseBaseUrl.contains("tannix26.shop") || lowercaseBaseUrl.contains("cdnassandplay.online") || lowercaseBaseUrl.contains("unituf.online") || lowercaseBaseUrl.contains("tannix")) {
-                    targetBaseUrl = "http://assist.new21vod.xyz"
+                } else if (lowercaseBaseUrl.contains("ovo54") || lowercaseBaseUrl.contains("assist.new21vod.xyz") || lowercaseBaseUrl.contains("poptvcdn.online") || lowercaseBaseUrl.contains("tannix26.shop") || lowercaseBaseUrl.contains("cdnassandplay.online") || lowercaseBaseUrl.contains("unituf.online") || lowercaseBaseUrl.contains("tannix")) {
+                    targetBaseUrl = "http://ovo54.sbs"
                     targetName = "TANNIX"
                 } else if (lowercaseBaseUrl.contains("painelplyon.top") || lowercaseBaseUrl.contains("cb6.fun") || lowercaseBaseUrl.contains("cb6000")) {
                     targetBaseUrl = "http://cdn.caterlune.top"
                     targetName = "CB6000"
-                } else if (lowercaseBaseUrl.contains("magmapuro.shop") || lowercaseBaseUrl.contains("app.vivoxi.xyz") || lowercaseBaseUrl.contains("vivoxi") || lowercaseBaseUrl.contains("mk21.uk") || lowercaseBaseUrl.contains("appsmk.org") || lowercaseBaseUrl.contains("mk21")) {
-                    targetBaseUrl = "http://magmapuro.shop"
+                } else if (lowercaseBaseUrl.contains("tigerouro") || lowercaseBaseUrl.contains("magmapuro.shop") || lowercaseBaseUrl.contains("app.vivoxi.xyz") || lowercaseBaseUrl.contains("vivoxi") || lowercaseBaseUrl.contains("mk21.uk") || lowercaseBaseUrl.contains("appsmk.org") || lowercaseBaseUrl.contains("mk21")) {
+                    targetBaseUrl = "http://app.tigerouro.shop"
                     targetName = "MK21 PRÓ"
                 } else if (lowercaseBaseUrl.contains("dali-as.skin") || lowercaseBaseUrl.contains("hll4.top") || lowercaseBaseUrl.contains("multt tv")) {
                     targetBaseUrl = "http://dali-as.skin"
                     targetName = "MULTT TV"
-                } else if (lowercaseBaseUrl.contains("pottermax.sbs") || lowercaseBaseUrl.contains("alfatecloan.sbs") || lowercaseBaseUrl.contains("lubtv.fun") || lowercaseBaseUrl.contains("lub")) {
-                    targetBaseUrl = "http://pottermax.sbs"
-                    targetName = "LUB TV"
                 } else if (lowercaseBaseUrl.contains("antaresfusion.shop") || lowercaseBaseUrl.contains("cinevo")) {
                     targetBaseUrl = "http://antaresfusion.shop"
                     targetName = "CINEVO"
@@ -1959,7 +1955,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ==========================================
-    // AUTO-UPDATER VIA GITHUB RELEASES
+    // AUTO-UPDATER VIA MK21UPDATEMANAGER
     // ==========================================
     data class GithubReleaseInfo(
         val tagName: String,
@@ -1984,291 +1980,149 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _updateCheckState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
     val updateCheckState = _updateCheckState.asStateFlow()
 
+    @Volatile
+    private var lastAvailableUpdate: UpdateInfo? = null
+
+    internal var expectedCertPinOverride: String? = null
+
+    internal var updateManagerFactory: (Context) -> Mk21UpdateManager = { ctx ->
+        Mk21UpdateManager(
+            context = ctx,
+            expectedCertSha256 = effectiveExpectedCertPin()
+        )
+    }
+
+    internal fun effectiveExpectedCertPin(): String? {
+        val raw = (expectedCertPinOverride ?: BuildConfig.EXPECTED_CERT_SHA256)
+            .replace(":", "")
+            .replace(" ", "")
+            .trim()
+            .lowercase()
+        return raw.ifBlank { null }
+    }
+
+    internal fun hasConfiguredCertPin(): Boolean {
+        val pin = effectiveExpectedCertPin() ?: return false
+        return ApkSignatureVerifier.isValidSha256Hex(pin)
+    }
+
+    fun getPreferredBrowserUpdateUrl(): String {
+        return lastAvailableUpdate?.apkUrl
+            ?: "https://github.com/2fbg/FBGs-Streaming/releases/latest"
+    }
+
     fun checkForUpdates() {
         viewModelScope.launch(Dispatchers.IO) {
             _updateCheckState.value = UpdateCheckState.Checking
-            val timestamp = System.currentTimeMillis()
-            val endpoints = listOf(
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/api/version.json?t=$timestamp",
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/app/applet/api/version.json?t=$timestamp",
-                "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/web/api/version.json?t=$timestamp",
-                "https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/api/version.json?t=$timestamp",
-                "https://bgstreaming.vercel.app/api/version.json?t=$timestamp",
-                "https://bgstreaming.vercel.app/app/applet/api/version.json?t=$timestamp",
-                "https://api.github.com/repos/2fbg/FBGs-Streaming/releases/latest"
-            )
-            val responses = mutableListOf<String>()
-            var lastError: String? = null
-            for (endpoint in endpoints) {
-                var conn: HttpURLConnection? = null
-                try {
-                    conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        setRequestProperty("User-Agent", "MK21-Android-Updater")
-                        setRequestProperty("Accept", "application/json")
-                        connectTimeout = 5000
-                        readTimeout = 8000
-                        instanceFollowRedirects = true
-                    }
-                    if (conn.responseCode == HttpURLConnection.HTTP_OK) {
-                        val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (body.isNotBlank()) responses.add(body)
-                    } else {
-                        lastError = "HTTP ${conn.responseCode}"
-                    }
-                } catch (e: Exception) {
-                    lastError = e.message
-                } finally {
-                    conn?.disconnect()
-                }
-            }
-            try {
-                fun versionParts(value: String): List<Int> = value
-                    .replace("[^0-9.]".toRegex(), "")
-                    .split('.')
-                    .filter { it.isNotBlank() }
-                    .map { it.toIntOrNull() ?: 0 }
-                    .let { it + List((4 - it.size).coerceAtLeast(0)) { 0 } }
-                fun versionRank(value: String): Long = versionParts(value).take(4).fold(0L) { acc, n -> acc * 1000L + n }
-                val verifiedManifests = responses.filter { raw ->
-                    try {
-                        val candidate = JSONObject(raw)
-                        val candidateUrl = candidate.optString("downloadUrl", candidate.optString("apkUrl", ""))
-                        candidate.optString("version", candidate.optString("tag_name", "")).isNotBlank() &&
-                            candidate.optString("apkSha256", "").matches(Regex("^[a-fA-F0-9]{64}$")) &&
-                            candidateUrl.startsWith("https://")
-                    } catch (e: Exception) {
-                        false
-                    }
-                }
-                val response = verifiedManifests.maxByOrNull { raw ->
-                    val candidate = JSONObject(raw)
-                    versionRank(candidate.optString("version", candidate.optString("tag_name", "0")))
-                } ?: throw IllegalStateException(
-                    if (responses.isNotEmpty()) {
-                        "Nenhum manifesto de atualização confiável com SHA-256 válido foi encontrado."
-                    } else {
-                        lastError ?: "Nenhum manifesto disponível."
-                    }
+            val manager = updateManagerFactory(getApplication())
+            when (
+                val outcome = manager.checkForUpdatesDetailed(
+                    currentVersionCode = BuildConfig.VERSION_CODE,
+                    currentVersionName = BuildConfig.VERSION_NAME
                 )
-                val json = JSONObject(response)
-                val tagName = json.optString("version", json.optString("tag_name", ""))
-                if (tagName.isBlank()) throw IllegalStateException("manifesto sem versão")
-                val name = json.optString("name", json.optString("title", "MK21 MultiServidor v$tagName"))
-                val body = json.optString("body", json.optString("releaseNotes", "Melhorias de desempenho e correções."))
-                var downloadUrl = json.optString("downloadUrl", json.optString("apkUrl", ""))
-                val expectedSha256 = json.optString("apkSha256", "").lowercase()
-                val expectedSizeBytes = json.optLong("sizeBytes", 0L)
-                val assets = json.optJSONArray("assets")
-                if (downloadUrl.contains("/releases") && assets != null) {
-                    for (i in 0 until assets.length()) {
-                        val asset = assets.getJSONObject(i)
-                        if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
-                            downloadUrl = asset.optString("browser_download_url", downloadUrl)
-                            break
-                        }
+            ) {
+                is UpdateCheckOutcome.Available -> {
+                    val info = outcome.info
+                    lastAvailableUpdate = info
+                    val effectiveBody = if (hasConfiguredCertPin()) {
+                        info.changelog
+                    } else {
+                        "${info.changelog}\n\nAviso de segurança: instalação automática no app desabilitada até configurar EXPECTED_CERT_SHA256 no build. Use \"Baixar via Navegador Externo\"."
                     }
-                }
-                val currentVersion = BuildConfig.VERSION_NAME
-                val remoteParts = versionParts(tagName)
-                val localParts = versionParts(currentVersion)
-                val remoteCode = json.optInt("versionCode", 0)
-                val currentCode = BuildConfig.VERSION_CODE
-                val isNewer = (remoteCode > currentCode) || (remoteParts.zip(localParts).firstOrNull { it.first != it.second }?.let { it.first > it.second } ?: false)
-                if (isNewer && downloadUrl.isNotBlank()) {
                     _updateCheckState.value = UpdateCheckState.Available(
-                        GithubReleaseInfo(tagName, name, body, downloadUrl, expectedSha256, expectedSizeBytes, true)
+                        GithubReleaseInfo(
+                            tagName = info.versionName,
+                            name = info.title,
+                            body = effectiveBody,
+                            downloadUrl = info.apkUrl,
+                            expectedSha256 = info.sha256,
+                            expectedSizeBytes = info.expectedSizeBytes,
+                            isNewer = true
+                        )
                     )
-                } else {
-                    _updateCheckState.value = UpdateCheckState.UpToDate("Seu app está na versão mais recente (v$currentVersion)")
                 }
-            } catch (e: Exception) {
-                _updateCheckState.value = UpdateCheckState.Error("Não foi possível verificar atualizações: ${e.message ?: "rede indisponível"}")
+                is UpdateCheckOutcome.UpToDate -> {
+                    lastAvailableUpdate = null
+                    _updateCheckState.value = UpdateCheckState.UpToDate(
+                        "Seu app está na versão mais recente (v${BuildConfig.VERSION_NAME})"
+                    )
+                }
+                is UpdateCheckOutcome.Failure -> {
+                    _updateCheckState.value = UpdateCheckState.Error(
+                        "Não foi possível verificar atualizações: ${outcome.reason}"
+                    )
+                }
             }
         }
     }
 
-    fun startInAppDownloadAndInstall(context: Context, downloadUrl: String, expectedSha256: String = "", expectedSizeBytes: Long = 0L) {
+    fun startInAppDownloadAndInstall(
+        context: Context,
+        downloadUrl: String,
+        expectedSha256: String = "",
+        expectedSizeBytes: Long = 0L
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
-            var downloadedApk: File? = null
-            try {
-                if (!expectedSha256.matches(Regex("^[a-fA-F0-9]{64}$"))) {
-                    throw SecurityException("Manifesto de atualização sem um SHA-256 válido.")
-                }
+            // Falha fechado: não baixa nem tenta auto-instalar sem pin de certificado válido configurado no build.
+            if (!hasConfiguredCertPin()) {
+                _updateCheckState.value = UpdateCheckState.Error(
+                    "Instalação automática recusada: pin de certificado (EXPECTED_CERT_SHA256) não configurado neste build. Baixe manualmente pelo navegador."
+                )
+                return@launch
+            }
 
-                _updateCheckState.value = UpdateCheckState.Downloading(0, 0L, 0L)
-                
-                var currentUrl = downloadUrl
-                var connection: HttpURLConnection
-                var redirects = 0
-                while (true) {
-                    val url = URL(currentUrl)
-                    connection = url.openConnection() as HttpURLConnection
-                    connection.instanceFollowRedirects = true
-                    connection.setRequestProperty("User-Agent", "MK21-Android")
-                    connection.connectTimeout = 15000
-                    connection.readTimeout = 30000
-                    val status = connection.responseCode
-                    if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
-                        val location = connection.getHeaderField("Location")
-                        currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) location else URL(url, location).toString()
-                        redirects++
-                        if (redirects > 5) break
-                        continue
-                    }
-                    break
-                }
-                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    throw IllegalStateException("servidor respondeu HTTP ${connection.responseCode}")
-                }
+            _updateCheckState.value = UpdateCheckState.Downloading(0, 0L, expectedSizeBytes)
+            val manager = updateManagerFactory(context.applicationContext)
+            val targetInfo = UpdateInfo(
+                versionCode = lastAvailableUpdate?.versionCode ?: (BuildConfig.VERSION_CODE + 1),
+                versionName = lastAvailableUpdate?.versionName ?: BuildConfig.VERSION_NAME,
+                apkUrl = downloadUrl,
+                sha256 = expectedSha256,
+                changelog = lastAvailableUpdate?.changelog ?: "",
+                expectedSizeBytes = expectedSizeBytes
+            )
 
-                val totalLength = connection.contentLength.toLong()
-                val updatesDir = File(context.getExternalFilesDir(null) ?: context.cacheDir, "updates").apply { mkdirs() }
-                val apkFile = File(updatesDir, "MK21-Update.apk")
-                downloadedApk = apkFile
-                if (apkFile.exists()) {
-                    apkFile.delete()
+            when (
+                val result = manager.downloadAndVerifyApkDetailed(
+                    updateInfo = targetInfo,
+                    autoLaunchInstaller = false
+                ) { progressPercent, downloadedBytes, totalBytes ->
+                    _updateCheckState.value = UpdateCheckState.Downloading(
+                        progressPercent = progressPercent,
+                        downloadedBytes = downloadedBytes,
+                        totalBytes = totalBytes
+                    )
                 }
-
-                connection.inputStream.use { input ->
-                    apkFile.outputStream().use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        var lastProgress = -1
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-                            val progress = if (totalLength > 0) ((totalRead * 100) / totalLength).toInt().coerceIn(0, 100) else 50
-                            if (progress != lastProgress) {
-                                lastProgress = progress
-                                _updateCheckState.value = UpdateCheckState.Downloading(progress, totalRead, totalLength)
-                            }
-                        }
+            ) {
+                is DownloadVerificationResult.Success -> {
+                    _updateCheckState.value = UpdateCheckState.ReadyToInstall(result.apkFile)
+                    withContext(Dispatchers.Main) {
+                        installApk(context, result.apkFile)
                     }
                 }
-
-                // Ensure file is readable by system package installer
-
-
-                try {
-                    apkFile.setReadable(true, false)
-                } catch (e: Exception) {
-                    // ignore
+                is DownloadVerificationResult.Failure -> {
+                    _updateCheckState.value = UpdateCheckState.Error(
+                        "Falha no download da atualização: ${result.reason}"
+                    )
                 }
-
-                if (apkFile.length() < 1_000_000L) {
-                    apkFile.delete()
-                    throw IllegalStateException("download incompleto ou corrompido")
-                }
-                if (expectedSizeBytes > 0L && apkFile.length() != expectedSizeBytes) {
-                    apkFile.delete()
-                    throw SecurityException("O tamanho do APK baixado não corresponde ao manifesto.")
-                }
-
-                val digest = MessageDigest.getInstance("SHA-256")
-                val actualSha256 = apkFile.inputStream().use { input ->
-                    val buffer = ByteArray(8192)
-                    var read: Int
-                    while (input.read(buffer).also { read = it } != -1) {
-                        digest.update(buffer, 0, read)
-                    }
-                    digest.digest().joinToString("") { "%02x".format(it) }
-                }
-                if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
-                    apkFile.delete()
-                    throw SecurityException("O SHA-256 do APK baixado não corresponde ao manifesto.")
-                }
-
-                verifyDownloadedApkSignature(context, apkFile)
-                _updateCheckState.value = UpdateCheckState.ReadyToInstall(apkFile)
-
-                withContext(Dispatchers.Main) {
-                    installApk(context, apkFile)
-                }
-            } catch (e: Exception) {
-                if (downloadedApk?.exists() == true && downloadedApk.length() < 1_000_000L) {
-                    downloadedApk.delete()
-                }
-                _updateCheckState.value = UpdateCheckState.Error("Falha no download da atualização: ${e.message}")
             }
         }
     }
-
-    private fun verifyDownloadedApkSignature(context: Context, apkFile: File) {
-        val packageManager = context.packageManager
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
-        } else {
-            @Suppress("DEPRECATION")
-            PackageManager.GET_SIGNATURES
-        }
-        val downloadedInfo = packageManager.getPackageArchiveInfo(apkFile.absolutePath, flags)
-        if (downloadedInfo == null) {
-            // Em ROMs customizadas (ex: Xiaomi HyperOS / MIUI) ou sandbox de diretório externo,
-            // getPackageArchiveInfo pode retornar nulo para arquivos não instalados.
-            // O PackageInstaller nativo do Android fará a validação criptográfica definitiva na instalação.
-            Log.w("AppViewModel", "Não foi possível inspecionar o arquivo APK baixado diretamente; instalador do sistema validará.")
-            return
-        }
-
-        if (downloadedInfo.packageName != null && downloadedInfo.packageName != context.packageName) {
-            throw SecurityException("O APK baixado pertence a outro aplicativo (${downloadedInfo.packageName}).")
-        }
-
-        try {
-            val installedInfo = packageManager.getPackageInfo(context.packageName, flags)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val installedSigning = installedInfo.signingInfo
-                val downloadedSigning = downloadedInfo.signingInfo
-                if (installedSigning != null && downloadedSigning != null) {
-                    val installedSigners = installedSigning.apkContentsSigners ?: emptyArray()
-                    val downloadedSigners = downloadedSigning.apkContentsSigners ?: emptyArray()
-
-                    if (installedSigners.isNotEmpty() && downloadedSigners.isNotEmpty()) {
-                        val matchDirect = installedSigners.any { inst ->
-                            downloadedSigners.any { down -> inst.toByteArray().contentEquals(down.toByteArray()) }
-                        }
-                        val matchHistory = downloadedSigning.signingCertificateHistory?.any { down ->
-                            installedSigners.any { inst -> inst.toByteArray().contentEquals(down.toByteArray()) }
-                        } == true || installedSigning.signingCertificateHistory?.any { inst ->
-                            downloadedSigners.any { down -> inst.toByteArray().contentEquals(down.toByteArray()) }
-                        } == true
-
-                        if (!matchDirect && !matchHistory) {
-                            throw SecurityException("A assinatura do APK baixado não corresponde ao aplicativo instalado.")
-                        }
-                    }
-                }
-            } else {
-                @Suppress("DEPRECATION")
-                val installedSigners = installedInfo.signatures
-                @Suppress("DEPRECATION")
-                val downloadedSigners = downloadedInfo.signatures
-                if (installedSigners != null && downloadedSigners != null &&
-                    installedSigners.isNotEmpty() && downloadedSigners.isNotEmpty() &&
-                    !sameSignatures(installedSigners, downloadedSigners)
-                ) {
-                    throw SecurityException("A assinatura do APK baixado não corresponde ao aplicativo instalado.")
-                }
-            }
-        } catch (e: SecurityException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w("AppViewModel", "Validação secundária de assinatura ignorada devido a limitação do sistema: ${e.message}")
-        }
-    }
-
-    private fun sameSignatures(left: Array<Signature>, right: Array<Signature>): Boolean =
-        left.size == right.size && left.all { signature ->
-            right.any { candidate ->
-                signature.toByteArray().contentEquals(candidate.toByteArray())
-            }
-        }
 
     fun installApk(context: Context, apkFile: File) {
         try {
+            if (!hasConfiguredCertPin()) {
+                _updateCheckState.value = UpdateCheckState.Error(
+                    "Instalação automática recusada: pin de certificado (EXPECTED_CERT_SHA256) não configurado."
+                )
+                Toast.makeText(
+                    context,
+                    "Instalação bloqueada sem pin de certificado configurado. Use o download pelo navegador.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
             if (!apkFile.exists() || apkFile.length() == 0L) {
                 Toast.makeText(context, "Arquivo da atualização corrompido ou incompleto.", Toast.LENGTH_LONG).show()
                 return
@@ -2278,42 +2132,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     if (!context.packageManager.canRequestPackageInstalls()) {
                         val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                            data = android.net.Uri.parse("package:${context.packageName}")
+                            data = Uri.parse("package:${context.packageName}")
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(settingsIntent)
-                        Toast.makeText(context, "Ative a permissão 'Instalar apps desconhecidos' e toque em Instalar novamente.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(
+                            context,
+                            "Ative a permissão 'Instalar apps desconhecidos' e toque em Instalar novamente.",
+                            Toast.LENGTH_LONG
+                        ).show()
                         return
                     }
                 } catch (_: Exception) {
-                    // Dispositivos Android TV / TV Box que não possuem tela dedicada de unknown sources seguem direto
+                    // Dispositivos Android TV / TV Box sem tela dedicada seguem direto
                 }
             }
 
-            val authority = "${context.packageName}.provider"
-            val uri = FileProvider.getUriForFile(context, authority, apkFile)
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            val manager = updateManagerFactory(context.applicationContext)
+            if (!manager.installApk(apkFile)) {
+                _updateCheckState.value = UpdateCheckState.Error(
+                    "Instalação recusada pela verificação de pin de certificado."
+                )
             }
-
-            // Concede permissões explícitas a qualquer handler do instalador de pacotes
-            try {
-                val resolveList = context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
-                for (resolveInfo in resolveList) {
-                    val targetPkg = resolveInfo.activityInfo.packageName
-                    context.grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                listOf("com.google.android.packageinstaller", "com.android.packageinstaller").forEach { pkg ->
-                    try {
-                        context.grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    } catch (_: Exception) {}
-                }
-            } catch (_: Exception) {}
-
-            context.startActivity(installIntent)
         } catch (e: Exception) {
             Toast.makeText(context, "Erro ao iniciar instalação: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -2321,7 +2161,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openBrowserDownload(context: Context, downloadUrl: String) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(downloadUrl)).apply {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)

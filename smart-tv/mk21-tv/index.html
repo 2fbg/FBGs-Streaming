@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.5.8">
-  <link rel="stylesheet" href="css/style.css?v=2.5.8">
+  <link rel="stylesheet" href="styles.css?v=2.8.0">
+  <link rel="stylesheet" href="css/style.css?v=2.8.0">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
   <script src="libs/hls.min.js"></script>
@@ -19,14 +19,24 @@
       document.write('<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"><\/script>');
     }
   </script>
+  <script>
+    // Fase 2: no Tizen o AVPlay vem de $WEBAPIS/webapis/webapis.js, que precisa
+    // existir ANTES do bundle (app.js). Em webOS/navegador o caminho nao existe,
+    // entao so injetamos quando o aparelho se identifica como Tizen/Samsung.
+    if (typeof webapis === 'undefined' && /Tizen|SMART-TV|Samsung/i.test(navigator.userAgent)) {
+      document.write('<script src="$WEBAPIS/webapis/webapis.js"><\/script>');
+    }
+  </script>
 </head>
 <body class="mk21-tv-body">
 
-  <!-- 1. MODAL DE LOGIN FULLSCREEN (SEM SPLASH SCREEN) -->
+  <!-- 1. MODAL DE LOGIN FULLSCREEN (PRETO ABSOLUTO + IDENTIDADE MK21) -->
   <div id="login-container" class="login-modal-fullscreen" style="display: none;">
     <div class="login-card" id="login-card">
+      <div class="login-neon-line" aria-hidden="true"><div class="login-neon-beam"></div></div>
       <div class="brand-header">
         <img src="assets/logo.png" alt="MK21 Play" class="brand-logo" onerror="this.src='icon.png'">
+        <div class="brand-wordmark">MK<span>21</span> PLAY</div>
         <div class="brand-tagline">MAIS QUE UM NÚMERO É RESULTADO</div>
       </div>
 
@@ -51,6 +61,7 @@
             id="user-input" 
             class="focusable input-field" 
             tabindex="2" 
+            value=""
             placeholder="Digite seu usuário"
             inputmode="text"
             autocomplete="off" 
@@ -61,13 +72,14 @@
         </div>
 
         <div class="input-group">
-          <label for="pass-input">Senha</label>
+          <label for="pass-input">Senha / Token</label>
           <input 
             type="password" 
             id="pass-input" 
             class="focusable input-field" 
             tabindex="3" 
-            placeholder="Digite sua senha"
+            value=""
+            placeholder="Digite sua senha ou token"
             inputmode="text"
             autocomplete="off"
           >
@@ -77,15 +89,15 @@
 
         <div class="action-group">
           <button type="button" id="btn-login" class="focusable btn-primary" tabindex="4">
-            ENTRAR
+            ENTRAR E LEMBRAR
           </button>
           <button type="button" id="btn-offline" class="focusable btn-secondary" tabindex="5">
             MODO OFFLINE
           </button>
         </div>
 
-        <div class="login-version" style="margin-top: 18px;">
-          MK21 PLAY OTT • v2.5.8 • Smart TV (webOS & Tizen)
+        <div class="login-version" style="margin-top: 10px;">
+          MK21 PLAY OTT • v2.8.0 • Smart TV (webOS &amp; Tizen)
         </div>
       </form>
     </div>
@@ -127,6 +139,9 @@
       <button id="btnRefreshList" class="action-btn header-focusable" title="Atualizar lista agora" tabindex="0">
         <i class="fa-solid fa-rotate"></i> Atualizar
       </button>
+      <button id="btnHeaderLogout" class="action-btn header-focusable" title="Sair da conta e trocar credenciais" tabindex="0" style="background:#2a1215; border-color:rgba(229,9,20,0.45); color:#ffb4b4;">
+        <i class="fa-solid fa-right-from-bracket"></i> Sair
+      </button>
       <div id="liveClock" class="clock-display">00:00:00</div>
     </div>
   </header>
@@ -143,7 +158,7 @@
           <span id="txtCatHeaderTitle">📁 Categorias</span>
           <span id="badgeCatCount" class="counter-badge">0</span>
         </div>
-        <ul id="listCategories" class="pane-scroll"></ul>
+        <ul id="listCategories" class="pane-scroll scrollable-container" tabindex="0"></ul>
       </div>
 
       <!-- COLUNA 2: ITENS / CANAIS / FILMES (36%) -->
@@ -155,7 +170,7 @@
           <span id="txtCurrentCategoryTitle">📺 Todos os Canais</span>
           <span id="badgeItemsCount" class="counter-badge">0</span>
         </div>
-        <ul id="listItems" class="pane-scroll"></ul>
+        <ul id="listItems" class="pane-scroll scrollable-container" tabindex="0"></ul>
       </div>
 
       <!-- COLUNA 3: PLAYER DE VÍDEO & INFORMAÇÕES (40%) -->
@@ -196,6 +211,8 @@
               <button type="button" id="fsBtnPrev" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Canal anterior / Voltar 10s">⏮ Anterior</button>
               <button type="button" id="fsBtnPlay" class="ctrl-btn hud-ctrl-btn" tabindex="0">⏯️ Pausar</button>
               <button type="button" id="fsBtnNext" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Próximo canal / Avançar 10s">⏭ Próximo</button>
+              <button type="button" id="fsBtnSpeed" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Velocidade de Reprodução (0.5x, 1x, 1.5x, 2x, 4x)">⚡ 1x</button>
+              <button type="button" id="fsBtnAspect" class="ctrl-btn hud-ctrl-btn" tabindex="0" title="Proporção da Tela (Original, Zoom, Esticar)">📐 Normal</button>
               <button type="button" id="fsBtnFav" class="ctrl-btn hud-ctrl-btn" tabindex="0">⭐ Favoritar</button>
               <button type="button" id="fsBtnQuality" class="ctrl-btn hud-ctrl-btn" tabindex="0">🎞️ Qualidade</button>
               <button type="button" id="fsBtnBuffer" class="ctrl-btn hud-ctrl-btn" tabindex="0">⚡ Buffer</button>
@@ -240,7 +257,7 @@
 
     <!-- SEÇÃO CONFIGURAÇÕES (CLONE VIZZION PLAY DAS FOTOS) -->
     <section id="sectionSettings" class="content-section hidden">
-      <div class="settings-left-menu">
+      <div class="settings-left-menu scrollable-container" tabindex="0">
         <button id="cfgBtnInfo" class="cfg-menu-item active" tabindex="0">⚙️ Informação geral</button>
         <button id="cfgBtnFonte" class="cfg-menu-item" tabindex="0">🔤 Tamanho da fonte</button>
         <button id="cfgBtnFiltro" class="cfg-menu-item" tabindex="0">📦 Filtrar conteúdo</button>
@@ -260,7 +277,7 @@
         </div>
       </div>
 
-      <div id="settingsDetailBox" class="settings-detail-panel"></div>
+      <div id="settingsDetailBox" class="settings-detail-panel scrollable-container" tabindex="0"></div>
     </section>
 
   </main>
@@ -286,32 +303,99 @@
     </div>
   </div>
 
-  <!-- Modal Gerenciador de Servidores & Manutenção de Listas -->
+  <!-- Modal Gerenciador de Servidores & Manutenção de Listas (Maximizado e Redesenhado) -->
   <div id="modalServerPicker" class="app-modal hidden">
-    <div class="modal-content server-manager-modal">
-      <div class="modal-header">
-        <span>⚙️ Gerenciador de Servidores e Listas</span>
-        <button id="btnCloseServerPicker" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
+    <div class="modal-content server-manager-modal server-manager-maximized">
+      <div class="modal-header server-manager-header">
+        <div class="server-header-title-wrap">
+          <span class="server-header-title">⚙️ Gerenciador de Servidores e Listas</span>
+          <span id="txtServerManagerActiveBadge" class="server-header-active-pill">Fonte ativa</span>
+        </div>
+        <div class="server-header-actions">
+          <button type="button" id="btnSyncAllServersNow" class="ctrl-btn primary" tabindex="0">🔄 Sincronizar Todas Agora</button>
+          <button type="button" id="btnCloseServerPicker" class="ctrl-btn" tabindex="0">✕ Fechar</button>
+        </div>
       </div>
 
       <div class="server-manager-body">
-        <h4 style="margin: 0; color: #cbd5e1; font-size: 18px;">Servidores e Listas Cadastrados:</h4>
-        <!-- Lista de Servidores com Conectar, Editar e Excluir -->
-        <div id="serverItemsGrid" class="servers-manager-list"></div>
-
-        <!-- Formulário de Inclusão e Edição Manual -->
-        <div class="add-server-card">
-          <h4 id="txtAddServerTitle" style="margin: 0 0 10px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
-          <input type="hidden" id="inputEditServerIndex" value="-1">
-          <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-            <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" style="flex: 1; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
-            <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" style="flex: 2; padding: 10px 14px; background: #121522; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 16px;" tabindex="0">
+        <!-- Totalizador Geral do Catálogo (mantido no topo) -->
+        <div id="serverMetricsSummary" class="server-metrics-grid" aria-live="polite">
+          <div class="server-metric-card">
+            <span class="server-metric-label">📺 Canais (Geral)</span>
+            <strong id="metricTotalChannels" class="server-metric-value">0</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <button id="btnAddServerSubmit" class="ctrl-btn primary" style="padding: 10px 22px;" tabindex="0">💾 Salvar e Conectar</button>
-            <button id="btnLoadOfflineCache" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; color: #ffd54f; border-color: #ffd54f;" tabindex="0">📂 Carregar Cache Offline</button>
-            <button id="btnCancelEditServer" class="ctrl-btn hidden" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">Cancelar Edição</button>
-            <button id="btnRestoreDefaultServers" class="ctrl-btn" style="padding: 10px 16px; font-size: 14px; opacity: 0.85;" tabindex="0">🔄 Restaurar 7 Padrões</button>
+          <div class="server-metric-card">
+            <span class="server-metric-label">🎬 Filmes VOD (Geral)</span>
+            <strong id="metricTotalVod" class="server-metric-value">0</strong>
+          </div>
+          <div class="server-metric-card">
+            <span class="server-metric-label">🍿 Séries (Geral)</span>
+            <strong id="metricTotalSeries" class="server-metric-value">0</strong>
+          </div>
+          <div class="server-metric-card">
+            <span class="server-metric-label">📡 EPG / Grupos</span>
+            <strong id="metricTotalEpg" class="server-metric-value">0</strong>
+          </div>
+        </div>
+
+        <!-- Sincronização e Carregamento (Estilo APK — Abre Diálogos de Rádio/Checkbox) -->
+        <div id="serverBgSyncControl" class="server-apk-sync-grid">
+          <button type="button" id="btnSrvCfgSyncFreq" class="apk-setting-card" tabindex="0">
+            <span class="apk-setting-icon">🔄</span>
+            <span class="apk-setting-texts">
+              <strong class="apk-setting-title">Frequência de Sincronização</strong>
+              <span id="txtSrvSyncFreqVal" class="apk-setting-sub">Uma vez ao dia</span>
+            </span>
+          </button>
+          <button type="button" id="btnSrvCfgSyncScope" class="apk-setting-card" tabindex="0">
+            <span class="apk-setting-icon">🌐</span>
+            <span class="apk-setting-texts">
+              <strong class="apk-setting-title">Sincronizar Todas as Listas</strong>
+              <span id="txtSrvSyncScopeVal" class="apk-setting-sub">Todas em 2º plano</span>
+            </span>
+          </button>
+          <button type="button" id="btnSrvCfgSyncProgress" class="apk-setting-card" tabindex="0">
+            <span class="apk-setting-icon">👁️</span>
+            <span class="apk-setting-texts">
+              <strong class="apk-setting-title">Progresso em Segundo Plano</strong>
+              <span id="txtSrvSyncProgressVal" class="apk-setting-sub">Mostrar na tela inicial</span>
+            </span>
+          </button>
+          <button type="button" id="btnSrvCfgStagedLoad" class="apk-setting-card" tabindex="0">
+            <span class="apk-setting-icon">📑</span>
+            <span class="apk-setting-texts">
+              <strong class="apk-setting-title">Carregamento em Etapas</strong>
+              <span id="txtSrvStagedLoadVal" class="apk-setting-sub">1º Plano: Canais</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="server-manager-workspace">
+          <!-- Painel Esquerdo: Lista Ampla de Servidores com Totais Individuais por Linha -->
+          <div class="server-list-pane">
+            <div class="server-pane-heading">
+              <span>📡 Servidores e Listas Cadastrados</span>
+              <span id="txtServerSyncLast" class="server-bgsync-sub">Totais individuais por servidor</span>
+            </div>
+            <div id="serverItemsGrid" class="servers-manager-list scrollable-container" tabindex="0"></div>
+          </div>
+
+          <!-- Painel Direito: Formulário de Cadastro / Edição e Ações de Cache -->
+          <div class="server-form-pane">
+            <div class="add-server-card">
+              <h4 id="txtAddServerTitle" style="margin: 0 0 12px 0; color: #ffd54f; font-size: 18px;">➕ Adicionar Novo Servidor / Lista Manual</h4>
+              <input type="hidden" id="inputEditServerIndex" value="-1">
+              <div class="add-server-inputs-col">
+                <input id="inputNewServerName" type="text" placeholder="Nome (ex: Minha Lista VIP)" class="server-form-input" tabindex="0">
+                <input id="inputNewServerUrl" type="url" placeholder="URL M3U ou Xtream (http://...)" class="server-form-input" tabindex="0">
+              </div>
+              <div class="add-server-actions-col">
+                <button id="btnAddServerSubmit" class="ctrl-btn primary" style="width:100%; justify-content:center; padding: 12px 16px;" tabindex="0">💾 Salvar e Conectar</button>
+                <button id="btnLoadOfflineCache" class="ctrl-btn" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px; color: #ffd54f; border-color: rgba(255,213,79,0.5);" tabindex="0">📂 Carregar Cache Offline</button>
+                <button id="btnCancelEditServer" class="ctrl-btn hidden" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px;" tabindex="0">✕ Cancelar Edição</button>
+                <button id="btnRestoreDefaultServers" class="ctrl-btn" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px; opacity: 0.9;" tabindex="0">🔄 Restaurar 7 Padrões</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -432,20 +516,82 @@
     </div>
   </div>
 
-  <!-- MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO -->
-  <div id="modalSortPicker" class="modal-overlay hidden">
-    <div class="modal-card" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3 style="margin:0; font-size:22px;">↕️ Opções de Classificação</h3>
-        <button id="btnCloseSortPicker" class="close-btn" tabindex="0">×</button>
+  <!-- MODAL DE CLASSIFICAÇÃO / ORDENAÇÃO (ESTILO APK) -->
+  <div id="modalSortPicker" class="app-modal modal-overlay hidden">
+    <div class="apk-dialog-card">
+      <h3 class="apk-dialog-title">Ordenação dos Menus/Canais</h3>
+      <div class="apk-radio-list">
+        <button type="button" class="apk-radio-option sort-choice-btn" data-order="DEFAULT" tabindex="0">
+          <span class="apk-radio-dot" aria-hidden="true"></span>
+          <span class="apk-radio-label">Ordem por número</span>
+        </button>
+        <button type="button" class="apk-radio-option sort-choice-btn" data-order="RECENT" tabindex="0">
+          <span class="apk-radio-dot" aria-hidden="true"></span>
+          <span class="apk-radio-label">Ordem por adição</span>
+        </button>
+        <button type="button" class="apk-radio-option sort-choice-btn" data-order="RATING" tabindex="0">
+          <span class="apk-radio-dot" aria-hidden="true"></span>
+          <span class="apk-radio-label">Ordem por qualificação</span>
+        </button>
+        <button type="button" class="apk-radio-option sort-choice-btn" data-order="AZ" tabindex="0">
+          <span class="apk-radio-dot" aria-hidden="true"></span>
+          <span class="apk-radio-label">Ordem por A-Z</span>
+        </button>
+        <button type="button" class="apk-radio-option sort-choice-btn" data-order="ZA" tabindex="0">
+          <span class="apk-radio-dot" aria-hidden="true"></span>
+          <span class="apk-radio-label">Ordem por Z-A</span>
+        </button>
       </div>
-      <p style="color:#aaa; font-size:14px; margin: 8px 0 16px 0;">Escolha como os canais, filmes ou séries serão ordenados:</p>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <button class="list-item-btn sort-choice-btn" data-order="DEFAULT" tabindex="0" style="padding:14px 18px;">↕️ Padrão (Ordem original da lista)</button>
-        <button class="list-item-btn sort-choice-btn" data-order="RECENT" tabindex="0" style="padding:14px 18px;">🕒 Mais Recentes (Assistidos / Novos)</button>
-        <button class="list-item-btn sort-choice-btn" data-order="AZ" tabindex="0" style="padding:14px 18px;">🔤 Ordem Alfabética (A - Z)</button>
-        <button class="list-item-btn sort-choice-btn" data-order="ZA" tabindex="0" style="padding:14px 18px;">🔤 Ordem Inversa (Z - A)</button>
-        <button class="list-item-btn sort-choice-btn" data-order="YEAR" tabindex="0" style="padding:14px 18px;">📅 Ano de Lançamento (Filmes e Séries)</button>
+      <div class="apk-dialog-footer">
+        <button type="button" id="btnCloseSortPicker" class="apk-btn-cancel" tabindex="0">CANCELAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GENÉRICO DE SELEÇÃO RADIO (ESTILO APK: FREQUÊNCIA, SINCRONIZAR TODAS, PROGRESSO) -->
+  <div id="modalApkRadioPicker" class="app-modal hidden">
+    <div class="apk-dialog-card">
+      <h3 id="apkRadioTitle" class="apk-dialog-title">Selecionar Opção</h3>
+      <div id="apkRadioOptions" class="apk-radio-list"></div>
+      <div class="apk-dialog-footer">
+        <button type="button" id="btnCancelApkRadio" class="apk-btn-cancel" tabindex="0">CANCELAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CARREGAMENTO EM ETAPAS (ESTILO APK) -->
+  <div id="modalStagedLoading" class="app-modal hidden">
+    <div class="apk-dialog-card">
+      <h3 class="apk-dialog-title">Carregamento em Etapas</h3>
+      <p class="apk-dialog-desc">
+        Selecione quais conteúdos carregar em Primeiro Plano. Os demais serão carregados em Segundo Plano de forma silenciosa e incremental para não travar o aplicativo.
+      </p>
+      <div class="apk-staged-list">
+        <button type="button" id="btnStageLive" class="apk-staged-row" data-stage="live" tabindex="0">
+          <span class="apk-staged-texts">
+            <strong class="apk-staged-title">Canais (Ao Vivo)</strong>
+            <span class="apk-staged-sub">Carga instantânea de canais de TV</span>
+          </span>
+          <span class="apk-checkbox-box" aria-hidden="true">✓</span>
+        </button>
+        <button type="button" id="btnStageMovies" class="apk-staged-row" data-stage="movies" tabindex="0">
+          <span class="apk-staged-texts">
+            <strong class="apk-staged-title">Filmes (VOD)</strong>
+            <span class="apk-staged-sub">Carregar catálogo de filmes na inicialização</span>
+          </span>
+          <span class="apk-checkbox-box" aria-hidden="true">✓</span>
+        </button>
+        <button type="button" id="btnStageSeries" class="apk-staged-row" data-stage="series" tabindex="0">
+          <span class="apk-staged-texts">
+            <strong class="apk-staged-title">Séries (VOD)</strong>
+            <span class="apk-staged-sub">Carregar catálogo de séries na inicialização</span>
+          </span>
+          <span class="apk-checkbox-box" aria-hidden="true">✓</span>
+        </button>
+      </div>
+      <div class="apk-dialog-actions-row">
+        <button type="button" id="btnCancelStagedLoading" class="apk-btn-cancel" tabindex="0">CANCELAR</button>
+        <button type="button" id="btnSaveStagedLoading" class="apk-btn-save" tabindex="0">SALVAR</button>
       </div>
     </div>
   </div>
@@ -464,8 +610,9 @@
       
       <!-- Ações de Escape para Smart TV caso o servidor demore -->
       <div id="hudLoadingActions" style="display: flex; gap: 12px; margin-top: 18px; justify-content: center; flex-wrap: wrap;">
-        <button id="btnHudChangeServer" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #e50914; color: #fff;" tabindex="0">🔴 Trocar Fonte (Servidor)</button>
-        <button id="btnHudCancelLoading" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px;" tabindex="0">↩️ Voltar ao App</button>
+        <button type="button" id="btnHudChangeServer" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #e50914; color: #fff;" tabindex="0">🔴 Trocar Fonte (Servidor)</button>
+        <button type="button" id="btnHudRelogin" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px; border-color: #ffd54f; color: #ffd54f;" tabindex="0">🔐 Trocar Login</button>
+        <button type="button" id="btnHudCancelLoading" class="ctrl-btn" style="padding: 10px 18px; font-size: 15px;" tabindex="0">↩️ Voltar ao App</button>
       </div>
       <button id="btnRetryLoading" class="ctrl-btn primary hidden" type="button" tabindex="0">↻ Tentar novamente</button>
     </div>
@@ -506,23 +653,24 @@
   </div>
 
   <!-- Modal Console de Logs em Tempo Real (Dev / Homologação) -->
-  <div id="modalDevLogs" class="app-modal hidden">
-    <div class="modal-content" style="width: 860px; max-width: 95vw; background: #0c0f1a; border: 1px solid rgba(59, 130, 246, 0.5); border-radius: 14px; padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,0.9);">
-      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 12px;">
-        <span style="color:#ffd54f; font-weight:800; font-size:18px;"><i class="fa-solid fa-terminal"></i> Console de Logs em Tempo Real (Dev / Homologação)</span>
-        <div style="display:flex; gap:8px;">
-          <button id="btnClearDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-solid fa-trash"></i> Limpar</button>
-          <button id="btnExportDevLogs" class="ctrl-btn primary" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-solid fa-floppy-disk"></i> Salvar Logs</button>
-          <button id="btnGitHubDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0"><i class="fa-brands fa-github"></i> GitHub</button>
-          <button id="btnCloseDevLogs" class="ctrl-btn" style="padding: 6px 14px; font-size: 13px;" tabindex="0">✕ Fechar</button>
+  <div id="modalDevLogs" class="app-modal devlogs-modal hidden">
+    <div class="modal-content devlogs-card">
+      <div class="modal-header devlogs-head">
+        <span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>
+        <div class="devlogs-actions">
+          <button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">⏸ Pausar</button>
+          <button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">🗑️ Limpar</button>
+          <button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">💾 Salvar</button>
+          <button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">✕ Fechar</button>
         </div>
       </div>
-      <div id="devLogsContainer" style="background:#05070d; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 12px; height: 380px; overflow-y: auto; font-family: monospace, Courier, sans-serif; font-size: 13px; line-height: 1.5; color: #cbd5e1; user-select: text;">
+      <div id="devLogsInfo" class="devlogs-info"></div>
+      <div id="devLogsContainer" class="devlogs-screen scrollable-container" tabindex="0">
         <div style="color:#64748b;">[Console inicializado. Logs do player, rede, codecs e controle remoto aparecerão aqui...]</div>
       </div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px; font-size: 12px; color: #94a3b8;">
-        <span>Salve o arquivo e anexe-o manualmente em 2fbg/FBGs-Streaming/logs.</span>
-        <span id="devLogsCountBadge" style="background:#1e293b; padding:2px 8px; border-radius:4px;">0 entradas</span>
+      <div class="devlogs-foot">
+        <span>Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>
+        <span id="devLogsCountBadge" style="background:#1e293b; padding:4px 12px; border-radius:6px;">0 entradas</span>
       </div>
     </div>
   </div>
@@ -566,7 +714,7 @@
           <button id="tabOmniSeries" class="omnisearch-tab-btn" tabindex="0">🍿 Séries (<span id="countOmniSeries">0</span>)</button>
         </div>
       </div>
-      <div class="omnisearch-body">
+      <div class="omnisearch-body scrollable-container" tabindex="0">
         <div id="omnisearchResultsGrid" class="omnisearch-results-grid"></div>
         <div id="omnisearchEmptyState" style="text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 16px;">
           Digite uma palavra-chave para buscar instantaneamente em todo o catálogo.
@@ -582,7 +730,7 @@
         <span id="txtEpgGuideTitle" style="color:#ffd54f; font-size:20px; font-weight:800;">🔵 Programação do Canal (EPG)</span>
         <button id="btnCloseEpgGuide" class="ctrl-btn" style="padding: 6px 14px;" tabindex="0">✕</button>
       </div>
-      <div id="epgScheduleList" style="padding:20px; max-height:480px; overflow-y:auto;">
+      <div id="epgScheduleList" class="scrollable-container" tabindex="0" style="padding:20px; max-height:480px; overflow-y:auto;">
         <div style="text-align:center; padding:30px; color:#aaa;">Carregando grade de programação...</div>
       </div>
     </div>
@@ -593,8 +741,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.5.8, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.5.8') {
+        // Se a versão OTA armazenada for anterior a 2.8.0, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.8.0') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -617,7 +765,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.5.8';
+              fallback.src = 'app.js?v=2.8.0';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -634,7 +782,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.5.8';
+      s.src = 'app.js?v=2.8.0';
       document.body.appendChild(s);
     })();
   </script>

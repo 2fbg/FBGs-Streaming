@@ -23,12 +23,12 @@ class ServerRepositoryImpl(
 ) : ServerRepository {
 
     private val staticDefaultServers = listOf(
-        ServerProfile("srv_1", "VLOG", "http://lumixx21.org"),
-        ServerProfile("srv_2", "TANNIX", "http://assist.new21vod.xyz"),
-        ServerProfile("srv_3", "LUB TV", "http://pottermax.sbs"),
-        ServerProfile("srv_4", "MK21 PRÓ", "http://magmapuro.shop"),
+        ServerProfile("srv_1", "VLOG", "http://tocombox21.cyou"),
+        ServerProfile("srv_2", "TANNIX", "http://ovo54.sbs"),
+        ServerProfile("srv_3", "LUB TV", "http://coxinhasemflango.shop"),
+        ServerProfile("srv_4", "MK21 PRÓ", "http://app.tigerouro.shop"),
         ServerProfile("srv_5", "CB6000", "http://cdn.caterlune.top"),
-        ServerProfile("srv_6", "CINELON", "http://powerex.lat"),
+        ServerProfile("srv_6", "CINELON", "http://parcerialife.lat"),
         ServerProfile("srv_7", "MULTT TV", "http://dali-as.skin")
     )
 
@@ -103,12 +103,13 @@ class ServerRepositoryImpl(
                 val existing = serverDao.getAllServersList()
                 for (srv in existing) {
                     val updatedUrl = when {
-                        srv.baseUrl.contains("myopbx.beer") -> "http://lumixx21.org"
-                        srv.name.equals("LUB TV", ignoreCase = true) || srv.baseUrl.contains("alfatecloan.sbs") || srv.baseUrl.contains("lubtv.fun") -> "http://pottermax.sbs"
-                        srv.baseUrl.contains("poptvcdn.online") || srv.baseUrl.contains("gip26.sbs") || srv.baseUrl.contains("tannix26.shop") -> "http://assist.new21vod.xyz"
-                        srv.baseUrl.contains("app.vivoxi.xyz") || srv.baseUrl.contains("tigerouro.shop") || srv.baseUrl.contains("mk21.uk") -> "http://magmapuro.shop"
-                        srv.baseUrl.contains("coliseuop.site") -> "http://powerex.lat"
-                        srv.name.equals("MULTT TV", ignoreCase = true) || srv.baseUrl.contains("hll4.top") -> "http://dali-as.skin"
+                        srv.name.equals("VLOG", ignoreCase = true) || srv.baseUrl.contains("lumixx21") || srv.baseUrl.contains("myopbx") -> "http://tocombox21.cyou"
+                        srv.name.equals("LUB TV", ignoreCase = true) || srv.baseUrl.contains("pottermax") || srv.baseUrl.contains("alfatecloan") || srv.baseUrl.contains("lubtv") -> "http://coxinhasemflango.shop"
+                        srv.name.equals("TANNIX", ignoreCase = true) || srv.baseUrl.contains("new21vod") || srv.baseUrl.contains("poptvcdn") || srv.baseUrl.contains("gip26") || srv.baseUrl.contains("tannix") -> "http://ovo54.sbs"
+                        srv.name.equals("MK21 PRÓ", ignoreCase = true) || srv.name.equals("MK21 TV", ignoreCase = true) || srv.baseUrl.contains("magmapuro") || srv.baseUrl.contains("vivoxi") || srv.baseUrl.contains("tigerouro") -> "http://app.tigerouro.shop"
+                        srv.name.equals("CINELON", ignoreCase = true) || srv.baseUrl.contains("powerex") || srv.baseUrl.contains("coliseuop") || srv.baseUrl.contains("parcerialife") -> "http://parcerialife.lat"
+                        srv.name.equals("CB6000", ignoreCase = true) || srv.baseUrl.contains("caterlune") -> "http://cdn.caterlune.top"
+                        srv.name.equals("MULTT TV", ignoreCase = true) || srv.baseUrl.contains("dali-as") || srv.baseUrl.contains("hll4") -> "http://dali-as.skin"
                         else -> null
                     }
                     if (updatedUrl != null && srv.baseUrl != updatedUrl) {
@@ -180,10 +181,11 @@ class ServerRepositoryImpl(
     }
 
     private fun migrateLegacyServerUrl(baseUrl: String): String = when (baseUrl.trimEnd('/').lowercase()) {
-        "http://myopbx.beer" -> "http://lumixx21.org"
-        "http://poptvcdn.online" -> "http://assist.new21vod.xyz"
-        "http://app.vivoxi.xyz" -> "http://magmapuro.shop"
-        "http://coliseuop.site" -> "http://powerex.lat"
+        "http://myopbx.beer", "http://lumixx21.org" -> "http://tocombox21.cyou"
+        "http://poptvcdn.online", "http://assist.new21vod.xyz" -> "http://ovo54.sbs"
+        "http://pottermax.sbs" -> "http://coxinhasemflango.shop"
+        "http://app.vivoxi.xyz", "http://magmapuro.shop" -> "http://app.tigerouro.shop"
+        "http://coliseuop.site", "http://powerex.lat" -> "http://parcerialife.lat"
         else -> baseUrl
     }
 }

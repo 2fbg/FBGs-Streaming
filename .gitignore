@@ -28,3 +28,15 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
+
+# Backups e arquivos de build históricos
+/backups/
+/builds/
+*.bak
+*.orig
+SHA256SUMS
+
+# Node toolchain (Player Factory)
+node_modules/
+coverage/
+dist/

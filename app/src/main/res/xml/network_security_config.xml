@@ -1,54 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Habilita tráfego cleartext HTTP globalmente para permitir reprodução de IPTV e servidores com redirecionamentos -->
+    <!-- Em Release, confia apenas em CAs do sistema (sem certificados instalados pelo usuário).
+         Cleartext permanece habilitado no base-config devido a servidores e CDNs IPTV HTTP dinâmicos. -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
 
-    <!-- Lista explícita de domínios conhecidos de servidores IPTV -->
-    <domain-config cleartextTrafficPermitted="true">
-        <!-- Novos domínios atualizados -->
-        <domain includeSubdomains="true">pottermax.sbs</domain>
-        <domain includeSubdomains="true">poptvcdn.online</domain>
-        <domain includeSubdomains="true">dali-as.skin</domain>
-        <domain includeSubdomains="true">vivoxi.xyz</domain>
-        <domain includeSubdomains="true">app.vivoxi.xyz</domain>
-
-        <!-- Domínios padrão e legados -->
-        <domain includeSubdomains="true">myopbx.beer</domain>
-        <domain includeSubdomains="true">coliseuop.site</domain>
-        <domain includeSubdomains="true">cdn.caterlune.top</domain>
-        <domain includeSubdomains="true">tigerouro.shop</domain>
-        <domain includeSubdomains="true">app.tigerouro.shop</domain>
-        <domain includeSubdomains="true">alfatecloan.sbs</domain>
-        <domain includeSubdomains="true">gip26.sbs</domain>
-        <domain includeSubdomains="true">cp2026.sbs</domain>
-        <domain includeSubdomains="true">hll4.top</domain>
-        <domain includeSubdomains="true">antaresfusion.shop</domain>
-        <domain includeSubdomains="true">cdnconn.xyz</domain>
-        <domain includeSubdomains="true">new-link.shop</domain>
-        <domain includeSubdomains="true">opbx-w.shop</domain>
-        <domain includeSubdomains="true">somentevlog.xyz</domain>
-        <domain includeSubdomains="true">vlogmk.de</domain>
-        <domain includeSubdomains="true">newphase.sbs</domain>
-        <domain includeSubdomains="true">pitclear.sbs</domain>
-        <domain includeSubdomains="true">triimundial.shop</domain>
-        <domain includeSubdomains="true">lubtv.fun</domain>
-        <domain includeSubdomains="true">connstar.xyz</domain>
-        <domain includeSubdomains="true">infinixparcerias.site</domain>
-        <domain includeSubdomains="true">cinelontv.work</domain>
-        <domain includeSubdomains="true">tannix26.shop</domain>
-        <domain includeSubdomains="true">cdnassandplay.online</domain>
-        <domain includeSubdomains="true">unituf.online</domain>
-        <domain includeSubdomains="true">painelplyon.top</domain>
-        <domain includeSubdomains="true">cb6.fun</domain>
-        <domain includeSubdomains="true">mk21.uk</domain>
-        <domain includeSubdomains="true">appsmk.org</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
+    <!-- Endpoints próprios de atualização OTA e backend web exigem HTTPS estrito -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">raw.githubusercontent.com</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">objects.githubusercontent.com</domain>
+        <domain includeSubdomains="true">release-assets.githubusercontent.com</domain>
+        <domain includeSubdomains="true">bgstreaming.vercel.app</domain>
     </domain-config>
 </network-security-config>
