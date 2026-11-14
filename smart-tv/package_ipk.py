@@ -341,6 +341,7 @@ if __name__ == "__main__":
         os.path.join(root_dir, "version.json"),
         os.path.join(root_dir, "api", "version.json"),
         os.path.join(root_dir, "public", "version.json"),
+        os.path.join(root_dir, "public", "api", "version.json"),
         os.path.join(web_dir, "version.json"),
         os.path.join(web_dir, "api", "version.json"),
     ]

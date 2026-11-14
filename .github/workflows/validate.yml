@@ -176,6 +176,7 @@ jobs:
               "web/version.json",
               "web/api/version.json",
               "public/version.json",
+              "public/api/version.json",
               "smart-tv/version.json",
               "smart-tv/mk21-tv/version.json",
           )
@@ -236,6 +237,7 @@ jobs:
               "web/version.json",
               "web/api/version.json",
               "public/version.json",
+              "public/api/version.json",
               "smart-tv/version.json",
               "smart-tv/mk21-tv/version.json",
           )
