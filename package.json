@@ -1,6 +1,6 @@
 {
   "name": "fbgs-streaming",
-  "version": "2.7.2",
+  "version": "2.8.0",
   "private": true,
   "description": "MK21 Streaming Web & OTT IPTV Platform",
   "scripts": {
@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "jest src/players",
     "test:players": "jest src/players",
-    "build:tv": "node esbuild.config.mjs"
+    "build:tv": "node esbuild.config.mjs",
+    "sync:web": "node scripts/sync-web.mjs",
+    "check:web": "node scripts/sync-web.mjs --check"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

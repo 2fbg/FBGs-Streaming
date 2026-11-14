@@ -214,6 +214,7 @@ jobs:
         id: smart-tv-validation
         run: |
           set -euo pipefail
+          node scripts/sync-web.mjs --check
           node --check smart-tv/mk21-tv/app.js
           node --check api/proxy.js
           node --check web/api/proxy.js

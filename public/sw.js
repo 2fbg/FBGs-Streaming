@@ -1,5 +1,5 @@
-// MK21 Web Service Worker for PWA shell caching and installation (v2.5.0)
-const CACHE_NAME = 'mk21-cache-v2.5.0';
+// MK21 Web Service Worker for PWA shell caching and installation (v2.8.0)
+const CACHE_NAME = 'mk21-cache-v2.8.0';
 const STATIC_ASSETS = [
     './',
     './index.html',

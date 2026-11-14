@@ -1,5 +1,6 @@
-// Vercel Serverless Function mirror for web/api/proxy.js (mantido sincronizado com api/proxy.js)
-// Ensures web/ deployments carry the exact same anti-SSRF, CORS allowlist, and safe error handling.
+// Vercel Serverless Function to act as a secure, fast, and dedicated streaming CORS Proxy for MK21 IPTV Web.
+// Since Node/Vercel acts server-side, it bypasses browser CORS and Mixed Content blocks.
+// Pipes binary streams directly from the source to prevent out-of-memory errors and timeout limits.
 
 const dns = require('dns');
 const http = require('http');
@@ -56,24 +57,25 @@ function isPrivateIpv4(ip) {
         return true;
     }
     const [a, b, c] = parts;
-    if (a === 0) return true;
-    if (a === 10) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 0 && c === 0) return true;
-    if (a === 192 && b === 0 && c === 2) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 198 && (b === 18 || b === 19)) return true;
-    if (a === 198 && b === 51 && c === 100) return true;
-    if (a === 203 && b === 0 && c === 113) return true;
-    if (a >= 224) return true;
+    if (a === 0) return true; // 0.0.0.0/8
+    if (a === 10) return true; // 10.0.0.0/8 (RFC1918)
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
+    if (a === 127) return true; // 127.0.0.0/8 (Loopback)
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 (Link-local / Cloud metadata)
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12 (RFC1918)
+    if (a === 192 && b === 0 && c === 0) return true; // 192.0.0.0/24 (IETF)
+    if (a === 192 && b === 0 && c === 2) return true; // 192.0.2.0/24 (TEST-NET-1)
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16 (RFC1918)
+    if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 (Benchmark)
+    if (a === 198 && b === 51 && c === 100) return true; // 198.51.100.0/24 (TEST-NET-2)
+    if (a === 203 && b === 0 && c === 113) return true; // 203.0.113.0/24 (TEST-NET-3)
+    if (a >= 224) return true; // Multicast + Reserved (224.0.0.0/3)
     return false;
 }
 
 function expandIpv6(rawIp) {
     let ip = rawIp.toLowerCase().split('%')[0];
+    // Handle IPv4-embedded suffix (e.g., ::ffff:127.0.0.1)
     const lastColon = ip.lastIndexOf(':');
     if (lastColon !== -1 && ip.slice(lastColon + 1).includes('.')) {
         const ipv4Part = ip.slice(lastColon + 1);
@@ -105,14 +107,15 @@ function isPrivateIpv6(ip) {
     if (!words) return true;
 
     const isAllZero = words.slice(0, 7).every((w) => w === 0);
-    if (isAllZero && (words[7] === 0 || words[7] === 1)) return true;
+    if (isAllZero && (words[7] === 0 || words[7] === 1)) return true; // :: e ::1
 
     const first = words[0];
-    if (first >= 0xfc00 && first <= 0xfdff) return true;
-    if ((first & 0xffc0) === 0xfe80) return true;
-    if ((first & 0xffc0) === 0xfec0) return true;
-    if ((first & 0xff00) === 0xff00) return true;
+    if (first >= 0xfc00 && first <= 0xfdff) return true; // fc00::/7 (ULA)
+    if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 (Link-local)
+    if ((first & 0xffc0) === 0xfec0) return true; // fec0::/10 (Site-local)
+    if ((first & 0xff00) === 0xff00) return true; // ff00::/8 (Multicast)
 
+    // IPv4-mapped (::ffff:0:0/96) ou IPv4-compatible (::/96)
     const isMappedV4 =
         words[0] === 0 && words[1] === 0 && words[2] === 0 &&
         words[3] === 0 && words[4] === 0 && (words[5] === 0xffff || words[5] === 0);
@@ -121,11 +124,13 @@ function isPrivateIpv6(ip) {
         return isPrivateIpv4(ipv4);
     }
 
+    // 6to4 (2002::/16) carrega IPv4 nos hextetos 1 e 2
     if (first === 0x2002) {
         const ipv4 = `${words[1] >> 8}.${words[1] & 0xff}.${words[2] >> 8}.${words[2] & 0xff}`;
         return isPrivateIpv4(ipv4);
     }
 
+    // NAT64 well-known prefix (64:ff9b::/96)
     if (words[0] === 0x0064 && words[1] === 0xff9b && words[2] === 0 && words[3] === 0 && words[4] === 0 && words[5] === 0) {
         const ipv4 = `${words[6] >> 8}.${words[6] & 0xff}.${words[7] >> 8}.${words[7] & 0xff}`;
         return isPrivateIpv4(ipv4);
@@ -144,6 +149,7 @@ function isPrivateIp(rawIp) {
 }
 
 function isSuspiciousNumericHost(host) {
+    // Bloqueia formas não-canônicas de IPv4 (decimal puro, hex 0x7f..., octal 0177.0.0.1)
     if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/i.test(host)) return true;
     if (/^\d+(?:\.\d+){1,3}$/.test(host)) {
         const parts = host.split('.');
@@ -153,6 +159,7 @@ function isSuspiciousNumericHost(host) {
     return false;
 }
 
+// Anti-SSRF: Block access to local / internal private networks and non-canonical numeric hosts
 function isPrivateHost(hostname) {
     if (!hostname || typeof hostname !== 'string') return true;
     const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
@@ -208,6 +215,7 @@ async function resolveAndValidateHost(hostname, lookupFn = dns.promises.lookup) 
     return { allowed: true, addresses: records };
 }
 
+// In-memory rate limiting per IP (Generous limit to allow continuous HLS / MPEG-TS streaming chunks)
 const requestCounts = new Map();
 const MAX_REQUESTS_PER_MINUTE = 3000;
 
@@ -279,6 +287,7 @@ function createProxyHandler(deps = {}) {
             return;
         }
 
+        // Handle preflight OPTIONS request
         if (req.method === 'OPTIONS') {
             res.statusCode = 204;
             res.end();
@@ -292,6 +301,7 @@ function createProxyHandler(deps = {}) {
             return;
         }
 
+        // Rate limiting check
         const rawForwarded = req.headers && req.headers['x-forwarded-for'];
         const clientIp = (typeof rawForwarded === 'string' ? rawForwarded.split(',')[0].trim() : '') ||
             (req.socket && req.socket.remoteAddress) || 'unknown';
@@ -302,6 +312,7 @@ function createProxyHandler(deps = {}) {
             return;
         }
 
+        // Extract target URL parameter
         let targetUrlStr = null;
         if (req.query && req.query.url) {
             targetUrlStr = req.query.url;
