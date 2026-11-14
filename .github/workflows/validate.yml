@@ -31,6 +31,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify published remote manifest URLs (against committed manifests)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork || false }}
+        run: |
+          set -euo pipefail
+          TV_VER=$(python3 -c "import json; print(json.load(open('version.json', encoding='utf-8'))['version'])")
+          IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$IS_FORK_PR" = "true" ]; then
+            if ! curl -sfI --max-time 5 https://github.com > /dev/null 2>&1; then
+              echo "::notice::PR de fork sem acesso de rede externa: validação --remote pulada com justificativa (push para main exige HTTP 200/206 e hash remoto)."
+              echo "- ⚠️ **Validação remota (`--remote`)**: pulada em PR de fork sem rede externa." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
+          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "$IPK_FILE" --remote
+
       - name: Prepare release keystore
         id: release-keystore
         env:
@@ -220,7 +243,7 @@ jobs:
           node --check api/proxy.js
           node --check web/api/proxy.js
           node --test smart-tv/tests/proxy-security.test.js smart-tv/tests/alternative-sources.test.js smart-tv/tests/catalog-utils.test.js smart-tv/tests/release-manifest.test.js
-          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "smart-tv/mk21play_$(python3 -c "import json; print(json.load(open('version.json'))['version'])")_all.ipk" --require-release-url
+          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "smart-tv/mk21play_$(python3 -c "import json; print(json.load(open('version.json'))['version'])")_all.ipk"
           python3 -m py_compile smart-tv/package_ipk.py
           python3 -m unittest discover -s smart-tv/tests -v
 

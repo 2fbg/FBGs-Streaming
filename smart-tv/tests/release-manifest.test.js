@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { verifyReleaseManifests } from '../../scripts/verify-release-manifests.mjs';
+import { verifyReleaseManifests, verifyRemoteAssets } from '../../scripts/verify-release-manifests.mjs';
 
 function setupTempReleaseFixture({ version = '2.8.0', versionCode = 280, gradleCode = 280, apkContent = 'signed-apk-bytes', manifestApkSha = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mk21-release-test-'));
@@ -34,6 +34,7 @@ function setupTempReleaseFixture({ version = '2.8.0', versionCode = 280, gradleC
     versionCode,
     apkUrl: `https://github.com/2fbg/FBGs-Streaming/releases/download/v${version}/mk21.apk`,
     downloadUrl: `https://github.com/2fbg/FBGs-Streaming/releases/download/v${version}/mk21.apk`,
+    ipkUrl: `https://github.com/2fbg/FBGs-Streaming/releases/download/v${version}/mk21play_${version}_all.ipk`,
     apkSha256: apkSha,
     sha256: apkSha,
     sizeBytes: Buffer.byteLength(apkContent),
@@ -104,6 +105,53 @@ test('verifyReleaseManifests fails when versionCode diverges from app/build.grad
     });
     assert.equal(res.ok, false);
     assert.ok(res.errors.some((e) => e.includes('versionCode')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyRemoteAssets reports exact git tag command when release URL returns HTTP 404', async () => {
+  const { dir } = setupTempReleaseFixture();
+  try {
+    const res = await verifyRemoteAssets({
+      rootDir: dir,
+      fetchImpl: async () => new Response('Not Found', { status: 404 }),
+    });
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('HTTP 404') && e.includes('git tag v2.8.0 && git push origin v2.8.0')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyRemoteAssets falls back from HEAD 405 to Range GET, catches SHA-256 mismatch, and passes on 200 match', async () => {
+  const { dir } = setupTempReleaseFixture();
+  try {
+    const apkBytes = Buffer.from('signed-apk-bytes');
+    const ipkBytes = Buffer.from('ipk-bytes');
+
+    const badHashRes = await verifyRemoteAssets({
+      rootDir: dir,
+      fetchImpl: async (url, init) => {
+        if (init.method === 'HEAD') return new Response(null, { status: 405 });
+        if (init.headers?.Range === 'bytes=0-0') return new Response('s', { status: 206 });
+        if (url.endsWith('.ipk')) return new Response(ipkBytes, { status: 200 });
+        return new Response(Buffer.from('wrong-apk-bytes!'), { status: 200 });
+      },
+    });
+    assert.equal(badHashRes.ok, false);
+    assert.ok(badHashRes.errors.some((e) => e.includes('apkUrl') && e.includes('SHA-256 divergente')));
+
+    const okRes = await verifyRemoteAssets({
+      rootDir: dir,
+      fetchImpl: async (url, init) => {
+        if (init.method === 'HEAD') return new Response(null, { status: 200 });
+        if (url.endsWith('.ipk')) return new Response(ipkBytes, { status: 200 });
+        return new Response(apkBytes, { status: 200 });
+      },
+    });
+    assert.equal(okRes.ok, true, okRes.errors.join('; '));
+    assert.equal(okRes.checked.length, 2);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
