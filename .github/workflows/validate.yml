@@ -7,6 +7,12 @@ on:
     branches: [main]
   # Permite reexecutar o workflow com os secrets atuais (ex.: apos cadastrar a keystore).
   workflow_dispatch:
+    inputs:
+      require_signed:
+        description: "Exigir build de release assinado com a keystore configurada nos secrets"
+        required: false
+        default: "false"
+        type: boolean
 
 permissions:
   contents: read
@@ -31,13 +37,23 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          REQUIRE_SIGNED: ${{ github.event.inputs.require_signed || 'false' }}
         run: |
           set -euo pipefail
           if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${STORE_PASSWORD:-}" ]; then
+            if [ "${REQUIRE_SIGNED}" = "true" ]; then
+              echo "::error::Secrets ANDROID_KEYSTORE_BASE64/STORE_PASSWORD ausentes com require_signed=true."
+              exit 1
+            fi
             echo "::warning::Secrets ANDROID_KEYSTORE_BASE64/STORE_PASSWORD ausentes: o APK do artifact sairá assinado com a chave de debug."
             echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "path=" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          if [ "$KEY_ALIAS" != "upload" ]; then
+            echo "::error::KEY_ALIAS está definido como '$KEY_ALIAS', mas app/build.gradle.kts usa alias 'upload' no signingConfigs.release."
+            exit 1
           fi
 
           KS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-upload.jks"
@@ -59,6 +75,7 @@ jobs:
           KEYSTORE_PATH: ${{ steps.release-keystore.outputs.path }}
           SIGNED: ${{ steps.release-keystore.outputs.signed }}
         run: |
+          set -euo pipefail
           chmod +x gradlew
           if [ ! -f "app/google-services.json" ]; then
             echo "Criando fallback de google-services.json para o ambiente CI..."
@@ -95,8 +112,9 @@ jobs:
           }
           EOF
           fi
-          ./gradlew testDebugUnitTest --no-daemon || (echo "Retrying tests due to socket/network hiccup..." && ./gradlew testDebugUnitTest --no-daemon)
+          ./gradlew testDebugUnitTest --no-daemon || { echo "Retrying tests due to socket/network hiccup..."; ./gradlew testDebugUnitTest --no-daemon; }
           if [ "$SIGNED" = "true" ]; then
+            test -f "$KEYSTORE_PATH" || { echo "Keystore de release ausente: $KEYSTORE_PATH"; exit 1; }
             # Sem KEY_PASSWORD próprio, assume a senha do keystore (caso comum).
             if [ -z "${KEY_PASSWORD:-}" ]; then export KEY_PASSWORD="$STORE_PASSWORD"; fi
             ./gradlew assembleRelease --no-daemon
@@ -115,6 +133,7 @@ jobs:
           APK_SOURCE: ${{ steps.android-build.outputs.apk_source }}
           SIGNED: ${{ steps.release-keystore.outputs.signed }}
         run: |
+          set -euo pipefail
           # O empacotador publica apkSha256/sizeBytes e ipkSha256/ipkSizeBytes nos manifestos,
           # então ele roda logo depois do build do APK, com o artefato recém-gerado.
           test -n "${APK_SOURCE:-}" || { echo "apk_source vazio: o passo de build não publicou a saída"; exit 1; }
@@ -126,13 +145,14 @@ jobs:
             # Garante que o carimbo foi feito sobre o APK de release, não sobre um fallback de debug.
             APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
             test -n "$APKSIGNER" || { echo "apksigner não encontrado para validar a assinatura"; exit 1; }
+            "$APKSIGNER" verify --verbose mk21.apk > /dev/null
             CERTS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-certs.txt"
             # Guarda a saída em arquivo: ler de pipe com head/grep -q pode gerar SIGPIPE e
             # derrubar o passo por causa do pipefail do shell do Actions.
             "$APKSIGNER" verify --print-certs mk21.apk > "$CERTS"
             sed -n '1,6p' "$CERTS"
             if grep -q "CN=Android Debug" "$CERTS"; then
-              echo "APK saiu com a chave de debug mesmo com os secrets configurados";
+              echo "APK saiu com a chave de debug mesmo com os secrets configurados"
               exit 1
             fi
           fi
@@ -160,7 +180,8 @@ jobs:
               "smart-tv/mk21-tv/version.json",
           )
           for name in manifests:
-              data = json.load(open(name, encoding="utf-8"))
+              with open(name, encoding="utf-8") as f:
+                  data = json.load(f)
               ipk_path = f"smart-tv/mk21play_{data['version']}_all.ipk"
               ipk_sha256 = sha256(ipk_path)
               if data["apkSha256"] != apk_sha256 or data["sizeBytes"] != apk_size:
@@ -189,32 +210,89 @@ jobs:
             echo "- IPK v${VER}: \`$(sha256sum "$IPK" | cut -d' ' -f1)\` ($(stat -c%s "$IPK") bytes)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smart TV validation
+      - name: Smart TV and version sync validation
         id: smart-tv-validation
         run: |
+          set -euo pipefail
           node --check smart-tv/mk21-tv/app.js
           python3 -m py_compile smart-tv/package_ipk.py
 
-          TV_VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
-          echo "Validando sincronismo de versões multiplataforma (Alvo: $TV_VER)..."
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('version.json'))['version'])")" || (echo "Mismatch em version.json" && exit 1)
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/version.json'))['version'])")" || (echo "Mismatch em smart-tv/mk21-tv/version.json" && exit 1)
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/mk21-tv/appinfo.json'))['version'])")" || (echo "Mismatch em smart-tv/mk21-tv/appinfo.json" && exit 1)
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('smart-tv/webos/appinfo.json'))['version'])")" || (echo "Mismatch em smart-tv/webos/appinfo.json" && exit 1)
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('web/version.json'))['version'])")" || (echo "Mismatch em web/version.json" && exit 1)
-          test "$TV_VER" = "$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")" || (echo "Mismatch em manifest.json" && exit 1)
-          TIZEN_VER=$(python3 -c "import xml.etree.ElementTree as ET; print(ET.parse('smart-tv/tizen/config.xml').getroot().attrib['version'])")
-          test "$TV_VER" = "$TIZEN_VER" || (echo "Mismatch em smart-tv/tizen/config.xml: $TIZEN_VER != $TV_VER" && exit 1)
+          TV_VER=$(python3 - <<'PY'
+          import json, re, sys, xml.etree.ElementTree as ET
+
+          with open("version.json", encoding="utf-8") as f:
+              root_manifest = json.load(f)
+          target_ver = str(root_manifest["version"])
+          target_code = int(root_manifest["versionCode"])
+
+          version_json_files = (
+              "version.json",
+              "api/version.json",
+              "web/version.json",
+              "web/api/version.json",
+              "public/version.json",
+              "smart-tv/version.json",
+              "smart-tv/mk21-tv/version.json",
+          )
+          errors = []
+          for path in version_json_files:
+              with open(path, encoding="utf-8") as f:
+                  data = json.load(f)
+              if str(data.get("version")) != target_ver:
+                  errors.append(f"{path}: version={data.get('version')} != {target_ver}")
+              if int(data.get("versionCode", -1)) != target_code:
+                  errors.append(f"{path}: versionCode={data.get('versionCode')} != {target_code}")
+              if "versionName" in data and str(data.get("versionName")) != target_ver:
+                  errors.append(f"{path}: versionName={data.get('versionName')} != {target_ver}")
+
+          simple_json_files = (
+              "manifest.json",
+              "web/manifest.json",
+              "public/manifest.json",
+              "smart-tv/mk21-tv/appinfo.json",
+              "smart-tv/webos/appinfo.json",
+          )
+          for path in simple_json_files:
+              with open(path, encoding="utf-8") as f:
+                  data = json.load(f)
+              if str(data.get("version")) != target_ver:
+                  errors.append(f"{path}: version={data.get('version')} != {target_ver}")
+
+          tizen_ver = ET.parse("smart-tv/tizen/config.xml").getroot().attrib.get("version")
+          if tizen_ver != target_ver:
+              errors.append(f"smart-tv/tizen/config.xml: version={tizen_ver} != {target_ver}")
+
+          with open("app/build.gradle.kts", encoding="utf-8") as f:
+              gradle_text = f.read()
+          code_match = re.search(r"^\s*versionCode\s*=\s*(\d+)", gradle_text, re.MULTILINE)
+          name_match = re.search(r'^\s*versionName\s*=\s*"([^"]+)"', gradle_text, re.MULTILINE)
+          gradle_code = int(code_match.group(1)) if code_match else None
+          gradle_name = name_match.group(1) if name_match else None
+          if gradle_code != target_code:
+              errors.append(f"app/build.gradle.kts: versionCode={gradle_code} != {target_code}")
+          if gradle_name != target_ver:
+              errors.append(f"app/build.gradle.kts: versionName={gradle_name} != {target_ver}")
+
+          if errors:
+              print("Falha de sincronismo de versão:", file=sys.stderr)
+              for err in errors:
+                  print(f" - {err}", file=sys.stderr)
+              sys.exit(1)
+
+          print(target_ver)
+          PY
+          )
 
           IPK_FILE="smart-tv/mk21play_${TV_VER}_all.ipk"
-          test -f "$IPK_FILE" || (echo "IPK $IPK_FILE não encontrado" && exit 1)
+          test -f "$IPK_FILE" || { echo "IPK $IPK_FILE não encontrado"; exit 1; }
           PKG_VER=$(dpkg-deb --field "$IPK_FILE" Version)
-          test "$PKG_VER" = "$TV_VER" || (echo "Versão interna do pacote IPK $PKG_VER difere de $TV_VER" && exit 1)
-          echo "Smart TV IPK $TV_VER validado com sucesso."
+          test "$PKG_VER" = "$TV_VER" || { echo "Versão interna do pacote IPK $PKG_VER difere de $TV_VER"; exit 1; }
+          echo "Sincronismo multiplataforma e Smart TV IPK $TV_VER validados com sucesso."
           echo "tv_version=$TV_VER" >> "$GITHUB_OUTPUT"
 
       - name: Write artifact checksums
         run: |
+          set -euo pipefail
           VER=$(python3 -c "import json; print(json.load(open('smart-tv/version.json'))['version'])")
           IPK="smart-tv/mk21play_${VER}_all.ipk"
           # Ordem fixa e caminhos relativos à raiz: "sha256sum -c SHA256SUMS"
@@ -251,6 +329,7 @@ jobs:
 
       - name: List generated apps
         run: |
+          set -euo pipefail
           echo "## Aplicativos gerados" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Android APK: \`mk21.apk\`" >> "$GITHUB_STEP_SUMMARY"

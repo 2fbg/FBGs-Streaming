@@ -2095,22 +2095,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                 _updateCheckState.value = UpdateCheckState.Downloading(0, 0L, 0L)
                 
+                val allowedOtaHosts = setOf(
+                    "raw.githubusercontent.com",
+                    "github.com",
+                    "objects.githubusercontent.com",
+                    "release-assets.githubusercontent.com"
+                )
+                fun isAllowedOtaUrl(raw: String): Boolean {
+                    val parsed = runCatching { URL(raw) }.getOrNull() ?: return false
+                    return parsed.protocol.equals("https", ignoreCase = true) &&
+                        allowedOtaHosts.any { it.equals(parsed.host, ignoreCase = true) }
+                }
+                if (!isAllowedOtaUrl(downloadUrl)) {
+                    throw SecurityException("URL de atualização fora da política HTTPS confiável.")
+                }
+
                 var currentUrl = downloadUrl
                 var connection: HttpURLConnection
                 var redirects = 0
                 while (true) {
+                    if (!isAllowedOtaUrl(currentUrl)) {
+                        throw SecurityException("Destino de redirecionamento OTA não confiável.")
+                    }
                     val url = URL(currentUrl)
                     connection = url.openConnection() as HttpURLConnection
-                    connection.instanceFollowRedirects = true
+                    connection.instanceFollowRedirects = false
                     connection.setRequestProperty("User-Agent", "MK21-Android")
                     connection.connectTimeout = 15000
                     connection.readTimeout = 30000
                     val status = connection.responseCode
                     if (status == HttpURLConnection.HTTP_MOVED_TEMP || status == HttpURLConnection.HTTP_MOVED_PERM || status == 307 || status == 308) {
                         val location = connection.getHeaderField("Location")
-                        currentUrl = if (location.startsWith("http://") || location.startsWith("https://")) location else URL(url, location).toString()
+                        connection.disconnect()
+                        if (location.isNullOrBlank()) {
+                            throw SecurityException("Redirecionamento OTA sem cabeçalho Location.")
+                        }
+                        currentUrl = URL(url, location).toString()
+                        if (!isAllowedOtaUrl(currentUrl)) {
+                            throw SecurityException("Redirecionamento OTA bloqueado pela allowlist HTTPS.")
+                        }
                         redirects++
-                        if (redirects > 5) break
+                        if (redirects > 5) {
+                            throw SecurityException("Excesso de redirecionamentos no download da atualização.")
+                        }
                         continue
                     }
                     break
@@ -2184,8 +2211,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     installApk(context, apkFile)
                 }
             } catch (e: Exception) {
-                if (downloadedApk?.exists() == true && downloadedApk.length() < 1_000_000L) {
-                    downloadedApk.delete()
+                if (e is SecurityException || (downloadedApk?.exists() == true && downloadedApk.length() < 1_000_000L)) {
+                    downloadedApk?.delete()
                 }
                 _updateCheckState.value = UpdateCheckState.Error("Falha no download da atualização: ${e.message}")
             }
