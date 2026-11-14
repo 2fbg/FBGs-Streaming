@@ -1,0 +1,296 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de release a publicar (ex: v2.8.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve release tag and validate signing secrets
+        id: release-meta
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          SECRET_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME:-}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${INPUT_TAG}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag inválida para release: '$TAG' (esperado formato vX.Y.Z)."
+            exit 1
+          fi
+          VER="${TAG#v}"
+
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${STORE_PASSWORD:-}" ]; then
+            echo "::error::Secrets ANDROID_KEYSTORE_BASE64 e STORE_PASSWORD são obrigatórios para publicar release."
+            exit 1
+          fi
+          if [ "$KEY_ALIAS" != "upload" ]; then
+            echo "::error::KEY_ALIAS está definido como '$KEY_ALIAS', mas app/build.gradle.kts exige alias 'upload'."
+            exit 1
+          fi
+
+          KS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-upload.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KS"
+          chmod 600 "$KS"
+
+          EFF_KEY_PASS="${KEY_PASSWORD:-$STORE_PASSWORD}"
+          keytool -list -keystore "$KS" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null
+
+          # Extrai o SHA-256 do certificado de upload (ou usa o secret explícito), sem expor senhas.
+          CERT_PIN="${SECRET_CERT_SHA256:-}"
+          if [ -z "$CERT_PIN" ]; then
+            CERT_PIN=$(keytool -list -v -keystore "$KS" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" \
+              | awk -F'SHA256:' '/SHA256:/ {gsub(/[^A-Fa-f0-9]/, "", $2); print tolower($2); exit}')
+          else
+            CERT_PIN=$(printf '%s' "$CERT_PIN" | tr -cd 'A-Fa-f0-9' | tr '[:upper:]' '[:lower:]')
+          fi
+          if [[ ! "$CERT_PIN" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::Não foi possível determinar um EXPECTED_CERT_SHA256 válido."
+            exit 1
+          fi
+
+          # Confere se a tag bate com app/build.gradle.kts e version.json antes de compilar.
+          python3 - "$VER" <<'PY'
+          import json, re, sys
+          ver = sys.argv[1]
+          with open("version.json", encoding="utf-8") as f:
+              manifest_ver = str(json.load(f).get("version"))
+          with open("app/build.gradle.kts", encoding="utf-8") as f:
+              gradle_text = f.read()
+          m = re.search(r'^\s*versionName\s*=\s*"([^"]+)"', gradle_text, re.MULTILINE)
+          gradle_ver = m.group(1) if m else None
+          if manifest_ver != ver or gradle_ver != ver:
+              print(f"::error::Tag v{ver} diverge de version.json ({manifest_ver}) ou build.gradle.kts ({gradle_ver}).", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "keystore_path=$KS" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$CERT_PIN"
+          echo "cert_pin=$CERT_PIN" >> "$GITHUB_OUTPUT"
+          echo "key_password_set=true" >> "$GITHUB_OUTPUT"
+
+      - name: Test and build signed release APK
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          KEYSTORE_PATH: ${{ steps.release-meta.outputs.keystore_path }}
+          EXPECTED_CERT_SHA256: ${{ steps.release-meta.outputs.cert_pin }}
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          if [ -z "${KEY_PASSWORD:-}" ]; then
+            export KEY_PASSWORD="$STORE_PASSWORD"
+          fi
+          if [ ! -f "app/google-services.json" ]; then
+            mkdir -p app
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "736577956980",
+              "project_id": "gen-lang-client-0474959166",
+              "storage_bucket": "gen-lang-client-0474959166.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:736577956980:android:8b24803d286868ab723521",
+                  "android_client_info": {
+                    "package_name": "com.aistudio.multiservidor.iptvmk"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDbFO4VGaBNxxphP99Mu6NbKZ1nATzHMmI"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
+          ./gradlew testDebugUnitTest --no-daemon
+          ./gradlew assembleRelease --no-daemon
+
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          test -f "$APK" || { echo "APK de release não encontrado."; exit 1; }
+          cp "$APK" mk21.apk
+
+          APKSIGNER=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          test -n "$APKSIGNER" || { echo "apksigner não encontrado."; exit 1; }
+          "$APKSIGNER" verify --verbose mk21.apk > /dev/null
+          CERTS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-release-certs.txt"
+          "$APKSIGNER" verify --print-certs mk21.apk > "$CERTS"
+          if grep -q "CN=Android Debug" "$CERTS"; then
+            echo "::error::APK de release saiu assinado com chave de debug."
+            exit 1
+          fi
+
+      - name: Package IPK, stamp manifests and verify hashes
+        env:
+          TAG: ${{ steps.release-meta.outputs.tag }}
+          VER: ${{ steps.release-meta.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 smart-tv/package_ipk.py
+
+          RELEASE_APK_URL="https://github.com/${REPO}/releases/download/${TAG}/mk21.apk"
+          IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
+
+          python3 - "$VER" "$RELEASE_APK_URL" "$IPK_PATH" <<'PY'
+          import hashlib, json, sys
+
+          ver, release_apk_url, ipk_path = sys.argv[1:4]
+          with open(ipk_path, "rb") as f:
+              ipk_sha = hashlib.sha256(f.read()).hexdigest()
+
+          for path in ("version.json", "api/version.json", "smart-tv/version.json", "smart-tv/mk21-tv/version.json"):
+              with open(path, "r", encoding="utf-8") as f:
+                  data = json.load(f)
+              data["apkUrl"] = release_apk_url
+              data["downloadUrl"] = release_apk_url
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(data, f, indent=2, ensure_ascii=False)
+                  f.write("\n")
+
+          for path in ("apps.json", "smart-tv/apps.json"):
+              with open(path, "r", encoding="utf-8") as f:
+                  apps = json.load(f)
+              pkg = apps["packages"][0]
+              pkg["version"] = ver
+              pkg["sourceUrl"] = f"https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/{ipk_path}"
+              pkg["manifest"]["version"] = ver
+              pkg["manifest"]["ipkUrl"] = pkg["sourceUrl"]
+              pkg["manifest"]["ipkHash"]["sha256"] = ipk_sha
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(apps, f, indent=2, ensure_ascii=False)
+                  f.write("\n")
+          PY
+
+          node scripts/sync-web.mjs
+          node scripts/sync-web.mjs --check
+          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "$IPK_PATH" --require-release-url
+
+          sha256sum \
+            mk21.apk \
+            "$IPK_PATH" \
+            version.json \
+            api/version.json \
+            web/version.json \
+            web/api/version.json \
+            public/version.json \
+            public/api/version.json \
+            smart-tv/version.json \
+            smart-tv/mk21-tv/version.json \
+            > SHA256SUMS
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release-meta.outputs.tag }}
+          VER: ${{ steps.release-meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
+          NOTES=$(python3 -c "import json; print(json.load(open('version.json', encoding='utf-8')).get('releaseNotes', 'Release ' + '${TAG}'))")
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS --clobber
+          else
+            gh release create "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS \
+              --title "MK21 Play ${TAG}" \
+              --notes "$NOTES"
+          fi
+
+      - name: Commit updated manifests and fallback APK [skip ci]
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release-meta.outputs.tag }}
+          VER: ${{ steps.release-meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Remove fallback gerado se não existir no repositório antes do commit
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            mk21.apk \
+            "smart-tv/mk21play_${VER}_all.ipk" \
+            smart-tv/mk21.ipk \
+            smart-tv/mk21-tv.ipk \
+            "web/mk21play_${VER}_all.ipk" \
+            web/mk21.ipk \
+            version.json \
+            api/version.json \
+            web/version.json \
+            web/api/version.json \
+            public/version.json \
+            public/api/version.json \
+            smart-tv/version.json \
+            smart-tv/mk21-tv/version.json \
+            apps.json \
+            web/apps.json \
+            public/apps.json \
+            smart-tv/apps.json
+
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração nos manifestos ou binários para commitar."
+            exit 0
+          fi
+
+          git commit -m "chore(release): publish ${TAG} manifests and binaries [skip ci]"
+          if ! git push origin "HEAD:main"; then
+            BRANCH="chore/release-manifests-${TAG}"
+            git push -f origin "HEAD:${BRANCH}"
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "chore(release): atualizar manifestos e binários ${TAG}" \
+              --body "Atualização automática pós-release ${TAG} com SHA-256 real do APK/IPK publicados. [skip ci]"
+          fi

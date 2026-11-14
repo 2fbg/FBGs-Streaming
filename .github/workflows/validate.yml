@@ -219,7 +219,8 @@ jobs:
           node --check smart-tv/mk21-tv/app.js
           node --check api/proxy.js
           node --check web/api/proxy.js
-          node --test smart-tv/tests/proxy-security.test.js smart-tv/tests/alternative-sources.test.js smart-tv/tests/catalog-utils.test.js
+          node --test smart-tv/tests/proxy-security.test.js smart-tv/tests/alternative-sources.test.js smart-tv/tests/catalog-utils.test.js smart-tv/tests/release-manifest.test.js
+          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "smart-tv/mk21play_$(python3 -c "import json; print(json.load(open('version.json'))['version'])")_all.ipk" --require-release-url
           python3 -m py_compile smart-tv/package_ipk.py
           python3 -m unittest discover -s smart-tv/tests -v
 

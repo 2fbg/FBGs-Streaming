@@ -2,11 +2,15 @@ package com.fbg.streaming
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.viewmodel.AppViewModel
 import com.fbg.streaming.security.ApkSignatureVerifier
 import com.fbg.streaming.security.ApkVerificationResult
 import com.fbg.streaming.update.Mk21UpdateManager
 import com.fbg.streaming.update.UpdateInfo
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -216,6 +220,162 @@ class Mk21UpdateSecurityTest {
         )
         assertTrue(validResult)
         File(updatesDir, "mk21_2.8.0.apk").delete()
+    }
+
+    @Test
+    fun `AppViewModel checkForUpdates via Mk21UpdateManager rejects untrusted manifest and announces manual download when pin is empty`() = runBlocking {
+        val app = context.applicationContext as android.app.Application
+        val vmUntrusted = AppViewModel(app)
+        vmUntrusted.expectedCertPinOverride = ""
+        val badManifest = """
+            {
+              "versionCode": 9999,
+              "versionName": "9.9.9",
+              "apkUrl": "https://evil.example.org/mk21.apk",
+              "apkSha256": "${"a".repeat(64)}"
+            }
+        """.trimIndent()
+        vmUntrusted.updateManagerFactory = { ctx ->
+            Mk21UpdateManager(ctx, httpClient = clientReturning(200, badManifest), minApkSizeBytes = 10L)
+        }
+        vmUntrusted.checkForUpdates()
+        val errState = withTimeout(5_000) {
+            vmUntrusted.updateCheckState.first {
+                it is AppViewModel.UpdateCheckState.Error ||
+                    it is AppViewModel.UpdateCheckState.Available ||
+                    it is AppViewModel.UpdateCheckState.UpToDate
+            }
+        }
+        assertTrue(errState is AppViewModel.UpdateCheckState.Error)
+
+        val vmValid = AppViewModel(app)
+        vmValid.expectedCertPinOverride = ""
+        val validManifest = """
+            {
+              "versionCode": 9999,
+              "versionName": "9.9.9",
+              "apkUrl": "https://github.com/2fbg/FBGs-Streaming/releases/download/v9.9.9/mk21.apk",
+              "apkSha256": "${"a".repeat(64)}",
+              "sizeBytes": 5777533,
+              "changelog": "Release de teste"
+            }
+        """.trimIndent()
+        vmValid.updateManagerFactory = { ctx ->
+            Mk21UpdateManager(
+                ctx,
+                httpClient = clientReturning(200, validManifest),
+                expectedCertSha256 = vmValid.effectiveExpectedCertPin(),
+                minApkSizeBytes = 10L
+            )
+        }
+        vmValid.checkForUpdates()
+        val availState = withTimeout(5_000) {
+            vmValid.updateCheckState.first {
+                it is AppViewModel.UpdateCheckState.Available ||
+                    it is AppViewModel.UpdateCheckState.Error
+            }
+        }
+        assertTrue(availState is AppViewModel.UpdateCheckState.Available)
+        val info = (availState as AppViewModel.UpdateCheckState.Available).info
+        assertTrue(info.body.contains("EXPECTED_CERT_SHA256"))
+
+        // Mesmo com manifesto disponível, instalação in-app falha fechado enquanto pin estiver vazio
+        vmValid.startInAppDownloadAndInstall(context, info.downloadUrl, info.expectedSha256, info.expectedSizeBytes)
+        val blockedState = withTimeout(5_000) {
+            vmValid.updateCheckState.first {
+                it is AppViewModel.UpdateCheckState.Error
+            }
+        }
+        assertTrue(
+            (blockedState as AppViewModel.UpdateCheckState.Error)
+                .error.contains("EXPECTED_CERT_SHA256")
+        )
+    }
+
+    @Test
+    fun `AppViewModel download path enforces allowlist, sha256, cert pin mismatch and blocks installApk without pin`() = runBlocking {
+        val app = context.applicationContext as android.app.Application
+        val vm = AppViewModel(app)
+        val pinnedHex = "f".repeat(64)
+        vm.expectedCertPinOverride = pinnedHex
+
+        val payloadBytes = "fake-apk-payload-for-cert-pin-check".toByteArray()
+        val payloadSha = MessageDigest.getInstance("SHA-256")
+            .digest(payloadBytes)
+            .joinToString("") { "%02x".format(it) }
+
+        val apkClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(payloadBytes.toResponseBody("application/vnd.android.package-archive".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        vm.updateManagerFactory = { ctx ->
+            Mk21UpdateManager(
+                context = ctx,
+                httpClient = apkClient,
+                expectedCertSha256 = vm.effectiveExpectedCertPin(),
+                minApkSizeBytes = 10L
+            )
+        }
+
+        // 1. Host fora da allowlist falha fechado
+        vm.startInAppDownloadAndInstall(context, "https://attacker.invalid/mk21.apk", payloadSha, payloadBytes.size.toLong())
+        val hostError = withTimeout(5_000) {
+            vm.updateCheckState.first {
+                it is AppViewModel.UpdateCheckState.Error
+            }
+        }
+        assertTrue(hostError is AppViewModel.UpdateCheckState.Error)
+
+        // 2. SHA-256 inválido falha fechado
+        vm.startInAppDownloadAndInstall(
+            context,
+            "https://github.com/2fbg/FBGs-Streaming/releases/download/v2.8.0/mk21.apk",
+            "invalid-sha",
+            0L
+        )
+        val shaError = withTimeout(5_000) {
+            vm.updateCheckState.first {
+                it is AppViewModel.UpdateCheckState.Error
+            }
+        }
+        assertTrue(shaError is AppViewModel.UpdateCheckState.Error)
+
+        // 3. Pin configurado + payload que não passa na verificação de assinatura deve rejeitar e apagar arquivo
+        vm.startInAppDownloadAndInstall(
+            context,
+            "https://github.com/2fbg/FBGs-Streaming/releases/download/v2.8.0/mk21.apk",
+            payloadSha,
+            payloadBytes.size.toLong()
+        )
+        val certError = withTimeout(5_000) {
+            vm.updateCheckState.first {
+                it is AppViewModel.UpdateCheckState.Error &&
+                    it.error.contains("certificado", ignoreCase = true)
+            }
+        }
+        assertTrue(certError is AppViewModel.UpdateCheckState.Error)
+        val updatesDir = File(context.externalCacheDir ?: context.cacheDir, "updates")
+        assertFalse(File(updatesDir, "mk21_2.8.0.apk").exists())
+
+        // 4. installApk com pin vazio deve recusar sem disparar Intent de instalação
+        vm.expectedCertPinOverride = ""
+        val tempApk = File(context.cacheDir, "dummy-no-pin.apk").apply { writeBytes(payloadBytes) }
+        try {
+            vm.installApk(context, tempApk)
+            assertTrue(vm.updateCheckState.value is AppViewModel.UpdateCheckState.Error)
+            val nextIntent = org.robolectric.Shadows.shadowOf(app).nextStartedActivity
+            assertNull(nextIntent)
+        } finally {
+            tempApk.delete()
+        }
     }
 
     private fun clientReturning(code: Int, bodyText: String): OkHttpClient {

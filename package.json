@@ -10,7 +10,8 @@
     "test:players": "jest src/players",
     "build:tv": "node esbuild.config.mjs",
     "sync:web": "node scripts/sync-web.mjs",
-    "check:web": "node scripts/sync-web.mjs --check"
+    "check:web": "node scripts/sync-web.mjs --check",
+    "verify:release": "node scripts/verify-release-manifests.mjs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

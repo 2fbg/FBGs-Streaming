@@ -52,31 +52,29 @@ if (!googleServicesFile.exists()) {
   }
 }
 
-fun decodeBase64OrGenerateKeystore(
+fun decodeBase64Keystore(
   keystoreFile: java.io.File,
-  base64File: java.io.File,
-  alias: String,
-  dname: String,
-  storePass: String,
-  keyPass: String
-) {
-  if (keystoreFile.exists()) return
+  base64File: java.io.File
+): Boolean {
+  if (keystoreFile.exists()) return true
+  if (!base64File.exists()) return false
+  val base64Text = base64File.readText().trim()
+  val cleanBase64 = base64Text.replace("\\s".toRegex(), "")
+  val decodedBytes = Base64.getDecoder().decode(cleanBase64)
+  keystoreFile.parentFile?.mkdirs()
+  keystoreFile.writeBytes(decodedBytes)
+  println("Decoded keystore from base64 to ${keystoreFile.absolutePath}")
+  return true
+}
 
-  if (base64File.exists()) {
-    try {
-      val base64Text = base64File.readText().trim()
-      val cleanBase64 = base64Text.replace("\\s".toRegex(), "")
-      val decodedBytes = Base64.getDecoder().decode(cleanBase64)
-      keystoreFile.writeBytes(decodedBytes)
-      println("Decoded keystore from base64 to ${keystoreFile.absolutePath}")
-      return
-    } catch (e: Exception) {
-      println("Failed to decode base64 file ${base64File.name}: ${e.message}")
-    }
-  }
+fun ensureDebugKeystore(
+  keystoreFile: java.io.File,
+  base64File: java.io.File
+) {
+  if (decodeBase64Keystore(keystoreFile, base64File)) return
 
   try {
-    println("Keystore not found. Generating on-the-fly: ${keystoreFile.absolutePath}")
+    println("Debug keystore not found. Generating on-the-fly: ${keystoreFile.absolutePath}")
     val storeType = if (keystoreFile.name.endsWith(".jks", ignoreCase = true)) "JKS" else "PKCS12"
     val pb = ProcessBuilder(
       "keytool", "-genkeypair",
@@ -86,20 +84,20 @@ fun decodeBase64OrGenerateKeystore(
       "-keyalg", "RSA",
       "-keysize", "2048",
       "-validity", "10000",
-      "-alias", alias,
-      "-storepass", storePass,
-      "-keypass", keyPass,
-      "-dname", dname
+      "-alias", "androiddebugkey",
+      "-storepass", "android",
+      "-keypass", "android",
+      "-dname", "CN=Android Debug, O=Android, C=US"
     )
     val process = pb.start()
     val exitCode = process.waitFor()
     if (exitCode != 0) {
       System.err.println("Keytool failed with exit code: $exitCode")
     } else {
-      println("Successfully generated keystore: ${keystoreFile.absolutePath}")
+      println("Successfully generated debug keystore: ${keystoreFile.absolutePath}")
     }
   } catch (e: Exception) {
-    System.err.println("Error generating keystore on-the-fly: ${e.message}")
+    System.err.println("Error generating debug keystore on-the-fly: ${e.message}")
   }
 }
 
@@ -129,26 +127,35 @@ android {
 
     val licenseSecret = System.getenv("LICENSE_SECRET") ?: "MK21_DEFAULT_HMAC_SECRET"
     buildConfigField("String", "LICENSE_SECRET", "\"$licenseSecret\"")
+
+    val expectedCertSha256 = (
+      project.findProperty("EXPECTED_CERT_SHA256")?.toString()
+        ?: System.getenv("EXPECTED_CERT_SHA256")
+        ?: ""
+      )
+      .replace("\"", "")
+      .trim()
+    buildConfigField("String", "EXPECTED_CERT_SHA256", "\"$expectedCertSha256\"")
+  }
+
+  val releaseStorePass = System.getenv("STORE_PASSWORD")?.takeIf { it.isNotBlank() }
+  val releaseKeyPass = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() }
+  val releaseKeystorePath = System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+  val defaultReleaseKeystore = File(rootProject.rootDir, "my-upload-key.jks")
+  val defaultReleaseBase64 = File(rootProject.rootDir, "my-upload-key.base64")
+  val releaseKeystoreFile = if (releaseKeystorePath != null) {
+    file(releaseKeystorePath)
+  } else {
+    defaultReleaseKeystore
   }
 
   signingConfigs {
-    val storePass = System.getenv("STORE_PASSWORD")
-    val keyPass = System.getenv("KEY_PASSWORD")
-    val hasReleaseCredentials = !storePass.isNullOrEmpty() && !keyPass.isNullOrEmpty()
-
     create("debugConfig") {
       enableV1Signing = true
       enableV2Signing = true
       val keystoreFile = File(rootProject.rootDir, "debug.keystore")
       val base64File = File(rootProject.rootDir, "debug.keystore.base64")
-      decodeBase64OrGenerateKeystore(
-        keystoreFile,
-        base64File,
-        "androiddebugkey",
-        "CN=Android Debug, O=Android, C=US",
-        "android",
-        "android"
-      )
+      ensureDebugKeystore(keystoreFile, base64File)
       storeFile = keystoreFile
       storePassword = "android"
       keyAlias = "androiddebugkey"
@@ -158,29 +165,49 @@ android {
     create("release") {
       enableV1Signing = true
       enableV2Signing = true
-      if (hasReleaseCredentials) {
-        val keystorePath = System.getenv("KEYSTORE_PATH")
-        val keystoreFile = if (!keystorePath.isNullOrEmpty()) file(keystorePath) else File(rootProject.rootDir, "my-upload-key.jks")
-        val base64File = File(rootProject.rootDir, "my-upload-key.base64")
-        decodeBase64OrGenerateKeystore(
-          keystoreFile,
-          base64File,
-          "upload",
-          "CN=Fabio Guarniere, O=MK21, C=BR",
-          storePass,
-          keyPass
+      if (releaseStorePass != null && releaseKeyPass != null &&
+        (releaseKeystoreFile.exists() || (releaseKeystorePath == null && defaultReleaseBase64.exists()))
+      ) {
+        if (!releaseKeystoreFile.exists() && releaseKeystorePath == null && defaultReleaseBase64.exists()) {
+          decodeBase64Keystore(releaseKeystoreFile, defaultReleaseBase64)
+        }
+        storeFile = releaseKeystoreFile
+        storePassword = releaseStorePass
+        keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
+        keyPassword = releaseKeyPass
+      }
+    }
+  }
+
+  gradle.taskGraph.whenReady {
+    val isReleaseTaskRequested = allTasks.any { task ->
+      val name = task.name
+      (name.contains("Release", ignoreCase = true) || name == "bundle" || name == "assemble") &&
+        name != "generateReleaseKeystore"
+    }
+    if (isReleaseTaskRequested) {
+      val missingVars = mutableListOf<String>()
+      if (releaseStorePass == null) missingVars.add("STORE_PASSWORD")
+      if (releaseKeyPass == null) missingVars.add("KEY_PASSWORD")
+      if (releaseKeystorePath == null && !defaultReleaseKeystore.exists() && !defaultReleaseBase64.exists()) {
+        missingVars.add("KEYSTORE_PATH")
+      }
+      if (missingVars.isNotEmpty()) {
+        throw GradleException(
+          "Assinatura de release obrigatória ausente. Variáveis faltando: ${missingVars.joinToString(", ")}. " +
+            "Defina STORE_PASSWORD, KEY_PASSWORD e KEYSTORE_PATH antes de compilar release."
         )
-        storeFile = keystoreFile
-        storePassword = storePass
-        keyAlias = "upload"
-        keyPassword = keyPass
-      } else {
-        // Fallback to debug keystore for development / preview release builds
-        val debugKeystore = File(rootProject.rootDir, "debug.keystore")
-        storeFile = debugKeystore
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
+      }
+      if (!releaseKeystoreFile.exists()) {
+        if (releaseKeystorePath == null && defaultReleaseBase64.exists()) {
+          decodeBase64Keystore(releaseKeystoreFile, defaultReleaseBase64)
+        }
+      }
+      if (!releaseKeystoreFile.exists()) {
+        throw GradleException(
+          "Keystore de release não encontrado em '${releaseKeystoreFile.absolutePath}'. " +
+            "Verifique KEYSTORE_PATH ou forneça my-upload-key.base64 existente (nunca gerar em build)."
+        )
       }
     }
   }
@@ -280,14 +307,26 @@ dependencies {
 }
 
 tasks.register("generateReleaseKeystore") {
+  group = "signing"
+  description = "Gera manualmente my-upload-key.jks e my-upload-key.base64 (requer -PgenerateKeystore=true)."
+  val generateOptIn = project.findProperty("generateKeystore")?.toString()?.equals("true", ignoreCase = true) == true
+  doFirst {
+    if (!generateOptIn) {
+      throw GradleException("generateReleaseKeystore exige opt-in explícito: execute com -PgenerateKeystore=true.")
+    }
+  }
   doLast {
+    if (!generateOptIn) {
+      throw GradleException("generateReleaseKeystore exige opt-in explícito: execute com -PgenerateKeystore=true.")
+    }
     val keystoreFile = file("${rootDir}/my-upload-key.jks")
     if (keystoreFile.exists()) {
       println("Keystore already exists at ${keystoreFile.absolutePath}")
       return@doLast
     }
-    val storePass = System.getenv("STORE_PASSWORD")
+    val storePass = System.getenv("STORE_PASSWORD")?.takeIf { it.isNotBlank() }
         ?: throw GradleException("STORE_PASSWORD não definido. Configure no .env ou CI/CD.")
+    val keyPass = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: storePass
     val pb = ProcessBuilder(
       "keytool", "-genkeypair",
       "-v",
@@ -297,7 +336,7 @@ tasks.register("generateReleaseKeystore") {
       "-validity", "10000",
       "-alias", "upload",
       "-storepass", storePass,
-      "-keypass", storePass,
+      "-keypass", keyPass,
       "-dname", "CN=Fabio Guarniere, O=MK21, C=BR"
     )
     val exitCode = pb.inheritIO().start().waitFor()
@@ -305,8 +344,7 @@ tasks.register("generateReleaseKeystore") {
       throw GradleException("Failed to generate keystore with keytool, exit code: $exitCode")
     }
     println("Keystore successfully created at ${keystoreFile.absolutePath}!")
-    
-    // Now convert it to base64 so it can be committed
+
     val base64File = file("${rootDir}/my-upload-key.base64")
     val bytes = keystoreFile.readBytes()
     val base64Text = Base64.getEncoder().encodeToString(bytes)
