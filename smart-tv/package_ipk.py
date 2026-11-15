@@ -196,6 +196,48 @@ def stamp_version_manifests(manifests, version, ipk_path):
     )
 
 
+def stamp_apps_manifests(manifests, version, ipk_path):
+    """Publish the built IPK SHA-256 in every matching webOS store catalog (apps.json)."""
+    ipk_sha256 = _sha256_of(ipk_path)
+    updated = []
+
+    for manifest_path in manifests:
+        if not os.path.exists(manifest_path):
+            continue
+        with open(manifest_path, "r", encoding="utf-8") as file:
+            current_content = file.read()
+        catalog = json.loads(current_content)
+        packages = catalog.get("packages")
+        if not isinstance(packages, list) or not packages or not isinstance(packages[0], dict):
+            continue
+        pkg = packages[0]
+        declared_version = str(pkg.get("version", ""))
+        if declared_version != str(version):
+            print(
+                f"[-] Skipping {manifest_path}: declares version {declared_version or 'unknown'!r}, "
+                f"build is {version!r}"
+            )
+            continue
+        pkg_manifest = pkg.get("manifest")
+        if not isinstance(pkg_manifest, dict):
+            continue
+        ipk_hash = pkg_manifest.get("ipkHash")
+        if not isinstance(ipk_hash, dict):
+            ipk_hash = {}
+            pkg_manifest["ipkHash"] = ipk_hash
+        ipk_hash["sha256"] = ipk_sha256
+        new_content = json.dumps(catalog, indent=2, ensure_ascii=False) + "\n"
+        updated.append(manifest_path)
+        if new_content == current_content:
+            print(f"[=] {manifest_path} already up to date: ipkHash.sha256={ipk_sha256}")
+            continue
+        with open(manifest_path, "w", encoding="utf-8") as file:
+            file.write(new_content)
+        print(f"[*] Stamped {manifest_path}: ipkHash.sha256={ipk_sha256}")
+
+    return updated
+
+
 def stamp_apk_manifests(manifests, version, apk_path):
     """Publish the built APK hash and size, which the Android updater verifies on download."""
     apk_sha256 = _sha256_of(apk_path)
@@ -346,6 +388,13 @@ if __name__ == "__main__":
         os.path.join(web_dir, "api", "version.json"),
     ]
 
+    apps_manifests = [
+        os.path.join(script_dir, "apps.json"),
+        os.path.join(root_dir, "apps.json"),
+        os.path.join(root_dir, "public", "apps.json"),
+        os.path.join(web_dir, "apps.json"),
+    ]
+
     # Stamp the APK before packaging, because the app bundles its own version.json.
     apk_path = os.path.join(root_dir, "mk21.apk")
     if os.path.exists(apk_path):
@@ -373,3 +422,4 @@ if __name__ == "__main__":
 
     # Publish the generated hash/size in the release manifests that match this version
     stamp_version_manifests(release_manifests, app_version, dst)
+    stamp_apps_manifests(apps_manifests, app_version, dst)

@@ -17,6 +17,7 @@ from package_ipk import (
     DEFAULT_BUILD_TIMESTAMP,
     build_ipk,
     stamp_apk_manifests,
+    stamp_apps_manifests,
     stamp_version_manifests,
 )
 
@@ -223,6 +224,67 @@ class PackageIpkTests(unittest.TestCase):
 
             with open(stale_path, encoding="utf-8") as file:
                 self.assertEqual(json.load(file), {"version": "2.3.7"})
+
+    def test_stamps_built_ipk_hash_into_matching_apps_manifests(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ipk_path = os.path.join(temp_dir, "mk21.ipk")
+            with open(ipk_path, "wb") as file:
+                file.write(b"fake-ipk-content")
+            expected_sha256 = hashlib.sha256(b"fake-ipk-content").hexdigest()
+
+            matching_path = os.path.join(temp_dir, "apps.json")
+            stale_path = os.path.join(temp_dir, "stale-apps.json")
+            with open(matching_path, "w", encoding="utf-8") as file:
+                json.dump(
+                    {
+                        "name": "MK21",
+                        "packages": [
+                            {
+                                "id": "com.mk21.tv",
+                                "version": "2.8.0",
+                                "manifest": {
+                                    "id": "com.mk21.tv",
+                                    "version": "2.8.0",
+                                    "ipkHash": {"sha256": "old-sha"},
+                                },
+                            }
+                        ],
+                    },
+                    file,
+                )
+            with open(stale_path, "w", encoding="utf-8") as file:
+                json.dump(
+                    {
+                        "name": "MK21",
+                        "packages": [
+                            {
+                                "id": "com.mk21.tv",
+                                "version": "2.7.9",
+                                "manifest": {
+                                    "id": "com.mk21.tv",
+                                    "version": "2.7.9",
+                                    "ipkHash": {"sha256": "keep-old"},
+                                },
+                            }
+                        ],
+                    },
+                    file,
+                )
+
+            updated = stamp_apps_manifests(
+                [matching_path, stale_path, os.path.join(temp_dir, "missing.json")],
+                "2.8.0",
+                ipk_path,
+            )
+
+            self.assertEqual(updated, [matching_path])
+            with open(matching_path, encoding="utf-8") as file:
+                catalog = json.load(file)
+            self.assertEqual(catalog["packages"][0]["manifest"]["ipkHash"]["sha256"], expected_sha256)
+
+            with open(stale_path, encoding="utf-8") as file:
+                stale_catalog = json.load(file)
+            self.assertEqual(stale_catalog["packages"][0]["manifest"]["ipkHash"]["sha256"], "keep-old")
 
     def test_rejects_launcher_icon_with_wrong_dimensions(self):
         with tempfile.TemporaryDirectory() as temp_dir:
