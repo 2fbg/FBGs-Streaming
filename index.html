@@ -1637,6 +1637,22 @@
             };
         }
 
+        function escapeHtml(str) {
+            return String(str == null ? '' : str).replace(/[&<>"']/g, function(ch) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+            });
+        }
+
+        function sanitizeImageUrl(rawUrl) {
+            if (!rawUrl || typeof rawUrl !== 'string') return '';
+            const trimmed = rawUrl.trim();
+            if (!trimmed) return '';
+            if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
+                return trimmed;
+            }
+            return '';
+        }
+
         // Inline replica of servers.json to work flawlessly offline or context-free (avoid CORS issues when testing locally via file://)
         const PREDEFINED_SERVERS = [
             { id: "server_1", name: "VLOG", baseUrl: "http://tocombox21.cyou", lotusCode: "21001", webCode: "303496" },
@@ -2141,10 +2157,19 @@
 
                 if (chNameEl) chNameEl.textContent = item.name || 'Canal Desconhecido';
                 if (logoContainer) {
-                    if (item.logo) {
-                        logoContainer.innerHTML = `<img src="${item.logo}" class="w-full h-full object-contain p-1" onerror="this.parentElement.innerHTML='<i class=\\'fa-solid fa-tv text-red-500 text-xl\\'></i>'">`;
+                    const safeLogoUrl = sanitizeImageUrl(item.logo);
+                    logoContainer.innerHTML = '';
+                    if (safeLogoUrl) {
+                        const img = document.createElement('img');
+                        img.src = safeLogoUrl;
+                        img.className = 'w-full h-full object-contain p-1';
+                        img.alt = item.name || 'Logo';
+                        img.onerror = function() {
+                            logoContainer.innerHTML = '<i class="fa-solid fa-tv text-red-500 text-xl"></i>';
+                        };
+                        logoContainer.appendChild(img);
                     } else {
-                        logoContainer.innerHTML = `<i class="fa-solid fa-tv text-red-500 text-xl"></i>`;
+                        logoContainer.innerHTML = '<i class="fa-solid fa-tv text-red-500 text-xl"></i>';
                     }
                 }
 
@@ -2185,12 +2210,12 @@
                         itemRow.innerHTML = `
                             <div class="flex items-center justify-between text-xs">
                                 <span class="font-mono text-slate-350 font-bold flex items-center gap-1.5">
-                                    <i class="fa-regular fa-clock text-[10px] text-slate-500"></i> ${startH} - ${stopH}
+                                    <i class="fa-regular fa-clock text-[10px] text-slate-500"></i> ${escapeHtml(startH)} - ${escapeHtml(stopH)}
                                 </span>
                                 ${isNow ? '<span class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 bg-red-600/30 text-red-400 border border-red-500/30 rounded-full flex items-center gap-1"><span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> NO AR</span>' : (isPast ? '<span class="text-[9px] font-semibold text-slate-500 uppercase">Encerrado</span>' : '<span class="text-[9px] font-semibold text-slate-400 uppercase">A Seguir</span>')}
                             </div>
-                            <h5 class="text-sm font-bold text-white ${isNow ? 'text-red-400 font-extrabold' : ''}">${prog.title}</h5>
-                            ${prog.description ? `<p class="text-xs text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">${prog.description}</p>` : ''}
+                            <h5 class="text-sm font-bold text-white ${isNow ? 'text-red-400 font-extrabold' : ''}">${escapeHtml(prog.title)}</h5>
+                            ${prog.description ? `<p class="text-xs text-slate-400 line-clamp-2 mt-0.5 leading-relaxed">${escapeHtml(prog.description)}</p>` : ''}
                         `;
                         listEl.appendChild(itemRow);
                     });
@@ -2251,12 +2276,14 @@
             // Atualiza cartões de canais visíveis que coincidam com o canal atualizado
             if (ev.detail && ev.detail.item) {
                 const targetName = ev.detail.item.name;
-                const cardLabels = document.querySelectorAll(`[data-epg-for="${targetName.replace(/"/g, '\\"')}"]`);
+                const cardLabels = Array.from(document.querySelectorAll('[data-epg-for]')).filter(
+                    el => el.getAttribute('data-epg-for') === targetName
+                );
                 cardLabels.forEach(el => {
                     const info = window.EpgManager.getProgramInfo(ev.detail.item);
                     el.innerHTML = `
                         <span class="w-1.5 h-1.5 bg-red-500 rounded-full inline-block animate-pulse shrink-0"></span>
-                        <span class="truncate text-red-400">NO AR: ${info.currentTitle}</span>
+                        <span class="truncate text-red-400">NO AR: ${escapeHtml(info.currentTitle)}</span>
                         ${info.isReal ? '<span class="text-[8px] px-1 py-0.2 bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 rounded font-black tracking-widest shrink-0">XMLTV</span>' : ''}
                     `;
                 });
@@ -3012,7 +3039,7 @@
                     : 'fast-server-chip px-2.5 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-between gap-1.5 bg-[#070709] border-slate-800 text-slate-400 hover:text-white hover:border-slate-700';
 
                 btn.innerHTML = `
-                    <span class="truncate">${srv.name}</span>
+                    <span class="truncate">${escapeHtml(srv.name)}</span>
                     <span class="w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-400 ring-2 ring-emerald-500/50' : 'bg-emerald-500'} shrink-0"></span>
                 `;
 
@@ -3237,16 +3264,16 @@
                     card.className = 'flex items-center gap-2.5 p-2.5 bg-black/60 hover:bg-slate-900 border border-slate-800 hover:border-[#E50914] rounded-xl transition-all duration-200 text-left group';
 
                     const bgClass = avatarBgs[idx % avatarBgs.length];
-                    const initial = (prof.username || 'U').charAt(0).toUpperCase();
+                    const initial = escapeHtml((prof.username || 'U').charAt(0).toUpperCase());
 
                     card.innerHTML = `
                         <div class="w-9 h-9 rounded-lg ${bgClass} flex items-center justify-center text-white font-extrabold text-sm shrink-0 shadow-md">
                             ${initial}
                         </div>
                         <div class="overflow-hidden flex-grow min-w-0">
-                            <p class="text-xs font-bold text-slate-100 truncate group-hover:text-[#E50914] transition-colors">${prof.username}</p>
+                            <p class="text-xs font-bold text-slate-100 truncate group-hover:text-[#E50914] transition-colors">${escapeHtml(prof.username)}</p>
                             <p class="text-[10px] text-slate-400 truncate flex items-center gap-1">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${prof.serverName}
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>${escapeHtml(prof.serverName)}
                             </p>
                         </div>
                         <i class="fa-solid fa-arrow-right text-[10px] text-slate-600 group-hover:text-[#E50914] pr-1"></i>
@@ -3258,7 +3285,7 @@
                         if (passInput) passInput.value = prof.password;
                         if (serverCodeInput) serverCodeInput.value = prof.serverName;
                         if (serverCodeBadge) {
-                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${prof.serverName}</span>`;
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${escapeHtml(prof.serverName)}</span>`;
                         }
                         performLogin();
                     };
@@ -3290,7 +3317,7 @@
                 const selName = serverSelector.options[serverSelector.selectedIndex].text;
                 serverCodeInput.value = selName;
                 if (serverCodeBadge) {
-                    serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${selName}</span>`;
+                    serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${escapeHtml(selName)}</span>`;
                 }
             }
 
@@ -3502,7 +3529,7 @@
                         const label = document.getElementById('selected-server-name-label');
                         if (label) label.textContent = matched.name;
                         if (serverCodeBadge) {
-                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${matched.name}</span>`;
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${escapeHtml(matched.name)}</span>`;
                         }
                         renderFastServerChips();
                     } else {
@@ -3526,7 +3553,7 @@
                         localStorage.setItem('mk21_server_name', selName);
                         localStorage.setItem('mk21_baseUrl', serverSelector.value);
                         if (serverCodeBadge) {
-                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${selName}</span>`;
+                            serverCodeBadge.innerHTML = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">✓ ${escapeHtml(selName)}</span>`;
                         }
                         renderFastServerChips();
                     }
@@ -4596,13 +4623,13 @@
 
             if (type === 'success') {
                 toast.className += ' bg-emerald-950/90 border-emerald-500/30 text-emerald-400';
-                toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> ${message}`;
+                toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> ${escapeHtml(message)}`;
             } else if (type === 'error') {
                 toast.className += ' bg-red-950/90 border-red-500/30 text-red-500';
-                toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-red-500"></i> ${message}`;
+                toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-red-500"></i> ${escapeHtml(message)}`;
             } else {
                 toast.className += ' bg-slate-900/95 border-slate-800 text-slate-300';
-                toast.innerHTML = `<i class="fa-solid fa-circle-info text-red-500"></i> ${message}`;
+                toast.innerHTML = `<i class="fa-solid fa-circle-info text-red-500"></i> ${escapeHtml(message)}`;
             }
 
             document.body.appendChild(toast);
@@ -4679,9 +4706,11 @@
                 const card = document.createElement('div');
                 card.className = "flex-shrink-0 w-36 bg-slate-900/60 p-2.5 border border-slate-850 hover:border-red-600/30 rounded-xl cursor-pointer hover:bg-slate-850 transition-all flex flex-col relative group snap-start";
 
-                const logoHtml = item.logo
-                    ? `<img class="w-full h-16 rounded-lg object-contain bg-slate-950 p-1 border border-slate-800 group-hover:scale-105 transition-transform duration-300" src="${item.logo}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%222%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="">`
-                    : `<div class="w-full h-16 rounded-lg bg-red-950/20 text-red-500 font-extrabold text-sm flex items-center justify-center border border-red-500/10 group-hover:scale-105 transition-transform duration-300">${item.name.charAt(0).toUpperCase()}</div>`;
+                const safeContinueLogo = sanitizeImageUrl(item.logo);
+                const safeItemName = escapeHtml(item.name || '');
+                const logoHtml = safeContinueLogo
+                    ? `<img class="w-full h-16 rounded-lg object-contain bg-slate-950 p-1 border border-slate-800 group-hover:scale-105 transition-transform duration-300" src="${escapeHtml(safeContinueLogo)}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%222%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>'" alt="">`
+                    : `<div class="w-full h-16 rounded-lg bg-red-950/20 text-red-500 font-extrabold text-sm flex items-center justify-center border border-red-500/10 group-hover:scale-105 transition-transform duration-300">${escapeHtml((item.name || '?').charAt(0).toUpperCase())}</div>`;
 
                 let sBadge = '';
                 if (item.type === 'LIVE') sBadge = '<span class="absolute top-3 left-3 z-10 px-1.5 py-0.5 bg-[#E50914] text-white text-[8px] font-black uppercase rounded shadow-md tracking-wider">AO VIVO</span>';
@@ -4697,10 +4726,10 @@
                         </div>
                     </div>
                     <div class="min-w-0 flex flex-col justify-between flex-grow h-7">
-                        <h4 class="font-extrabold text-[10px] leading-tight text-slate-200 truncate group-hover:text-red-500 transition-colors">${item.name}</h4>
+                        <h4 class="font-extrabold text-[10px] leading-tight text-slate-200 truncate group-hover:text-red-500 transition-colors">${safeItemName}</h4>
                         <div class="flex items-center justify-between text-[8px] text-slate-500 font-medium pb-0.5">
-                            <span class="truncate max-w-[85px]">${item.category}</span>
-                            <button class="remove-history-btn p-1 text-slate-600 hover:text-red-500 rounded transition-colors" data-url="${item.url}" title="Remover histórico">
+                            <span class="truncate max-w-[85px]">${escapeHtml(item.category)}</span>
+                            <button class="remove-history-btn p-1 text-slate-600 hover:text-red-500 rounded transition-colors" data-url="${escapeHtml(item.url)}" title="Remover histórico">
                                 <i class="fa-solid fa-trash-can text-[8px]"></i>
                             </button>
                         </div>
@@ -5020,7 +5049,7 @@
                         ${ep.episode < 10 ? '0' + ep.episode : ep.episode}
                     </div>
                     <div class="flex-grow min-w-0">
-                        <h5 class="text-[11px] truncate leading-tight">${ep.title}</h5>
+                        <h5 class="text-[11px] truncate leading-tight">${escapeHtml(ep.title)}</h5>
                         <p class="text-[9px] text-slate-500 truncate font-semibold mt-0.5">Mídia: S${ep.season < 10 ? '0' + ep.season : ep.season}E${ep.episode < 10 ? '0' + ep.episode : ep.episode}</p>
                     </div>
                     <div class="text-right shrink-0">
@@ -5343,11 +5372,12 @@
 
             for (let i = 0; i < categories.length; i++) {
                 const cat = categories[i];
+                const safeCat = escapeHtml(cat);
                 const count = categoryCounts[cat];
                 const isActive = (activeCategory === cat);
                 html += `
-                    <button data-cat="${cat}" class="cat-select-btn w-full text-left px-3 py-2.5 text-xs font-semibold rounded-xl flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-red-950/25 to-slate-900/10 text-red-500 border-l-[3px] border-l-[#E50914] pl-2 font-black shadow-md shadow-black/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/40' }">
-                        <span class="truncate pr-2">${cat}</span>
+                    <button data-cat="${safeCat}" class="cat-select-btn w-full text-left px-3 py-2.5 text-xs font-semibold rounded-xl flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-red-950/25 to-slate-900/10 text-red-500 border-l-[3px] border-l-[#E50914] pl-2 font-black shadow-md shadow-black/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/40' }">
+                        <span class="truncate pr-2">${safeCat}</span>
                         <span class="text-[10px] bg-slate-950 px-1.5 py-0.5 rounded-md font-mono ${isActive ? 'text-red-400 border border-red-900/30' : 'text-slate-500 border border-slate-900'}">${count}</span>
                     </button>
                 `;
@@ -5372,10 +5402,11 @@
                 `;
                 for (let i = 0; i < Math.min(categories.length, 35); i++) {
                     const cat = categories[i];
+                    const safeCat = escapeHtml(cat);
                     const isActive = (activeCategory === cat);
                     chipsHtml += `
-                        <button data-cat="${cat}" class="quick-cat-chip px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 shrink-0 flex items-center gap-1.5 ${isActive ? 'bg-[#E50914] text-white shadow-md shadow-red-950/40 font-black' : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800'}" tabindex="0">
-                            <span class="truncate max-w-[150px]">${cat}</span>
+                        <button data-cat="${safeCat}" class="quick-cat-chip px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 shrink-0 flex items-center gap-1.5 ${isActive ? 'bg-[#E50914] text-white shadow-md shadow-red-950/40 font-black' : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800'}" tabindex="0">
+                            <span class="truncate max-w-[150px]">${safeCat}</span>
                             <span class="text-[10px] font-mono opacity-75">(${categoryCounts[cat]})</span>
                         </button>
                     `;
@@ -5490,13 +5521,14 @@
                     const epText = countShow === 1 ? '1 ep' : `${countShow} eps`;
                     const seText = countSeas === 1 ? '1 temp' : `${countSeas} temps`;
 
-                    const posterUrl = show.logo || '';
+                    const posterUrl = sanitizeImageUrl(show.logo || '');
                     const safePoster = posterUrl ? (location.protocol === 'https:' && posterUrl.startsWith('http://') ? posterUrl.replace(/^http:\/\//i, 'https://') : posterUrl) : '';
+                    const safeShowTitle = escapeHtml(show.title);
                     const imageHtml = posterUrl
-                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-300" src="${safePoster}" data-orig-src="${posterUrl}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${show.title.replace(/"/g, '&quot;')}">`
+                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-300" src="${escapeHtml(safePoster)}" data-orig-src="${escapeHtml(posterUrl)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${safeShowTitle}">`
                         : `<div class="w-full aspect-[2/3] bg-gradient-to-tr from-slate-950 to-slate-900 text-red-500 flex flex-col items-center justify-center p-2 border-b border-slate-800/40">
                              <i class="fa-solid fa-tv text-2xl mb-1 opacity-40"></i>
-                             <span class="font-extrabold text-[9px] text-center uppercase tracking-wider line-clamp-2">${show.title}</span>
+                             <span class="font-extrabold text-[9px] text-center uppercase tracking-wider line-clamp-2">${safeShowTitle}</span>
                           </div>`;
 
                     colCard.innerHTML = `
@@ -5507,10 +5539,10 @@
                             </div>
                         </div>
                         <div class="p-2 flex flex-col flex-grow justify-between min-w-0">
-                            <h4 class="font-bold text-[11px] text-slate-100 group-hover:text-red-500 transition-colors line-clamp-1 leading-snug">${show.title}</h4>
+                            <h4 class="font-bold text-[11px] text-slate-100 group-hover:text-red-500 transition-colors line-clamp-1 leading-snug">${safeShowTitle}</h4>
                             <div class="flex items-center gap-1 mt-1 flex-wrap">
-                                <span class="text-[7.5px] text-[#E50914] bg-red-950/40 border border-red-500/20 px-1 py-0.2 rounded font-black uppercase tracking-wider">${seText}</span>
-                                <span class="text-[7.5px] text-slate-300 bg-slate-950 border border-slate-800 px-1 py-0.2 rounded font-bold font-mono">${epText}</span>
+                                <span class="text-[7.5px] text-[#E50914] bg-red-950/40 border border-red-500/20 px-1 py-0.2 rounded font-black uppercase tracking-wider">${escapeHtml(seText)}</span>
+                                <span class="text-[7.5px] text-slate-300 bg-slate-950 border border-slate-800 px-1 py-0.2 rounded font-bold font-mono">${escapeHtml(epText)}</span>
                             </div>
                         </div>
                     `;
@@ -5555,13 +5587,14 @@
                     colCard.className = "group relative bg-slate-900/80 hover:bg-slate-850/80 border border-slate-800/60 hover:border-red-500/40 rounded-xl overflow-hidden cursor-pointer flex flex-col transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-red-950/20 media-item-card focus:outline-none";
                     colCard.setAttribute('tabindex', '0');
 
-                    const posterUrl = item.logo || '';
+                    const posterUrl = sanitizeImageUrl(item.logo || '');
                     const safePoster = posterUrl ? (location.protocol === 'https:' && posterUrl.startsWith('http://') ? posterUrl.replace(/^http:\/\//i, 'https://') : posterUrl) : '';
+                    const safeItemTitle = escapeHtml(item.name);
                     const imageHtml = posterUrl
-                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-300" src="${safePoster}" data-orig-src="${posterUrl}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${item.name.replace(/"/g, '&quot;')}">`
+                        ? `<img class="w-full aspect-[2/3] object-cover bg-slate-950 border-b border-slate-800/40 group-hover:scale-105 transition-transform duration-300" src="${escapeHtml(safePoster)}" data-orig-src="${escapeHtml(posterUrl)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22180%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23E50914%22 stroke-width=%221%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${safeItemTitle}">`
                         : `<div class="w-full aspect-[2/3] bg-gradient-to-tr from-slate-950 to-slate-900 text-red-500 flex flex-col items-center justify-center p-2 border-b border-slate-800/40">
                              <i class="fa-solid fa-film text-2xl mb-1 opacity-40"></i>
-                             <span class="font-extrabold text-[9px] text-center uppercase tracking-wider line-clamp-2">${item.name}</span>
+                             <span class="font-extrabold text-[9px] text-center uppercase tracking-wider line-clamp-2">${safeItemTitle}</span>
                           </div>`;
 
                     colCard.innerHTML = `
@@ -5570,13 +5603,13 @@
                             <div class="absolute top-1.5 left-1.5 bg-gradient-to-r from-red-650 to-red-600 text-white text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded shadow z-10">
                                 FILME
                             </div>
-                            ${item.rating ? `<div class="absolute top-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-amber-400 text-[8px] font-bold px-1.5 py-0.5 rounded shadow z-10 flex items-center gap-0.5"><i class="fa-solid fa-star text-[7px]"></i> ${item.rating}</div>` : ''}
+                            ${item.rating ? `<div class="absolute top-1.5 right-1.5 bg-black/80 backdrop-blur-sm text-amber-400 text-[8px] font-bold px-1.5 py-0.5 rounded shadow z-10 flex items-center gap-0.5"><i class="fa-solid fa-star text-[7px]"></i> ${escapeHtml(item.rating)}</div>` : ''}
                         </div>
                         <div class="p-2 flex flex-col flex-grow justify-between min-w-0">
-                            <h4 class="font-bold text-[11px] text-slate-100 group-hover:text-red-500 transition-colors line-clamp-1 leading-snug">${item.name}</h4>
+                            <h4 class="font-bold text-[11px] text-slate-100 group-hover:text-red-500 transition-colors line-clamp-1 leading-snug">${safeItemTitle}</h4>
                             <div class="text-[8.5px] text-slate-400 mt-1 truncate font-medium flex items-center gap-1">
                                 <i class="fa-solid fa-masks-theater text-[7px] text-red-500/65"></i>
-                                <span class="truncate">${item.category}</span>
+                                <span class="truncate">${escapeHtml(item.category)}</span>
                             </div>
                         </div>
                     `;
@@ -5587,12 +5620,13 @@
                     colCard.setAttribute('tabindex', '0');
                     colCard.setAttribute('data-channel-id', item.id || item.stream_id || item.name);
 
-                    const logoHtml = item.logo
-                        ? `<img class="channel-card-logo" src="${item.logo}" data-orig-src="${item.logo}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23ff9800%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${item.name.replace(/"/g, '&quot;')}">`
-                        : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500/20 to-slate-800 text-amber-400 flex items-center justify-center font-black text-xl border border-amber-500/30 shadow">${item.name.charAt(0).toUpperCase()}</div>`;
+                    const safeChannelLogo = sanitizeImageUrl(item.logo || '');
+                    const safeName = escapeHtml(item.name);
+                    const logoHtml = safeChannelLogo
+                        ? `<img class="channel-card-logo" src="${escapeHtml(safeChannelLogo)}" data-orig-src="${escapeHtml(safeChannelLogo)}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='/api/proxy?url='+encodeURIComponent(this.dataset.origSrc);}else{this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23ff9800%22 stroke-width=%221.5%22><rect x=%222%22 y=%222%22 width=%2220%22 height=%2220%22 rx=%224%22/><path d=%22m9%22 m12 l3 l-3 l-3%22/></svg>';}" alt="${safeName}">`
+                        : `<div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500/20 to-slate-800 text-amber-400 flex items-center justify-center font-black text-xl border border-amber-500/30 shadow">${escapeHtml((item.name || '?').charAt(0).toUpperCase())}</div>`;
 
                     const epgInfo = window.EpgManager ? window.EpgManager.getProgramInfo(item) : { currentTitle: getCurrentEpgProgram(item.name), isReal: false };
-                    const safeName = item.name.replace(/"/g, '&quot;');
 
                     colCard.innerHTML = `
                         <!-- Badge Ao Vivo Sutil -->
@@ -5609,9 +5643,9 @@
 
                         <!-- Rodapé com Overlay Semi-Transparente e Nome do Canal -->
                         <div class="channel-card-footer">
-                            <div class="channel-card-name" title="${safeName}">${item.name}</div>
+                            <div class="channel-card-name" title="${safeName}">${safeName}</div>
                             <div class="channel-card-category" data-epg-for="${safeName}">
-                                ${epgInfo.currentTitle ? `<span class="text-amber-400 font-semibold truncate">${epgInfo.currentTitle}</span>` : `<span class="truncate">${item.category || 'Geral'}</span>`}
+                                ${epgInfo.currentTitle ? `<span class="text-amber-400 font-semibold truncate">${escapeHtml(epgInfo.currentTitle)}</span>` : `<span class="truncate">${escapeHtml(item.category || 'Geral')}</span>`}
                             </div>
                         </div>
                     `;
@@ -6968,7 +7002,7 @@
                     const btn = document.createElement('button');
                     const isActive = window.hlsPlayer.audioTrack === idx;
                     btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-                    btn.innerHTML = `<span>🔊 ${tr.name || tr.lang || ('Faixa de Áudio ' + (idx + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.innerHTML = `<span>🔊 ${escapeHtml(tr.name || tr.lang || ('Faixa de Áudio ' + (idx + 1)))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
                     btn.onclick = () => {
                         window.hlsPlayer.audioTrack = idx;
                         showNotification(`Áudio alterado: ${tr.name || tr.lang || (idx + 1)}`, 'info');
@@ -6983,7 +7017,7 @@
                     const btn = document.createElement('button');
                     const isActive = tr.enabled;
                     btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-                    btn.innerHTML = `<span>🔊 ${tr.label || tr.language || ('Faixa ' + (i + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.innerHTML = `<span>🔊 ${escapeHtml(tr.label || tr.language || ('Faixa ' + (i + 1)))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
                     btn.onclick = () => {
                         for (let j = 0; j < video.audioTracks.length; j++) {
                             video.audioTracks[j].enabled = (j === i);
@@ -7023,7 +7057,7 @@
                     const btn = document.createElement('button');
                     const isActive = window.hlsPlayer.subtitleTrack === idx;
                     btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-                    btn.innerHTML = `<span>💬 ${tr.name || tr.lang || ('Legenda ' + (idx + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.innerHTML = `<span>💬 ${escapeHtml(tr.name || tr.lang || ('Legenda ' + (idx + 1)))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
                     btn.onclick = () => {
                         window.hlsPlayer.subtitleTrack = idx;
                         showNotification(`Legenda: ${tr.name || tr.lang || (idx + 1)}`, 'info');
@@ -7038,7 +7072,7 @@
                     const btn = document.createElement('button');
                     const isActive = tr.mode === 'showing';
                     btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${isActive ? 'bg-[#E50914] text-white shadow' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'}`;
-                    btn.innerHTML = `<span>💬 ${tr.label || tr.language || ('Legenda ' + (i + 1))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
+                    btn.innerHTML = `<span>💬 ${escapeHtml(tr.label || tr.language || ('Legenda ' + (i + 1)))}</span> ${isActive ? '<i class="fa-solid fa-check text-xs"></i>' : ''}`;
                     btn.onclick = () => {
                         for (let j = 0; j < video.textTracks.length; j++) {
                             video.textTracks[j].mode = (j === i) ? 'showing' : 'disabled';

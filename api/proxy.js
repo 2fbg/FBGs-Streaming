@@ -261,6 +261,8 @@ function buildPinnedLookup(validatedAddresses) {
 
 function createProxyHandler(deps = {}) {
     const lookupFn = deps.lookup || dns.promises.lookup;
+    const httpImpl = deps.httpImpl || http;
+    const httpsImpl = deps.httpsImpl || https;
 
     return async function handler(req, res) {
         const origin = req.headers && req.headers.origin;
@@ -301,10 +303,16 @@ function createProxyHandler(deps = {}) {
             return;
         }
 
-        // Rate limiting check
+        // Rate limiting check (prioriza cabeçalho confiável de borda quando disponível)
+        const rawRealIp = req.headers && req.headers['x-real-ip'];
         const rawForwarded = req.headers && req.headers['x-forwarded-for'];
-        const clientIp = (typeof rawForwarded === 'string' ? rawForwarded.split(',')[0].trim() : '') ||
-            (req.socket && req.socket.remoteAddress) || 'unknown';
+        const forwardedList = typeof rawForwarded === 'string'
+            ? rawForwarded.split(',').map((item) => item.trim()).filter(Boolean)
+            : [];
+        const clientIp = (typeof rawRealIp === 'string' && rawRealIp.trim()) ||
+            (req.socket && req.socket.remoteAddress) ||
+            (forwardedList.length > 0 ? forwardedList[forwardedList.length - 1] : '') ||
+            'unknown';
         if (isRateLimited(clientIp)) {
             res.statusCode = 429;
             res.setHeader('Content-Type', 'application/json');
@@ -391,7 +399,7 @@ function createProxyHandler(deps = {}) {
                 }
 
                 const isHttps = parsedUrl.protocol === 'https:';
-                const client = isHttps ? https : http;
+                const client = isHttps ? httpsImpl : httpImpl;
 
                 const forwardHeaders = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
@@ -401,10 +409,10 @@ function createProxyHandler(deps = {}) {
                 };
 
                 if (req.headers['range']) {
-                    forwardHeaders['Range'] = req.headers['range'];
+                    forwardHeaders['Range'] = String(req.headers['range']).replace(/[\r\n]+/g, '');
                 }
                 if (req.headers['if-range']) {
-                    forwardHeaders['If-Range'] = req.headers['if-range'];
+                    forwardHeaders['If-Range'] = String(req.headers['if-range']).replace(/[\r\n]+/g, '');
                 }
 
                 const options = {
@@ -468,10 +476,18 @@ function createProxyHandler(deps = {}) {
                     }
 
                     if (proxyRes.headers['content-encoding']) {
-                        responseHeaders['Content-Encoding'] = proxyRes.headers['content-encoding'];
+                        responseHeaders['Content-Encoding'] = String(proxyRes.headers['content-encoding']).replace(/[\r\n]+/g, '');
                     }
                     if (proxyRes.headers['content-type']) {
-                        responseHeaders['Content-Type'] = proxyRes.headers['content-type'];
+                        const rawCt = String(proxyRes.headers['content-type']).replace(/[\r\n]+/g, '');
+                        // Neutraliza HTML/SVG retornados pelo upstream para impedir XSS na origem Vercel
+                        if (/(?:text\/html|application\/xhtml\+xml|image\/svg\+xml)/i.test(rawCt)) {
+                            responseHeaders['Content-Type'] = 'text/plain; charset=utf-8';
+                            responseHeaders['Content-Security-Policy'] = 'sandbox';
+                            responseHeaders['Content-Disposition'] = 'attachment; filename="proxied.txt"';
+                        } else {
+                            responseHeaders['Content-Type'] = rawCt;
+                        }
                     }
                     if (proxyRes.headers['content-length']) {
                         responseHeaders['Content-Length'] = proxyRes.headers['content-length'];

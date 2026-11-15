@@ -23,7 +23,7 @@ class GeminiAiService {
     // Lazy initialization to prevent startup crashes before Firebase is ready
     private val model by lazy {
         Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash"
+            modelName = "gemini-2.5-flash"
         )
     }
 

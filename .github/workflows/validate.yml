@@ -68,6 +68,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          SECRET_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
           LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
           REQUIRE_SIGNED: ${{ github.event.inputs.require_signed || 'false' }}
         run: |
@@ -80,6 +81,7 @@ jobs:
             echo "::warning::Secrets ANDROID_KEYSTORE_BASE64/STORE_PASSWORD ausentes: o APK do artifact sairá assinado com a chave de debug."
             echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "path=" >> "$GITHUB_OUTPUT"
+            echo "cert_pin=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -100,9 +102,22 @@ jobs:
           # Valida senha e alias antes de gastar o build: erro aqui aponta secret errado,
           # em vez de gerar um APK assinado com uma chave nova a cada run.
           keytool -list -keystore "$KS" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null
+          CERT_PIN="${SECRET_CERT_SHA256:-}"
+          if [ -z "$CERT_PIN" ]; then
+            CERT_PIN=$(keytool -list -v -keystore "$KS" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" \
+              | awk -F'SHA256:' '/SHA256:/ {gsub(/[^A-Fa-f0-9]/, "", $2); print tolower($2); exit}')
+          else
+            CERT_PIN=$(printf '%s' "$CERT_PIN" | tr -cd 'A-Fa-f0-9' | tr '[:upper:]' '[:lower:]')
+          fi
+          if [[ ! "$CERT_PIN" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::Não foi possível determinar um EXPECTED_CERT_SHA256 válido."
+            exit 1
+          fi
+          echo "::add-mask::$CERT_PIN"
           echo "Keystore validado: alias $KEY_ALIAS, $(stat -c%s "$KS") bytes."
           echo "signed=true" >> "$GITHUB_OUTPUT"
           echo "path=$KS" >> "$GITHUB_OUTPUT"
+          echo "cert_pin=$CERT_PIN" >> "$GITHUB_OUTPUT"
 
       - name: Android tests and build
         id: android-build
@@ -111,6 +126,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
           KEYSTORE_PATH: ${{ steps.release-keystore.outputs.path }}
+          EXPECTED_CERT_SHA256: ${{ steps.release-keystore.outputs.cert_pin || '' }}
           SIGNED: ${{ steps.release-keystore.outputs.signed }}
           LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
           ALLOW_LEGACY_LICENSE: ${{ vars.ALLOW_LEGACY_LICENSE || 'false' }}
@@ -179,7 +195,9 @@ jobs:
           test -n "${APK_SOURCE:-}" || { echo "apk_source vazio: o passo de build não publicou a saída"; exit 1; }
           test -f "$APK_SOURCE" || { echo "APK do build não encontrado: $APK_SOURCE"; exit 1; }
           cp "$APK_SOURCE" mk21.apk
+          npm run build:tv
           python3 smart-tv/package_ipk.py
+          node scripts/sync-web.mjs
 
           if [ "$SIGNED" = "true" ]; then
             # Garante que o carimbo foi feito sobre o APK de release, não sobre um fallback de debug.
@@ -353,6 +371,7 @@ jobs:
             web/version.json \
             web/api/version.json \
             public/version.json \
+            public/api/version.json \
             smart-tv/version.json \
             smart-tv/mk21-tv/version.json \
             > SHA256SUMS
@@ -370,6 +389,7 @@ jobs:
             web/version.json
             web/api/version.json
             public/version.json
+            public/api/version.json
             smart-tv/version.json
             smart-tv/mk21-tv/version.json
             SHA256SUMS

@@ -216,6 +216,11 @@ jobs:
                   f.write("\n")
           PY
 
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
+          npm run build:tv
+
           python3 smart-tv/package_ipk.py
 
           python3 - "$VER" "$IPK_PATH" "$RELEASE_IPK_URL" <<'PY'
@@ -299,10 +304,7 @@ jobs:
           git add \
             mk21.apk \
             "smart-tv/mk21play_${VER}_all.ipk" \
-            smart-tv/mk21.ipk \
-            smart-tv/mk21-tv.ipk \
-            "web/mk21play_${VER}_all.ipk" \
-            web/mk21.ipk \
+            smart-tv/mk21-tv/app.js \
             version.json \
             api/version.json \
             web/version.json \

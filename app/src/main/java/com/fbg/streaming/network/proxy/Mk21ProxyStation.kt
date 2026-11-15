@@ -57,8 +57,8 @@ class Mk21ProxyStation(
         .connectionPool(ConnectionPool(12, 5, TimeUnit.MINUTES))
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -117,7 +117,12 @@ class Mk21ProxyStation(
                 null
             } ?: continue
 
-            scope.launch { handleClient(clientSocket) }
+            scope.launch {
+                try {
+                    handleClient(clientSocket)
+                } catch (_: Exception) {
+                }
+            }
         }
     }
 
@@ -318,14 +323,28 @@ class Mk21ProxyStation(
         while (attempt < maxAttempts) {
             attempt++
             try {
-                val req = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", "MK21-MultiServidor/2.1 (Android; ExoPlayer)")
-                    .header("Accept", "*/*")
-                    .build()
-                val res = upstreamClient.newCall(req).execute()
-                if (res.isSuccessful) return res
-                res.close()
+                var currentUrl = url
+                var redirects = 0
+                while (redirects <= 5) {
+                    if (!isAllowedTargetUrl(currentUrl)) return null
+                    val req = Request.Builder()
+                        .url(currentUrl)
+                        .header("User-Agent", "MK21-MultiServidor/2.1 (Android; ExoPlayer)")
+                        .header("Accept", "*/*")
+                        .build()
+                    val res = upstreamClient.newCall(req).execute()
+                    if (res.isRedirect) {
+                        val location = res.header("Location")?.trim()
+                        res.close()
+                        if (location.isNullOrEmpty() || redirects == 5) break
+                        currentUrl = URI(currentUrl).resolve(location).toString()
+                        redirects++
+                        continue
+                    }
+                    if (res.isSuccessful) return res
+                    res.close()
+                    break
+                }
             } catch (_: Exception) {
             }
             if (attempt < maxAttempts) delay(delayMs)

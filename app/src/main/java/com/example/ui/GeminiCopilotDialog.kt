@@ -144,7 +144,7 @@ fun GeminiCopilotDialog(
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "Powered by Google Gemini API (gemini-3.8-flash)",
+                                    text = "Powered by Google Gemini API (gemini-2.5-flash)",
                                     fontSize = 10.sp,
                                     color = Color(0xFFFF9800),
                                     fontWeight = FontWeight.SemiBold

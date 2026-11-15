@@ -2818,7 +2818,7 @@ async function updateSmartTvEpg(item) {
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${sim.timeStr}`;
   if ($('previewEpgNow')) $('previewEpgNow').textContent = `NO AR: ${sim.title}`;
   if ($('previewEpgNext')) $('previewEpgNext').textContent = `A SEGUIR: ${sim.nextTitle}`;
-  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${sim.title}</b>`;
+  if ($('epgStatus')) $('epgStatus').innerHTML = `🔴 NO AR: <b>${escapeHtml(sim.title)}</b>`;
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${sim.progressPercent}%`;
   if ($('epgNext')) $('epgNext').textContent = `A seguir: ${sim.nextTitle}`;
@@ -2940,13 +2940,13 @@ function applyRealSmartTvEpg(item, listings) {
 
   if ($('epgTitle')) $('epgTitle').textContent = `▶ ${item.name}`;
   if ($('epgGroup')) $('epgGroup').textContent = `Categoria: ${item.group} • ${startH} - ${stopH}`;
-  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${current.title}</b>`;
+  if ($('previewEpgNow')) $('previewEpgNow').innerHTML = `NO AR: <b>${escapeHtml(current.title)}</b>`;
   if ($('previewEpgNext')) {
     const nextH = next ? new Date(next.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '--:--';
     $('previewEpgNext').textContent = `A SEGUIR (${nextH}): ${next ? next.title : 'Programação Normal'}`;
   }
   if ($('epgStatus')) {
-    $('epgStatus').innerHTML = `🔴 NO AR: <b>${current.title}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
+    $('epgStatus').innerHTML = `🔴 NO AR: <b>${escapeHtml(current.title)}</b> <span style="font-size:10px; background:rgba(16,185,129,0.25); color:#10b981; border:1px solid rgba(16,185,129,0.4); border-radius:4px; padding:1px 5px; margin-left:6px; font-weight:800;">📡 XMLTV REAL</span>`;
   }
   const pBar = document.querySelector('.epg-progress');
   if (pBar) pBar.style.width = `${pct}%`;
@@ -3405,11 +3405,11 @@ function renderOmnisearchResults() {
 
     btn.innerHTML = `
       <div class="omnisearch-item-header">
-        <span class="omnisearch-type-badge ${typeBadgeClass}">${typeLabel}</span>
+        <span class="omnisearch-type-badge ${typeBadgeClass}">${escapeHtml(typeLabel)}</span>
         <span style="font-size:12px; color:#ffd54f;">${item.isAdult ? '+18' : ''}</span>
       </div>
-      <div class="omnisearch-item-name">${item.name}</div>
-      <div class="omnisearch-item-group">${item.group || 'Geral'}</div>
+      <div class="omnisearch-item-name">${escapeHtml(item.name)}</div>
+      <div class="omnisearch-item-group">${escapeHtml(item.group || 'Geral')}</div>
     `;
 
     btn.onclick = () => {
@@ -3460,10 +3460,10 @@ function openEpgGuideModal() {
       const stopH = new Date(l.stop).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       html += `
         <div class="epg-schedule-row ${isNow ? 'active-now' : ''}">
-          <div class="epg-time-col">${startH} - ${stopH} ${isNow ? '<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span>' : ''}</div>
+          <div class="epg-time-col">${escapeHtml(startH)} - ${escapeHtml(stopH)} ${isNow ? '<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span>' : ''}</div>
           <div class="epg-details-col">
-            <div class="epg-sched-title">${l.title}</div>
-            <div class="epg-sched-desc">${l.desc || 'Sem sinopse disponível.'}</div>
+            <div class="epg-sched-title">${escapeHtml(l.title)}</div>
+            <div class="epg-sched-desc">${escapeHtml(l.desc || 'Sem sinopse disponível.')}</div>
           </div>
         </div>
       `;
@@ -3479,14 +3479,14 @@ function openEpgGuideModal() {
 
     list.innerHTML = `
       <div class="epg-schedule-row active-now">
-        <div class="epg-time-col">${h1} - ${h2}<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span></div>
+        <div class="epg-time-col">${escapeHtml(h1)} - ${escapeHtml(h2)}<br><span style="color:#10b981; font-size:11px; font-weight:800;">[NO AR]</span></div>
         <div class="epg-details-col">
-          <div class="epg-sched-title">${activeItem.name} - Ao Vivo</div>
-          <div class="epg-sched-desc">Transmissão em tempo real da categoria ${activeItem.group || 'Geral'}.</div>
+          <div class="epg-sched-title">${escapeHtml(activeItem.name)} - Ao Vivo</div>
+          <div class="epg-sched-desc">Transmissão em tempo real da categoria ${escapeHtml(activeItem.group || 'Geral')}.</div>
         </div>
       </div>
       <div class="epg-schedule-row">
-        <div class="epg-time-col">${h2} - ${h3}</div>
+        <div class="epg-time-col">${escapeHtml(h2)} - ${escapeHtml(h3)}</div>
         <div class="epg-details-col">
           <div class="epg-sched-title">Programação Sequencial</div>
           <div class="epg-sched-desc">Continuação da grade diária da emissora.</div>
@@ -5284,7 +5284,7 @@ function renderSettings(sec) {
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px;">
         <div style="background:#1a1e2d; padding:12px 16px; border-radius:8px;">
           <div style="font-size:14px; color:#888;">Usuário Conectado</div>
-          <div style="font-size:18px; font-weight:700; color:#4caf50;">${activeUserLabel}</div>
+          <div style="font-size:18px; font-weight:700; color:#4caf50;">${escapeHtml(activeUserLabel)}</div>
         </div>
         <div style="background:#1a1e2d; padding:12px 16px; border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
           <div>
@@ -5426,10 +5426,10 @@ function renderServerPanel() {
       <div class="server-manager-row ${ativo ? 'active-server' : ''}" style="margin-bottom:10px;">
         <div class="server-info-col">
           <div class="server-info-top-line">
-            <span class="server-info-name">${ativo ? '🟢' : '⚪'} Fonte ${i + 1}: ${cleanServerName(srv.name)}${ativo ? ' [✓ ATIVA]' : ''}</span>
-            <span class="server-row-sync-meta">• ${formatSyncTimestampShort(lastTs)}</span>
+            <span class="server-info-name">${ativo ? '🟢' : '⚪'} Fonte ${i + 1}: ${escapeHtml(cleanServerName(srv.name))}${ativo ? ' [✓ ATIVA]' : ''}</span>
+            <span class="server-row-sync-meta">• ${escapeHtml(formatSyncTimestampShort(lastTs))}</span>
           </div>
-          <div class="server-row-metrics" data-srv-metrics-id="${srv.id}">${buildPerServerMetricsPillsHtml(srvMetrics)}</div>
+          <div class="server-row-metrics" data-srv-metrics-id="${escapeHtml(srv.id)}">${buildPerServerMetricsPillsHtml(srvMetrics)}</div>
         </div>
         <div class="server-row-actions">
           <button type="button" class="btn-server-sync-one cfg-srv-sync-one" data-srv="${i}" tabindex="0">🔄 Sync</button>
@@ -5440,7 +5440,7 @@ function renderServerPanel() {
 
   box.innerHTML = `
     <h3 style="margin:0 0 8px 0; font-size:24px;">📡 Servidor / Fonte</h3>
-    <p style="color:#aaa; margin:0 0 12px 0; font-size:15px;">Fonte ativa: <strong style="color:#4caf50;">${cleanServerName(atual.name)}</strong>. Configure a sincronização ou confira os totais individuais por servidor.</p>
+    <p style="color:#aaa; margin:0 0 12px 0; font-size:15px;">Fonte ativa: <strong style="color:#4caf50;">${escapeHtml(cleanServerName(atual.name))}</strong>. Configure a sincronização ou confira os totais individuais por servidor.</p>
     <div class="server-metrics-grid" style="max-width:860px;">
       <div class="server-metric-card"><span class="server-metric-label">📺 Canais (Geral)</span><strong class="server-metric-value">${metrics.totalChannels.toLocaleString('pt-BR')}</strong></div>
       <div class="server-metric-card"><span class="server-metric-label">🎬 Filmes VOD (Geral)</span><strong class="server-metric-value">${metrics.totalVOD.toLocaleString('pt-BR')}</strong></div>

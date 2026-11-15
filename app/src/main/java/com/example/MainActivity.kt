@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
             addAction("com.example.ACTION_PREVIOUS")
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(pipReceiver, filter, android.content.Context.RECEIVER_EXPORTED)
+            registerReceiver(pipReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(pipReceiver, filter)
         }

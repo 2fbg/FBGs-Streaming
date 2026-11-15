@@ -408,18 +408,6 @@ if __name__ == "__main__":
 
     build_ipk(src, dst)
 
-    # Also generate mirrors for web and compatibility links
-    def copy_mirror(destination):
-        if os.path.abspath(dst) != os.path.abspath(destination):
-            shutil.copy2(dst, destination)
-
-    if os.path.exists(web_dir):
-        copy_mirror(os.path.join(web_dir, f"mk21play_{app_version}_all.ipk"))
-        copy_mirror(os.path.join(web_dir, "mk21.ipk"))
-    copy_mirror(os.path.join(root_dir, "mk21.ipk"))
-    copy_mirror(os.path.join(script_dir, "mk21.ipk"))
-    copy_mirror(os.path.join(script_dir, "mk21-tv.ipk"))
-
     # Publish the generated hash/size in the release manifests that match this version
     stamp_version_manifests(release_manifests, app_version, dst)
     stamp_apps_manifests(apps_manifests, app_version, dst)

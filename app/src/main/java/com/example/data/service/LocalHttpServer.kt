@@ -102,6 +102,7 @@ class LocalHttpServer {
 
     fun handleConnection(socket: Socket) {
         try {
+            socket.soTimeout = 10_000
             val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
             val firstLine = reader.readLine() ?: ""
             // Read headers until blank line
@@ -151,7 +152,7 @@ class LocalHttpServer {
                 val timeQuery = extractQueryParam(path, "time")
                 if (!timeQuery.isNullOrEmpty()) {
                     val actualTime = timeQuery.toFloatOrNull()
-                    if (actualTime != null) {
+                    if (actualTime != null && actualTime.isFinite() && actualTime >= 0f) {
                         tvCurrentTimeSeconds = actualTime
                     }
                 }
@@ -361,10 +362,17 @@ class LocalHttpServer {
             }
 
             val htmlBytes = html.toByteArray(Charsets.UTF_8)
+            val csp = "default-src 'self' https://vjs.zencdn.net; " +
+                "script-src 'self' 'unsafe-inline' https://vjs.zencdn.net; " +
+                "style-src 'self' 'unsafe-inline' https://vjs.zencdn.net; " +
+                "media-src * blob: data:; connect-src * blob:; img-src * data: blob:; " +
+                "frame-ancestors 'none'; base-uri 'self'"
             val responseHeader = "HTTP/1.1 200 OK\r\n" +
                 "Content-Type: text/html; charset=utf-8\r\n" +
                 "Content-Length: ${htmlBytes.size}\r\n" +
                 "Cache-Control: no-store\r\n" +
+                "Referrer-Policy: no-referrer\r\n" +
+                "Content-Security-Policy: $csp\r\n" +
                 "X-Content-Type-Options: nosniff\r\n" +
                 "Connection: close\r\n\r\n"
 

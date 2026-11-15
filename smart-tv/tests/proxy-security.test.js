@@ -132,3 +132,86 @@ test('handler rejects DNS-resolved private hosts with 403 and no internal error 
     assert.equal(res.headers['access-control-allow-origin'], 'https://bgstreaming.vercel.app');
     assert.match(res._body, /redes locais e privadas/i);
 });
+
+test('proxy neutralizes upstream text/html and image/svg+xml responses to prevent same-origin XSS', async () => {
+    const http = require('node:http');
+    const server = http.createServer((req, res) => {
+        if (req.url === '/evil.html') {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end('<script>alert(document.domain)</script>');
+            return;
+        }
+        if (req.url === '/evil.svg') {
+            res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+            res.end('<svg onload="alert(1)"></svg>');
+            return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
+        res.end('#EXTM3U\n');
+    });
+
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = server.address().port;
+
+    try {
+        const { PassThrough } = require('node:stream');
+        const originalHttpRequest = http.request;
+        // Inject a handler whose lookup returns public IP 93.184.216.34 while mocking upstream socket
+        const customTransport = {
+            request(options, cb) {
+                const upstreamReq = originalHttpRequest(
+                    {
+                        hostname: '127.0.0.1',
+                        port,
+                        path: options.path,
+                        method: options.method,
+                        headers: options.headers
+                    },
+                    cb
+                );
+                return upstreamReq;
+            }
+        };
+
+        const handler = proxy.createProxyHandler({
+            lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+            httpImpl: customTransport
+        });
+
+        for (const pathName of ['/evil.html', '/evil.svg']) {
+            const req = new EventEmitter();
+            req.method = 'GET';
+            req.url = `/api/proxy?url=${encodeURIComponent(`http://cdn.example.com${pathName}`)}`;
+            req.headers = {
+                origin: 'https://bgstreaming.vercel.app',
+                range: 'bytes=0-100\r\nX-Injected: bad'
+            };
+            req.socket = { remoteAddress: '203.0.113.11' };
+
+            const res = new PassThrough();
+            res.headers = {};
+            res.statusCode = 200;
+            res.setHeader = (k, v) => {
+                res.headers[k.toLowerCase()] = v;
+            };
+            res.writeHead = (code, headers = {}) => {
+                res.statusCode = code;
+                for (const [k, v] of Object.entries(headers)) {
+                    res.headers[k.toLowerCase()] = v;
+                }
+            };
+            await new Promise((resolve) => {
+                res.once('finish', resolve);
+                handler(req, res).catch(resolve);
+            });
+
+            assert.equal(res.statusCode, 200);
+            assert.equal(res.headers['content-type'], 'text/plain; charset=utf-8');
+            assert.equal(res.headers['content-security-policy'], 'sandbox');
+            assert.equal(res.headers['content-disposition'], 'attachment; filename="proxied.txt"');
+        }
+    } finally {
+        server.close();
+    }
+});
+

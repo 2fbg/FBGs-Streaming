@@ -140,7 +140,6 @@ object ApkSignatureVerifier {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val signingInfo = packageInfo.signingInfo
             signingInfo?.apkContentsSigners?.forEach { result.add(it.toByteArray()) }
-            signingInfo?.signingCertificateHistory?.forEach { result.add(it.toByteArray()) }
         } else {
             @Suppress("DEPRECATION")
             packageInfo.signatures?.forEach { result.add(it.toByteArray()) }

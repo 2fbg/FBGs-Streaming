@@ -3588,7 +3588,10 @@ fun ChannelEpgPreviewDialog(
 
                 if (streamId != null && baseUrl.isNotEmpty() && user.isNotEmpty() && pass.isNotEmpty()) {
                     val cleanBase = baseUrl.trimEnd('/')
-                    val epgApiUrl = "$cleanBase/player_api.php?username=$user&password=$pass&action=get_short_epg&stream_id=$streamId&limit=10"
+                    val encUser = java.net.URLEncoder.encode(user, "UTF-8")
+                    val encPass = java.net.URLEncoder.encode(pass, "UTF-8")
+                    val encStreamId = java.net.URLEncoder.encode(streamId, "UTF-8")
+                    val epgApiUrl = "$cleanBase/player_api.php?username=$encUser&password=$encPass&action=get_short_epg&stream_id=$encStreamId&limit=10"
                     val client = okhttp3.OkHttpClient.Builder()
                         .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                         .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
@@ -7547,8 +7550,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
 
                             Button(
                                 onClick = {
-                                    val isMasterBypass = currentInput == "admin2026" || currentInput == "guarniere2026" || currentInput == "mk21admin" || currentInput == "9999" || currentInput == "8888" || currentInput == "0000"
-                                    if (currentInput != adultPin && !isMasterBypass) {
+                                    if (currentInput != adultPin) {
                                         errorMessage = "Senha atual incorreta!"
                                     } else if (newInput.isEmpty()) {
                                         errorMessage = "A nova senha não pode ser vazia!"
