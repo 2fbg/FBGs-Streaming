@@ -5,6 +5,8 @@
  *  - version.json e espelhos (api/, web/, public/, smart-tv/)
  *  - SHA-256 e tamanho do binário APK (e opcionalmente IPK)
  *  - URL da release do APK quando --require-release-url for informado
+ *  - apps.json e smart-tv/apps.json (e espelhos web/ e public/): versão, ipkUrl/sourceUrl e
+ *    ipkHash.sha256 consistentes com version.json e com o IPK (loja webOS / Homebrew Channel)
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -32,6 +34,75 @@ export function parseGradleVersions(gradlePath) {
     versionCode: Number(codeMatch[1]),
     versionName: nameMatch[1],
   };
+}
+
+const APPS_MANIFEST_PATHS = ['apps.json', 'smart-tv/apps.json', 'web/apps.json', 'public/apps.json'];
+const REPO_SLUG = '2fbg/FBGs-Streaming';
+
+function readJsonSafe(absPath) {
+  try {
+    return { data: JSON.parse(fs.readFileSync(absPath, 'utf8')), error: null };
+  } catch (err) {
+    return { data: null, error: err.message };
+  }
+}
+
+/**
+ * Valida os catálogos apps.json usados por lojas webOS (ex.: Homebrew Channel).
+ * Aceita sourceUrl/ipkUrl apontando para a release OU para o raw da main (mesmo arquivo),
+ * exceto quando requireReleaseUrl=true: aí exige a URL da GitHub Release.
+ */
+export function verifyAppsManifests({ rootDir = DEFAULT_ROOT, rootManifest, requireReleaseUrl = false, ipkPath = null } = {}) {
+  const errors = [];
+  const version = String(rootManifest.version || '');
+  const ipkName = `mk21play_${version}_all.ipk`;
+  const releaseIpkUrl = `https://github.com/${REPO_SLUG}/releases/download/v${version}/${ipkName}`;
+  const rawIpkUrl = `https://raw.githubusercontent.com/${REPO_SLUG}/main/smart-tv/${ipkName}`;
+  const expectedIpkSha = String(rootManifest.ipkSha256 || '').trim().toLowerCase();
+  const actualIpkSha = ipkPath && fs.existsSync(ipkPath) ? sha256File(ipkPath) : null;
+
+  for (const rel of APPS_MANIFEST_PATHS) {
+    const abs = path.join(rootDir, rel);
+    if (!fs.existsSync(abs)) {
+      errors.push(`Catálogo ausente: ${rel}`);
+      continue;
+    }
+    const { data, error } = readJsonSafe(abs);
+    if (error) {
+      errors.push(`${rel}: JSON inválido (${error})`);
+      continue;
+    }
+    const pkg = Array.isArray(data?.packages) ? data.packages[0] : null;
+    if (!pkg || !pkg.manifest) {
+      errors.push(`${rel}: packages[0].manifest ausente`);
+      continue;
+    }
+    if (String(pkg.version || '') !== version) {
+      errors.push(`${rel}: packages[0].version (${pkg.version}) != version.json (${version})`);
+    }
+    if (String(pkg.manifest.version || '') !== version) {
+      errors.push(`${rel}: manifest.version (${pkg.manifest.version}) != version.json (${version})`);
+    }
+    if (!pkg.sourceUrl || pkg.sourceUrl !== pkg.manifest.ipkUrl) {
+      errors.push(`${rel}: sourceUrl e manifest.ipkUrl devem ser iguais (${pkg.sourceUrl} vs ${pkg.manifest.ipkUrl})`);
+    }
+    const allowed = requireReleaseUrl ? [releaseIpkUrl] : [releaseIpkUrl, rawIpkUrl];
+    if (!allowed.includes(String(pkg.manifest.ipkUrl || ''))) {
+      errors.push(`${rel}: manifest.ipkUrl deve ser ${allowed.join(' ou ')} (atual: ${pkg.manifest.ipkUrl})`);
+    }
+    const declared = String(pkg.manifest.ipkHash?.sha256 || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(declared)) {
+      errors.push(`${rel}: manifest.ipkHash.sha256 inválido ("${declared}")`);
+    } else {
+      if (expectedIpkSha && declared !== expectedIpkSha) {
+        errors.push(`${rel}: ipkHash.sha256 (${declared}) != ipkSha256 do version.json (${expectedIpkSha})`);
+      }
+      if (actualIpkSha && declared !== actualIpkSha) {
+        errors.push(`${rel}: ipkHash.sha256 (${declared}) não bate com ${ipkPath} (${actualIpkSha})`);
+      }
+    }
+  }
+  return errors;
 }
 
 export function verifyReleaseManifests({
@@ -124,6 +195,15 @@ export function verifyReleaseManifests({
       }
     }
   }
+
+  errors.push(
+    ...verifyAppsManifests({
+      rootDir,
+      rootManifest,
+      requireReleaseUrl,
+      ipkPath: ipkPath && fs.existsSync(ipkPath) ? ipkPath : null,
+    })
+  );
 
   return { ok: errors.length === 0, errors, version: targetVersion, versionCode: targetCode };
 }
@@ -284,6 +364,25 @@ export async function verifyRemoteAssets({
       label: 'ipkUrl',
       url: ipkUrl,
       expectedSha256: String(rootManifest.ipkSha256 || '').trim().toLowerCase(),
+      expectedSizeBytes: Number(rootManifest.ipkSizeBytes || 0),
+    });
+  }
+
+  // apps.json / smart-tv/apps.json: a URL que a loja webOS resolve também precisa estar no ar
+  // com o hash declarado em manifest.ipkHash.sha256 (deduplicado por URL).
+  const seenUrls = new Set(targets.map((t) => t.url));
+  for (const rel of ['apps.json', 'smart-tv/apps.json']) {
+    const abs = path.join(rootDir, rel);
+    if (!fs.existsSync(abs)) continue;
+    const { data } = readJsonSafe(abs);
+    const pkgManifest = Array.isArray(data?.packages) ? data.packages[0]?.manifest : null;
+    const appsIpkUrl = String(pkgManifest?.ipkUrl || '').trim();
+    if (!appsIpkUrl || seenUrls.has(appsIpkUrl)) continue;
+    seenUrls.add(appsIpkUrl);
+    targets.push({
+      label: `${rel} ipkUrl`,
+      url: appsIpkUrl,
+      expectedSha256: String(pkgManifest?.ipkHash?.sha256 || '').trim().toLowerCase(),
       expectedSizeBytes: Number(rootManifest.ipkSizeBytes || 0),
     });
   }

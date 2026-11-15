@@ -125,8 +125,27 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    val licenseSecret = System.getenv("LICENSE_SECRET") ?: "MK21_DEFAULT_HMAC_SECRET"
-    buildConfigField("String", "LICENSE_SECRET", "\"$licenseSecret\"")
+    // Segredo de licença: OBRIGATÓRIO em tarefas de release (sem fallback embutido no APK publicado).
+    // Em debug/testes unitários usa um valor local fixo, que nunca vai para um build de release.
+    val licenseSecretEnv = System.getenv("LICENSE_SECRET")?.trim().orEmpty()
+    val isReleaseBuild = project.gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+    if (isReleaseBuild && (licenseSecretEnv.length < 16 || licenseSecretEnv == "MK21_DEFAULT_HMAC_SECRET")) {
+      throw GradleException(
+        "LICENSE_SECRET ausente, curto (<16 caracteres) ou igual ao fallback antigo. " +
+          "Defina a variável de ambiente LICENSE_SECRET antes de compilar o release."
+      )
+    }
+    val licenseSecret = licenseSecretEnv.ifEmpty { "MK21_DEFAULT_HMAC_SECRET" }
+    buildConfigField(
+      "String",
+      "LICENSE_SECRET",
+      "\"" + licenseSecret.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    )
+
+    // Chaves legadas (MD5 + salt fixo) ficam DESLIGADAS por padrão. Para uma migração gradual,
+    // defina ALLOW_LEGACY_LICENSE=true no ambiente (no CI: variável de repositório).
+    val legacyLicenseEnabled = System.getenv("ALLOW_LEGACY_LICENSE")?.trim().equals("true", ignoreCase = true)
+    buildConfigField("boolean", "LEGACY_LICENSE_ENABLED", legacyLicenseEnabled.toString())
 
     val expectedCertSha256 = (
       project.findProperty("EXPECTED_CERT_SHA256")?.toString()

@@ -4,15 +4,26 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { verifyReleaseManifests, verifyRemoteAssets } from '../../scripts/verify-release-manifests.mjs';
+import { verifyAppsManifests, verifyReleaseManifests, verifyRemoteAssets } from '../../scripts/verify-release-manifests.mjs';
 
-function setupTempReleaseFixture({ version = '2.8.0', versionCode = 280, gradleCode = 280, apkContent = 'signed-apk-bytes', manifestApkSha = null } = {}) {
+function setupTempReleaseFixture({
+  version = '2.8.0',
+  versionCode = 280,
+  gradleCode = 280,
+  apkContent = 'signed-apk-bytes',
+  manifestApkSha = null,
+  appsIpkUrl = null,
+  appsIpkSha = null,
+  appsVersion = null,
+} = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mk21-release-test-'));
   fs.mkdirSync(path.join(dir, 'app'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'api'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'web/api'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'public/api'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'smart-tv'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'web'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'public'), { recursive: true });
 
   const apkPath = path.join(dir, 'mk21.apk');
   fs.writeFileSync(apkPath, apkContent);
@@ -52,6 +63,27 @@ function setupTempReleaseFixture({ version = '2.8.0', versionCode = 280, gradleC
     'smart-tv/version.json',
   ]) {
     fs.writeFileSync(path.join(dir, rel), JSON.stringify(manifest, null, 2));
+  }
+
+  const releaseIpkUrl = `https://github.com/2fbg/FBGs-Streaming/releases/download/v${version}/mk21play_${version}_all.ipk`;
+  const apps = {
+    name: 'MK21 Streaming Repository',
+    packages: [
+      {
+        id: 'com.mk21.tv',
+        version: appsVersion || version,
+        sourceUrl: appsIpkUrl || releaseIpkUrl,
+        manifest: {
+          id: 'com.mk21.tv',
+          version: appsVersion || version,
+          ipkUrl: appsIpkUrl || releaseIpkUrl,
+          ipkHash: { sha256: appsIpkSha || ipkSha },
+        },
+      },
+    ],
+  };
+  for (const rel of ['apps.json', 'smart-tv/apps.json', 'web/apps.json', 'public/apps.json']) {
+    fs.writeFileSync(path.join(dir, rel), JSON.stringify(apps, null, 2));
   }
 
   return { dir, apkPath, ipkPath };
@@ -152,6 +184,53 @@ test('verifyRemoteAssets falls back from HEAD 405 to Range GET, catches SHA-256 
     });
     assert.equal(okRes.ok, true, okRes.errors.join('; '));
     assert.equal(okRes.checked.length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyReleaseManifests fails when apps.json ipkHash diverges from the IPK binary', () => {
+  const { dir, apkPath, ipkPath } = setupTempReleaseFixture({ appsIpkSha: 'a'.repeat(64) });
+  try {
+    const res = verifyReleaseManifests({ rootDir: dir, apkPath, ipkPath, requireApkHashMatch: true });
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('apps.json') && e.includes('ipkHash.sha256')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyReleaseManifests fails when apps.json version diverges from version.json', () => {
+  const { dir, apkPath, ipkPath } = setupTempReleaseFixture({ appsVersion: '2.7.0' });
+  try {
+    const res = verifyReleaseManifests({ rootDir: dir, apkPath, ipkPath, requireApkHashMatch: true });
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('apps.json') && e.includes('2.7.0')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyAppsManifests accepts raw main URL normally but requires the GitHub Release URL with requireReleaseUrl', () => {
+  const rawUrl = 'https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21play_2.8.0_all.ipk';
+  const { dir } = setupTempReleaseFixture({ appsIpkUrl: rawUrl });
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'version.json'), 'utf8'));
+    assert.deepEqual(verifyAppsManifests({ rootDir: dir, rootManifest: manifest }), []);
+    const strict = verifyAppsManifests({ rootDir: dir, rootManifest: manifest, requireReleaseUrl: true });
+    assert.ok(strict.length > 0 && strict.every((e) => e.includes('releases/download')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('verifyAppsManifests reports a missing apps.json catalog', () => {
+  const { dir } = setupTempReleaseFixture();
+  try {
+    fs.rmSync(path.join(dir, 'smart-tv/apps.json'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'version.json'), 'utf8'));
+    const errors = verifyAppsManifests({ rootDir: dir, rootManifest: manifest });
+    assert.ok(errors.some((e) => e.includes('Catálogo ausente: smart-tv/apps.json')));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

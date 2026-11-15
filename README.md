@@ -49,6 +49,8 @@
 
 ---
 
+> **Release assinado:** veja [`docs/RELEASE_SECRETS.md`](docs/RELEASE_SECRETS.md) para os secrets (`ANDROID_KEYSTORE_BASE64`, `STORE_PASSWORD`, `LICENSE_SECRET`, `EXPECTED_CERT_SHA256`) e o checklist de publicação.
+
 ## 🛠️ Build, Sincronização e Testes
 
 ### Android (JVM / Robolectric + APK)

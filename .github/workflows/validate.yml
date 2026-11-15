@@ -34,6 +34,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+
+      - name: TypeScript typecheck and Jest unit tests (players)
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
 
       - name: Verify published remote manifest URLs (against committed manifests)
         env:
@@ -60,6 +68,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
+          LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
           REQUIRE_SIGNED: ${{ github.event.inputs.require_signed || 'false' }}
         run: |
           set -euo pipefail
@@ -76,6 +85,12 @@ jobs:
 
           if [ "$KEY_ALIAS" != "upload" ]; then
             echo "::error::KEY_ALIAS está definido como '$KEY_ALIAS', mas app/build.gradle.kts usa alias 'upload' no signingConfigs.release."
+            exit 1
+          fi
+
+          # Build de release exige o segredo de licença (sem fallback embutido no APK).
+          if [ -z "${LICENSE_SECRET:-}" ] || [ "${#LICENSE_SECRET}" -lt 16 ]; then
+            echo "::error::Secret LICENSE_SECRET ausente ou curto (mín. 16 caracteres): obrigatório para build de release assinado."
             exit 1
           fi
 
@@ -97,6 +112,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
           KEYSTORE_PATH: ${{ steps.release-keystore.outputs.path }}
           SIGNED: ${{ steps.release-keystore.outputs.signed }}
+          LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          ALLOW_LEGACY_LICENSE: ${{ vars.ALLOW_LEGACY_LICENSE || 'false' }}
         run: |
           set -euo pipefail
           chmod +x gradlew

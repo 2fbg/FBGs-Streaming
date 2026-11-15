@@ -40,3 +40,6 @@ SHA256SUMS
 node_modules/
 coverage/
 dist/
+FETCH_HEAD
+*.backup
+/main

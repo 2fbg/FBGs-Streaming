@@ -1459,7 +1459,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                     indication = null
                                 ) {
                                     tapCount++
-                                    if (tapCount >= 5) {
+                                    if (com.example.BuildConfig.DEBUG && tapCount >= 5) {
                                         isAdminMode = true
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -1655,7 +1655,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                             Button(
                                 onClick = {
                                     val trimmedInput = localKeyInput.trim()
-                                    if (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin") {
+                                    if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
                                         isAdminMode = true
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
@@ -8190,7 +8190,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     indication = null
                                 ) {
                                     tapCount++
-                                    if (tapCount >= 5) {
+                                    if (com.example.BuildConfig.DEBUG && tapCount >= 5) {
                                         isAdminMode = true
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -8412,7 +8412,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             Button(
                                 onClick = {
                                     val trimmedInput = localKeyInput.trim()
-                                    if (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin") {
+                                    if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
                                         isAdminMode = true
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()

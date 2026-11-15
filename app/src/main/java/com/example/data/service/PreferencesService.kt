@@ -181,8 +181,10 @@ class PreferencesService(context: Context) {
     }
 
     /**
-     * Generates valid autonomous key for a device matching the built-in admin key generator.
+     * LEGADO: gera a chave autônoma (MD5 + salt fixo). Só é aceita por [isLicenseValid] quando
+     * BuildConfig.LEGACY_LICENSE_ENABLED for true. Para emitir chaves novas use [generateValidKeyForDevice].
      */
+    @Deprecated("Algoritmo legado e previsível; use generateValidKeyForDevice (HMAC-SHA256).")
     fun generateAutonomousKeyForDevice(deviceMac: String): String {
         val cleanMac = deviceMac.replace("[^A-Fa-f0-9]".toRegex(), "").take(12).uppercase()
         val paddedMac = cleanMac.padEnd(12, 'F')
@@ -203,21 +205,26 @@ class PreferencesService(context: Context) {
     }
 
     /**
-     * Verifies license key validity against both HMAC-SHA256 and Autonomous MD5 keys.
+     * Verifica a chave de ativação (HMAC-SHA256 com o segredo do BuildConfig).
+     * As chaves legadas (MD5 + salt fixo) só são aceitas quando BuildConfig.LEGACY_LICENSE_ENABLED
+     * for true (ALLOW_LEGACY_LICENSE=true no build): o algoritmo é público no APK, então qualquer
+     * pessoa consegue gerá-las offline.
      */
     fun isLicenseValid(): Boolean {
         val key = activationKey.uppercase().trim()
         if (key.isEmpty()) return false
 
-        // 1. Standard 3-segment HMAC-SHA256 check
+        // 1. HMAC-SHA256 de 3 segmentos (comparação em tempo constante)
         val expectedHmac = generateValidKeyForDevice(virtualMac).uppercase().trim()
-        if (key == expectedHmac) return true
+        if (MessageDigest.isEqual(key.toByteArray(Charsets.UTF_8), expectedHmac.toByteArray(Charsets.UTF_8))) return true
 
-        // 2. Autonomous Generator MD5 check (MK21_GOLDEN_SALT_2026)
+        if (!BuildConfig.LEGACY_LICENSE_ENABLED) return false
+
+        // 2. Legado: chave autônoma MD5 de 3 segmentos
         val expectedAutonomous = generateAutonomousKeyForDevice(virtualMac).uppercase().trim()
         if (key == expectedAutonomous) return true
 
-        // 3. Backward compatibility for 2-segment autonomous key if used
+        // 3. Legado: chave autônoma de 2 segmentos
         try {
             val cleanMac = virtualMac.replace("[^A-Fa-f0-9]".toRegex(), "").take(12).uppercase()
             val paddedMac = cleanMac.padEnd(12, 'F')

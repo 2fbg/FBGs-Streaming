@@ -82,13 +82,19 @@ class ExampleRobolectricTest {
     prefs.activationKey = validKey
     org.junit.Assert.assertTrue(prefs.isLicenseValid())
 
-    // With autonomous generator key, license is also valid
+    // Legacy MD5 key is only accepted when ALLOW_LEGACY_LICENSE=true at build time (default: off)
+    @Suppress("DEPRECATION")
     val autonomousKey = prefs.generateAutonomousKeyForDevice(mac)
     prefs.activationKey = autonomousKey
-    org.junit.Assert.assertTrue(prefs.isLicenseValid())
+    if (BuildConfig.LEGACY_LICENSE_ENABLED) {
+      org.junit.Assert.assertTrue(prefs.isLicenseValid())
+    } else {
+      org.junit.Assert.assertFalse(prefs.isLicenseValid())
+    }
 
     // Verify key from user's device MAC matches autonomous generator
     val sampleMac = "9D:59:2E:00:6A:1F"
+    @Suppress("DEPRECATION")
     val sampleGeneratedKey = prefs.generateAutonomousKeyForDevice(sampleMac)
     org.junit.Assert.assertEquals("MK-9F83-B09E-F4D4", sampleGeneratedKey)
   }

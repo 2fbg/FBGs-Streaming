@@ -47,6 +47,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
           SECRET_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
+          LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
@@ -67,6 +68,10 @@ jobs:
           fi
           if [ "$KEY_ALIAS" != "upload" ]; then
             echo "::error::KEY_ALIAS está definido como '$KEY_ALIAS', mas app/build.gradle.kts exige alias 'upload'."
+            exit 1
+          fi
+          if [ -z "${LICENSE_SECRET:-}" ] || [ "${#LICENSE_SECRET}" -lt 16 ] || [ "$LICENSE_SECRET" = "MK21_DEFAULT_HMAC_SECRET" ]; then
+            echo "::error::Secret LICENSE_SECRET ausente, curto (<16) ou igual ao fallback antigo: obrigatório para publicar release."
             exit 1
           fi
 
@@ -118,6 +123,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
           KEYSTORE_PATH: ${{ steps.release-meta.outputs.keystore_path }}
           EXPECTED_CERT_SHA256: ${{ steps.release-meta.outputs.cert_pin }}
+          LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          ALLOW_LEGACY_LICENSE: ${{ vars.ALLOW_LEGACY_LICENSE || 'false' }}
         run: |
           set -euo pipefail
           chmod +x gradlew
@@ -211,10 +218,10 @@ jobs:
 
           python3 smart-tv/package_ipk.py
 
-          python3 - "$VER" "$IPK_PATH" <<'PY'
+          python3 - "$VER" "$IPK_PATH" "$RELEASE_IPK_URL" <<'PY'
           import hashlib, json, sys
 
-          ver, ipk_path = sys.argv[1:3]
+          ver, ipk_path, release_ipk_url = sys.argv[1:4]
           with open(ipk_path, "rb") as f:
               ipk_sha = hashlib.sha256(f.read()).hexdigest()
 
@@ -223,7 +230,9 @@ jobs:
                   apps = json.load(f)
               pkg = apps["packages"][0]
               pkg["version"] = ver
-              pkg["sourceUrl"] = f"https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/{ipk_path}"
+              # URL da GitHub Release: fica no ar assim que `gh release create` termina, sem depender
+              # do commit em main (que pode exigir PR se houver proteção de branch).
+              pkg["sourceUrl"] = release_ipk_url
               pkg["manifest"]["version"] = ver
               pkg["manifest"]["ipkUrl"] = pkg["sourceUrl"]
               pkg["manifest"]["ipkHash"]["sha256"] = ipk_sha

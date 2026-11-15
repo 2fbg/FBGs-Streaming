@@ -96,7 +96,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         get() = preferencesService.virtualMac
 
     fun generateAutonomousKey(mac: String): String {
-        return preferencesService.generateAutonomousKeyForDevice(mac)
+        // Emite chave HMAC-SHA256 (o gerador MD5 legado foi descontinuado).
+        return preferencesService.generateValidKeyForDevice(mac)
     }
 
     fun activateLicense(key: String): Boolean {
