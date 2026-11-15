@@ -18,9 +18,16 @@ on:
         required: false
         default: false
         type: boolean
+      force:
+        description: "Republicar mesmo se a release já estiver publicada (sobrescreve os assets)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: release-${{ github.ref }}
+  # Grupo fixo: publicações de release são serializadas entre si, independente do ref.
+  # Sem isso, push na main e push de tag caem em grupos distintos e competem pela mesma release.
+  group: release-publication
   cancel-in-progress: false
 
 permissions: {}
@@ -50,6 +57,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           GITHUB_REF_FULL: ${{ github.ref }}
           INPUT_TAG: ${{ github.event.inputs.tag || '' }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
         run: |
           set -euo pipefail
           MANIFEST_VER=$(python3 -c 'import json; print(str(json.load(open("version.json", encoding="utf-8"))["version"]).strip())')
@@ -67,17 +75,16 @@ jobs:
             exit 1
           fi
 
-          if [ "$EVENT_NAME" = "push" ] && [[ "$GITHUB_REF_FULL" != refs/tags/* ]]; then
-            IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "missing")
-            if [ "$IS_DRAFT" = "false" ]; then
-              echo "Release $TAG já está publicada; pulando publicação automática neste push para main."
-              echo "- ℹ️ Release \`$TAG\` já está publicada. Para disparar nova release automaticamente ao commitar em \`main\`, incremente \`version.json\` e \`app/build.gradle.kts\`." >> "$GITHUB_STEP_SUMMARY"
-              echo "should_release=false" >> "$GITHUB_OUTPUT"
-              echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Release automática habilitada para $TAG (status atual: $IS_DRAFT)."
+          # Regra única para push de branch, push de tag e dispatch: release publicada não se toca.
+          IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "missing")
+          if [ "$IS_DRAFT" = "false" ] && [ "${FORCE:-false}" != "true" ]; then
+            echo "::notice::Release $TAG já está publicada; assets preservados (use force=true para sobrescrever)."
+            echo "- ℹ️ Release \`$TAG\` já está publicada; assets preservados. Para publicar de novo, rode workflow_dispatch com \`force=true\` ou incremente a versão." >> "$GITHUB_STEP_SUMMARY"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "Publicação habilitada para $TAG (status atual: $IS_DRAFT, force=$FORCE)."
 
           echo "should_release=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
