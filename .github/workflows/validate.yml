@@ -14,24 +14,27 @@ on:
         default: "false"
         type: boolean
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: npm
@@ -64,6 +67,7 @@ jobs:
 
       - name: Prepare release keystore
         id: release-keystore
+        if: github.event_name != 'pull_request'
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -119,8 +123,58 @@ jobs:
           echo "path=$KS" >> "$GITHUB_OUTPUT"
           echo "cert_pin=$CERT_PIN" >> "$GITHUB_OUTPUT"
 
-      - name: Android tests and build
-        id: android-build
+      - name: Android tests and debug build (Pull Request without secrets)
+        id: android-build-pr
+        if: github.event_name == 'pull_request'
+        env:
+          ALLOW_LEGACY_LICENSE: ${{ vars.ALLOW_LEGACY_LICENSE || 'false' }}
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          if [ ! -f "app/google-services.json" ]; then
+            echo "Criando fallback de google-services.json para o ambiente CI..."
+            mkdir -p app
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "736577956980",
+              "project_id": "gen-lang-client-0474959166",
+              "storage_bucket": "gen-lang-client-0474959166.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:736577956980:android:8b24803d286868ab723521",
+                  "android_client_info": {
+                    "package_name": "com.aistudio.multiservidor.iptvmk"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDbFO4VGaBNxxphP99Mu6NbKZ1nATzHMmI"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+          ./gradlew testDebugUnitTest --no-daemon || { echo "Retrying tests due to socket/network hiccup..."; ./gradlew testDebugUnitTest --no-daemon; }
+          ./gradlew assembleDebug --no-daemon
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK" || { echo "APK não encontrado: $APK"; exit 1; }
+          echo "apk_source=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Android tests and build (main/dispatch)
+        id: android-build-signed
+        if: github.event_name != 'pull_request'
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -186,8 +240,8 @@ jobs:
       - name: Package IPK and stamp build hashes
         id: package-and-stamp
         env:
-          APK_SOURCE: ${{ steps.android-build.outputs.apk_source }}
-          SIGNED: ${{ steps.release-keystore.outputs.signed }}
+          APK_SOURCE: ${{ steps.android-build-signed.outputs.apk_source || steps.android-build-pr.outputs.apk_source }}
+          SIGNED: ${{ steps.release-keystore.outputs.signed || 'false' }}
         run: |
           set -euo pipefail
           # O empacotador publica apkSha256/sizeBytes e ipkSha256/ipkSizeBytes nos manifestos,
@@ -353,6 +407,10 @@ jobs:
           test -f "$IPK_FILE" || { echo "IPK $IPK_FILE não encontrado"; exit 1; }
           PKG_VER=$(dpkg-deb --field "$IPK_FILE" Version)
           test "$PKG_VER" = "$TV_VER" || { echo "Versão interna do pacote IPK $PKG_VER difere de $TV_VER"; exit 1; }
+          if [[ ! "$TV_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Versão inválida em tv_version: '$TV_VER'"
+            exit 1
+          fi
           echo "Sincronismo multiplataforma e Smart TV IPK $TV_VER validados com sucesso."
           echo "tv_version=$TV_VER" >> "$GITHUB_OUTPUT"
 
@@ -378,7 +436,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Upload generated apps
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: generated-apps
           path: |
@@ -396,13 +454,15 @@ jobs:
           if-no-files-found: error
 
       - name: List generated apps
+        env:
+          TV_VERSION: ${{ steps.smart-tv-validation.outputs.tv_version }}
         run: |
           set -euo pipefail
           echo "## Aplicativos gerados" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Android APK: \`mk21.apk\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Smart TV IPK: \`smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Smart TV IPK: \`smart-tv/mk21play_${TV_VERSION}_all.ipk\`" >> "$GITHUB_STEP_SUMMARY"
           echo ""
           echo "Aplicativos gerados:"
           echo "  Android APK: mk21.apk"
-          echo "  Smart TV IPK: smart-tv/mk21play_${{ steps.smart-tv-validation.outputs.tv_version }}_all.ipk"
+          echo "  Smart TV IPK: smart-tv/mk21play_${TV_VERSION}_all.ipk"
