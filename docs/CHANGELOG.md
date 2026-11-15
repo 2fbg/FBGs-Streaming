@@ -2,6 +2,12 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.9.0] - 2026-11-15
+
+- **MK21 AI Copilot (Android):** Redimensionamento da janela do diálogo para teclado virtual (`SOFT_INPUT_ADJUST_RESIZE` + `.imePadding()` / `.navigationBarsPadding()`), caixa de entrada expansível até 5 linhas (`132.dp`) com envio alinhado à base e fechamento automático do teclado.
+- **Respostas dinâmicas no Copilot:** Indicador de digitação animado com 3 pontos pulsantes, cursor piscante durante streaming, renderização leve de Markdown (`**negrito**`, listas `- ` / `• `, URLs destacadas), auto-scroll que respeita rolagem manual com botão flutuante `⤓ Ir para o fim` e chips contextuais de continuação após cada resposta.
+- **Sincronização Multiplataforma v2.9.0 (Code 290):** Atualização coordenada dos manifestos Android, Web/PWA, LG webOS e Samsung Tizen.
+
 ## [2.8.0] - 2026-11-14
 
 - **Hardening OTA & Assinatura Android:** `ApkSignatureVerifier` e `Mk21UpdateManager` passaram a validar SHA-256 em modo *fail-closed*, redirecionamentos HTTPS restritos a hosts GitHub oficiais e assinatura de certificado do APK antes da instalação; `validate.yml` exige assinatura de upload e checa sincronismo contra `app/build.gradle.kts` (`versionCode = 280`).
