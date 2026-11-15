@@ -891,7 +891,7 @@ function closeSearchMode(clearText = false) {
        $('tabLive'));
   searchPreviousFocus = null;
   if (target) {
-    try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    mk21FocusSafe(target);
   } else {
     focusActiveElement();
   }
@@ -2223,7 +2223,10 @@ function renderCategoriesList() {
   });
 
   ul.appendChild(fragment);
-  if (typeof mk21UpdateVisualScrollbarFor === 'function') mk21UpdateVisualScrollbarFor(ul);
+  if (typeof mk21UpdateVisualScrollbarFor === 'function') {
+    mk21UpdateVisualScrollbarFor(ul);
+    setTimeout(() => mk21UpdateVisualScrollbarFor(ul), 60);
+  }
 }
 
 function selectCategory(catKey) {
@@ -2452,7 +2455,10 @@ function renderItemsList(preserveScroll) {
 
   ul.appendChild(fragment);
   if (preserveScroll) { try { ul.scrollTop = scrollAnterior; } catch (e) {} }
-  if (typeof mk21UpdateVisualScrollbarFor === 'function') mk21UpdateVisualScrollbarFor(ul);
+  if (typeof mk21UpdateVisualScrollbarFor === 'function') {
+    mk21UpdateVisualScrollbarFor(ul);
+    setTimeout(() => mk21UpdateVisualScrollbarFor(ul), 60);
+  }
 
   // Não inicia reprodução automática durante busca para não roubar foco ou mudar canal
   if (!activeItem && currentContentType === 'LIVE' && currentFilteredItems.length > 0 && !query) {
@@ -4301,8 +4307,12 @@ function playStream(item, forcedUrl) {
   // Feedback imediato na troca de canal
   if ($('epgStatus')) $('epgStatus').textContent = '⏳ Sintonizando...';
   if ($('channelOverlay')) {
-    $('channelOverlay').textContent = '▶ ' + item.name;
-    $('channelOverlay').classList.remove('hidden');
+    if (getToastDisplayMode() !== 'off') {
+      $('channelOverlay').textContent = '▶ ' + item.name;
+      $('channelOverlay').classList.remove('hidden');
+    } else {
+      $('channelOverlay').classList.add('hidden');
+    }
   }
 
   const btns = $('listItems').querySelectorAll('.list-item-btn');
@@ -4311,7 +4321,7 @@ function playStream(item, forcedUrl) {
     const t = (b.textContent || '').replace(/^[⭐★▶]\s*/, '');
     if (item.name && t.indexOf(item.name) === 0) {
       b.classList.add('active');
-      try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      mk21ScrollElementInsideContainer(b);
     }
   });
 
@@ -4549,11 +4559,40 @@ function mk21SetBotaoTocando(tocando) {
   if (fs) fs.textContent = tocando ? '⏸️ Pausar' : '▶️ Reproduzir';
 }
 
-let toastTimer = null;
-function showChannelBanner(text) {
-  if (!AppState || !AppState.isLoggedIn) {
+function getToastDisplayMode() {
+  try {
+    const mode = localStorage.getItem('mk21_toast_mode');
+    if (mode === 'off' || mode === 'player' || mode === 'all') return mode;
+    if (localStorage.getItem('mk21_show_toasts') === 'true') return 'all';
+  } catch (e) {}
+  return 'off';
+}
+
+function setToastDisplayMode(mode) {
+  const safe = (mode === 'player' || mode === 'all') ? mode : 'off';
+  try {
+    localStorage.setItem('mk21_toast_mode', safe);
+    localStorage.setItem('mk21_show_toasts', safe === 'off' ? 'false' : 'true');
+  } catch (e) {}
+  if (safe === 'off') {
+    const overlay = $('channelOverlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+  if (safe !== 'all') {
     const existingBanner = $('mk21-toast-banner');
     if (existingBanner) existingBanner.classList.remove('visible');
+  }
+  return safe;
+}
+
+let toastTimer = null;
+function showChannelBanner(text) {
+  const mode = getToastDisplayMode();
+  if (!AppState || !AppState.isLoggedIn || mode === 'off') {
+    const existingBanner = $('mk21-toast-banner');
+    if (existingBanner) existingBanner.classList.remove('visible');
+    const overlayEl = $('channelOverlay');
+    if (overlayEl) overlayEl.classList.add('hidden');
     return;
   }
   const overlay = $('channelOverlay');
@@ -4562,6 +4601,11 @@ function showChannelBanner(text) {
     overlay.classList.remove('hidden');
     clearTimeout(overlay._timer);
     overlay._timer = setTimeout(() => overlay.classList.add('hidden'), 3500);
+  }
+  if (mode !== 'all') {
+    const existingBanner = $('mk21-toast-banner');
+    if (existingBanner) existingBanner.classList.remove('visible');
+    return;
   }
   let banner = $('mk21-toast-banner');
   if (!banner) {
@@ -4672,6 +4716,11 @@ function toggleFullscreen(force) {
   if (goingIn) {
     box.classList.add('is-fullscreen');
     document.body.classList.add('is-fullscreen');
+    const colorBar = $('remoteColorBar');
+    if (colorBar) {
+      colorBar.classList.add('hidden');
+      colorBar.style.setProperty('display', 'none', 'important');
+    }
     activeZone = 'player';
     showFsHud(true);
     pokeFsHud();
@@ -4703,6 +4752,11 @@ function toggleFullscreen(force) {
     });
     box.classList.remove('is-fullscreen');
     document.body.classList.remove('is-fullscreen');
+    const colorBar = $('remoteColorBar');
+    if (colorBar) {
+      colorBar.classList.remove('hidden');
+      colorBar.style.removeProperty('display');
+    }
     showFsHud(false);
     addDevLog('[Player] Modo Tela Cheia DESATIVADO', 'info');
     try {
@@ -5122,13 +5176,19 @@ function switchContentType(type) {
 
   // Restaura foco imediato na lista de canais ou categoria
   setTimeout(() => {
+    ['#listCategories', '#listItems'].forEach((sel) => {
+      const box = document.querySelector(sel);
+      if (box && typeof mk21UpdateVisualScrollbarFor === 'function') {
+        mk21UpdateVisualScrollbarFor(box);
+      }
+    });
     const firstItem = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
     const activeCat = $('listCategories') ? $('listCategories').querySelector('.cat-item-btn.active') : null;
     const target = firstItem || activeCat || safeTabTarget;
     if (target) {
-      try { target.focus(); target.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      mk21FocusSafe(target);
     }
-  }, 30);
+  }, 40);
 }
 
 // 12. CONFIGURAÇÕES (TOTALMENTE ALINHADO AO CLONE VIZZION PLAY DAS FOTOS)
@@ -5149,6 +5209,7 @@ const MK21_SETTINGS_SPEC = [
   ['cfgBtnQualidadeVideo', '🎞️ Qualidade de vídeo'],
   ['cfgBtnBuffer', '⚡ Buffer e fluidez'],
   ['cfgBtnAdulto', '🔞 Restrição adulto'],
+  ['cfgBtnNotificacoes', '🔔 Avisos na tela'],
   ['cfgBtnPin', '🔒 Alterar código pin'],
   ['cfgBtnLogout', '🚪 Sair da Conta (Logout)']
 ];
@@ -5206,6 +5267,10 @@ CFG_BUTTONS.forEach(bId => {
 });
 
 function renderSettings(sec) {
+  if (sec !== 'speedtest' && window.__mk21SpeedTestController) {
+    try { window.__mk21SpeedTestController.abort(); } catch (e) {}
+    window.__mk21SpeedTestController = null;
+  }
   if (sec === 'logout') {
     logout();
     return;
@@ -5285,6 +5350,8 @@ function renderSettings(sec) {
     renderBufferPanel();
   } else if (sec === 'adulto') {
     renderAdultPanel();
+  } else if (sec === 'notificacoes') {
+    renderNotificationsPanel();
   }
 }
 
@@ -5689,13 +5756,78 @@ function renderPinSettingsPanel() {
   });
 }
 
+function renderNotificationsPanel() {
+  const box = $('settingsDetailBox');
+  if (!box) return;
+  const cur = getToastDisplayMode();
+  const options = [
+    {
+      id: 'off',
+      title: '🔕 Desativado (Padrão)',
+      desc: 'Não exibe banners Toast flutuantes nem avisos sobrepostos ao trocar de canal.'
+    },
+    {
+      id: 'player',
+      title: '📺 Apenas no canto do player',
+      desc: 'Exibe somente a etiqueta discreta no canto superior do vídeo por alguns segundos.'
+    },
+    {
+      id: 'all',
+      title: '🔔 Completo (Player + Banner flutuante)',
+      desc: 'Exibe etiqueta no player e banner Toast flutuante para ações e troca de canal.'
+    }
+  ];
+  const rows = options.map(opt => {
+    const ativo = cur === opt.id;
+    return `
+      <button type="button" class="list-item-btn cfg-toast-choice ${ativo ? 'active' : ''}" data-toast-mode="${opt.id}" style="padding:16px 20px; display:flex; flex-direction:column; align-items:flex-start; gap:4px;" tabindex="0">
+        <span style="font-size:17px; font-weight:700; color:${ativo ? '#4caf50' : '#fff'};">${ativo ? '✅' : '⚪'} ${opt.title}</span>
+        <span style="font-size:14px; color:#94a3b8; white-space:normal;">${opt.desc}</span>
+      </button>`;
+  }).join('');
+
+  box.innerHTML = `
+    <h3 style="margin:0 0 10px 0; font-size:24px;">🔔 Avisos na Tela (Toast)</h3>
+    <p style="color:#aaa; margin:0 0 18px 0;">Controle se os banners de aviso (troca de canal, favoritos, ordenação e busca) aparecem sobre a tela.</p>
+    <div style="display:flex; flex-direction:column; gap:10px; max-width:640px;">${rows}</div>
+    <div id="msgToastSaved" style="margin-top:16px; color:#4caf50; font-weight:bold; font-size:15px; display:none;"></div>
+  `;
+
+  box.querySelectorAll('.cfg-toast-choice').forEach(btn => {
+    btn.onclick = () => {
+      const next = setToastDisplayMode(btn.getAttribute('data-toast-mode'));
+      renderNotificationsPanel();
+      const msg = $('msgToastSaved');
+      if (msg) {
+        const labels = {
+          off: '✅ Avisos Toast desativados na tela.',
+          player: '✅ Modo discreto ativado (apenas no canto do player).',
+          all: '✅ Avisos Toast completos ativados.'
+        };
+        msg.textContent = labels[next] || '✅ Preferência salva.';
+        msg.style.display = 'block';
+      }
+      if (next === 'all') {
+        showChannelBanner('🔔 Avisos Toast ativados');
+      }
+    };
+  });
+}
+
 async function runSpeedTest() {
+  if (window.__mk21SpeedTestController) {
+    try { window.__mk21SpeedTestController.abort(); } catch (e) {}
+  }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  window.__mk21SpeedTestController = controller;
+  const signal = controller ? controller.signal : undefined;
+
   const box = $('settingsDetailBox');
   box.innerHTML = `
     <h3 style="margin-top:0; font-size:24px;">🚀 Teste de Velocidade da Conexão</h3>
-    <p style="color:#aaa;">Medição real da rede da Smart TV. O upload depende do endpoint configurado.</p>
+    <p style="color:#aaa;">Medição multi-conexão progressiva (padrão Fast.com / Open Connect CDN).</p>
     <div class="speed-meter-box">
-      <div id="speedMeterStatus" style="font-size:18px;color:#94a3b8;margin-bottom:12px;">1/4 - Medindo latência...</div>
+      <div id="speedMeterStatus" style="font-size:18px;color:#94a3b8;margin-bottom:12px;">1/4 - Conectando aos servidores Fast / CDN...</div>
       <div class="speed-gauge-wrap"><div id="speedGaugeArc" class="speed-gauge-arc" style="transform:rotate(-45deg);"></div></div>
       <div><span id="speedMeterNumber" class="speed-meter-val">0.0</span><span id="speedMeterUnit" class="speed-meter-unit">Mbps</span></div>
       <div class="speed-progress-bar-wrap"><div id="speedProgressBar" class="speed-progress-bar-fill" style="width:0%;"></div></div>
@@ -5707,52 +5839,322 @@ async function runSpeedTest() {
       </div><div id="speedQualityRating" style="margin-top:16px;font-size:16px;font-weight:bold;color:#fff;"></div>
     </div><button id="btnStartSpeedTest" class="ctrl-btn primary" style="padding:12px 28px;" tabindex="0">🔄 Iniciar Novo Teste</button>`;
   $('btnStartSpeedTest').onclick = runSpeedTest;
-  const setStatus = text => { if ($('speedMeterStatus')) $('speedMeterStatus').textContent = text; };
-  const setProgress = pct => { if ($('speedProgressBar')) $('speedProgressBar').style.width = pct + '%'; };
-  const setGauge = value => { if ($('speedGaugeArc')) $('speedGaugeArc').style.transform = `rotate(${Math.min(135, -45 + (Math.min(value, 150) / 150) * 180)}deg)`; };
-  const formatMbps = value => Number.isFinite(value) ? value.toFixed(1) + ' Mbps' : 'Indisponível';
-  const endpoint = localStorage.getItem('mk21_speed_test_endpoint') || 'https://speed.cloudflare.com';
-  try {
-    setStatus('1/4 - Medindo latência e jitter...');
-    const samples = [];
-    for (let i = 0; i < 3; i++) {
-      const t0 = performance.now();
-      const r = await fetch(endpoint + '/__down?bytes=1&cache=' + Date.now() + '-' + i, { cache: 'no-store' });
-      if (!r.ok) throw new Error('Endpoint de teste indisponível');
-      await r.arrayBuffer();
-      samples.push(performance.now() - t0);
+
+  const isStale = () => (window.__mk21SpeedTestController !== controller) || (signal && signal.aborted);
+  const setStatus = text => { if (!isStale() && $('speedMeterStatus')) $('speedMeterStatus').textContent = text; };
+  const setProgress = pct => { if (!isStale() && $('speedProgressBar')) $('speedProgressBar').style.width = Math.max(0, Math.min(100, pct)) + '%'; };
+  const setGauge = value => {
+    if (isStale() || !$('speedGaugeArc')) return;
+    const safeVal = Math.max(0, Number(value) || 0);
+    // Escala logarítmica suave até ~1000 Mbps para boa leitura de 5 Mbps a 500+ Mbps
+    const ratio = Math.min(1, Math.log10(1 + safeVal) / Math.log10(1001));
+    $('speedGaugeArc').style.transform = `rotate(${(-45 + ratio * 180).toFixed(1)}deg)`;
+  };
+  const formatMbps = value => Number.isFinite(value) && value >= 0
+    ? (value >= 100 ? Math.round(value) + ' Mbps' : value.toFixed(1) + ' Mbps')
+    : 'Indisponível';
+  const formatBigNumber = value => !Number.isFinite(value) ? '0.0' : (value >= 100 ? String(Math.round(value)) : value.toFixed(1));
+
+  const customEndpoint = (localStorage.getItem('mk21_speed_test_endpoint') || '').trim().replace(/\/+$/, '');
+  const cloudflareBase = customEndpoint || 'https://speed.cloudflare.com';
+
+  function buildRangeUrl(url, startByte, endByte) {
+    const sep = url.indexOf('?') !== -1 ? '&' : '?';
+    return `${url}${sep}range=${startByte}-${endByte}&_=${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  async function discoverTargets() {
+    if (!customEndpoint) {
+      const fastApiUrl = 'https://api.fast.com/netflix/speedtest/v2?https=true&token=YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm&urlCount=5';
+      try {
+        const fastCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = fastCtrl ? setTimeout(() => fastCtrl.abort(), 3500) : null;
+        const onParentAbort = () => { if (fastCtrl) fastCtrl.abort(); };
+        if (signal && fastCtrl) signal.addEventListener('abort', onParentAbort, { once: true });
+        try {
+          const res = await fetch(fastApiUrl, {
+            cache: 'no-store',
+            signal: fastCtrl ? fastCtrl.signal : signal
+          });
+          if (res.ok) {
+            const payload = await res.json();
+            const targets = Array.isArray(payload && payload.targets) ? payload.targets : [];
+            const validUrls = targets
+              .map(t => (t && typeof t.url === 'string' ? t.url.trim() : ''))
+              .filter(u => /^https?:\/\//i.test(u));
+            if (validUrls.length > 0) {
+              return { provider: 'Fast.com (Netflix Open Connect)', mode: 'fast', urls: validUrls };
+            }
+          }
+        } finally {
+          if (timer) clearTimeout(timer);
+          if (signal && fastCtrl) signal.removeEventListener('abort', onParentAbort);
+        }
+      } catch (e) {}
     }
-    const ping = samples.reduce((a,b) => a+b, 0) / samples.length;
-    const jitter = samples.reduce((a,b) => a + Math.abs(b - ping), 0) / samples.length;
-    $('speedMeterPing').textContent = Math.round(ping) + ' ms';
-    $('speedMeterJitter').textContent = jitter.toFixed(1) + ' ms';
-    setProgress(15);
-    setStatus('2/4 - Medindo download real...');
-    const downStart = performance.now();
-    const downRes = await fetch(endpoint + '/__down?bytes=10000000&cache=' + Date.now(), { cache: 'no-store' });
-    if (!downRes.ok) throw new Error('Download de teste indisponível');
-    let bytes = 0;
-    if (downRes.body && downRes.body.getReader) {
-      const reader = downRes.body.getReader();
-      while (true) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; setProgress(Math.min(55, 15 + Math.round(bytes / 10000000 * 40))); }
-    } else { bytes = (await downRes.arrayBuffer()).byteLength; setProgress(55); }
-    const downMbps = bytes * 8 / ((performance.now() - downStart) / 1000) / 1000000;
-    $('speedMeterNumber').textContent = downMbps.toFixed(1); $('speedMeterDownload').textContent = formatMbps(downMbps); setGauge(downMbps);
-    setStatus('3/4 - Medindo upload real...');
-    const uploadBytes = 1000000;
-    const payload = new Uint8Array(uploadBytes);
-    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(payload.subarray(0, 65536));
-    const upStart = performance.now();
-    const upRes = await fetch(endpoint + '/__up?cache=' + Date.now(), { method: 'POST', body: payload, cache: 'no-store', headers: { 'Content-Type': 'application/octet-stream' } });
-    if (!upRes.ok) throw new Error('Upload não permitido pelo endpoint');
-    try { await upRes.arrayBuffer(); } catch (e) {}
-    const upMbps = uploadBytes * 8 / ((performance.now() - upStart) / 1000) / 1000000;
-    $('speedMeterNumber').textContent = upMbps.toFixed(1); $('speedMeterUpload').textContent = formatMbps(upMbps); setGauge(upMbps); setProgress(95);
-    setStatus('4/4 - ✅ Teste concluído com medição real!'); setProgress(100);
-    $('speedQualityRating').textContent = `Download ${formatMbps(downMbps)} • Upload ${formatMbps(upMbps)} • Latência ${Math.round(ping)} ms`;
+    return {
+      provider: customEndpoint ? 'Endpoint Personalizado' : 'Cloudflare CDN Multi-Conexão',
+      mode: 'cloudflare',
+      urls: [cloudflareBase + '/__down']
+    };
+  }
+
+  async function probeOnce(targetInfo) {
+    const base = targetInfo.urls[0];
+    const url = targetInfo.mode === 'fast'
+      ? buildRangeUrl(base, 0, 0)
+      : `${base}?bytes=1&_=${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const t0 = performance.now();
+    const r = await fetch(url, { cache: 'no-store', signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    await r.arrayBuffer();
+    return performance.now() - t0;
+  }
+
+  try {
+    const targetInfo = await discoverTargets();
+    if (isStale()) return;
+
+    setStatus(`1/4 - Medindo latência (${targetInfo.provider})...`);
+    // Warm-up para estabilizar DNS + TLS keep-alive antes das amostras de RTT
+    await probeOnce(targetInfo);
+    const samples = [];
+    for (let i = 0; i < 5; i++) {
+      if (isStale()) return;
+      samples.push(await probeOnce(targetInfo));
+    }
+    const sorted = samples.slice().sort((a, b) => a - b);
+    const ping = sorted[Math.floor(sorted.length / 2)];
+    let jitterSum = 0;
+    for (let i = 1; i < samples.length; i++) jitterSum += Math.abs(samples[i] - samples[i - 1]);
+    const jitter = samples.length > 1 ? jitterSum / (samples.length - 1) : 0;
+
+    if ($('speedMeterPing')) $('speedMeterPing').textContent = Math.round(ping) + ' ms';
+    if ($('speedMeterJitter')) $('speedMeterJitter').textContent = jitter.toFixed(1) + ' ms';
+    setProgress(12);
+
+    // 2/4: Download multi-stream progressivo estilo Fast.com (5 conexões simultâneas, 8.5s)
+    setStatus(`2/4 - Medindo download multi-conexão (${targetInfo.provider})...`);
+    const CONCURRENCY = Math.min(6, Math.max(4, targetInfo.urls.length));
+    const DURATION_MS = 8500;
+    const WARMUP_MS = 1000;
+    const WINDOW_MS = 2500;
+
+    const dlCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const onAbortDl = () => { if (dlCtrl) dlCtrl.abort(); };
+    if (signal && dlCtrl) signal.addEventListener('abort', onAbortDl, { once: true });
+
+    let dlFirstByteTs = 0;
+    let totalBytesSinceFirst = 0;
+    const byteEvents = []; // { t, b }
+    let dlStopped = false;
+    let peakWindowMbps = 0;
+
+    function computeWindowMbps(now) {
+      const cutoff = Math.max(dlFirstByteTs + WARMUP_MS, now - WINDOW_MS);
+      let sum = 0;
+      let firstT = now;
+      for (let i = byteEvents.length - 1; i >= 0; i--) {
+        const ev = byteEvents[i];
+        if (ev.t < cutoff) break;
+        sum += ev.b;
+        if (ev.t < firstT) firstT = ev.t;
+      }
+      const elapsedSec = (now - firstT) / 1000;
+      if (sum <= 0 || elapsedSec < 0.35) return 0;
+      return (sum * 8) / elapsedSec / 1000000;
+    }
+
+    function computeSteadyMbps(now) {
+      const steadyStart = dlFirstByteTs + WARMUP_MS;
+      if (now <= steadyStart + 500) {
+        const elapsedAll = Math.max(0.25, (now - dlFirstByteTs) / 1000);
+        return (totalBytesSinceFirst * 8) / elapsedAll / 1000000;
+      }
+      let steadyBytes = 0;
+      for (let i = 0; i < byteEvents.length; i++) {
+        if (byteEvents[i].t >= steadyStart) steadyBytes += byteEvents[i].b;
+      }
+      const steadySec = (now - steadyStart) / 1000;
+      return steadySec > 0 ? (steadyBytes * 8) / steadySec / 1000000 : 0;
+    }
+
+    const dlTicker = setInterval(() => {
+      if (isStale() || dlStopped) return;
+      const now = performance.now();
+      if (dlFirstByteTs <= 0) return;
+      const elapsed = now - dlFirstByteTs;
+      const liveMbps = computeWindowMbps(now) || computeSteadyMbps(now);
+      if (liveMbps > peakWindowMbps && elapsed > WARMUP_MS + 800) {
+        peakWindowMbps = liveMbps;
+      }
+      if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(liveMbps);
+      if ($('speedMeterDownload')) $('speedMeterDownload').textContent = formatMbps(liveMbps);
+      setGauge(liveMbps);
+      setProgress(12 + Math.min(53, Math.round((elapsed / DURATION_MS) * 53)));
+    }, 200);
+
+    const dlStopTimer = setTimeout(() => {
+      dlStopped = true;
+      if (dlCtrl) try { dlCtrl.abort(); } catch (e) {}
+    }, DURATION_MS);
+
+    async function downloadWorker(workerIdx) {
+      let iter = 0;
+      while (!dlStopped && !isStale()) {
+        const base = targetInfo.urls[(workerIdx + iter) % targetInfo.urls.length];
+        iter++;
+        const url = targetInfo.mode === 'fast'
+          ? buildRangeUrl(base, 0, 26214399)
+          : `${base}?bytes=25000000&_=${Date.now()}_${workerIdx}_${iter}`;
+        try {
+          const res = await fetch(url, {
+            cache: 'no-store',
+            signal: dlCtrl ? dlCtrl.signal : signal
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          if (res.body && typeof res.body.getReader === 'function') {
+            const reader = res.body.getReader();
+            while (!dlStopped && !isStale()) {
+              const part = await reader.read();
+              if (part.done) break;
+              const chunkLen = part.value ? part.value.byteLength : 0;
+              if (chunkLen > 0) {
+                const now = performance.now();
+                if (dlFirstByteTs === 0) dlFirstByteTs = now;
+                totalBytesSinceFirst += chunkLen;
+                byteEvents.push({ t: now, b: chunkLen });
+              }
+            }
+            try { await reader.cancel(); } catch (e) {}
+          } else {
+            const buf = await res.arrayBuffer();
+            const now = performance.now();
+            if (dlFirstByteTs === 0) dlFirstByteTs = now;
+            totalBytesSinceFirst += buf.byteLength;
+            byteEvents.push({ t: now, b: buf.byteLength });
+          }
+        } catch (err) {
+          if (dlStopped || isStale() || (err && err.name === 'AbortError')) break;
+          // Troca silenciosamente para próxima URL em caso de erro pontual de um worker
+          await new Promise(r => setTimeout(r, 120));
+        }
+      }
+    }
+
+    try {
+      const workers = [];
+      for (let i = 0; i < CONCURRENCY; i++) workers.push(downloadWorker(i));
+      await Promise.all(workers);
+    } finally {
+      dlStopped = true;
+      clearInterval(dlTicker);
+      clearTimeout(dlStopTimer);
+      if (signal && dlCtrl) signal.removeEventListener('abort', onAbortDl);
+    }
+
+    if (isStale()) return;
+    if (totalBytesSinceFirst <= 0 || dlFirstByteTs <= 0) {
+      throw new Error('Não foi possível baixar dados dos servidores de teste');
+    }
+
+    const dlEndTs = performance.now();
+    const steadyMbps = computeSteadyMbps(dlEndTs);
+    const downMbps = Math.max(steadyMbps, peakWindowMbps * 0.92);
+    if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(downMbps);
+    if ($('speedMeterDownload')) $('speedMeterDownload').textContent = formatMbps(downMbps);
+    setGauge(downMbps);
+    setProgress(68);
+
+    // 3/4: Upload multi-stream (3 conexões simultâneas no endpoint com CORS)
+    setStatus('3/4 - Medindo upload multi-conexão...');
+    let upMbps = NaN;
+    try {
+      const upCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const onAbortUp = () => { if (upCtrl) upCtrl.abort(); };
+      if (signal && upCtrl) signal.addEventListener('abort', onAbortUp, { once: true });
+
+      const chunkSize = 1500000; // 1.5 MB por envio
+      const payload = new Uint8Array(chunkSize);
+      if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(payload.subarray(0, 65536));
+
+      // Warm-up único para abrir conexão HTTP/2/TLS antes do cronômetro de upload
+      const warmRes = await fetch(`${cloudflareBase}/__up?_=${Date.now()}`, {
+        method: 'POST',
+        body: payload.subarray(0, 16384),
+        cache: 'no-store',
+        signal: upCtrl ? upCtrl.signal : signal,
+        headers: { 'Content-Type': 'application/octet-stream' }
+      });
+      if (!warmRes.ok) throw new Error('Upload bloqueado (HTTP ' + warmRes.status + ')');
+      try { await warmRes.arrayBuffer(); } catch (e) {}
+
+      let upStopped = false;
+      let uploadedBytes = 0;
+      const upStart = performance.now();
+      const UP_DURATION_MS = 4500;
+      const upTimer = setTimeout(() => {
+        upStopped = true;
+        if (upCtrl) try { upCtrl.abort(); } catch (e) {}
+      }, UP_DURATION_MS);
+
+      async function uploadWorker(idx) {
+        let wave = 0;
+        while (!upStopped && !isStale() && (performance.now() - upStart) < UP_DURATION_MS) {
+          wave++;
+          const res = await fetch(`${cloudflareBase}/__up?_=${Date.now()}_${idx}_${wave}`, {
+            method: 'POST',
+            body: payload,
+            cache: 'no-store',
+            signal: upCtrl ? upCtrl.signal : signal,
+            headers: { 'Content-Type': 'application/octet-stream' }
+          });
+          if (!res.ok) throw new Error('Upload HTTP ' + res.status);
+          try { await res.arrayBuffer(); } catch (e) {}
+          uploadedBytes += chunkSize;
+          const elapsedSec = Math.max(0.25, (performance.now() - upStart) / 1000);
+          const curUp = (uploadedBytes * 8) / elapsedSec / 1000000;
+          if ($('speedMeterUpload')) $('speedMeterUpload').textContent = formatMbps(curUp);
+          setProgress(68 + Math.min(28, Math.round(((performance.now() - upStart) / UP_DURATION_MS) * 28)));
+        }
+      }
+
+      try {
+        await Promise.all([uploadWorker(0), uploadWorker(1), uploadWorker(2)]);
+      } catch (upWorkerErr) {
+        if (!upStopped && (!upWorkerErr || upWorkerErr.name !== 'AbortError')) throw upWorkerErr;
+      } finally {
+        upStopped = true;
+        clearTimeout(upTimer);
+        if (signal && upCtrl) signal.removeEventListener('abort', onAbortUp);
+      }
+
+      const upElapsedSec = Math.max(0.25, (performance.now() - upStart) / 1000);
+      if (uploadedBytes > 0) {
+        upMbps = (uploadedBytes * 8) / upElapsedSec / 1000000;
+      }
+    } catch (upErr) {
+      upMbps = NaN;
+    }
+
+    if (isStale()) return;
+    if ($('speedMeterUpload')) $('speedMeterUpload').textContent = formatMbps(upMbps);
+    // Padrão Fast.com: número principal exibe Download ao finalizar
+    if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(downMbps);
+    setGauge(downMbps);
+    setProgress(100);
+    setStatus(`4/4 - ✅ Concluído (${targetInfo.provider})`);
+    if ($('speedQualityRating')) {
+      const upLabel = Number.isFinite(upMbps) ? formatMbps(upMbps) : 'Indisponível';
+      $('speedQualityRating').textContent = `Download ${formatMbps(downMbps)} • Upload ${upLabel} • Latência ${Math.round(ping)} ms • Jitter ${jitter.toFixed(1)} ms`;
+    }
   } catch (err) {
-    setProgress(0); setStatus('Teste não disponível nesta rede/TV');
-    if ($('speedQualityRating')) $('speedQualityRating').textContent = 'Não foi possível medir com segurança: ' + (err.message || 'endpoint bloqueado') + '. Configure mk21_speed_test_endpoint em um endpoint próprio com CORS.';
+    if (isStale()) return;
+    setProgress(0);
+    setStatus('Teste não disponível nesta rede/TV');
+    if ($('speedQualityRating')) {
+      $('speedQualityRating').textContent = 'Não foi possível medir: ' + (err && err.message ? err.message : 'endpoint bloqueado') + '.';
+    }
   }
 }
 
@@ -7116,13 +7518,75 @@ function mk21RectCenter(el) {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r };
 }
 
+function mk21ResetViewportScroll() {
+  try {
+    if (window.scrollX !== 0 || window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
+    if (document.documentElement) {
+      document.documentElement.scrollTop = 0;
+      document.documentElement.scrollLeft = 0;
+    }
+    if (document.body) {
+      document.body.scrollTop = 0;
+      document.body.scrollLeft = 0;
+    }
+    const fixedContainers = [
+      '#home-container',
+      '.app-body',
+      '.app-header',
+      '#sectionUnified',
+      '#sectionSettings',
+      '.col-categories',
+      '.col-channels',
+      '.col-player'
+    ];
+    for (let i = 0; i < fixedContainers.length; i++) {
+      const node = document.querySelector(fixedContainers[i]);
+      if (node) {
+        if (node.scrollTop !== 0) node.scrollTop = 0;
+        if (node.scrollLeft !== 0) node.scrollLeft = 0;
+      }
+    }
+  } catch (e) {}
+}
+
+function mk21ScrollElementInsideContainer(el) {
+  if (!el || typeof el.closest !== 'function') return;
+  try {
+    const container = el.closest('#listCategories, #listItems, .settings-left-menu, .settings-detail-panel, .pane-scroll, .scrollable-container, #serverItemsGrid, #devLogsContainer, #epgScheduleList, .omnisearch-body');
+    if (!container || container === el) return;
+    const cRect = container.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const pad = 8;
+    if (eRect.top < cRect.top + pad) {
+      container.scrollTop += (eRect.top - (cRect.top + pad));
+    } else if (eRect.bottom > cRect.bottom - pad) {
+      container.scrollTop += (eRect.bottom - (cRect.bottom - pad));
+    }
+    if (typeof mk21UpdateVisualScrollbarFor === 'function') {
+      mk21UpdateVisualScrollbarFor(container);
+    }
+  } catch (e) {}
+}
+
+function mk21FocusSafe(el) {
+  if (!el || typeof el.focus !== 'function') return;
+  try {
+    el.focus({ preventScroll: true });
+  } catch (e) {
+    try { el.focus(); } catch (e2) {}
+  }
+  mk21ScrollElementInsideContainer(el);
+  mk21ResetViewportScroll();
+}
+
 function mk21MoveFocus(direction) {
   const items = mk21GetFocusables();
   if (!items.length) return;
   let current = document.activeElement;
   if (!current || items.indexOf(current) === -1) {
-    items[0].focus();
-    try { items[0].scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    mk21FocusSafe(items[0]);
     return;
   }
   const cur = mk21RectCenter(current);
@@ -7166,20 +7630,7 @@ function mk21MoveFocus(direction) {
   }
 
   if (best) {
-    best.focus();
-    try {
-      best.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      if (window.scrollX !== 0 || window.scrollY !== 0) {
-        window.scrollTo(0, 0);
-      }
-      if (document.documentElement.scrollLeft !== 0) {
-        document.documentElement.scrollLeft = 0;
-      }
-      const colPl = document.querySelector('.col-player');
-      if (colPl && colPl.scrollTop !== 0) {
-        colPl.scrollTop = 0;
-      }
-    } catch (e) {}
+    mk21FocusSafe(best);
     // mantém índices legados sincronizados
     try {
       if (best.id && typeof headerElements !== 'undefined' && headerElements.indexOf(best.id) !== -1) {
@@ -7224,8 +7675,7 @@ function focusActiveElement() {
     }
     if (!el || !mk21IsVisible(el)) el = items[0];
     if (el) {
-      el.focus();
-      try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      mk21FocusSafe(el);
     }
   } catch (err) {
     console.warn('[MK21] focusActiveElement', err);
@@ -7528,11 +7978,11 @@ document.addEventListener('keydown', function (e) {
       closeSearchMode(false);
       const firstChannel = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
       if (firstChannel) {
-        firstChannel.focus();
+        mk21FocusSafe(firstChannel);
         activeZone = 'channels';
       } else {
         const cat = $('listCategories') ? ($('listCategories').querySelector('.cat-item-btn.active') || $('listCategories').querySelector('.cat-item-btn')) : null;
-        if (cat) { cat.focus(); activeZone = 'categories'; }
+        if (cat) { mk21FocusSafe(cat); activeZone = 'categories'; }
       }
       return;
     }
@@ -7540,21 +7990,21 @@ document.addEventListener('keydown', function (e) {
       e.preventDefault();
       closeSearchMode(false);
       const activeTab = document.querySelector('.main-tabs .tab-btn.active') || $('tabLive');
-      if (activeTab) { activeTab.focus(); activeZone = 'header'; }
+      if (activeTab) { mk21FocusSafe(activeTab); activeZone = 'header'; }
       return;
     }
     if ((k === 37 || key === 'ArrowLeft') && (!ae.value || ae.selectionStart === 0)) {
       e.preventDefault();
       closeSearchMode(false);
       const activeCat = $('listCategories') ? ($('listCategories').querySelector('.cat-item-btn.active') || $('listCategories').querySelector('.cat-item-btn')) : null;
-      if (activeCat) { activeCat.focus(); activeZone = 'categories'; }
+      if (activeCat) { mk21FocusSafe(activeCat); activeZone = 'categories'; }
       return;
     }
     if (k === 39 || key === 'ArrowRight') {
       if (!ae.value || ae.selectionStart === ae.value.length) {
         e.preventDefault();
         const nextBtn = $('btnClearSearch') || $('btnFullscreen') || $('btnPlayPause');
-        if (nextBtn) { nextBtn.focus(); }
+        if (nextBtn) { mk21FocusSafe(nextBtn); }
         return;
       }
     }
@@ -8282,19 +8732,34 @@ function initWebOSScrollFix() {
 
   if (!window.__mk21VisualScrollInit) {
     window.__mk21VisualScrollInit = true;
+    ['#home-container', '.app-body', '#sectionUnified', '#sectionSettings', '.col-categories', '.col-channels', '.col-player'].forEach(function (sel) {
+      const wrapper = document.querySelector(sel);
+      if (wrapper) {
+        wrapper.addEventListener('scroll', function () {
+          if (wrapper.scrollTop !== 0) wrapper.scrollTop = 0;
+          if (wrapper.scrollLeft !== 0) wrapper.scrollLeft = 0;
+        }, { passive: true });
+      }
+    });
+    window.addEventListener('scroll', function () {
+      if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+    }, { passive: true });
     document.addEventListener('focusin', function (e) {
       const target = e.target;
       if (!target || typeof target.closest !== 'function') return;
+      mk21ResetViewportScroll();
       const container = target.closest(WEBOS_SCROLL_SELECTOR);
       document.querySelectorAll('.mk21-vscroll-rail.is-active').forEach(function (r) {
         r.classList.remove('is-active');
       });
       if (container) {
+        mk21ScrollElementInsideContainer(target);
         mk21UpdateVisualScrollbarFor(container);
         if (container._mk21ScrollRail) container._mk21ScrollRail.classList.add('is-active');
       }
     }, true);
     window.addEventListener('resize', function () {
+      mk21ResetViewportScroll();
       document.querySelectorAll(WEBOS_SCROLL_SELECTOR).forEach(function (el) {
         if (el.offsetParent !== null) mk21UpdateVisualScrollbarFor(el);
       });
@@ -8750,15 +9215,16 @@ function unlockHomeInterface(shouldLoad = true) {
 
   const scheduleFrame = (window.requestAnimationFrame || function (cb) { return setTimeout(cb, 0); });
   scheduleFrame(function () {
-    if (window.__mk21WebOSScrollFixActive) {
-      ['#listCategories', '#listItems'].forEach(function (sel) {
-        const el = document.querySelector(sel);
-        if (el) forceRevealScrollbar(el);
-      });
-    }
+    mk21ResetViewportScroll();
+    ['#listCategories', '#listItems'].forEach(function (sel) {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      if (window.__mk21WebOSScrollFixActive) forceRevealScrollbar(el);
+      else mk21UpdateVisualScrollbarFor(el);
+    });
     activeZone = 'header';
     focusedHeaderIdx = 0;
-    if ($('tabLive')) $('tabLive').focus();
+    if ($('tabLive')) mk21FocusSafe($('tabLive'));
     else if (typeof focusActiveElement === 'function') focusActiveElement();
   });
 

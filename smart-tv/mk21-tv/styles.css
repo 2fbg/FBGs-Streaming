@@ -2927,12 +2927,15 @@ body.osk-open .login-card {
 /* Seção Unificada 3 Colunas: ativa apenas quando NÃO oculta */
 #sectionUnified:not(.hidden) {
   display: grid !important;
-  grid-template-columns: minmax(140px, 1.15fr) minmax(210px, 1.85fr) minmax(310px, 2.1fr) !important;
+  grid-template-columns: minmax(150px, 1.15fr) minmax(230px, 2.25fr) minmax(240px, 1.45fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  align-items: stretch !important;
   gap: 12px !important;
   padding: 10px 14px !important;
   background: #090b12 !important;
   height: 100% !important;
   max-height: 100% !important;
+  min-height: 0 !important;
   overflow: hidden !important;
   overflow-x: hidden !important;
   box-sizing: border-box !important;
@@ -3017,7 +3020,8 @@ body.osk-open .login-card {
     font-size: 14px !important;
   }
   #sectionUnified:not(.hidden) {
-    grid-template-columns: minmax(130px, 1.1fr) minmax(190px, 1.8fr) minmax(270px, 2fr) !important;
+    grid-template-columns: minmax(140px, 1.1fr) minmax(210px, 2.15fr) minmax(220px, 1.4fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
     gap: 10px !important;
     padding: 8px 10px !important;
   }
@@ -3053,7 +3057,8 @@ body.osk-open .login-card {
     margin-bottom: 4px !important;
   }
   #sectionUnified:not(.hidden) {
-    grid-template-columns: minmax(120px, 1fr) minmax(170px, 1.7fr) minmax(240px, 2.1fr) !important;
+    grid-template-columns: minmax(130px, 1.05fr) minmax(195px, 2.1fr) minmax(205px, 1.35fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
     gap: 8px !important;
     padding: 6px 8px !important;
   }
@@ -3145,18 +3150,34 @@ body.osk-open .login-card {
   background: #ffa726 !important;
 }
 
-/* O mini player fica travado no topo e NUNCA rola para fora da tela */
+/* Colunas sempre travadas à altura da viewport; apenas as listas rolam internamente */
+.col-pane,
+.col-categories,
+.col-channels,
 .col-player {
   overflow: hidden !important;
   overflow-y: hidden !important;
   height: 100% !important;
   max-height: 100% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
   display: flex !important;
   flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+
+#sectionUnified #listCategories,
+#sectionUnified #listItems {
+  flex: 1 1 0% !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
 }
 
 .video-box:not(.is-fullscreen):not(:fullscreen):not(:-webkit-full-screen) {
-  max-height: 46vh !important;
+  max-height: 40vh !important;
   flex: 0 0 auto !important;
 }
 
@@ -3465,6 +3486,19 @@ body.osk-open .login-card {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  overflow: hidden !important;
+}
+
+body.is-fullscreen #remoteColorBar,
+body.is-fullscreen #remoteColorBar.remote-color-bar,
+body.is-fullscreen .remote-color-bar,
+#home-container:fullscreen #remoteColorBar,
+#home-container:-webkit-full-screen #remoteColorBar {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
   overflow: hidden !important;
 }
 
