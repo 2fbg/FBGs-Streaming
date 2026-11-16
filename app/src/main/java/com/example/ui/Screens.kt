@@ -198,11 +198,17 @@ fun AppNavigation(viewModel: AppViewModel) {
     }
 }
 
+private fun formatLicenseDate(epochSeconds: Long): String {
+    val formatter = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR"))
+    return formatter.format(java.util.Date(epochSeconds * 1000L))
+}
+
 @Composable
 fun TrialExpiredScreen(viewModel: AppViewModel) {
     val context = LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val virtualMac = viewModel.virtualMacAddress
+    val isActivatingLicense by viewModel.isActivatingLicense.collectAsState()
     
     var activationCodeInput by remember { mutableStateOf("") }
     var activationError by remember { mutableStateOf<String?>(null) }
@@ -352,15 +358,18 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
 
             // Action button
             Button(
+                enabled = !isActivatingLicense,
                 onClick = {
-                    if (activationCodeInput.isEmpty()) {
+                    if (activationCodeInput.isBlank()) {
                         activationError = "Por favor, digite seu código de ativação"
                     } else {
-                        val success = viewModel.activateLicense(activationCodeInput)
-                        if (success) {
-                            android.widget.Toast.makeText(context, "Dispositivo ativado com sucesso! Aproveite!", android.widget.Toast.LENGTH_LONG).show()
-                        } else {
-                            activationError = "Código inválido para este dispositivo!"
+                        activationError = null
+                        viewModel.activateLicense(activationCodeInput) { success, message ->
+                            if (success) {
+                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                            } else {
+                                activationError = message
+                            }
                         }
                     }
                 },
@@ -370,12 +379,20 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
                     .fillMaxWidth()
                     .height(48.dp)
             ) {
-                Text(
-                    text = "ATIVAR DISPOSITIVO",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black,
-                    fontSize = 14.sp
-                )
+                if (isActivatingLicense) {
+                    CircularProgressIndicator(
+                        color = Color.Black,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Text(
+                        text = "ATIVAR DISPOSITIVO",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        fontSize = 14.sp
+                    )
+                }
             }
         }
     }
@@ -609,6 +626,8 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
     var logoClickCount by remember { mutableStateOf(0) }
     var showLicenseDialogInLogin by remember { mutableStateOf(false) }
     val isPremiumActive by viewModel.isPremiumActive.collectAsState()
+    val currentLicenseInfo by viewModel.currentLicenseInfo.collectAsState()
+    val isActivatingLicense by viewModel.isActivatingLicense.collectAsState()
 
     val isAmoled = MaterialTheme.colorScheme.background == Color.Black
     Box(
@@ -1474,8 +1493,13 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center
                         ) {
+                            val activeLicense = currentLicenseInfo
                             Text(
-                                text = if (isPremiumActive) "PREMIUM ATIVO" else "MODO AVALIAÇÃO: ${viewModel.trialDaysLeft.value} DIAS",
+                                text = when {
+                                    activeLicense != null -> "ATIVO ATÉ ${formatLicenseDate(activeLicense.expiresAtEpoch)}"
+                                    isPremiumActive -> "PREMIUM ATIVO"
+                                    else -> "MODO AVALIAÇÃO: ${viewModel.trialDaysLeft.value} DIAS"
+                                },
                                 color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -1653,22 +1677,21 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                             }
 
                             Button(
+                                enabled = !isActivatingLicense,
                                 onClick = {
                                     val trimmedInput = localKeyInput.trim()
                                     if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
                                         isAdminMode = true
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else if (trimmedInput.isEmpty()) {
+                                        licenseStatusMsg = "Insira um código válido"
                                     } else {
-                                        if (localKeyInput.isEmpty()) {
-                                            licenseStatusMsg = "Insira um código válido"
-                                        } else {
-                                            val success = viewModel.activateLicense(localKeyInput)
+                                        licenseStatusMsg = null
+                                        viewModel.activateLicense(trimmedInput) { success, message ->
+                                            licenseStatusMsg = if (success) "Premium Ativado!" else message
                                             if (success) {
-                                                licenseStatusMsg = "Premium Ativado!"
-                                                android.widget.Toast.makeText(context, "Chave ativada com sucesso!", android.widget.Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                licenseStatusMsg = "Código inválido para este ID"
+                                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -1677,7 +1700,15 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 modifier = Modifier.weight(1.2f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("ATIVAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                if (isActivatingLicense) {
+                                    CircularProgressIndicator(
+                                        color = Color.Black,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Text("ATIVAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
                             }
                         }
                     }
@@ -6972,6 +7003,8 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
     val password by viewModel.password.collectAsState()
     val activePlaylist by viewModel.activePlaylistName.collectAsState()
     val isPremiumActive by viewModel.isPremiumActive.collectAsState()
+    val currentLicenseInfo by viewModel.currentLicenseInfo.collectAsState()
+    val isActivatingLicense by viewModel.isActivatingLicense.collectAsState()
     val trialDaysLeft by viewModel.trialDaysLeft.collectAsState()
     val useAmoledMode by viewModel.useAmoledMode.collectAsState()
     val adultPin = viewModel.preferencesService.adultPin
@@ -7145,7 +7178,14 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                                     if (list.isEmpty()) "Segundo Plano" else "1º Plano: " + list.joinToString(", ")
                                                 }
                                                 "Importar do Painel" -> "Carregar texto do painel"
-                                                "Licença e Ativação" -> if (isPremiumActive) "Premium Ativo" else "$trialDaysLeft dias"
+                                                "Licença e Ativação" -> {
+                                                    val activeLicense = currentLicenseInfo
+                                                    when {
+                                                        activeLicense != null -> "Ativo até ${formatLicenseDate(activeLicense.expiresAtEpoch)}"
+                                                        isPremiumActive -> "Premium Ativo"
+                                                        else -> "$trialDaysLeft dias"
+                                                    }
+                                                }
                                                 "Modo AMOLED" -> if (useAmoledMode) "Ativo (Preto Absoluto)" else "Inativo (Padrão)"
                                                 "Espelhar com a TV" -> "Como sincronizar com a TV"
                                                 else -> ""
@@ -8207,8 +8247,13 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                 .padding(horizontal = 10.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center
                         ) {
+                            val activeLicense = currentLicenseInfo
                             Text(
-                                text = if (isPremiumActive) "PREMIUM ATIVO" else "MODO AVALIAÇÃO: $trialDaysLeft DIAS",
+                                text = when {
+                                    activeLicense != null -> "ATIVO ATÉ ${formatLicenseDate(activeLicense.expiresAtEpoch)}"
+                                    isPremiumActive -> "PREMIUM ATIVO"
+                                    else -> "MODO AVALIAÇÃO: $trialDaysLeft DIAS"
+                                },
                                 color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -8412,22 +8457,21 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             }
 
                             Button(
+                                enabled = !isActivatingLicense,
                                 onClick = {
                                     val trimmedInput = localKeyInput.trim()
                                     if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
                                         isAdminMode = true
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else if (trimmedInput.isEmpty()) {
+                                        licenseStatusMsg = "Insira um código válido"
                                     } else {
-                                        if (localKeyInput.isEmpty()) {
-                                            licenseStatusMsg = "Insira um código válido"
-                                        } else {
-                                            val success = viewModel.activateLicense(localKeyInput)
+                                        licenseStatusMsg = null
+                                        viewModel.activateLicense(trimmedInput) { success, message ->
+                                            licenseStatusMsg = if (success) "Premium Ativado!" else message
                                             if (success) {
-                                                licenseStatusMsg = "Premium Ativado!"
-                                                android.widget.Toast.makeText(context, "Chave ativada com sucesso!", android.widget.Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                licenseStatusMsg = "Código inválido para este ID"
+                                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -8436,7 +8480,15 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                 modifier = Modifier.weight(1.2f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("ATIVAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                if (isActivatingLicense) {
+                                    CircularProgressIndicator(
+                                        color = Color.Black,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Text("ATIVAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
                             }
                         }
                     }

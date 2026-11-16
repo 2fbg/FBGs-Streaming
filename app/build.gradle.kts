@@ -155,6 +155,15 @@ android {
       .replace("\"", "")
       .trim()
     buildConfigField("String", "EXPECTED_CERT_SHA256", "\"$expectedCertSha256\"")
+
+    val licensePubKeyB64 = (
+      project.findProperty("LICENSE_PUBKEY_B64")?.toString()
+        ?: System.getenv("LICENSE_PUBKEY_B64")
+        ?: ""
+      )
+      .replace("\"", "")
+      .trim()
+    buildConfigField("String", "LICENSE_PUBKEY_B64", "\"$licensePubKeyB64\"")
   }
 
   val releaseStorePass = System.getenv("STORE_PASSWORD")?.takeIf { it.isNotBlank() }

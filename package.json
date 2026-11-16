@@ -22,6 +22,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "hls.js": "^1.7.4"
   }
 }

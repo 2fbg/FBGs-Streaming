@@ -28,14 +28,18 @@ import com.example.data.model.ServerProfile
 import com.example.data.parser.M3UParser
 import com.example.data.service.PreferencesService
 import com.fbg.streaming.security.ApkSignatureVerifier
+import com.fbg.streaming.security.LicenseInfo
+import com.fbg.streaming.security.LicenseTokenVerifier
 import com.fbg.streaming.update.DownloadVerificationResult
 import com.fbg.streaming.update.Mk21UpdateManager
 import com.fbg.streaming.update.UpdateCheckOutcome
 import com.fbg.streaming.update.UpdateInfo
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -86,26 +90,146 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         get() = _predefinedServersState.value.map { it.name }.toSet()
 
     // Real-time Licencing State Flows
-    private val _isPremiumActive = MutableStateFlow(preferencesService.isLicenseValid())
+    private val _currentLicenseInfo = MutableStateFlow(preferencesService.currentLicense())
+    val currentLicenseInfo: StateFlow<LicenseInfo?> = _currentLicenseInfo.asStateFlow()
+
+    private val _isPremiumActive = MutableStateFlow(_currentLicenseInfo.value != null)
     val isPremiumActive = _isPremiumActive.asStateFlow()
 
     private val _trialDaysLeft = MutableStateFlow(preferencesService.getTrialDaysRemaining())
     val trialDaysLeft = _trialDaysLeft.asStateFlow()
 
+    private val _isActivatingLicense = MutableStateFlow(false)
+    val isActivatingLicense: StateFlow<Boolean> = _isActivatingLicense.asStateFlow()
+
     val virtualMacAddress: String
         get() = preferencesService.virtualMac
 
+    @Deprecated("Substituído pela emissão de tokens ECDSA P-256 via servidor.")
+    @Suppress("DEPRECATION")
     fun generateAutonomousKey(mac: String): String {
-        // Emite chave HMAC-SHA256 (o gerador MD5 legado foi descontinuado).
         return preferencesService.generateValidKeyForDevice(mac)
     }
 
-    fun activateLicense(key: String): Boolean {
-        preferencesService.activationKey = key
-        val isValid = preferencesService.isLicenseValid()
-        _isPremiumActive.value = isValid
+    private fun syncLicenseState() {
+        val info = preferencesService.currentLicense()
+        _currentLicenseInfo.value = info
+        _isPremiumActive.value = info != null
         _trialDaysLeft.value = preferencesService.getTrialDaysRemaining()
-        return isValid
+    }
+
+    /**
+     * Ativa a licença via servidor (`/api/license/activate`), valida a assinatura ECDSA P-256
+     * recebida no token e persiste localmente para verificação offline.
+     */
+    fun activateLicense(code: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        val trimmedCode = code.trim()
+        if (trimmedCode.isEmpty()) {
+            onResult(false, "Insira um código válido")
+            return
+        }
+        if (_isActivatingLicense.value) return
+        _isActivatingLicense.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val (success, message) = requestLicenseActivation(trimmedCode)
+            withContext(Dispatchers.Main) {
+                _isActivatingLicense.value = false
+                onResult(success, message)
+            }
+        }
+    }
+
+    private fun requestLicenseActivation(code: String): Pair<Boolean, String> {
+        return try {
+            val payloadJson = JSONObject().apply {
+                put("code", code)
+                put("deviceId", virtualMacAddress)
+            }.toString()
+
+            val request = Request.Builder()
+                .url("$LICENSE_API_BASE_URL/activate")
+                .post(payloadJson.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                val rawBody = response.body?.string().orEmpty()
+                val json = runCatching { JSONObject(rawBody) }.getOrNull()
+
+                if (!response.isSuccessful) {
+                    val serverMsg = json?.optString("error", "")?.trim().orEmpty()
+                    return false to serverMsg.ifEmpty { "Código inválido para este dispositivo (${response.code})" }
+                }
+
+                val token = json?.optString("token", "")?.trim().orEmpty()
+                if (token.isEmpty()) {
+                    return false to "Resposta inválida do servidor de licenças"
+                }
+
+                val verified = LicenseTokenVerifier.verify(
+                    token = token,
+                    deviceId = virtualMacAddress,
+                    publicKeyB64 = BuildConfig.LICENSE_PUBKEY_B64
+                ) ?: return false to "Token inválido ou chave pública não configurada neste build"
+
+                preferencesService.licenseToken = token
+                preferencesService.activationKey = code
+                _currentLicenseInfo.value = verified
+                _isPremiumActive.value = true
+                _trialDaysLeft.value = 9999
+                true to "Dispositivo ativado com sucesso!"
+            }
+        } catch (e: Throwable) {
+            Log.w("MK21_VM", "License activation network failure: ${e.message}")
+            false to "Não foi possível conectar ao servidor de ativação. Verifique sua internet."
+        }
+    }
+
+    private fun refreshLicenseIfNeeded() {
+        val current = preferencesService.currentLicense() ?: return
+        val nowEpoch = System.currentTimeMillis() / 1000L
+        val thirtyDaysSeconds = 30L * 86400L
+        if (current.expiresAtEpoch - nowEpoch >= thirtyDaysSeconds) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val payloadJson = JSONObject().apply {
+                    put("deviceId", virtualMacAddress)
+                }.toString()
+
+                val request = Request.Builder()
+                    .url("$LICENSE_API_BASE_URL/refresh")
+                    .post(payloadJson.toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use
+                    val rawBody = response.body?.string().orEmpty()
+                    val token = runCatching { JSONObject(rawBody).optString("token", "").trim() }.getOrDefault("")
+                    if (token.isEmpty()) return@use
+
+                    val verified = LicenseTokenVerifier.verify(
+                        token = token,
+                        deviceId = virtualMacAddress,
+                        publicKeyB64 = BuildConfig.LICENSE_PUBKEY_B64
+                    ) ?: return@use
+
+                    preferencesService.licenseToken = token
+                    withContext(Dispatchers.Main) {
+                        _currentLicenseInfo.value = verified
+                        _isPremiumActive.value = true
+                        _trialDaysLeft.value = 9999
+                    }
+                }
+            } catch (_: Throwable) {
+                // Silencioso: mantém funcionamento offline até a expiração do token local
+            }
+        }
+    }
+
+    companion object {
+        private const val LICENSE_API_BASE_URL = "https://bgstreaming.vercel.app/api/license"
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 
     private val _username = MutableStateFlow(preferencesService.username)
@@ -926,6 +1050,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (preferencesService.trialStartDate == 0L) {
             preferencesService.trialStartDate = System.currentTimeMillis()
         }
+
+        // Silent background license refresh when fewer than 30 days remain
+        refreshLicenseIfNeeded()
         
         // Autoload current configurations or do silent caching check
         viewModelScope.launch {

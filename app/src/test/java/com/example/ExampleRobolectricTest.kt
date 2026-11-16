@@ -58,44 +58,46 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `test hmac sha256 license validation`() {
+  fun `test ecdsa license validation in preferences service`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val prefs = PreferencesService(context)
     val mac = prefs.virtualMac
-    val validKey = prefs.generateValidKeyForDevice(mac)
 
-    // Initially with empty key, license is invalid
-    prefs.activationKey = ""
-    org.junit.Assert.assertFalse(prefs.isLicenseValid())
+    val kpg = java.security.KeyPairGenerator.getInstance("EC")
+    kpg.initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+    val keyPair = kpg.generateKeyPair()
+    val pubB64 = android.util.Base64.encodeToString(keyPair.public.encoded, android.util.Base64.NO_WRAP)
 
-    // With invalid or bypass key, license must be invalid
-    prefs.activationKey = "ADMIN2026"
-    org.junit.Assert.assertFalse(prefs.isLicenseValid())
-
-    prefs.activationKey = "GUARNIERE2026"
-    org.junit.Assert.assertFalse(prefs.isLicenseValid())
-
-    prefs.activationKey = "9999"
-    org.junit.Assert.assertFalse(prefs.isLicenseValid())
-
-    // With legitimate HMAC-SHA256 generated key, license is valid
-    prefs.activationKey = validKey
-    org.junit.Assert.assertTrue(prefs.isLicenseValid())
-
-    // Legacy MD5 key is only accepted when ALLOW_LEGACY_LICENSE=true at build time (default: off)
-    @Suppress("DEPRECATION")
-    val autonomousKey = prefs.generateAutonomousKeyForDevice(mac)
-    prefs.activationKey = autonomousKey
-    if (BuildConfig.LEGACY_LICENSE_ENABLED) {
-      org.junit.Assert.assertTrue(prefs.isLicenseValid())
-    } else {
-      org.junit.Assert.assertFalse(prefs.isLicenseValid())
+    val now = System.currentTimeMillis() / 1000L
+    val urlFlags = android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+    val payloadJson = org.json.JSONObject().apply {
+      put("d", mac)
+      put("t", "pro")
+      put("iat", now)
+      put("exp", now + 365 * 86400L)
+      put("o", "ORD-ROBO-1")
+    }.toString()
+    val body = "MKL1." + android.util.Base64.encodeToString(payloadJson.toByteArray(Charsets.UTF_8), urlFlags)
+    val sig = java.security.Signature.getInstance("SHA256withECDSA").run {
+      initSign(keyPair.private)
+      update(body.toByteArray(Charsets.UTF_8))
+      sign()
     }
+    val validToken = "$body." + android.util.Base64.encodeToString(sig, urlFlags)
 
-    // Verify key from user's device MAC matches autonomous generator
-    val sampleMac = "9D:59:2E:00:6A:1F"
-    @Suppress("DEPRECATION")
-    val sampleGeneratedKey = prefs.generateAutonomousKeyForDevice(sampleMac)
-    org.junit.Assert.assertEquals("MK-9F83-B09E-F4D4", sampleGeneratedKey)
+    // Initially empty or fake legacy strings must be invalid
+    prefs.licenseToken = ""
+    org.junit.Assert.assertNull(prefs.currentLicense(pubB64, now))
+    org.junit.Assert.assertFalse(prefs.isLicenseValid())
+
+    prefs.licenseToken = "ADMIN2026"
+    org.junit.Assert.assertNull(prefs.currentLicense(pubB64, now))
+
+    // Valid ECDSA token unlocks the device
+    prefs.licenseToken = validToken
+    val license = prefs.currentLicense(pubB64, now)
+    assertNotNull(license)
+    assertEquals("pro", license?.tier)
+    assertEquals("ORD-ROBO-1", license?.orderCode)
   }
 }

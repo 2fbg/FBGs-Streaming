@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.example.BuildConfig
+import com.fbg.streaming.security.LicenseInfo
+import com.fbg.streaming.security.LicenseTokenVerifier
 import java.security.MessageDigest
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -149,6 +151,10 @@ class PreferencesService(context: Context) {
         get() = try { prefs.getString("activation_key", "") ?: "" } catch (e: Throwable) { "" }
         set(value) { try { prefs.edit().putString("activation_key", value).apply() } catch (e: Throwable) {} }
 
+    var licenseToken: String
+        get() = try { prefs.getString("license_token", "") ?: "" } catch (e: Throwable) { "" }
+        set(value) { try { prefs.edit().putString("license_token", value).apply() } catch (e: Throwable) {} }
+
     val deviceId: String by lazy {
         try {
             val androidId = android.provider.Settings.Secure.getString(
@@ -167,8 +173,10 @@ class PreferencesService(context: Context) {
     }
 
     /**
-     * Generates valid activation key for a device using HMAC-SHA256 with the app secret from BuildConfig.
+     * LEGADO: gera chave HMAC-SHA256 local. Mantido apenas para compatibilidade temporária
+     * de ferramentas internas; não é aceito por [isLicenseValid].
      */
+    @Deprecated("Substituído por token ECDSA P-256 assinado pelo servidor.")
     fun generateValidKeyForDevice(deviceMac: String, secret: String = BuildConfig.LICENSE_SECRET): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
@@ -181,10 +189,9 @@ class PreferencesService(context: Context) {
     }
 
     /**
-     * LEGADO: gera a chave autônoma (MD5 + salt fixo). Só é aceita por [isLicenseValid] quando
-     * BuildConfig.LEGACY_LICENSE_ENABLED for true. Para emitir chaves novas use [generateValidKeyForDevice].
+     * LEGADO: gera a chave autônoma (MD5 + salt fixo). Descontinuado após migração para ECDSA P-256.
      */
-    @Deprecated("Algoritmo legado e previsível; use generateValidKeyForDevice (HMAC-SHA256).")
+    @Deprecated("Algoritmo legado e previsível; substituído por token ECDSA P-256 assinado pelo servidor.")
     fun generateAutonomousKeyForDevice(deviceMac: String): String {
         val cleanMac = deviceMac.replace("[^A-Fa-f0-9]".toRegex(), "").take(12).uppercase()
         val paddedMac = cleanMac.padEnd(12, 'F')
@@ -205,41 +212,22 @@ class PreferencesService(context: Context) {
     }
 
     /**
-     * Verifica a chave de ativação (HMAC-SHA256 com o segredo do BuildConfig).
-     * As chaves legadas (MD5 + salt fixo) só são aceitas quando BuildConfig.LEGACY_LICENSE_ENABLED
-     * for true (ALLOW_LEGACY_LICENSE=true no build): o algoritmo é público no APK, então qualquer
-     * pessoa consegue gerá-las offline.
+     * Valida offline o token ECDSA P-256 emitido pelo servidor (`MKL1.<payload>.<assinatura>`).
+     * Retorna null se ausente, inválido, expirado ou pertencente a outro dispositivo.
      */
-    fun isLicenseValid(): Boolean {
-        val key = activationKey.uppercase().trim()
-        if (key.isEmpty()) return false
-
-        // 1. HMAC-SHA256 de 3 segmentos (comparação em tempo constante)
-        val expectedHmac = generateValidKeyForDevice(virtualMac).uppercase().trim()
-        if (MessageDigest.isEqual(key.toByteArray(Charsets.UTF_8), expectedHmac.toByteArray(Charsets.UTF_8))) return true
-
-        if (!BuildConfig.LEGACY_LICENSE_ENABLED) return false
-
-        // 2. Legado: chave autônoma MD5 de 3 segmentos
-        val expectedAutonomous = generateAutonomousKeyForDevice(virtualMac).uppercase().trim()
-        if (key == expectedAutonomous) return true
-
-        // 3. Legado: chave autônoma de 2 segmentos
-        try {
-            val cleanMac = virtualMac.replace("[^A-Fa-f0-9]".toRegex(), "").take(12).uppercase()
-            val paddedMac = cleanMac.padEnd(12, 'F')
-            val formattedMac = paddedMac.chunked(2).joinToString(":")
-            val salt = "MK21_GOLDEN_SALT_2026"
-            val md5 = MessageDigest.getInstance("MD5")
-            val hashBytes: ByteArray = md5.digest((formattedMac + salt).toByteArray(Charsets.UTF_8))
-            val fullHash = hashBytes.joinToString("") { b -> "%02X".format(b) }
-            val p1 = fullHash.take(4)
-            val p2 = fullHash.takeLast(4)
-            if (key == "MK-$p1-$p2".uppercase()) return true
-        } catch (_: Exception) {}
-
-        return false
+    fun currentLicense(
+        publicKeyB64: String = BuildConfig.LICENSE_PUBKEY_B64,
+        nowEpoch: Long = System.currentTimeMillis() / 1000L
+    ): LicenseInfo? {
+        return LicenseTokenVerifier.verify(
+            token = licenseToken,
+            deviceId = virtualMac,
+            publicKeyB64 = publicKeyB64,
+            nowEpoch = nowEpoch
+        )
     }
+
+    fun isLicenseValid(): Boolean = currentLicense() != null
 
     fun getTrialDaysRemaining(): Int {
         if (isLicenseValid()) return 9999
