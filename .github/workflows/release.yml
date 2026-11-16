@@ -123,6 +123,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
           SECRET_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
           LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          LICENSE_PUBKEY_B64: ${{ secrets.LICENSE_PUBKEY_B64 }}
           RESOLVED_TAG: ${{ needs.check-release-needed.outputs.tag }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
@@ -144,6 +145,10 @@ jobs:
           fi
           if [ -z "${LICENSE_SECRET:-}" ] || [ "${#LICENSE_SECRET}" -lt 16 ] || [ "$LICENSE_SECRET" = "MK21_DEFAULT_HMAC_SECRET" ]; then
             echo "::error::Secret LICENSE_SECRET ausente, curto (<16) ou igual ao fallback antigo: obrigatório para publicar release."
+            exit 1
+          fi
+          if [ -z "${LICENSE_PUBKEY_B64:-}" ]; then
+            echo "::error::Secret LICENSE_PUBKEY_B64 ausente: chave pública ECDSA P-256 obrigatória para build de release com verificação offline."
             exit 1
           fi
 
@@ -196,6 +201,7 @@ jobs:
           KEYSTORE_PATH: ${{ steps.release-meta.outputs.keystore_path }}
           EXPECTED_CERT_SHA256: ${{ steps.release-meta.outputs.cert_pin }}
           LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          LICENSE_PUBKEY_B64: ${{ secrets.LICENSE_PUBKEY_B64 }}
           ALLOW_LEGACY_LICENSE: ${{ vars.ALLOW_LEGACY_LICENSE || 'false' }}
         run: |
           set -euo pipefail

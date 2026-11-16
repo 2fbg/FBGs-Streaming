@@ -43,3 +43,7 @@ dist/
 FETCH_HEAD
 *.backup
 /main
+
+# Chaves de licença ECDSA (NUNCA commitar)
+license-private.pem
+license-public.pem

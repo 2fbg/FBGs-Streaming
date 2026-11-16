@@ -78,6 +78,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'upload' }}
           SECRET_CERT_SHA256: ${{ secrets.EXPECTED_CERT_SHA256 }}
           LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          LICENSE_PUBKEY_B64: ${{ secrets.LICENSE_PUBKEY_B64 }}
           REQUIRE_SIGNED: ${{ github.event.inputs.require_signed || 'false' }}
         run: |
           set -euo pipefail
@@ -101,6 +102,12 @@ jobs:
           # Build de release exige o segredo de licença (sem fallback embutido no APK).
           if [ -z "${LICENSE_SECRET:-}" ] || [ "${#LICENSE_SECRET}" -lt 16 ]; then
             echo "::error::Secret LICENSE_SECRET ausente ou curto (mín. 16 caracteres): obrigatório para build de release assinado."
+            exit 1
+          fi
+
+          # Chave pública ECDSA P-256: obrigatória para verificação offline de licença no APK.
+          if [ -z "${LICENSE_PUBKEY_B64:-}" ]; then
+            echo "::error::Secret LICENSE_PUBKEY_B64 ausente: chave pública ECDSA P-256 obrigatória para build de release."
             exit 1
           fi
 
@@ -187,6 +194,7 @@ jobs:
           EXPECTED_CERT_SHA256: ${{ steps.release-keystore.outputs.cert_pin || '' }}
           SIGNED: ${{ steps.release-keystore.outputs.signed }}
           LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          LICENSE_PUBKEY_B64: ${{ secrets.LICENSE_PUBKEY_B64 }}
           ALLOW_LEGACY_LICENSE: ${{ vars.ALLOW_LEGACY_LICENSE || 'false' }}
         run: |
           set -euo pipefail
