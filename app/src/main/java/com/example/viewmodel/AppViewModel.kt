@@ -1,6 +1,9 @@
 package com.example.viewmodel
 
 import com.example.network.DnsResolver
+import com.example.network.StreamHeadersRegistry
+import com.example.network.StreamHttpClients
+import com.example.utils.LogSanitizer
 import android.net.Uri
 import androidx.media3.common.MediaItem
 
@@ -548,7 +551,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = emptyList()
     )
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private val okHttpClient = StreamHttpClients.baseClient.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor { chain ->
@@ -974,7 +977,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                     } catch (e: Throwable) {
-                        Log.w("MK21_VM", "Attempt $attempt to load servers from $url failed: ${e.message}")
+                        Log.w("MK21_VM", "Attempt $attempt to load servers from ${LogSanitizer.sanitizeUrl(url)} failed: ${LogSanitizer.sanitizeText(e.message)}")
                     }
                     if (!success && attempt < 3) {
                         delay(2000L * attempt) // Retry delay: 2s, 4s
@@ -1174,7 +1177,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var prefetchJob: kotlinx.coroutines.Job? = null
     private val prefetchClient by lazy {
-        okhttp3.OkHttpClient.Builder()
+        StreamHttpClients.streamClient.newBuilder()
             .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
             .build()
@@ -1196,12 +1199,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val urlStr = adj.url
                     if (urlStr.startsWith("http://", ignoreCase = true) || urlStr.startsWith("https://", ignoreCase = true)) {
-                        val req = okhttp3.Request.Builder()
+                        val customHeaders = StreamHeadersRegistry.get(urlStr)
+                        val reqBuilder = okhttp3.Request.Builder()
                             .url(urlStr)
-                            .header("User-Agent", "Mozilla/5.0 MK21Player/1.2.0")
+                            .header("User-Agent", customHeaders?.userAgent ?: "Mozilla/5.0 MK21Player/1.2.0")
                             .header("Range", "bytes=0-32767")
-                            .build()
-                        prefetchClient.newCall(req).execute().use { res ->
+                        if (!customHeaders?.referrer.isNullOrBlank()) {
+                            reqBuilder.header("Referer", customHeaders!!.referrer!!)
+                        }
+                        prefetchClient.newCall(reqBuilder.build()).execute().use { res ->
                             res.body?.byteStream()?.read(ByteArray(4096))
                         }
                     }
@@ -1698,7 +1704,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             false
         } catch (e: Exception) {
-            Log.e("MK21_VM", "Silent download/parse failed safely context: ${e.message}", e)
+            Log.e("MK21_VM", "Silent download/parse failed safely context: ${LogSanitizer.sanitizeText(e.message)}")
             false
         }
     }
@@ -1877,14 +1883,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // 4. Fallback protegido: só aceita URL sintética se responder com fluxo de vídeo real comprovado
             val candidateUrl = buildServerStreamUrl(targetServer, currentItem)
             if (candidateUrl.isNotBlank() && isStreamReachableAndValid(candidateUrl)) {
-                Log.d("MK21_VM", "URL sintética validada com sucesso no $targetServerName: $candidateUrl")
+                Log.d("MK21_VM", "URL sintética validada com sucesso no $targetServerName: ${LogSanitizer.sanitizeUrl(candidateUrl)}")
                 return@withContext candidateUrl
             }
 
             Log.w("MK21_VM", "Canal '${currentItem.name}' não encontrado e sem stream válido no servidor $targetServerName.")
             null
         } catch (e: Exception) {
-            Log.e("MK21_VM", "Erro ao resolver canal no servidor $targetServerName: ${e.message}", e)
+            Log.e("MK21_VM", "Erro ao resolver canal no servidor $targetServerName: ${LogSanitizer.sanitizeText(e.message)}")
             null
         }
     }

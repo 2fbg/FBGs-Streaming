@@ -23,6 +23,8 @@ object M3UParser {
 
         var currentMetaData: String? = null
         var currentGroup: String? = null
+        var pendingUserAgent: String? = null
+        var pendingReferrer: String? = null
         var processedLines = 0
         var firstLine: String? = null
 
@@ -50,10 +52,28 @@ object M3UParser {
                     currentMetaData = currentLine
                 } else if (currentLine.startsWith("#EXTGRP:", ignoreCase = true)) {
                     currentGroup = currentLine.substring(8).trim()
+                } else if (currentLine.startsWith("#EXTVLCOPT:", ignoreCase = true)) {
+                    val opt = currentLine.substring(11).trim()
+                    val eqIdx = opt.indexOf('=')
+                    if (eqIdx > 0) {
+                        val key = opt.substring(0, eqIdx).trim().lowercase(Locale.ROOT)
+                        val value = opt.substring(eqIdx + 1).trim()
+                        when (key) {
+                            "http-user-agent" -> if (value.isNotEmpty()) pendingUserAgent = value
+                            "http-referrer", "http-referer" -> if (value.isNotEmpty()) pendingReferrer = value
+                        }
+                    }
                 } else if (!currentLine.startsWith("#")) {
                     // This is a stream URL line!
                     val sanitizedUrl = sanitizeStreamUrl(currentLine)
                     if (sanitizedUrl != null) {
+                        if (pendingUserAgent != null || pendingReferrer != null) {
+                            com.example.network.StreamHeadersRegistry.register(
+                                sanitizedUrl,
+                                pendingUserAgent,
+                                pendingReferrer
+                            )
+                        }
                         if (currentMetaData != null) {
                             val metadata = currentMetaData
                             val item = parseItem(metadata, sanitizedUrl, playlistSource, currentGroup)
@@ -69,6 +89,8 @@ object M3UParser {
                         currentMetaData = null
                         currentGroup = null
                     }
+                    pendingUserAgent = null
+                    pendingReferrer = null
 
                     // Emitting progress at regular intervals
                     if (items.size % 400 == 0) {

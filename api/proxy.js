@@ -181,7 +181,68 @@ function isPrivateHost(hostname) {
     return false;
 }
 
-async function resolveAndValidateHost(hostname, lookupFn = dns.promises.lookup) {
+async function queryDoHProvider(url, httpsImpl = https) {
+    return new Promise((resolve) => {
+        try {
+            const req = httpsImpl.get(
+                url,
+                { headers: { Accept: 'application/dns-json', 'User-Agent': 'mk21-proxy-doh/1.0' } },
+                (resp) => {
+                    if (!resp || resp.statusCode < 200 || resp.statusCode >= 300) {
+                        if (resp) resp.resume();
+                        resolve([]);
+                        return;
+                    }
+                    let body = '';
+                    resp.setEncoding('utf8');
+                    resp.on('data', (chunk) => {
+                        if (body.length < 32768) body += chunk;
+                    });
+                    resp.on('end', () => {
+                        try {
+                            const json = JSON.parse(body);
+                            const answers = Array.isArray(json && json.Answer) ? json.Answer : [];
+                            const records = [];
+                            for (const ans of answers) {
+                                if (!ans || (ans.type !== 1 && ans.type !== 28)) continue;
+                                const ip = String(ans.data || '').trim();
+                                const family = net.isIP(ip);
+                                if (family === 4 || family === 6) {
+                                    records.push({ address: ip, family });
+                                }
+                            }
+                            resolve(records);
+                        } catch (_) {
+                            resolve([]);
+                        }
+                    });
+                }
+            );
+            req.on('error', () => resolve([]));
+            req.setTimeout(2500, () => {
+                try { req.destroy(); } catch (_) {}
+                resolve([]);
+            });
+        } catch (_) {
+            resolve([]);
+        }
+    });
+}
+
+async function resolveViaDoH(hostname, httpsImpl = https) {
+    const encoded = encodeURIComponent(hostname);
+    const providers = [
+        `https://1.1.1.1/dns-query?name=${encoded}&type=A`,
+        `https://dns.google/resolve?name=${encoded}&type=A`
+    ];
+    for (const url of providers) {
+        const records = await queryDoHProvider(url, httpsImpl);
+        if (records.length > 0) return records;
+    }
+    return [];
+}
+
+async function resolveAndValidateHost(hostname, lookupFn = dns.promises.lookup, dohLookupFn = resolveViaDoH) {
     if (isPrivateHost(hostname)) {
         return { allowed: false, reason: 'Acesso a redes locais e privadas não é permitido.' };
     }
@@ -195,15 +256,23 @@ async function resolveAndValidateHost(hostname, lookupFn = dns.promises.lookup) 
         };
     }
 
-    let records;
+    let records = [];
     try {
         records = await lookupFn(cleanHost, { all: true, verbatim: true });
     } catch (_) {
-        return { allowed: false, reason: 'Falha ao resolver destino.' };
+        records = [];
+    }
+
+    if ((!Array.isArray(records) || records.length === 0) && typeof dohLookupFn === 'function') {
+        try {
+            records = await dohLookupFn(cleanHost);
+        } catch (_) {
+            records = [];
+        }
     }
 
     if (!Array.isArray(records) || records.length === 0) {
-        return { allowed: false, reason: 'Destino sem endereço IP resolvido.' };
+        return { allowed: false, reason: 'Falha ao resolver destino.' };
     }
 
     for (const rec of records) {
@@ -263,6 +332,7 @@ function createProxyHandler(deps = {}) {
     const lookupFn = deps.lookup || dns.promises.lookup;
     const httpImpl = deps.httpImpl || http;
     const httpsImpl = deps.httpsImpl || https;
+    const dohLookupFn = deps.dohLookup || ((host) => resolveViaDoH(host, httpsImpl));
 
     return async function handler(req, res) {
         const origin = req.headers && req.headers.origin;
@@ -390,7 +460,7 @@ function createProxyHandler(deps = {}) {
                     return;
                 }
 
-                const dnsCheck = await resolveAndValidateHost(parsedUrl.hostname, lookupFn);
+                const dnsCheck = await resolveAndValidateHost(parsedUrl.hostname, lookupFn, dohLookupFn);
                 if (!dnsCheck.allowed) {
                     res.statusCode = 403;
                     res.setHeader('Content-Type', 'application/json');

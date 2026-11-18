@@ -19,6 +19,12 @@ const Mk21DnsResolver = {
 // MK21 PLAY v2.8.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
+// Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
+// HUD de zapping e teclado virtual). Ficam fora deste arquivo para poderem ser
+// testados em Node — ver smart-tv/tests/.
+const EpgGuide = require('../../core/EpgGuide.js');
+const ZapHud = require('../../core/ZapHud.js');
+const OnScreenKeyboard = require('../../core/OnScreenKeyboard.js');
 const $ = id => document.getElementById(id);
 
 // Fase 2: o legado deixou de viver no escopo global (agora e um IIFE bundlado).
@@ -32,7 +38,17 @@ window.mk21App = {
   logout: function () { return logout(); },
   initWebOSScrollFix: function () { return initWebOSScrollFix(); },
   get activeItem() { return activeItem; },
-  get playerService() { return window.FBG2PlayerService; }
+  get playerService() { return window.FBG2PlayerService; },
+  // Funcionalidades portadas do Saimo TV
+  openGuide: function () { return mk21OpenGuide(); },
+  closeGuide: function () { return mk21GuideClose(); },
+  guideState: function () { return mk21Guide; },
+  loadXmltv: function (force) { return mk21LoadXmltv(force); },
+  showZapHud: function (item) { return mk21ShowZapHud(item); },
+  hideZapHud: function () { return mk21HideZapHud(); },
+  openOsk: function (target) { return mk21OpenOsk(target); },
+  closeOsk: function (commit) { return mk21CloseOsk(commit); },
+  oskState: function () { return mk21Osk; }
 };
 
 // ==================== FASE 2: LIGACAO COM O PLAYERSERVICE ====================
@@ -63,6 +79,7 @@ let mk21FactoryAudioTracks = [];
       hidePlayerReconnectBadge();
       stallCount = 0;
       lastBufferProgressAt = Date.now();
+      if (activeItem && activeItem.url) mk21MarkStreamHealthy(activeItem.url);
       mk21SetBotaoTocando(true);
       if ($('epgStatus')) $('epgStatus').textContent = '\uD83D\uDD34 NO AR';
       updateRealResolution(activeItem);
@@ -835,7 +852,7 @@ function resumeLastChannelIfPossible() {
   if (toPlay) {
     currentContentType = 'LIVE';
     try {
-      ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings'].forEach(t => {
+      ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabGuide', 'tabSettings'].forEach(t => {
         if ($(t)) $(t).classList.remove('active');
       });
       if ($('tabLive')) $('tabLive').classList.add('active');
@@ -960,7 +977,7 @@ let focusedSeriesEpIdx = 0;
 let activeModalSeriesData = null;
 
 const headerElements = [
-  'tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings',
+  'tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabGuide', 'tabSettings',
   'btnHeaderServer', 'btnHeaderLogs', 'btnRefreshList', 'btnHeaderLogout'
 ];
 
@@ -1230,6 +1247,7 @@ async function parseM3uTextStream(res, onItem, onProgress) {
     }
     const lines = text.split(/\r?\n/);
     let meta = null;
+    let pendingHeaders = null;
     for (const raw of lines) {
       const line = raw.trim();
       if (line.startsWith('#EXTM3U')) {
@@ -1242,10 +1260,24 @@ async function parseM3uTextStream(res, onItem, onProgress) {
         const im = line.match(/tvg-id="([^"]*)"/i);
         const nm = line.match(/tvg-name="([^"]*)"/i);
         meta = { name: comma >= 0 ? line.slice(comma + 1).trim() : 'Item', group: gm && gm[1] ? gm[1].trim() : 'Geral', logo: lm && lm[1] ? lm[1].trim() : '', tvgId: im && im[1] ? im[1].trim() : '', tvgName: nm && nm[1] ? nm[1].trim() : '' };
+      } else if (line.startsWith('#EXTVLCOPT:')) {
+        const opt = line.slice(11).trim();
+        const eq = opt.indexOf('=');
+        if (eq > 0) {
+          const k = opt.slice(0, eq).trim().toLowerCase();
+          const v = opt.slice(eq + 1).trim();
+          if (v && (k === 'http-user-agent' || k === 'http-referrer' || k === 'http-referer')) {
+            if (!pendingHeaders) pendingHeaders = {};
+            pendingHeaders[k === 'http-user-agent' ? 'userAgent' : 'referrer'] = v;
+          }
+        }
       } else if (meta && /^https?:\/\//i.test(line)) {
         const type = determineType(meta.name, meta.group, line);
-        wrappedOnItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
+        const entry = { ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) };
+        if (pendingHeaders) entry.httpHeaders = pendingHeaders;
+        wrappedOnItem(entry);
         meta = null;
+        pendingHeaders = null;
       }
     }
     if (itemCount === 0) throw new Error('Lista M3U sem canais válidos');
@@ -1258,6 +1290,7 @@ async function parseM3uTextStream(res, onItem, onProgress) {
   let headerSample = '';
   let headerChecked = false;
   let meta = null;
+  let pendingHeaders = null;
   let received = 0;
   const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
   const quickAttr = (str, key) => {
@@ -1283,14 +1316,28 @@ async function parseM3uTextStream(res, onItem, onProgress) {
           tvgId: quickAttr(line, 'tvg-id'),
           tvgName: quickAttr(line, 'tvg-name')
         };
+      } else if (line.startsWith('#EXTVLCOPT:')) {
+        const opt = line.slice(11).trim();
+        const eq = opt.indexOf('=');
+        if (eq > 0) {
+          const k = opt.slice(0, eq).trim().toLowerCase();
+          const v = opt.slice(eq + 1).trim();
+          if (v && (k === 'http-user-agent' || k === 'http-referrer' || k === 'http-referer')) {
+            if (!pendingHeaders) pendingHeaders = {};
+            pendingHeaders[k === 'http-user-agent' ? 'userAgent' : 'referrer'] = v;
+          }
+        }
       } else if (line.startsWith('#EXTM3U')) {
         const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
         if (xm) window.serverXmltvUrl = xm;
       }
     } else if (meta && (line.startsWith('http://') || line.startsWith('https://'))) {
       const type = determineType(meta.name, meta.group, line);
-      wrappedOnItem({ ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) });
+      const entry = { ...meta, url: line, contentType: type, isAdult: isAdult(meta.name) || isAdult(meta.group) };
+      if (pendingHeaders) entry.httpHeaders = pendingHeaders;
+      wrappedOnItem(entry);
       meta = null;
+      pendingHeaders = null;
     }
   };
 
@@ -2685,6 +2732,63 @@ $('btnCloseSeriesModal').onclick = () => {
 // MOTOR EPG SMART TV: METADADOS REAIS DO SERVIDOR COM FALLBACK DINÂMICO
 // =====================================================================
 const smartTvEpgCache = new Map();
+const TV_EPG_DB = 'mk21_epg_tv_v1';
+const TV_EPG_STORE = 'epg_listings';
+const TV_EPG_TTL_MS = 6 * 3600 * 1000;
+let tvEpgDbPromise = null;
+
+function openTvEpgDb() {
+  if (tvEpgDbPromise) return tvEpgDbPromise;
+  tvEpgDbPromise = new Promise(resolve => {
+    try {
+      if (!window.indexedDB) { resolve(null); return; }
+      const req = indexedDB.open(TV_EPG_DB, 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(TV_EPG_STORE)) {
+          db.createObjectStore(TV_EPG_STORE, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+  return tvEpgDbPromise;
+}
+
+async function readTvEpgIdb(key) {
+  try {
+    const db = await openTvEpgDb();
+    if (!db) return null;
+    return await new Promise(resolve => {
+      const tx = db.transaction(TV_EPG_STORE, 'readonly');
+      const req = tx.objectStore(TV_EPG_STORE).get(key);
+      req.onsuccess = () => {
+        const rec = req.result;
+        if (!rec || !rec.updatedAt || (Date.now() - rec.updatedAt) > TV_EPG_TTL_MS) {
+          resolve(null);
+          return;
+        }
+        const cutoff = Date.now() - 24 * 3600 * 1000;
+        const fresh = (rec.listings || []).filter(l => {
+          const stop = parseXmltvTimestamp(l.stop_timestamp || l.end || l.stop);
+          return isNaN(stop) || stop >= cutoff;
+        });
+        resolve(fresh.length ? fresh : null);
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+
+async function writeTvEpgIdb(key, listings) {
+  try {
+    const db = await openTvEpgDb();
+    if (!db || !Array.isArray(listings) || !listings.length) return;
+    const tx = db.transaction(TV_EPG_STORE, 'readwrite');
+    tx.objectStore(TV_EPG_STORE).put({ key, updatedAt: Date.now(), listings: listings.slice(0, 16) });
+  } catch (e) {}
+}
 
 function decodeSmartTvEpgText(str) {
   if (!str || typeof str !== 'string') return '';
@@ -2858,22 +2962,44 @@ async function updateSmartTvEpg(item) {
     return;
   }
 
+  const listings = await mk21FetchShortEpg(item, streamId, srv, user, pass, 6);
+  if (listings && listings.length > 0 && activeItem === item) {
+    applyRealSmartTvEpg(item, listings);
+  }
+}
+
+/**
+ * Busca a grade curta de um canal no Xtream (`get_short_epg`) e guarda em memória + IndexedDB.
+ * Extraído de `updateSmartTvEpg` para ser reaproveitado pelo Guia de Programação
+ * (que precisa da grade de canais que o usuário não está assistindo).
+ */
+async function mk21FetchShortEpg(item, streamId, srv, user, pass, limit) {
+  if (!srv || !srv.url || !streamId || !user || !pass) return null;
+  const cacheKey = `epg_${streamId}`;
+  if (smartTvEpgCache.has(cacheKey)) return smartTvEpgCache.get(cacheKey);
+
+  const cachedIdb = await readTvEpgIdb(cacheKey);
+  if (cachedIdb && cachedIdb.length > 0) {
+    smartTvEpgCache.set(cacheKey, cachedIdb);
+    return cachedIdb;
+  }
+
   try {
     const cleanBase = srv.url.replace(/\/+$/, '');
-    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=6`;
+    const apiUrl = `${cleanBase}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_short_epg&stream_id=${streamId}&limit=${limit || 6}`;
     const res = await fetch(apiUrl);
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.epg_listings) && data.epg_listings.length > 0) {
         smartTvEpgCache.set(cacheKey, data.epg_listings);
-        if (activeItem === item) {
-          applyRealSmartTvEpg(item, data.epg_listings);
-        }
+        writeTvEpgIdb(cacheKey, data.epg_listings);
+        return data.epg_listings;
       }
     }
   } catch (err) {
     console.debug('[SmartTV EPG] Falha ao carregar metadados reais, mantendo simulação:', err);
   }
+  return null;
 }
 
 function parseXmltvTimestamp(val) {
@@ -3239,6 +3365,7 @@ function commitChannelNumber() {
   if (targetIdx >= 0 && targetIdx < currentFilteredItems.length) {
     playStream(currentFilteredItems[targetIdx]);
     showChannelBanner(`Canal ${channelNum}: ${currentFilteredItems[targetIdx].name}`);
+    mk21ShowZapHud(currentFilteredItems[targetIdx]);
   } else {
     showChannelBanner(`Canal ${channelNum} não encontrado`);
   }
@@ -3595,6 +3722,25 @@ function stopStallWatchdog() {
   }
 }
 
+const mk21ChannelHealth = new Map();
+
+function mk21MarkStreamFailure(url) {
+  if (!url) return;
+  if (mk21ChannelHealth.size > 400) mk21ChannelHealth.clear();
+  const prev = mk21ChannelHealth.get(url) || { fails: 0, lastFailAt: 0 };
+  mk21ChannelHealth.set(url, { fails: prev.fails + 1, lastFailAt: Date.now() });
+}
+
+function mk21MarkStreamHealthy(url) {
+  if (url) mk21ChannelHealth.delete(url);
+}
+
+function mk21IsRecentlyUnhealthy(url) {
+  const rec = url ? mk21ChannelHealth.get(url) : null;
+  if (!rec) return false;
+  return rec.fails >= 2 && (Date.now() - rec.lastFailAt) < 5 * 60 * 1000;
+}
+
 function triggerAutoReconnect(cause) {
   if (isAutoReconnecting || !activeItem) return;
   isAutoReconnecting = true;
@@ -3603,6 +3749,7 @@ function triggerAutoReconnect(cause) {
   if (autoReconnectAttempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
     console.error('[SmartPlayer Watchdog] Limite máximo de reconexão atingido:', cause);
     isAutoReconnecting = false;
+    if (activeItem && activeItem.url) mk21MarkStreamFailure(activeItem.url);
     // 2.5.3: antes de desistir, tenta outra fonte (duplicata na mesma lista ou
     // o mesmo canal em outro servidor já guardado no cache do aparelho).
     if (typeof mk21TryAlternativeSource === 'function') {
@@ -3694,6 +3841,7 @@ function startStallWatchdog(streamKey) {
       stallCount = 0;
       autoReconnectAttempts = 0;
       isAutoReconnecting = false;
+      if (activeItem && activeItem.url) mk21MarkStreamHealthy(activeItem.url);
       hidePlayerReconnectBadge();
     });
     video.addEventListener('progress', () => {
@@ -3800,9 +3948,17 @@ function mk21RenderAllDevLogs() {
   mk21RefreshDevLogsBadge();
 }
 
+function mk21SanitizeLog(value) {
+  return String(value || '')
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, '$1[REDACTED]@')
+    .replace(/([?&](?:username|user|password|pass|token|auth|api[_-]?key)=)[^&#\s]*/gi, '$1[REDACTED]')
+    .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]');
+}
+
 function addDevLog(msg, type = 'info') {
+  const safeMsg = mk21SanitizeLog(msg);
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
-  const entry = { time, msg, type };
+  const entry = { time, msg: safeMsg, type };
   sessionDevLogs.push(entry);
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
 
@@ -3817,9 +3973,9 @@ function addDevLog(msg, type = 'info') {
     mk21RefreshDevLogsBadge();
   } catch (e) {}
 
-  if (type === 'error') console.error('[MK21-TV]', msg);
-  else if (type === 'warn') console.warn('[MK21-TV]', msg);
-  else console.log('[MK21-TV]', msg);
+  if (type === 'error') console.error('[MK21-TV]', safeMsg);
+  else if (type === 'warn') console.warn('[MK21-TV]', safeMsg);
+  else console.log('[MK21-TV]', safeMsg);
 }
 
 function escapeHtml(str) {
@@ -4638,6 +4794,7 @@ function playNextChannel() {
   const nextIdx = (currentIdx + 1) % currentFilteredItems.length;
   playStream(currentFilteredItems[nextIdx]);
   showChannelBanner('▲ Próximo: ' + currentFilteredItems[nextIdx].name);
+  mk21ShowZapHud(currentFilteredItems[nextIdx]);
 }
 
 function playPreviousChannel() {
@@ -4646,6 +4803,7 @@ function playPreviousChannel() {
   const prevIdx = (currentIdx - 1 + currentFilteredItems.length) % currentFilteredItems.length;
   playStream(currentFilteredItems[prevIdx]);
   showChannelBanner('▼ Anterior: ' + currentFilteredItems[prevIdx].name);
+  mk21ShowZapHud(currentFilteredItems[prevIdx]);
 }
 
 function isAppFullscreen() {
@@ -5124,26 +5282,58 @@ $('tabLive').onclick = () => switchContentType('LIVE');
 $('tabMovies').onclick = () => switchContentType('MOVIE');
 $('tabSeries').onclick = () => switchContentType('SERIES');
 if ($('tabContinue')) $('tabContinue').onclick = () => switchContentType('CONTINUE');
+if ($('tabGuide')) $('tabGuide').onclick = () => switchContentType('GUIDE');
 $('tabFavs').onclick = () => switchContentType('FAVORITES');
 $('tabSettings').onclick = () => switchContentType('SETTINGS');
 
+// Teclado virtual: botão ao lado do campo de busca.
+if ($('btnOpenOsk')) {
+  $('btnOpenOsk').onclick = () => {
+    if (mk21Osk.open) { mk21CloseOsk(true); return; }
+    mk21OpenOsk($('inputSearch'));
+  };
+}
+
+// Guia: clique/toque em um canal da coluna esquerda.
+if ($('listGuideChannels')) {
+  $('listGuideChannels').addEventListener('click', (ev) => {
+    const btn = ev.target.closest ? ev.target.closest('.guide-channel-btn') : null;
+    if (!btn) return;
+    const idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
+    if (!Number.isFinite(idx)) return;
+    mk21SelectGuideChannel(idx);
+  });
+}
+
 function switchContentType(type) {
+  // Guarda a aba de origem para o VOLTAR do Guia voltar para ela.
+  if (type === 'GUIDE' && typeof mk21Guide !== 'undefined') {
+    mk21Guide.previousType = (currentContentType && currentContentType !== 'GUIDE') ? currentContentType : 'LIVE';
+  }
   currentContentType = type;
   // Feedback visual imediato ao trocar de aba
   try {
-    const labels = { LIVE: '📺 Ao Vivo', MOVIE: '🎬 Filmes', SERIES: '🍿 Séries', CONTINUE: '▶ Continuar', FAVORITES: '⭐ Favoritos', SETTINGS: '⚙️ Config' };
+    const labels = { LIVE: '📺 Ao Vivo', MOVIE: '🎬 Filmes', SERIES: '🍿 Séries', CONTINUE: '▶ Continuar', GUIDE: '📅 Guia', FAVORITES: '⭐ Favoritos', SETTINGS: '⚙️ Config' };
     if (labels[type]) showChannelBanner(labels[type]);
   } catch (e) {}
 
-  ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabSettings'].forEach(t => {
+  ['tabLive', 'tabMovies', 'tabSeries', 'tabContinue', 'tabFavs', 'tabGuide', 'tabSettings'].forEach(t => {
     const el = $(t);
     if (el) el.classList.remove('active');
   });
-  const activeTabId = type === 'LIVE' ? 'tabLive' : (type === 'MOVIE' ? 'tabMovies' : (type === 'SERIES' ? 'tabSeries' : (type === 'CONTINUE' ? 'tabContinue' : (type === 'FAVORITES' ? 'tabFavs' : 'tabSettings'))));
+  const activeTabId = type === 'LIVE' ? 'tabLive' : (type === 'MOVIE' ? 'tabMovies' : (type === 'SERIES' ? 'tabSeries' : (type === 'CONTINUE' ? 'tabContinue' : (type === 'FAVORITES' ? 'tabFavs' : (type === 'GUIDE' ? 'tabGuide' : 'tabSettings')))));
   if ($(activeTabId)) $(activeTabId).classList.add('active');
+
+  if (type === 'GUIDE') {
+    $('sectionUnified').classList.add('hidden');
+    $('sectionSettings').classList.add('hidden');
+    mk21OpenGuide();
+    return;
+  }
 
   if (type === 'SETTINGS') {
     $('sectionUnified').classList.add('hidden');
+    $('sectionGuide').classList.add('hidden');
     $('sectionSettings').classList.remove('hidden');
     renderSettings('info');
     activeZone = 'settings';
@@ -5166,6 +5356,7 @@ function switchContentType(type) {
   }
 
   $('sectionSettings').classList.add('hidden');
+  $('sectionGuide').classList.add('hidden');
   $('sectionUnified').classList.remove('hidden');
 
   buildCurrentCategories();
@@ -7889,6 +8080,40 @@ document.addEventListener('keydown', function (e) {
     }
   }
 
+  // TECLADO VIRTUAL (D-pad) — tem prioridade sobre tudo: quando está aberto,
+  // as setas movem a seleção das teclas e o OK confirma a tecla focada.
+  if (typeof mk21Osk !== 'undefined' && mk21Osk.open) {
+    if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+      e.preventDefault();
+      e.stopPropagation();
+      mk21CloseOsk(false);
+      return;
+    }
+    if (k === 37 || key === 'ArrowLeft') { e.preventDefault(); mk21OskMove('left'); return; }
+    if (k === 39 || key === 'ArrowRight') { e.preventDefault(); mk21OskMove('right'); return; }
+    if (k === 38 || key === 'ArrowUp') { e.preventDefault(); mk21OskMove('up'); return; }
+    if (k === 40 || key === 'ArrowDown') { e.preventDefault(); mk21OskMove('down'); return; }
+    if (k === 13 || key === 'Enter') { e.preventDefault(); mk21OskActivate(); return; }
+    if (k === 8 || key === 'Backspace') { e.preventDefault(); mk21OskBackspace(); return; }
+    return;
+  }
+
+  // GUIA DE PROGRAMAÇÃO — enquanto aberto, o D-pad navega nas duas colunas.
+  if (typeof mk21Guide !== 'undefined' && mk21Guide.open) {
+    if (k === 461 || k === 10009 || k === 27 || key === 'Escape' || key === 'Back') {
+      e.preventDefault();
+      e.stopPropagation();
+      mk21GuideClose();
+      return;
+    }
+    if (k === 37 || key === 'ArrowLeft') { e.preventDefault(); mk21GuideMove('left'); return; }
+    if (k === 39 || key === 'ArrowRight') { e.preventDefault(); mk21GuideMove('right'); return; }
+    if (k === 38 || key === 'ArrowUp') { e.preventDefault(); mk21GuideMove('up'); return; }
+    if (k === 40 || key === 'ArrowDown') { e.preventDefault(); mk21GuideMove('down'); return; }
+    if (k === 13 || key === 'Enter') { e.preventDefault(); mk21GuideActivate(); return; }
+    return;
+  }
+
   // 1.1 Focus Trap & Gestão de Foco para Smart TVs (webOS, Tizen, Android TV)
   const activeModal = mk21GetOpenModal();
   if (isAppFullscreen() && !activeModal) {
@@ -9574,7 +9799,8 @@ async function mk21TryAlternativeSource() {
       const match = list.find(candidate => mk21SameChannel(activeItem, candidate, sources));
       if (match && match.url) candidates.push({ url: match.url, origem: cleanServerName(srv.name) });
     }
-    const next = candidates.find(candidate => candidate.url && !mk21TriedSourceUrls.has(candidate.url));
+    const next = candidates.find(c => c.url && !mk21TriedSourceUrls.has(c.url) && !mk21IsRecentlyUnhealthy(c.url)) ||
+      candidates.find(c => c.url && !mk21TriedSourceUrls.has(c.url));
     if (!next) {
       addDevLog('[AutoFonte] Nenhuma fonte alternativa disponível para ' + activeItem.name, 'warn');
       return false;
@@ -9590,6 +9816,774 @@ async function mk21TryAlternativeSource() {
   } finally {
     mk21SourceTrying = false;
   }
+}
+
+/* ==========================================================================
+   GUIA DE PROGRAMAÇÃO + HUD DE ZAPPING + TECLADO VIRTUAL
+   --------------------------------------------------------------------------
+   Funcionalidades portadas do Saimo TV (LG webOS) para o MK21 Play:
+
+     1. Guia de Programação dedicado (canais à esquerda + grade à direita);
+     2. HUD de zapping (cartão do canal com NO AR / A SEGUIR e contagem);
+     3. Teclado virtual navegável pelo D-pad (a TV não tem teclado físico).
+
+   Até a v2.9.0 a TV só conhecia o EPG do canal QUE ESTÁ TOCANDO e completava o
+   resto com uma grade simulada. Aqui passamos a baixar o XMLTV do servidor
+   (`xmltv.php`), indexar por canal e usar a grade real nas três telas.
+   ========================================================================== */
+
+// --------------------------------------------------------------------------
+// 1. EPG XMLTV — carga, indexação por canal e consulta
+// --------------------------------------------------------------------------
+const mk21Xmltv = {
+  url: '',
+  promise: null,
+  byChannel: new Map(),   // id do XMLTV -> [programas]
+  byName: new Map(),      // nome exibido normalizado -> id do XMLTV
+  programCount: 0,
+  channelCount: 0,
+  loadedAt: 0,
+  lastError: '',
+  maxProgrammes: 250000   // teto de memória: TVs antigas não aguentam milhões
+};
+
+/**
+ * Normaliza um nome de canal para comparar com o `<display-name>` do XMLTV.
+ * Remove qualidade e sufixos que o painel costuma acrescentar ("Globo FHD").
+ */
+function mk21NormalizeChannelName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\b(fhd|uhd|hd|sd|4k|2k|1080p|720p|480p|hevc|h265|br|brasil)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** URL do XMLTV: `url-tvg=` do header da playlist ou `xmltv.php` do Xtream. */
+function mk21XmltvUrl() {
+  if (window.serverXmltvUrl) return window.serverXmltvUrl;
+
+  const srv = SERVERS[currentServerIndex] || DEFAULT_SERVERS[0];
+  const cred = getSavedCredentials() || {};
+  if (srv && srv.url && cred.user && cred.pass) {
+    return `${srv.url.replace(/\/+$/, '')}/xmltv.php?username=${encodeURIComponent(cred.user)}&password=${encodeURIComponent(cred.pass)}`;
+  }
+  return '';
+}
+
+/**
+ * Parser do XMLTV. Usa regex (e não DOMParser) porque o arquivo pode passar de
+ * 50 MB e a árvore DOM estouraria a memória das TVs antigas — o mesmo motivo
+ * que levou o M3U a ir para Web Worker.
+ */
+function mk21ParseXmltv(xmlText) {
+  const map = new Map();
+  const names = new Map();
+  if (!xmlText || typeof xmlText !== 'string') return { byChannel: map, byName: names };
+  if (xmlText.indexOf('<programme') < 0) return { byChannel: map, byName: names };
+
+  // <channel id="..."><display-name>...</display-name></channel>
+  // O nome exibido é o que amarra o XMLTV ao canal quando o painel não
+  // devolve o `epg_channel_id` (campo do Xtream).
+  const channelRe = /<channel\s+id="([^"]+)"[^>]*>([\s\S]*?)<\/channel>/gi;
+  const displayNameRe = /<display-name[^>]*>([\s\S]*?)<\/display-name>/i;
+  let chMatch;
+  while ((chMatch = channelRe.exec(xmlText)) !== null) {
+    const id = String(chMatch[1] || '').trim().toLowerCase();
+    if (!id) continue;
+    const dn = chMatch[2].match(displayNameRe);
+    if (!dn) continue;
+    const display = String(dn[1]).replace(/<!\[CDATA\[|\]\]>/g, '').trim();
+    const key = mk21NormalizeChannelName(display);
+    if (key && !names.has(key)) names.set(key, id);
+  }
+
+  const programmeRe = /<programme\s+[^>]*start="([^"]+)"[^>]*stop="([^"]+)"[^>]*channel="([^"]+)"[^>]*>([\s\S]*?)<\/programme>/gi;
+  const titleRe = /<title[^>]*>([\s\S]*?)<\/title>/i;
+  const descRe = /<desc[^>]*>([\s\S]*?)<\/desc>/i;
+  const catRe = /<category[^>]*>([\s\S]*?)<\/category>/i;
+
+  let match;
+  let count = 0;
+  while ((match = programmeRe.exec(xmlText)) !== null) {
+    if (count >= mk21Xmltv.maxProgrammes) break;
+
+    const channelId = String(match[3] || '').trim().toLowerCase();
+    const start = EpgGuide.toTimestampMs(match[1]);
+    const stop = EpgGuide.toTimestampMs(match[2]);
+    if (!channelId || !Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) continue;
+
+    const inner = match[4] || '';
+    const titleMatch = inner.match(titleRe);
+    const descMatch = inner.match(descRe);
+    const catMatch = inner.match(catRe);
+
+    const clean = (m) => (m ? String(m[1]).replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '');
+    const programme = {
+      title: clean(titleMatch) || 'Programação',
+      desc: clean(descMatch),
+      category: clean(catMatch),
+      start,
+      stop
+    };
+
+    let list = map.get(channelId);
+    if (!list) {
+      list = [];
+      map.set(channelId, list);
+    }
+    list.push(programme);
+    count++;
+  }
+
+  // Ordena a grade de cada canal por horário de início.
+  map.forEach((list) => list.sort((a, b) => a.start - b.start));
+  return { byChannel: map, byName: names };
+}
+
+/** Baixa e indexa o XMLTV (uma única promessa em voo por URL). */
+async function mk21LoadXmltv(force) {
+  const url = mk21XmltvUrl();
+  if (!url) {
+    mk21Xmltv.lastError = 'Servidor não expõe XMLTV.';
+    return null;
+  }
+
+  if (!force && mk21Xmltv.promise && mk21Xmltv.url === url) return mk21Xmltv.promise;
+  if (!force && mk21Xmltv.loadedAt && mk21Xmltv.url === url) return mk21Xmltv.byChannel;
+
+  mk21Xmltv.url = url;
+  mk21Xmltv.promise = (async () => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        mk21Xmltv.lastError = 'HTTP ' + res.status;
+        return null;
+      }
+      const text = await res.text();
+      const parsed = mk21ParseXmltv(text);
+      const map = parsed.byChannel;
+      if (!map || map.size === 0) {
+        mk21Xmltv.lastError = 'XMLTV sem programas.';
+        return null;
+      }
+      mk21Xmltv.byChannel = map;
+      mk21Xmltv.byName = parsed.byName;
+      mk21Xmltv.channelCount = map.size;
+      mk21Xmltv.programCount = Array.from(map.values()).reduce((acc, l) => acc + l.length, 0);
+      mk21Xmltv.loadedAt = Date.now();
+      mk21Xmltv.lastError = '';
+      addDevLog('[Guia] XMLTV carregado: ' + mk21Xmltv.programCount + ' programas em ' + mk21Xmltv.channelCount + ' canais.', 'info');
+      try { window.dispatchEvent(new CustomEvent('mk21:epg-updated')); } catch (e) {}
+      return map;
+    } catch (err) {
+      mk21Xmltv.lastError = (err && err.message) ? err.message : 'falha de rede';
+      console.debug('[Guia] Falha ao carregar XMLTV:', err);
+      return null;
+    }
+  })();
+
+  return mk21Xmltv.promise;
+}
+
+/**
+ * Programas do XMLTV já em cache para um canal (null quando não há).
+ *
+ * Ordem de tentativa:
+ *   1. `tvg-id` / `epg_channel_id` — o id exato do canal no XMLTV;
+ *   2. id do XMLTV igual ao nome normalizado do canal;
+ *   3. `<display-name>` do XMLTV igual ao nome do canal (quando o painel não
+ *      devolve o `epg_channel_id`).
+ */
+function mk21XmltvProgramsFor(channel) {
+  if (!channel) return null;
+
+  const tvgId = String(channel.tvgId || channel['tvg-id'] || '').trim().toLowerCase();
+  if (tvgId) {
+    const list = mk21Xmltv.byChannel.get(tvgId);
+    if (list && list.length) return list;
+  }
+
+  const name = String(channel.name || channel.tvgName || '').trim().toLowerCase();
+  if (name) {
+    const list = mk21Xmltv.byChannel.get(name);
+    if (list && list.length) return list;
+  }
+
+  const normalized = mk21NormalizeChannelName(channel.name || channel.tvgName);
+  if (normalized) {
+    const xmltvId = mk21Xmltv.byName.get(normalized);
+    if (xmltvId) {
+      const list = mk21Xmltv.byChannel.get(xmltvId);
+      if (list && list.length) return list;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Grade completa de um canal: XMLTV (servidor) + short EPG (Xtream) + simulada.
+ * Devolve sempre uma lista normalizada e ordenada.
+ */
+async function mk21ProgramsForChannel(channel, options) {
+  const opts = options || {};
+  const nowMs = Date.now();
+  const sources = [];
+
+  const xmltv = mk21XmltvProgramsFor(channel);
+  if (xmltv) sources.push(xmltv);
+
+  // Se ainda não temos XMLTV, tenta carregar em segundo plano.
+  if (!xmltv && opts.allowFetch !== false) {
+    const url = mk21XmltvUrl();
+    if (url && mk21Xmltv.url !== url) {
+      mk21LoadXmltv(false).then(() => {
+        if (mk21Guide.open) mk21RenderGuidePrograms();
+      }).catch(() => {});
+    }
+  }
+
+  // Short EPG do Xtream como complemento do canal em foco.
+  if (opts.withShortEpg) {
+    const srv = SERVERS[currentServerIndex] || DEFAULT_SERVERS[0];
+    const cred = getSavedCredentials() || {};
+    let streamId = channel && (channel.streamId || channel.stream_id);
+    if (!streamId && channel && channel.url) {
+      const m = channel.url.match(/\/([0-9]+)(?:\.[a-zA-Z0-9]+)?$/);
+      if (m && m[1]) streamId = m[1];
+    }
+    if (srv && cred.user && cred.pass && streamId) {
+      const listings = await mk21FetchShortEpg(channel, streamId, srv, cred.user, cred.pass, 12);
+      if (listings && listings.length) {
+        sources.push(listings.map((l) => ({
+          title: l.title,
+          desc: l.description,
+          start: l.start_timestamp !== undefined ? l.start_timestamp : l.start,
+          stop: l.stop_timestamp !== undefined ? l.stop_timestamp : (l.end !== undefined ? l.end : l.stop)
+        })));
+      }
+    }
+  }
+
+  const merged = EpgGuide.mergeProgramSources.apply(null, sources);
+  if (merged.length) return merged;
+
+  // Sem EPG real: usa a grade simulada já existente no app legado.
+  const sim = getSimulatedTvProgram((channel && channel.name) || '');
+  if (sim && sim.title) {
+    const now = new Date(nowMs);
+    const startMs = now.getTime() - (now.getMinutes() % 60) * 60000;
+    return EpgGuide.normalizePrograms([
+      { title: sim.title, desc: '', start: startMs, stop: startMs + 3600000 }
+    ]);
+  }
+  return [];
+}
+
+// --------------------------------------------------------------------------
+// 2. GUIA DE PROGRAMAÇÃO (tela dedicada)
+// --------------------------------------------------------------------------
+const mk21Guide = {
+  open: false,
+  channels: [],
+  channelIndex: 0,
+  programs: [],
+  programIndex: 0,
+  pane: 'channels',   // 'channels' | 'programs'
+  loading: false
+};
+
+/** Canais exibidos no guia (todos os canais ao vivo do catálogo). */
+function mk21GuideChannels() {
+  const live = (allCatalog && Array.isArray(allCatalog.LIVE) && allCatalog.LIVE.length)
+    ? allCatalog.LIVE
+    : (Array.isArray(currentFilteredItems)
+      ? currentFilteredItems.filter((it) => !it.contentType || it.contentType === 'LIVE')
+      : []);
+  return live.filter((it) => it && (it.name || it.url));
+}
+
+/** Abre a tela do guia. */
+function mk21OpenGuide() {
+  const section = $('sectionGuide');
+  if (!section) return;
+
+  // Garante que só o Guia fique visível, mesmo quando ele é aberto por atalho
+  // (e não pela aba do cabeçalho).
+  const unified = $('sectionUnified');
+  if (unified) unified.classList.add('hidden');
+  const settings = $('sectionSettings');
+  if (settings) settings.classList.add('hidden');
+
+  mk21Guide.channels = mk21GuideChannels();
+  mk21Guide.open = true;
+  mk21Guide.programIndex = 0;
+
+  // Destaca o canal que está no ar (ou o primeiro da lista).
+  const activeKey = activeItem ? ZapHud.channelKey(activeItem) : '';
+  let idx = 0;
+  if (activeKey) {
+    idx = mk21Guide.channels.findIndex((ch) => ZapHud.channelKey(ch) === activeKey);
+    if (idx < 0) idx = 0;
+  }
+  mk21Guide.channelIndex = idx;
+
+  section.classList.remove('hidden');
+  mk21RenderGuideChannels();
+  mk21SelectGuideChannel(idx, true);
+
+  // Carrega o XMLTV em segundo plano (a primeira abertura demora).
+  mk21LoadXmltv(false).then(() => {
+    if (mk21Guide.open) mk21RenderGuidePrograms();
+  }).catch(() => {});
+
+  try { mk21FocusSafe($('listGuideChannels')); } catch (e) {}
+  activeZone = 'guide';
+  showChannelBanner('📅 Guia de Programação');
+}
+
+/** Fecha a tela do guia. */
+function mk21CloseGuide() {
+  const section = $('sectionGuide');
+  if (section) section.classList.add('hidden');
+  mk21Guide.open = false;
+  mk21Guide.programs = [];
+}
+
+/** Renderiza a coluna de canais (com o que está no ar em cada um). */
+function mk21RenderGuideChannels() {
+  const list = $('listGuideChannels');
+  if (!list) return;
+
+  const badge = $('badgeGuideChannels');
+  if (badge) badge.textContent = String(mk21Guide.channels.length);
+
+  if (!mk21Guide.channels.length) {
+    list.innerHTML = '<div class="guide-empty">Nenhum canal carregado.<br>Conecte-se a um servidor para ver a grade.</div>';
+    return;
+  }
+
+  const nowMs = Date.now();
+  let html = '';
+  for (let i = 0; i < mk21Guide.channels.length; i++) {
+    const ch = mk21Guide.channels[i];
+    const programmes = mk21XmltvProgramsFor(ch);
+    let nowTitle = '';
+    if (programmes) {
+      const pick = EpgGuide.pickNowNext(programmes, nowMs);
+      nowTitle = pick.current ? pick.current.title : '';
+    }
+
+    const number = i + 1;
+    const safeName = escapeHtml(ch.name || 'Canal');
+    const logoUrl = String(ch.logo || '').trim();
+    const logo = /^https?:\/\//i.test(logoUrl)
+      ? '<img class="guide-channel-logo" src="' + escapeHtml(logoUrl) + '" alt="" onerror="this.style.display=\'none\'">'
+      : '<div class="guide-channel-logo-placeholder">' + escapeHtml((ch.name || '?').trim().charAt(0).toUpperCase()) + '</div>';
+
+    html += '<li>'
+      + '<button class="guide-channel-btn' + (i === mk21Guide.channelIndex ? ' active' : '') + '" type="button" tabindex="0" data-idx="' + i + '">'
+      + '<span class="guide-channel-number">' + number + '</span>'
+      + logo
+      + '<span class="guide-channel-meta">'
+      + '<span class="guide-channel-name">' + safeName + '</span>'
+      + '<span class="guide-channel-now' + (nowTitle ? ' is-live' : '') + '">' + (nowTitle ? '● ' + escapeHtml(nowTitle) : '— sem programação') + '</span>'
+      + '</span>'
+      + '</button>'
+      + '</li>';
+  }
+  list.innerHTML = html;
+}
+
+/** Renderiza a coluna de programação do canal selecionado. */
+function mk21RenderGuidePrograms() {
+  const box = $('listGuidePrograms');
+  if (!box) return;
+
+  const channel = mk21Guide.channels[mk21Guide.channelIndex];
+  const titleEl = $('txtGuideProgramsTitle');
+  const badge = $('badgeGuidePrograms');
+
+  if (!channel) {
+    if (titleEl) titleEl.textContent = '🔵 Programação';
+    if (badge) badge.textContent = '0';
+    box.innerHTML = '<div class="guide-empty">Selecione um canal para ver a grade.</div>';
+    return;
+  }
+
+  if (titleEl) titleEl.textContent = '🔵 ' + (channel.name || 'Canal');
+  if (badge) badge.textContent = String(mk21Guide.programs.length);
+
+  if (mk21Guide.loading) {
+    box.innerHTML = '<div class="guide-empty">Carregando programação…</div>';
+    return;
+  }
+
+  if (!mk21Guide.programs.length) {
+    box.innerHTML = '<div class="guide-empty">Sem programação disponível para este canal.<br>'
+      + 'O servidor pode não expor EPG (XMLTV) nem guia por canal.</div>';
+    return;
+  }
+
+  const timeline = EpgGuide.buildTimeline(mk21Guide.programs, Date.now());
+  let html = '';
+  for (let i = 0; i < timeline.length; i++) {
+    const p = timeline[i];
+    html += '<div class="guide-prog-row' + (p.isLive ? ' is-live' : '') + (p.isPast ? ' is-past' : '') + '">'
+      + '<div class="guide-prog-time">' + escapeHtml(EpgGuide.formatClock(p.start)) + ' - ' + escapeHtml(EpgGuide.formatClock(p.stop))
+      + (p.isLive ? '<span class="guide-live-badge">NO AR</span>' : '')
+      + '</div>'
+      + '<div class="guide-prog-body">'
+      + '<div class="guide-prog-title">' + escapeHtml(p.title) + '</div>'
+      + (p.desc ? '<div class="guide-prog-desc">' + escapeHtml(p.desc) + '</div>' : '')
+      + (p.isLive ? '<div class="guide-prog-bar"><div class="guide-prog-bar-fill" style="width:' + p.progressPct + '%"></div></div>' : '')
+      + '</div>'
+      + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+/** Seleciona um canal do guia e carrega a grade dele. */
+async function mk21SelectGuideChannel(index, keepFocus) {
+  if (!mk21Guide.channels.length) return;
+  const clamped = Math.max(0, Math.min(mk21Guide.channels.length - 1, index));
+  mk21Guide.channelIndex = clamped;
+  mk21Guide.programIndex = 0;
+  mk21Guide.pane = 'channels';
+
+  // Destaque visual do canal selecionado.
+  const buttons = document.querySelectorAll('#listGuideChannels .guide-channel-btn');
+  for (let i = 0; i < buttons.length; i++) {
+    buttons[i].classList.toggle('active', i === clamped);
+  }
+
+  const channel = mk21Guide.channels[clamped];
+  mk21Guide.loading = true;
+  mk21RenderGuidePrograms();
+
+  try {
+    mk21Guide.programs = await mk21ProgramsForChannel(channel, { withShortEpg: true });
+  } catch (e) {
+    mk21Guide.programs = [];
+  }
+  mk21Guide.loading = false;
+  mk21RenderGuidePrograms();
+  mk21RenderGuideChannels();
+
+  if (!keepFocus) {
+    try {
+      const btn = document.querySelector('#listGuideChannels .guide-channel-btn.active');
+      if (btn) mk21FocusSafe(btn);
+    } catch (e) {}
+  }
+}
+
+/** Move a seleção do guia (setas do D-pad). */
+function mk21GuideMove(direction) {
+  if (!mk21Guide.open) return;
+
+  if (mk21Guide.pane === 'channels') {
+    if (direction === 'up' || direction === 'down') {
+      const delta = direction === 'up' ? -1 : 1;
+      const next = Math.max(0, Math.min(mk21Guide.channels.length - 1, mk21Guide.channelIndex + delta));
+      if (next !== mk21Guide.channelIndex) {
+        mk21SelectGuideChannel(next);
+      } else {
+        mk21GuideScrollFocus();
+      }
+      return;
+    }
+    if (direction === 'right') {
+      mk21Guide.pane = 'programs';
+      mk21GuideScrollFocus();
+      return;
+    }
+    if (direction === 'left') {
+      mk21GuideClose();
+      return;
+    }
+  } else {
+    if (direction === 'up' || direction === 'down') {
+      const delta = direction === 'up' ? -1 : 1;
+      const max = Math.max(0, mk21Guide.programs.length - 1);
+      mk21Guide.programIndex = Math.max(0, Math.min(max, mk21Guide.programIndex + delta));
+      mk21GuideScrollFocus();
+      return;
+    }
+    if (direction === 'left') {
+      mk21Guide.pane = 'channels';
+      mk21GuideScrollFocus();
+      return;
+    }
+    if (direction === 'right') {
+      // Sintoniza o programa em destaque.
+      mk21GuideTune();
+      return;
+    }
+  }
+}
+
+/** Rola a coluna ativa para manter o item selecionado visível. */
+function mk21GuideScrollFocus() {
+  if (mk21Guide.pane === 'channels') {
+    const btn = document.querySelector('#listGuideChannels .guide-channel-btn.active');
+    if (btn && typeof mk21UpdateVisualScrollbarFor === 'function') {
+      mk21UpdateVisualScrollbarFor(btn.closest('ul') || btn.parentElement);
+    }
+  } else {
+    const box = $('listGuidePrograms');
+    if (box) {
+      const row = box.querySelectorAll('.guide-prog-row')[mk21Guide.programIndex];
+      if (row && row.scrollIntoView) {
+        row.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+}
+
+/** OK na coluna de canais: abre a grade; OK na grade: sintoniza o canal. */
+function mk21GuideActivate() {
+  if (!mk21Guide.open) return;
+  if (mk21Guide.pane === 'channels') {
+    mk21Guide.pane = 'programs';
+    mk21GuideScrollFocus();
+    return;
+  }
+  mk21GuideTune();
+}
+
+/** Sintoniza o canal selecionado no guia. */
+function mk21GuideTune() {
+  const channel = mk21Guide.channels[mk21Guide.channelIndex];
+  if (!channel) return;
+  const previous = (mk21Guide.previousType && mk21Guide.previousType !== 'GUIDE') ? mk21Guide.previousType : 'LIVE';
+  mk21CloseGuide();
+  try { switchContentType(previous === 'GUIDE' ? 'LIVE' : previous); } catch (e) {}
+  try { playStream(channel); } catch (e) {}
+  showChannelBanner('▶ ' + (channel.name || 'Canal'));
+}
+
+/** Fecha o guia e devolve o foco para a aba de origem. */
+function mk21GuideClose() {
+  const previous = (mk21Guide.previousType && mk21Guide.previousType !== 'GUIDE') ? mk21Guide.previousType : 'LIVE';
+  mk21CloseGuide();
+  try { switchContentType(previous); } catch (e) {}
+  activeZone = 'channels';
+  try {
+    const tab = $('tabGuide');
+    if (tab) mk21FocusSafe(tab);
+  } catch (e) {}
+}
+
+// --------------------------------------------------------------------------
+// 3. HUD DE ZAPPING (cartão do canal durante a troca)
+// --------------------------------------------------------------------------
+let mk21ZapTimer = null;
+let mk21ZapTickTimer = null;
+let mk21ZapItem = null;
+
+/** Mostra o cartão do canal com a programação atual e a contagem regressiva. */
+function mk21ShowZapHud(item) {
+  const hud = $('zapHud');
+  if (!hud || !item) return;
+
+  const channelNumber = mk21ZapChannelNumber(item);
+  const programmes = mk21XmltvProgramsFor(item) || [];
+  const info = ZapHud.buildZapInfo({
+    channel: item,
+    channelNumber,
+    programs: programmes,
+    nowMs: Date.now()
+  });
+
+  mk21ZapItem = item;
+
+  const numEl = $('zapHudNumber');
+  if (numEl) {
+    numEl.textContent = info.hasNumber ? String(info.number) : '';
+    numEl.style.display = info.hasNumber ? '' : 'none';
+  }
+  const nameEl = $('zapHudName');
+  if (nameEl) nameEl.textContent = info.name;
+
+  const logoEl = $('zapHudLogo');
+  if (logoEl) {
+    const logoUrl = String(info.logo || '').trim();
+    const safe = /^https?:\/\//i.test(logoUrl) ? logoUrl : '';
+    logoEl.src = safe;
+    logoEl.style.display = safe ? '' : 'none';
+  }
+
+  const nowEl = $('zapHudNow');
+  if (nowEl) nowEl.textContent = info.currentTitle || 'Sem programação disponível';
+
+  const fillEl = $('zapHudProgressFill');
+  if (fillEl) fillEl.style.width = info.progressPct + '%';
+
+  const nextEl = $('zapHudNext');
+  if (nextEl) nextEl.textContent = info.nextTitle || '—';
+
+  const cdEl = $('zapHudCountdown');
+  if (cdEl) cdEl.textContent = info.countdownText;
+
+  hud.classList.remove('hidden');
+
+  if (mk21ZapTimer) clearTimeout(mk21ZapTimer);
+  if (mk21ZapTickTimer) clearInterval(mk21ZapTickTimer);
+
+  const shownAt = Date.now();
+  mk21ZapTimer = setTimeout(() => {
+    if (ZapHud.shouldAutoHide(Date.now() - shownAt)) mk21HideZapHud();
+  }, ZapHud.ZAP_AUTO_HIDE_MS + 120);
+
+  // Atualiza a contagem regressiva e a barra de progresso a cada segundo.
+  mk21ZapTickTimer = setInterval(() => {
+    if (!mk21ZapItem) return;
+    const programmesNow = mk21XmltvProgramsFor(mk21ZapItem) || [];
+    const tick = ZapHud.buildZapInfo({
+      channel: mk21ZapItem,
+      channelNumber: mk21ZapChannelNumber(mk21ZapItem),
+      programs: programmesNow,
+      nowMs: Date.now()
+    });
+    const cd = $('zapHudCountdown');
+    if (cd) cd.textContent = tick.countdownText;
+    const fill = $('zapHudProgressFill');
+    if (fill) fill.style.width = tick.progressPct + '%';
+    const nowTitle = $('zapHudNow');
+    if (nowTitle && tick.currentTitle) nowTitle.textContent = tick.currentTitle;
+  }, 1000);
+}
+
+/** Número do canal (LCN) — segue a ordem do catálogo ao vivo. */
+function mk21ZapChannelNumber(item) {
+  const channels = mk21GuideChannels();
+  const key = ZapHud.channelKey(item);
+  for (let i = 0; i < channels.length; i++) {
+    if (ZapHud.channelKey(channels[i]) === key) return i + 1;
+  }
+  return null;
+}
+
+/** Esconde o cartão de zapping. */
+function mk21HideZapHud() {
+  const hud = $('zapHud');
+  if (hud) hud.classList.add('hidden');
+  if (mk21ZapTimer) { clearTimeout(mk21ZapTimer); mk21ZapTimer = null; }
+  if (mk21ZapTickTimer) { clearInterval(mk21ZapTickTimer); mk21ZapTickTimer = null; }
+  mk21ZapItem = null;
+}
+
+// --------------------------------------------------------------------------
+// 4. TECLADO VIRTUAL (D-pad)
+// --------------------------------------------------------------------------
+const mk21Osk = {
+  open: false,
+  state: null,
+  target: null
+};
+
+/** Abre o teclado virtual sobre um campo de texto. */
+function mk21OpenOsk(target) {
+  const overlay = $('oskOverlay');
+  if (!overlay) return;
+
+  const input = target || $('inputSearch');
+  mk21Osk.target = input;
+  mk21Osk.state = OnScreenKeyboard.createState(input ? input.value : '', 'lower');
+  mk21Osk.open = true;
+
+  overlay.classList.remove('hidden');
+  mk21RenderOsk();
+  try { mk21FocusSafe(overlay); } catch (e) {}
+}
+
+/** Fecha o teclado virtual (com ou sem confirmar o texto). */
+function mk21CloseOsk(commit) {
+  const overlay = $('oskOverlay');
+  if (overlay) overlay.classList.add('hidden');
+
+  if (commit && mk21Osk.target) {
+    mk21Osk.target.value = mk21Osk.state ? mk21Osk.state.value : '';
+    try {
+      mk21Osk.target.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) {}
+  }
+
+  mk21Osk.open = false;
+  mk21Osk.state = null;
+
+  if (mk21Osk.target) {
+    try { mk21FocusSafe(mk21Osk.target); } catch (e) {}
+  }
+  activeZone = 'channels';
+}
+
+/** Desenha o teclado na tela. */
+function mk21RenderOsk() {
+  const grid = $('oskGrid');
+  const preview = $('oskPreview');
+  const modeEl = $('oskMode');
+  if (!grid || !mk21Osk.state) return;
+
+  if (preview) preview.textContent = mk21Osk.state.value || '';
+  if (modeEl) modeEl.textContent = OnScreenKeyboard.getModeLabel(mk21Osk.state);
+
+  const rows = OnScreenKeyboard.getRows(mk21Osk.state.mode);
+  let html = '';
+  for (let r = 0; r < rows.length; r++) {
+    html += '<div class="osk-row">';
+    for (let c = 0; c < rows[r].length; c++) {
+      const key = rows[r][c];
+      const isControl = (typeof key === 'object' && key !== null);
+      const label = isControl ? key.label : key;
+      const focused = (r === mk21Osk.state.row && c === mk21Osk.state.col);
+      html += '<button type="button" tabindex="-1" class="osk-key' + (isControl ? ' control' : '') + (focused ? ' focused' : '') + '"'
+        + ' data-row="' + r + '" data-col="' + c + '">' + escapeHtml(label) + '</button>';
+    }
+    html += '</div>';
+  }
+  grid.innerHTML = html;
+}
+
+/** Move a seleção do teclado. */
+function mk21OskMove(direction) {
+  if (!mk21Osk.open || !mk21Osk.state) return;
+  mk21Osk.state = OnScreenKeyboard.moveCursor(mk21Osk.state, direction);
+  mk21RenderOsk();
+}
+
+/** OK: confirma a tecla focada. */
+function mk21OskActivate() {
+  if (!mk21Osk.open || !mk21Osk.state) return;
+  const key = OnScreenKeyboard.getFocusedKey(mk21Osk.state);
+  if (!key) return;
+
+  if (typeof key === 'object' && key.action) {
+    if (key.action === 'MODE') {
+      mk21Osk.state = OnScreenKeyboard.toggleMode(mk21Osk.state);
+    } else if (key.action === 'SPACE') {
+      mk21Osk.state = OnScreenKeyboard.insertChar(mk21Osk.state, ' ');
+    } else if (key.action === 'BACKSPACE') {
+      mk21Osk.state = OnScreenKeyboard.backspace(mk21Osk.state);
+    } else if (key.action === 'CLEAR') {
+      mk21Osk.state = OnScreenKeyboard.clearText(mk21Osk.state);
+    }
+  } else {
+    mk21Osk.state = OnScreenKeyboard.insertChar(mk21Osk.state, key);
+    // Avança para a próxima tecla (como um teclado de celular): sem isso o
+    // próximo OK repetiria a mesma letra.
+    mk21Osk.state = OnScreenKeyboard.advanceCursor(mk21Osk.state);
+  }
+  mk21RenderOsk();
+}
+
+/** Apaga um caractere (tecla Backspace do controle remoto). */
+function mk21OskBackspace() {
+  if (!mk21Osk.open || !mk21Osk.state) return;
+  mk21Osk.state = OnScreenKeyboard.backspace(mk21Osk.state);
+  mk21RenderOsk();
 }
 
 /* ------------------------------------------------------------- inicialização */

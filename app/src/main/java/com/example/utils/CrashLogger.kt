@@ -40,7 +40,8 @@ object CrashLogger {
         val sw = StringWriter()
         val pw = PrintWriter(sw)
         throwable.printStackTrace(pw)
-        val stackTrace = sw.toString()
+        val stackTrace = LogSanitizer.sanitizeText(sw.toString())
+        val safeMessage = LogSanitizer.sanitizeText(throwable.message)
 
         val timeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
         val memRuntime = Runtime.getRuntime()
@@ -55,7 +56,7 @@ object CrashLogger {
             appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Memória RAM: ${usedMb}MB em uso / ${maxMb}MB max")
             appendLine("Thread: ${thread.name} (id: ${thread.id})")
-            appendLine("Exceção: ${throwable.javaClass.name}: ${throwable.message}")
+            appendLine("Exceção: ${throwable.javaClass.name}: $safeMessage")
             appendLine("\n--- STACK TRACE ---")
             appendLine(stackTrace)
             appendLine("=============================")

@@ -41,6 +41,9 @@
 - **LG webOS:** Pacote reproduzível `.ipk` (`smart-tv/package_ipk.py`) para webOS 3.0+ a webOS 24.
 - **Samsung Tizen:** Manifesto em `smart-tv/tizen/config.xml` (`v2.8.0`) compatível com Tizen 3.0+.
 - **Bundle & Performance 10-foot UI:** Entrada em `smart-tv/mk21-tv/src/main.js` empacotada para `smart-tv/mk21-tv/app.js` (< 350 KB), navegação estrita via D-Pad, worker não-bloqueante e cache local.
+- **Guia de Programação real (XMLTV):** A TV baixa o `xmltv.php` do servidor (ou o `url-tvg=` da playlist), indexa a grade por canal e a exibe na aba **GUIA** (canais à esquerda com o que está *no ar*, grade do canal à direita) e no HUD de zapping (cartão com **NO AR** / **A SEGUIR** e contagem regressiva). Parser por regex (sem DOMParser) para respeitar a memória das TVs antigas; amarração por `tvg-id`/`epg_channel_id` e por `<display-name>` normalizado. Módulo puro em `smart-tv/mk21-tv/core/EpgGuide.js`.
+- **Teclado virtual (D-pad):** QWERTY PT-BR para a busca, navegável só pelo controle remoto, com modos `abc`/`ABC`/`123`/`#+=`. Módulo puro em `smart-tv/mk21-tv/core/OnScreenKeyboard.js`.
+- **Paridade com o Saimo TV:** o comparativo completo (o que já existe em cada plataforma e o que falta) está em [`docs/SAIMO-TV-PARITY.md`](docs/SAIMO-TV-PARITY.md).
 
 ### Web PWA (Fonte Única na Raiz -> `/web` e `/public`)
 - **Fonte Canônica:** Os arquivos na **raiz** (`index.html`, `sw.js`, `manifest.json`, `apps.json`, `servers.json`, `version.json`, `api/proxy.js`, `css/`, `js/`) são a única fonte de verdade.

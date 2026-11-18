@@ -64,7 +64,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.example.network.StreamHttpClients
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -3623,7 +3624,7 @@ fun ChannelEpgPreviewDialog(
                     val encPass = java.net.URLEncoder.encode(pass, "UTF-8")
                     val encStreamId = java.net.URLEncoder.encode(streamId, "UTF-8")
                     val epgApiUrl = "$cleanBase/player_api.php?username=$encUser&password=$encPass&action=get_short_epg&stream_id=$encStreamId&limit=10"
-                    val client = okhttp3.OkHttpClient.Builder()
+                    val client = StreamHttpClients.baseClient.newBuilder()
                         .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                         .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
@@ -3697,11 +3698,8 @@ fun ChannelEpgPreviewDialog(
 
     // Dedicated lightweight ExoPlayer instance for Live Stream Mini Preview
     val miniPlayer = remember(item.url) {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(15000)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(StreamHttpClients.streamClient)
+            .setUserAgent(StreamHttpClients.DEFAULT_MOBILE_UA)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
@@ -4445,14 +4443,10 @@ fun VideoPlayerUI(
         }
     }
 
-    // Standard media3 ExoPlayer controller setup with proper scopes, robust HTTP DataSource and User-Agent
+    // Standard media3 ExoPlayer controller setup with proper scopes, DoH OkHttp DataSource and custom EXTVLCOPT headers
     val exoPlayer = remember {
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(12000)
-            .setKeepPostFor302Redirects(true)
+        val httpDataSourceFactory = OkHttpDataSource.Factory(StreamHttpClients.streamClient)
+            .setUserAgent(StreamHttpClients.DEFAULT_MOBILE_UA)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)

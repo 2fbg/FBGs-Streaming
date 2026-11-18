@@ -1734,6 +1734,84 @@
                 return keys;
             },
 
+            EPG_DB_NAME: 'mk21_epg_db',
+            EPG_STORE_NAME: 'schedules',
+            EPG_TTL_MS: 12 * 60 * 60 * 1000,
+            _epgDbPromise: null,
+
+            openEpgDb() {
+                if (this._epgDbPromise) return this._epgDbPromise;
+                this._epgDbPromise = new Promise((resolve) => {
+                    try {
+                        if (!window.indexedDB) { resolve(null); return; }
+                        const req = indexedDB.open(this.EPG_DB_NAME, 1);
+                        req.onupgradeneeded = (e) => {
+                            const db = e.target.result;
+                            if (!db.objectStoreNames.contains(this.EPG_STORE_NAME)) {
+                                db.createObjectStore(this.EPG_STORE_NAME, { keyPath: 'key' });
+                            }
+                        };
+                        req.onsuccess = () => resolve(req.result);
+                        req.onerror = () => resolve(null);
+                    } catch (e) {
+                        resolve(null);
+                    }
+                });
+                return this._epgDbPromise;
+            },
+
+            pruneScheduleWindow(schedule) {
+                if (!Array.isArray(schedule)) return [];
+                const nowMs = Date.now();
+                const minMs = nowMs - 2 * 3600 * 1000;
+                const maxMs = nowMs + 36 * 3600 * 1000;
+                return schedule
+                    .map(p => ({
+                        title: p.title || 'Programa',
+                        description: p.description || '',
+                        start: p.start instanceof Date ? p.start : new Date(p.start),
+                        stop: p.stop instanceof Date ? p.stop : new Date(p.stop),
+                        isReal: !!p.isReal
+                    }))
+                    .filter(p => p.start && p.stop && !isNaN(p.start.getTime()) && !isNaN(p.stop.getTime()) && p.stop.getTime() >= minMs && p.start.getTime() <= maxMs)
+                    .slice(0, 24);
+            },
+
+            async readEpgFromIdb(key) {
+                try {
+                    const db = await this.openEpgDb();
+                    if (!db) return null;
+                    return await new Promise((resolve) => {
+                        const tx = db.transaction(this.EPG_STORE_NAME, 'readonly');
+                        const req = tx.objectStore(this.EPG_STORE_NAME).get(key);
+                        req.onsuccess = () => {
+                            const rec = req.result;
+                            if (!rec || !rec.timestamp || (Date.now() - rec.timestamp) > this.EPG_TTL_MS) {
+                                resolve(null);
+                                return;
+                            }
+                            resolve(rec.data || null);
+                        };
+                        req.onerror = () => resolve(null);
+                    });
+                } catch (e) {
+                    return null;
+                }
+            },
+
+            async writeEpgToIdb(key, data) {
+                try {
+                    const db = await this.openEpgDb();
+                    if (!db) return;
+                    const tx = db.transaction(this.EPG_STORE_NAME, 'readwrite');
+                    tx.objectStore(this.EPG_STORE_NAME).put({
+                        key,
+                        timestamp: Date.now(),
+                        data
+                    });
+                } catch (e) {}
+            },
+
             getCachedSchedule(item) {
                 const keys = this.getChannelKeys(item);
                 for (const k of keys) {
@@ -1747,12 +1825,8 @@
                         const raw = sessionStorage.getItem(`mk21_epg_${k}`);
                         if (raw) {
                             const parsed = JSON.parse(raw);
-                            if (Array.isArray(parsed) && parsed.length > 0) {
-                                const hydrated = parsed.map(p => ({
-                                    ...p,
-                                    start: new Date(p.start),
-                                    stop: new Date(p.stop)
-                                }));
+                            const hydrated = this.pruneScheduleWindow(parsed);
+                            if (hydrated.length > 0) {
                                 this.cache.set(k, hydrated);
                                 return hydrated;
                             }
@@ -1763,19 +1837,24 @@
             },
 
             storeSchedule(item, schedule) {
+                const pruned = this.pruneScheduleWindow(schedule);
+                if (pruned.length === 0) return;
+                const serializable = pruned.slice(0, 15).map(p => ({
+                    title: p.title,
+                    description: p.description,
+                    start: p.start.toISOString(),
+                    stop: p.stop.toISOString(),
+                    isReal: p.isReal
+                }));
                 const keys = this.getChannelKeys(item);
                 for (const k of keys) {
-                    this.cache.set(k, schedule);
+                    this.cache.set(k, pruned);
                     try {
-                        const serializable = schedule.slice(0, 15).map(p => ({
-                            title: p.title,
-                            description: p.description,
-                            start: p.start.toISOString(),
-                            stop: p.stop.toISOString(),
-                            isReal: p.isReal
-                        }));
                         sessionStorage.setItem(`mk21_epg_${k}`, JSON.stringify(serializable));
                     } catch (e) {}
+                }
+                if (keys.length > 0) {
+                    this.writeEpgToIdb(keys[0], serializable);
                 }
             },
 
@@ -1786,6 +1865,15 @@
 
                 if (this.cache.has(primaryKey)) {
                     return this.cache.get(primaryKey);
+                }
+                for (const k of keys) {
+                    const idbSchedule = await this.readEpgFromIdb(k);
+                    const hydrated = this.pruneScheduleWindow(idbSchedule);
+                    if (hydrated.length > 0) {
+                        for (const alias of keys) this.cache.set(alias, hydrated);
+                        window.dispatchEvent(new CustomEvent('mk21:epg-updated', { detail: { item, schedule: hydrated } }));
+                        return hydrated;
+                    }
                 }
                 if (this.fetchingKeys.has(primaryKey)) {
                     return null;
@@ -1871,6 +1959,24 @@
 
                 this.xmltvPromise = (async () => {
                     try {
+                        const snapshotKey = `xmltv_${targetUrl.split('?')[0]}`;
+                        const cachedSnapshot = await this.readEpgFromIdb(snapshotKey);
+                        if (cachedSnapshot && typeof cachedSnapshot === 'object') {
+                            let cachedCount = 0;
+                            for (const [chKey, list] of Object.entries(cachedSnapshot)) {
+                                const hydrated = this.pruneScheduleWindow(list);
+                                if (hydrated.length > 0) {
+                                    this.cache.set(chKey, hydrated);
+                                    cachedCount += hydrated.length;
+                                }
+                            }
+                            if (cachedCount > 0) {
+                                console.log(`[EPG] XMLTV restaurado do IndexedDB: ${cachedCount} programas.`);
+                                window.dispatchEvent(new CustomEvent('mk21:epg-updated', { detail: { count: cachedCount } }));
+                                return cachedCount;
+                            }
+                        }
+
                         const corsMethod = localStorage.getItem('mk21_cors') || 'auto';
                         const fetchUrl = (typeof getEffectiveProxyMethod === 'function')
                             ? getProxyUrl(targetUrl, getEffectiveProxyMethod(targetUrl, corsMethod))
@@ -1881,30 +1987,53 @@
                         const xmlText = await res.text();
                         if (!xmlText.includes('<tv') || !xmlText.includes('<programme')) return null;
 
+                        const nowMs = Date.now();
+                        const windowStartMs = nowMs - 2 * 3600 * 1000;
+                        const windowEndMs = nowMs + 36 * 3600 * 1000;
                         const progRegex = /<programme\s+[^>]*start="([^"]+)"\s+[^>]*stop="([^"]+)"\s+[^>]*channel="([^"]+)"[^>]*>([\s\S]*?)<\/programme>/gi;
                         let match;
                         let count = 0;
-                        while ((match = progRegex.exec(xmlText)) !== null) {
-                            const [, startStr, stopStr, channelId, inner] = match;
-                            const titleMatch = inner.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-                            const descMatch = inner.match(/<desc[^>]*>([\s\S]*?)<\/desc>/i);
+                        let iterated = 0;
+                        const snapshotToPersist = {};
 
-                            const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : 'Programa';
-                            const desc = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+                        while ((match = progRegex.exec(xmlText)) !== null) {
+                            iterated++;
+                            if (iterated % 200 === 0) {
+                                await new Promise((resolve) => setTimeout(resolve, 0));
+                            }
+                            const [, startStr, stopStr, channelId, inner] = match;
                             const start = this.parseXmltvDate(startStr);
                             const stop = this.parseXmltvDate(stopStr);
+                            if (!start || !stop || !channelId) continue;
+                            if (stop.getTime() < windowStartMs || start.getTime() > windowEndMs) continue;
 
-                            if (start && stop && channelId) {
+                            const titleMatch = inner.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+                            const descMatch = inner.match(/<desc[^>]*>([\s\S]*?)<\/desc>/i);
+                            const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : 'Programa';
+                            const desc = descMatch ? descMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+
+                            const chKey = `tvgid_${channelId.toLowerCase().trim()}`;
+                            const arr = this.cache.get(chKey) || [];
+                            if (arr.length < 24) {
                                 const prog = { title, description: desc, start, stop, isReal: true };
-                                const chKey = `tvgid_${channelId.toLowerCase().trim()}`;
-                                if (!this.cache.has(chKey)) {
-                                    this.cache.set(chKey, []);
-                                }
-                                this.cache.get(chKey).push(prog);
+                                arr.push(prog);
+                                this.cache.set(chKey, arr);
+                                if (!snapshotToPersist[chKey]) snapshotToPersist[chKey] = [];
+                                snapshotToPersist[chKey].push({
+                                    title,
+                                    description: desc,
+                                    start: start.toISOString(),
+                                    stop: stop.toISOString(),
+                                    isReal: true
+                                });
                                 count++;
                             }
                         }
-                        console.log(`[EPG] XMLTV carregado com sucesso: ${count} programas mapeados.`);
+
+                        if (count > 0) {
+                            await this.writeEpgToIdb(snapshotKey, snapshotToPersist);
+                        }
+                        console.log(`[EPG] XMLTV carregado com sucesso (chunked + IndexedDB): ${count} programas mapeados.`);
                         window.dispatchEvent(new CustomEvent('mk21:epg-updated', { detail: { count } }));
                         return count;
                     } catch (e) {
@@ -3812,9 +3941,13 @@
         function handlePlaybackError() {
             if (!currentStreamUrl) return;
 
-            if (currentProxyRotationIndex < PROXY_ROTATION_LIST.length - 1) {
+            const safeRotationList = (typeof hasSensitiveCredentials === 'function' && hasSensitiveCredentials(currentStreamUrl))
+                ? PROXY_ROTATION_LIST.filter(m => m === 'auto' || m === 'vercel' || m === 'direct')
+                : PROXY_ROTATION_LIST;
+
+            if (currentProxyRotationIndex < safeRotationList.length - 1) {
                 currentProxyRotationIndex++;
-                const nextProxyMethod = PROXY_ROTATION_LIST[currentProxyRotationIndex];
+                const nextProxyMethod = safeRotationList[currentProxyRotationIndex];
 
                 let proxyLabel = 'Conexão Direta (Sem Proxy)';
                 if (nextProxyMethod === 'corsproxy') proxyLabel = 'Servidor de Transmissão 1 (CorsProxy)';
@@ -3822,7 +3955,7 @@
                 if (nextProxyMethod === 'codetabs') proxyLabel = 'Servidor de Transmissão Alternativo 3 (CodeTabs)';
                 if (nextProxyMethod === 'allorigins') proxyLabel = 'Servidor de Transmissão Alternativo 4 (AllOrigins)';
 
-                console.warn(`[PLAYER-FALLBACK] Playback failed. Restructuring connection under: ${nextProxyMethod} (${currentProxyRotationIndex}/${PROXY_ROTATION_LIST.length - 1})`);
+                console.warn(`[PLAYER-FALLBACK] Playback failed. Restructuring connection under: ${nextProxyMethod} (${currentProxyRotationIndex}/${safeRotationList.length - 1})`);
                 addLog(`[Player Fallback] Falha na reprodução corrente. Rotacionando conexão para: ${nextProxyMethod.toUpperCase()} (${proxyLabel})`, 'warn');
                 showNotification(`Instabilidade sob IP direto. Reconectando canais em modo seguro pelo ${proxyLabel}... 🔄`, 'info');
 
@@ -4278,13 +4411,10 @@
             const encPass = encodeURIComponent(pass);
 
             try {
+                // Nunca enviar credenciais Xtream (usuario/senha) para proxies publicos de terceiros
                 const methods = [
                 { name: 'vercel', label: 'Proxy Vercel Dedicado', getUrl: (url) => `${window.location.origin}/api/proxy?url=${encodeURIComponent(url)}` },
-                { name: 'direct', label: 'Conexão Direta (sem proxy)', getUrl: (url) => url },
-                { name: 'corsproxy', label: 'Proxy CorsProxy.io', getUrl: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}` },
-                { name: 'allorigins', label: 'Proxy AllOrigins (Raw)', getUrl: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-                { name: 'codetabs', label: 'Proxy CodeTabs', getUrl: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
-                { name: 'thingproxy', label: 'Proxy ThingProxy', getUrl: (url) => `https://thingproxy.freeboard.io/fetch/${url}` }
+                { name: 'direct', label: 'Conexão Direta (sem proxy)', getUrl: (url) => url }
             ];
 
             let sortedMethods = [...methods];
@@ -4296,7 +4426,7 @@
                 });
             }
 
-            const preferredLoginMethod = getEffectiveProxyMethod(baseUrl, corsMethod);
+            const preferredLoginMethod = (corsMethod === 'direct') ? 'direct' : 'vercel';
             const methodsToTry = (corsMethod === 'auto')
                 ? sortedMethods.filter(m => m.name === preferredLoginMethod).concat(
                     sortedMethods.filter(m => m.name !== preferredLoginMethod)
@@ -5719,9 +5849,22 @@
             return localStorage.getItem('mk21_cors') || 'auto';
         }
 
+        function hasSensitiveCredentials(url) {
+            if (!url || typeof url !== 'string') return false;
+            return (
+                /[?&](?:username|user|password|pass|token|auth|api[_-]?key)=/i.test(url) ||
+                /\/(?:live|movie|series)\/[^/\s?]+\/[^/\s?]+/i.test(url) ||
+                /https?:\/\/[^/@\s:]+:[^/@\s]+@/i.test(url) ||
+                /(?:player_api|panel_api|xmltv|get)\.php/i.test(url)
+            );
+        }
+
+        const PUBLIC_THIRD_PARTY_PROXIES = ['corsproxy', 'allorigins', 'codetabs', 'thingproxy'];
+
         function getEffectiveProxyMethod(url, preferredMethod = null) {
             let corsMethod = preferredMethod || getStoredProxyMode();
             const httpInSecurePage = isSecureContextPlayback() && isHttpUrl(url);
+            const isCredentialed = hasSensitiveCredentials(url);
 
             if (corsMethod === 'auto') {
                 if (
@@ -5732,15 +5875,19 @@
                 ) {
                     return 'vercel';
                 }
-                if (httpInSecurePage) {
+                if (httpInSecurePage || isCredentialed) {
                     return 'vercel';
                 }
                 if (window.location.protocol === 'http:' && !isHttpUrl(url)) {
                     return 'direct';
                 }
-                if (fastestCalculatedProxy) {
+                if (fastestCalculatedProxy && (!isCredentialed || !PUBLIC_THIRD_PARTY_PROXIES.includes(fastestCalculatedProxy))) {
                     return fastestCalculatedProxy;
                 }
+                return 'vercel';
+            }
+
+            if (isCredentialed && PUBLIC_THIRD_PARTY_PROXIES.includes(corsMethod)) {
                 return 'vercel';
             }
 
@@ -5940,10 +6087,14 @@
         function getProxyUrl(url, preferredMethod = null) {
             if (!url) return "";
 
-            const corsMethod = getEffectiveProxyMethod(url, preferredMethod);
+            let corsMethod = getEffectiveProxyMethod(url, preferredMethod);
 
             if (corsMethod === 'direct') {
                 return url;
+            }
+
+            if (hasSensitiveCredentials(url) && PUBLIC_THIRD_PARTY_PROXIES.includes(corsMethod)) {
+                corsMethod = 'vercel';
             }
 
             switch (corsMethod) {

@@ -79,6 +79,24 @@ test('resolveAndValidateHost blocks domains resolving to private IPs (anti DNS r
 
     const r3 = await proxy.resolveAndValidateHost('cdn.example.com', publicLookup);
     assert.equal(r3.allowed, true);
+
+    const failingLookup = async () => {
+        throw new Error('ENOTFOUND');
+    };
+    const r4 = await proxy.resolveAndValidateHost(
+        'blocked-by-isp-dns.example.com',
+        failingLookup,
+        async () => [{ address: '104.21.10.20', family: 4 }]
+    );
+    assert.equal(r4.allowed, true);
+    assert.equal(r4.addresses[0].address, '104.21.10.20');
+
+    const r5 = await proxy.resolveAndValidateHost(
+        'doh-rebinding.example.com',
+        failingLookup,
+        async () => [{ address: '127.0.0.1', family: 4 }]
+    );
+    assert.equal(r5.allowed, false);
 });
 
 test('CORS allowlist allows official origins, same-host HTTPS deployments, and rejects arbitrary third-party sites', async () => {

@@ -2,6 +2,15 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [Não publicado] — Paridade com o Saimo TV (Smart TV)
+
+- **Guia de Programação na Smart TV (LG webOS / Tizen):** nova aba **GUIA** com duas colunas — canais à esquerda (número, logo, nome e o que está *no ar*) e a grade do canal selecionado à direita (faixa de horário, selo **NO AR**, sinopse e barra de progresso). Navegação 100 % por D-pad (`▲▼` coluna ativa, `◀▶` troca de coluna, `OK` abre/sintoniza, `VOLTAR` fecha).
+- **EPG real (XMLTV) na Smart TV:** a TV não tinha **nenhum** carregador de XMLTV — `matchEPG()` era código morto e `epgCache` nunca era preenchido; só existia o `get_short_epg` do canal em foco e uma grade simulada. Agora o `xmltv.php` do servidor (ou o `url-tvg=` da playlist) é baixado, indexado por canal e usado no Guia e no HUD de zapping. Parser por regex (sem DOMParser) para não estourar a memória das TVs antigas, com teto de 250 000 programas; amarração por `tvg-id`/`epg_channel_id`, por id do XMLTV e por `<display-name>` normalizado, preservando o cache IndexedDB (`mk21_epg_tv_v1`).
+- **HUD de zapping:** cartão no topo durante a troca de canal com número (LCN), logo, selo **NO AR**, barra de progresso, **A SEGUIR** e contagem regressiva que atualiza a cada segundo, com auto-hide em 7 s. Acionado por `CH +/-`, digitação de número e pelo Guia.
+- **Teclado virtual (D-pad):** QWERTY PT-BR (com `ç` e acentos) para a busca, com 4 modos (`abc`/`ABC`/`123`/`#+=`), linha de controle (modo, espaço, backspace, limpar), seleção que avança como um teclado de celular e trava nas bordas do grid. Botão `⌨️` ao lado do campo de busca.
+- **Testes:** 3 módulos puros novos em `smart-tv/mk21-tv/core/` (`EpgGuide.js`, `ZapHud.js`, `OnScreenKeyboard.js`) com 42 testes unitários em Node, mais um teste de integração em Chromium que sobe um servidor IPTV simulado (Xtream + XMLTV), faz login no app de verdade e valida o Guia, a navegação por D-pad, o VOLTAR, o HUD de zapping e o teclado virtual. O Playwright é opcional — sem ele o teste é ignorado, não quebrado.
+- **Documentação:** `docs/SAIMO-TV-PARITY.md` (comparativo Saimo TV × MK21 e roteiro do que falta), `docs/MK21-FEATURE-INVENTORY.md` e `docs/SAIMO-TV-FEATURE-INVENTORY.md`.
+
 ## [2.9.0] - 2026-11-15
 
 - **MK21 AI Copilot (Android):** Redimensionamento da janela do diálogo para teclado virtual (`SOFT_INPUT_ADJUST_RESIZE` + `.imePadding()` / `.navigationBarsPadding()`), caixa de entrada expansível até 5 linhas (`132.dp`) com envio alinhado à base e fechamento automático do teclado.

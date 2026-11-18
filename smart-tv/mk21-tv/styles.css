@@ -199,6 +199,8 @@ html, body {
   height: calc(100vh - 128px);
   min-height: 0;
   background: #090b12;
+  /* ancora do HUD de zapping e do teclado virtual dentro da area de conteudo */
+  position: relative;
 }
 
 .content-section {
@@ -4611,4 +4613,488 @@ div[style*="overflow"], .pane-scroll, .list-container,
   margin-right: 0;
   min-height: 68px;
 }
+
+
+/* ==========================================================================
+   GUIA DE PROGRAMAÇÃO (tela dedicada — paridade com o Saimo TV na LG webOS)
+   ========================================================================== */
+#sectionGuide {
+  display: block;
+  padding: 10px 14px;
+  background: #000000;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#sectionGuide.hidden {
+  display: none !important;
+}
+
+.guide-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(380px, 1.4fr);
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.col-guide-channels,
+.col-guide-programs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Item da coluna de canais */
+.guide-channel-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: #10121a;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid transparent;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.guide-channel-btn.active {
+  border-left-color: var(--primary-red);
+  background: #1b1520;
+}
+
+.guide-channel-btn:focus,
+.guide-channel-btn.mk21-focus {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.guide-channel-logo {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #05060a;
+}
+
+.guide-channel-logo-placeholder {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #1a1e2c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.guide-channel-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.guide-channel-name {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guide-channel-now {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guide-channel-now.is-live {
+  color: #22c55e;
+}
+
+/* Item da coluna de programação */
+.guide-prog-row {
+  display: flex;
+  gap: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: #10121a;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid transparent;
+  border-radius: 10px;
+}
+
+.guide-prog-row.is-live {
+  border-left-color: #22c55e;
+  background: #0f1a14;
+}
+
+.guide-prog-row.is-past {
+  opacity: 0.55;
+}
+
+.guide-prog-time {
+  flex-shrink: 0;
+  width: 118px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--focus-ring);
+  line-height: 1.4;
+}
+
+.guide-prog-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.guide-prog-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.guide-prog-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  max-height: 2.8em;
+  overflow: hidden;
+}
+
+.guide-prog-bar {
+  margin-top: 8px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.guide-prog-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #22c55e, #a3e635);
+}
+
+.guide-live-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #4ade80;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.guide-empty {
+  padding: 26px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   HUD DE ZAPPING (cartão mostrado durante a troca de canal)
+   ========================================================================== */
+.zap-hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  background: rgba(6, 7, 12, 0.92);
+  border: 1px solid rgba(229, 9, 20, 0.45);
+  border-radius: 14px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: zapHudIn 0.18s ease-out;
+}
+
+.zap-hud.hidden {
+  display: none !important;
+}
+
+@keyframes zapHudIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.zap-hud-logo-wrap {
+  width: 76px;
+  height: 76px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: #05060a;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.zap-hud-logo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.zap-hud-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.zap-hud-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.zap-hud-number {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary-red);
+  font-variant-numeric: tabular-nums;
+}
+
+.zap-hud-name {
+  font-size: 22px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zap-hud-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.zap-hud-badge {
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(34, 197, 94, 0.22);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  color: #4ade80;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  flex-shrink: 0;
+}
+
+.zap-hud-now-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zap-hud-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.zap-hud-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #e50914, #ff7a45);
+  transition: width 0.4s linear;
+}
+
+.zap-hud-next {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.zap-hud-next-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--focus-ring);
+  flex-shrink: 0;
+}
+
+.zap-hud-next-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zap-hud-countdown {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ==========================================================================
+   TECLADO VIRTUAL (D-PAD)
+   ========================================================================== */
+.search-osk-btn {
+  flex-shrink: 0;
+  margin-left: 8px;
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  background: #1a1e2c;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.search-osk-btn:focus {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.osk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.osk-overlay.hidden {
+  display: none !important;
+}
+
+.osk-panel {
+  width: min(1180px, 92vw);
+  padding: 20px 24px 16px;
+  background: #0b0d14;
+  border: 1px solid rgba(229, 9, 20, 0.4);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+
+.osk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.osk-title {
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.osk-mode {
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: rgba(229, 9, 20, 0.18);
+  border: 1px solid rgba(229, 9, 20, 0.45);
+  color: #ff8a8a;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.osk-preview {
+  min-height: 46px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #10121a;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 19px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.osk-preview:empty::before {
+  content: 'Digite para buscar...';
+  color: var(--text-muted);
+}
+
+.osk-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.osk-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.osk-key {
+  width: 92px;
+  height: 62px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #171a26;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 21px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.osk-key.control {
+  background: #20242f;
+  color: var(--focus-ring);
+  font-size: 19px;
+}
+
+.osk-key.focused {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -2px;
+  background: #2a1a1f;
+}
+
+.osk-hint {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 

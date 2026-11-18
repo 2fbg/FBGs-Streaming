@@ -120,6 +120,7 @@
         <button id="tabMovies" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-film"></i> FILMES</button>
         <button id="tabSeries" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clapperboard"></i> SÉRIES</button>
         <button id="tabContinue" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-clock-rotate-left"></i> CONTINUAR</button>
+        <button id="tabGuide" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-calendar-days"></i> GUIA</button>
         <button id="tabFavs" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-star"></i> FAVORITOS</button>
         <button id="tabSettings" class="tab-btn header-focusable" tabindex="0"><i class="fa-solid fa-gear"></i> CONFIGURAÇÕES</button>
       </nav>
@@ -165,6 +166,7 @@
       <div class="col-pane col-channels">
         <div class="search-box">
           <input id="inputSearch" type="text" placeholder="🔍 Buscar canal, filme ou série..." tabindex="0">
+          <button id="btnOpenOsk" class="search-osk-btn" tabindex="0" title="Teclado virtual">⌨️</button>
         </div>
         <div class="pane-header">
           <span id="txtCurrentCategoryTitle">📺 Todos os Canais</span>
@@ -255,6 +257,26 @@
 
     </section>
 
+    <!-- SEÇÃO GUIA DE PROGRAMAÇÃO (canais + grade, no estilo Saimo TV) -->
+    <section id="sectionGuide" class="content-section hidden">
+      <div class="guide-layout">
+        <div class="col-pane col-guide-channels">
+          <div class="pane-header">
+            <span id="txtGuideChannelsTitle">📺 Canais</span>
+            <span id="badgeGuideChannels" class="counter-badge">0</span>
+          </div>
+          <ul id="listGuideChannels" class="pane-scroll scrollable-container" tabindex="0"></ul>
+        </div>
+        <div class="col-pane col-guide-programs">
+          <div class="pane-header">
+            <span id="txtGuideProgramsTitle">🔵 Programação</span>
+            <span id="badgeGuidePrograms" class="counter-badge">0</span>
+          </div>
+          <div id="listGuidePrograms" class="pane-scroll scrollable-container" tabindex="0"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- SEÇÃO CONFIGURAÇÕES (CLONE VIZZION PLAY DAS FOTOS) -->
     <section id="sectionSettings" class="content-section hidden">
       <div class="settings-left-menu scrollable-container" tabindex="0">
@@ -281,7 +303,43 @@
       <div id="settingsDetailBox" class="settings-detail-panel scrollable-container" tabindex="0"></div>
     </section>
 
+    <!-- HUD DE ZAPPING (cartão do canal durante a troca de canal) -->
+    <div id="zapHud" class="zap-hud hidden" aria-live="polite">
+      <div class="zap-hud-logo-wrap">
+        <img id="zapHudLogo" class="zap-hud-logo" alt="" onerror="this.style.display='none'">
+      </div>
+      <div class="zap-hud-body">
+        <div class="zap-hud-title-row">
+          <span id="zapHudNumber" class="zap-hud-number"></span>
+          <span id="zapHudName" class="zap-hud-name">Canal</span>
+        </div>
+        <div class="zap-hud-now">
+          <span class="zap-hud-badge">NO AR</span>
+          <span id="zapHudNow" class="zap-hud-now-title">—</span>
+        </div>
+        <div class="zap-hud-progress"><div id="zapHudProgressFill" class="zap-hud-progress-fill"></div></div>
+        <div class="zap-hud-next">
+          <span class="zap-hud-next-label">A SEGUIR</span>
+          <span id="zapHudNext" class="zap-hud-next-title">—</span>
+          <span id="zapHudCountdown" class="zap-hud-countdown">--:--</span>
+        </div>
+      </div>
+    </div>
+
   </main>
+
+  <!-- ================= TECLADO VIRTUAL (D-PAD) ================= -->
+  <div id="oskOverlay" class="osk-overlay hidden">
+    <div class="osk-panel">
+      <div class="osk-head">
+        <span class="osk-title">⌨️ Teclado virtual</span>
+        <span id="oskMode" class="osk-mode">abc</span>
+      </div>
+      <div id="oskPreview" class="osk-preview"></div>
+      <div id="oskGrid" class="osk-grid"></div>
+      <div class="osk-hint">◀ ▶ ▲ ▼ navegar &nbsp;•&nbsp; OK confirmar &nbsp;•&nbsp; VOLTAR fechar</div>
+    </div>
+  </div>
 
   <!-- ================= MODAIS ================= -->
   <!-- Modal de Faixas de Áudio e Legendas -->
