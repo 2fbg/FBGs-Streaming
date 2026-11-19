@@ -260,7 +260,41 @@ android {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions {
+    unitTests {
+      isIncludeAndroidResources = true
+      all { test ->
+        test.dependsOn("prepareRobolectricSdks")
+        test.systemProperty("robolectric.offline", "true")
+        test.systemProperty(
+          "robolectric.dependency.dir",
+          layout.buildDirectory.dir("robolectric-deps").get().asFile.absolutePath
+        )
+      }
+    }
+  }
+}
+
+// Pré-resolve os JARs android-all-instrumented via Gradle (1 detachedConfiguration por SDK
+// para evitar resolução de conflito entre versões do mesmo artefato) e mantém o Robolectric
+// 100% offline, eliminando falhas HTTP/404 do MavenArtifactFetcher no GitHub Actions.
+val robolectricSdkVersions = listOf(
+  "13-robolectric-9030017-i7",
+  "14-robolectric-10818077-i7",
+  "16-robolectric-13921718-i7",
+)
+
+val robolectricSdkConfigs = robolectricSdkVersions.map { ver ->
+  configurations.detachedConfiguration(
+    dependencies.create("org.robolectric:android-all-instrumented:$ver")
+  ).apply {
+    isTransitive = false
+  }
+}
+
+tasks.register<Sync>("prepareRobolectricSdks") {
+  robolectricSdkConfigs.forEach { cfg -> from(cfg) }
+  into(layout.buildDirectory.dir("robolectric-deps"))
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
