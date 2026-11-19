@@ -32,6 +32,7 @@
   ],
   "rewrites": [
     { "source": "/api/proxy", "destination": "/api/proxy.js" },
+    { "source": "/api/epg", "destination": "/api/epg.js" },
     { "source": "/api/version.json", "destination": "/version.json" },
     { "source": "/web", "destination": "/index.html" },
     { "source": "/web/", "destination": "/index.html" },

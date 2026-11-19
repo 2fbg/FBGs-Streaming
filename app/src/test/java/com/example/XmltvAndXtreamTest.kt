@@ -216,4 +216,27 @@ class XmltvAndXtreamTest {
         assertEquals(1763500000_000L, list[0].startMs)
         assertEquals(1763503600_000L, list[0].stopMs)
     }
+
+    @Test
+    fun `public epg json parser parses valid programs sorted by start and skips malformed entries`() {
+        val json = """
+            {
+              "source": "meuguia.tv",
+              "slug": "GRD",
+              "programs": [
+                {"title": "Novela das Nove", "desc": "Novela", "start": 1763503600000, "stop": 1763507200000},
+                {"title": "", "desc": "Invalido", "start": 1763500000000, "stop": 1763503600000},
+                {"title": "Jornal Nacional", "desc": "Jornalismo", "start": 1763500000000, "stop": 1763503600000}
+              ]
+            }
+        """.trimIndent()
+
+        val parsed = com.example.data.service.AndroidEpgManager.parsePublicEpgJson(json, "globo")
+        assertEquals(2, parsed.size)
+        assertEquals("Jornal Nacional", parsed[0].title)
+        assertEquals("Jornalismo", parsed[0].description)
+        assertEquals("Novela das Nove", parsed[1].title)
+        assertTrue(com.example.data.service.AndroidEpgManager.parsePublicEpgJson("not json", "globo").isEmpty())
+    }
 }
+

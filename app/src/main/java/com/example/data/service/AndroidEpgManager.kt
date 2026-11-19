@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -36,6 +37,8 @@ object AndroidEpgManager {
 
     private const val TAG = "MK21_EPG"
     private const val XMLTV_TTL_MS = 2L * 60L * 60L * 1000L // 2 horas
+    private const val PUBLIC_EPG_TTL_MS = 15L * 60L * 1000L // 15 min
+    const val PUBLIC_EPG_ENDPOINT = "https://bgstreaming.vercel.app/api/epg"
 
     private val _xmltvIndex = MutableStateFlow<XmltvIndex?>(null)
     val xmltvIndex: StateFlow<XmltvIndex?> = _xmltvIndex.asStateFlow()
@@ -47,6 +50,7 @@ object AndroidEpgManager {
     private val epgIdByStreamUrl = ConcurrentHashMap<String, String>()
     private val epgIdByNormalizedName = ConcurrentHashMap<String, String>()
     private val shortEpgCache = ConcurrentHashMap<String, Pair<Long, List<XmltvProgramme>>>()
+    private val publicEpgCache = ConcurrentHashMap<String, Pair<Long, List<XmltvProgramme>>>()
 
     @Volatile
     private var lastXmltvUrl: String? = null
@@ -149,7 +153,85 @@ object AndroidEpgManager {
     }
 
     /**
+     * Faz o parsing do JSON retornado pelo endpoint público `/api/epg`.
+     */
+    fun parsePublicEpgJson(json: String, channelKey: String): List<XmltvProgramme> {
+        if (json.isBlank()) return emptyList()
+        return try {
+            val root = JSONObject(json)
+            val arr = root.optJSONArray("programs") ?: return emptyList()
+            val result = ArrayList<XmltvProgramme>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val title = obj.optString("title", "").trim()
+                val startMs = obj.optLong("start", 0L)
+                val stopMs = obj.optLong("stop", 0L)
+                if (title.isEmpty() || startMs <= 0L || stopMs <= startMs) continue
+                result.add(
+                    XmltvProgramme(
+                        channelId = channelKey,
+                        title = title,
+                        description = obj.optString("desc", "").trim(),
+                        startMs = startMs,
+                        stopMs = stopMs
+                    )
+                )
+            }
+            result.sortedBy { it.startMs }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Fallback público de EPG brasileiro sem credencial (`/api/epg`), ideal para listas M3U puras
+     * ou servidores Xtream que não fornecem XMLTV/Short EPG.
+     */
+    suspend fun fetchPublicFallbackEpg(
+        item: PlaylistItem,
+        client: OkHttpClient = StreamHttpClients.baseClient
+    ): List<XmltvProgramme> = withContext(Dispatchers.IO) {
+        val normName = XmltvEpgParser.normalizeChannelKey(item.name)
+        if (normName.isEmpty()) return@withContext emptyList()
+
+        val now = System.currentTimeMillis()
+        publicEpgCache[normName]?.let { (ts, cachedList) ->
+            if ((now - ts) < PUBLIC_EPG_TTL_MS) return@withContext cachedList
+        }
+
+        val encoded = try {
+            URLEncoder.encode(item.name.trim(), "UTF-8")
+        } catch (_: Exception) {
+            return@withContext emptyList()
+        }
+
+        val epgClient = client.newBuilder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .build()
+        val req = Request.Builder()
+            .url("$PUBLIC_EPG_ENDPOINT?channel=$encoded")
+            .build()
+
+        val list = try {
+            epgClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) emptyList()
+                else parsePublicEpgJson(resp.body?.string().orEmpty(), normName)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        publicEpgCache[normName] = now to list
+        if (list.isNotEmpty()) {
+            AndroidRealEpgCache.put(item.name, toEpgProgramInfoList(list, now))
+        }
+        list
+    }
+
+    /**
      * Busca Short EPG para um canal específico (usado no Preview e como reforço do Guia).
+     * Quando o canal vem de lista M3U pura ou o servidor não retorna Short EPG, consulta o fallback público `/api/epg`.
      */
     suspend fun fetchShortEpgForChannel(
         item: PlaylistItem,
@@ -166,28 +248,40 @@ object AndroidEpgManager {
             }
         }
 
-        val streamId = XtreamCatalogClient.extractStreamIdFromUrl(item.url) ?: return@withContext emptyList()
-        val epgClient = client.newBuilder()
-            .connectTimeout(6, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
-        val list = XtreamCatalogClient.fetchShortEpg(
-            client = epgClient,
-            baseUrl = baseUrl,
-            username = username,
-            password = password,
-            streamId = streamId,
-            limit = 12
-        )
-        if (list.isNotEmpty()) {
-            shortEpgCache[cacheKey] = now to list
-            AndroidRealEpgCache.put(item.name, toEpgProgramInfoList(list, now))
+        val streamId = XtreamCatalogClient.extractStreamIdFromUrl(item.url)
+        val xtreamList = if (streamId != null && baseUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()) {
+            val epgClient = client.newBuilder()
+                .connectTimeout(6, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+            XtreamCatalogClient.fetchShortEpg(
+                client = epgClient,
+                baseUrl = baseUrl,
+                username = username,
+                password = password,
+                streamId = streamId,
+                limit = 12
+            )
+        } else {
+            emptyList()
         }
-        list
+
+        val finalList = if (xtreamList.isNotEmpty()) {
+            xtreamList
+        } else {
+            fetchPublicFallbackEpg(item, client)
+        }
+
+        if (finalList.isNotEmpty()) {
+            shortEpgCache[cacheKey] = now to finalList
+            AndroidRealEpgCache.put(item.name, toEpgProgramInfoList(finalList, now))
+        }
+        finalList
     }
 
     /**
-     * Obtém a grade real de um canal consultando primeiro o XMLTV indexado e depois o cache de Short EPG.
+     * Obtém a grade real de um canal consultando primeiro o XMLTV indexado,
+     * depois o cache de Short EPG Xtream e por fim o cache do fallback público.
      */
     fun getRealProgrammes(item: PlaylistItem, nowMs: Long = System.currentTimeMillis()): List<XmltvProgramme> {
         val tvgId = resolveTvgId(item)
@@ -196,6 +290,10 @@ object AndroidEpgManager {
 
         val shortList = shortEpgCache[item.url]?.second.orEmpty()
         if (shortList.isNotEmpty()) return shortList
+
+        val normName = XmltvEpgParser.normalizeChannelKey(item.name)
+        val pubList = if (normName.isNotEmpty()) publicEpgCache[normName]?.second.orEmpty() else emptyList()
+        if (pubList.isNotEmpty()) return pubList
 
         return emptyList()
     }
@@ -227,6 +325,7 @@ object AndroidEpgManager {
 
     fun clearSessionCaches() {
         shortEpgCache.clear()
+        publicEpgCache.clear()
         epgIdByStreamUrl.clear()
         epgIdByNormalizedName.clear()
         discoveredM3uXmltvUrl = null

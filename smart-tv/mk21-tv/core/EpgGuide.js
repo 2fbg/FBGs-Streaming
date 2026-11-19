@@ -288,6 +288,128 @@ function summarizeChannel(channel, programs, nowMs) {
   };
 }
 
+/**
+ * Normaliza texto para busca insensível a acentos e caixa (busca "no ar agora").
+ */
+function normalizeSearchText(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Gera os slots de horário (ex.: intervalos de 30 min por 3 horas) ancorados
+ * na meia hora atual para a grade EPG em eixo horizontal (Canal x Horário).
+ */
+function buildTimelineSlots(nowMs, slotMinutes, slotCount) {
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const stepMin = Number.isFinite(slotMinutes) && slotMinutes > 0 ? slotMinutes : 30;
+  const count = Number.isFinite(slotCount) && slotCount > 0 ? slotCount : 6;
+  const stepMs = stepMin * MS_PER_MINUTE;
+  const windowStart = Math.floor(now / stepMs) * stepMs;
+  const windowEnd = windowStart + count * stepMs;
+
+  const slots = [];
+  for (let i = 0; i < count; i++) {
+    const start = windowStart + i * stepMs;
+    slots.push({
+      start,
+      end: start + stepMs,
+      label: formatClock(start)
+    });
+  }
+  const nowOffsetPct = Math.min(100, Math.max(0, ((now - windowStart) / (windowEnd - windowStart)) * 100));
+  return {
+    windowStart,
+    windowEnd,
+    windowMs: windowEnd - windowStart,
+    nowOffsetPct: Math.round(nowOffsetPct * 10) / 10,
+    slots
+  };
+}
+
+/**
+ * Projeta os programas de uma lista de canais na janela horizontal [windowStart, windowEnd],
+ * calculando posição (`leftPct`) e largura (`widthPct`) para renderização leve em Smart TVs.
+ */
+function buildTimelineGridRows(channels, getProgramsForChannel, nowMs, slotMinutes, slotCount) {
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const axis = buildTimelineSlots(now, slotMinutes, slotCount);
+  const list = Array.isArray(channels) ? channels : [];
+  const rows = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const ch = list[i];
+    if (!ch) continue;
+    const rawProgs = typeof getProgramsForChannel === 'function' ? getProgramsForChannel(ch, i) : [];
+    const normalized = normalizePrograms(rawProgs);
+    const blocks = [];
+
+    for (let j = 0; j < normalized.length; j++) {
+      const p = normalized[j];
+      if (p.stop <= axis.windowStart || p.start >= axis.windowEnd) continue;
+      const clampedStart = Math.max(p.start, axis.windowStart);
+      const clampedStop = Math.min(p.stop, axis.windowEnd);
+      const leftPct = ((clampedStart - axis.windowStart) / axis.windowMs) * 100;
+      const widthPct = ((clampedStop - clampedStart) / axis.windowMs) * 100;
+      if (widthPct <= 0.5) continue;
+
+      blocks.push({
+        title: p.title,
+        desc: p.desc,
+        start: p.start,
+        stop: p.stop,
+        timeRange: formatClock(p.start) + ' - ' + formatClock(p.stop),
+        leftPct: Math.round(leftPct * 100) / 100,
+        widthPct: Math.round(widthPct * 100) / 100,
+        isLive: p.start <= now && p.stop > now
+      });
+    }
+
+    rows.push({
+      channel: ch,
+      index: i,
+      blocks
+    });
+  }
+
+  return {
+    axis,
+    rows
+  };
+}
+
+/**
+ * Busca canais pelo nome OU pelo título/sinopse do programa que está NO AR AGORA.
+ */
+function searchNowPlaying(channels, getProgramsForChannel, query, nowMs) {
+  const list = Array.isArray(channels) ? channels : [];
+  const q = normalizeSearchText(query);
+  if (!q) return list.slice();
+
+  const now = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const matches = [];
+  for (let i = 0; i < list.length; i++) {
+    const ch = list[i];
+    if (!ch) continue;
+    const chName = normalizeSearchText(ch.name || ch.tvgName || '');
+    if (chName.includes(q)) {
+      matches.push(ch);
+      continue;
+    }
+    const rawProgs = typeof getProgramsForChannel === 'function' ? getProgramsForChannel(ch, i) : [];
+    const pick = pickNowNext(rawProgs, now);
+    const curTitle = normalizeSearchText(pick.current && pick.current.title);
+    const curDesc = normalizeSearchText(pick.current && pick.current.desc);
+    if ((curTitle && curTitle.includes(q)) || (curDesc && curDesc.includes(q))) {
+      matches.push(ch);
+    }
+  }
+  return matches;
+}
+
 module.exports = {
   MS_PER_MINUTE,
   MS_PER_SECOND,
@@ -302,5 +424,9 @@ module.exports = {
   formatClock,
   formatClockDate,
   formatCountdown,
-  summarizeChannel
+  summarizeChannel,
+  normalizeSearchText,
+  buildTimelineSlots,
+  buildTimelineGridRows,
+  searchNowPlaying
 };

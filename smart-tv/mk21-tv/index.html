@@ -257,9 +257,19 @@
 
     </section>
 
-    <!-- SEÇÃO GUIA DE PROGRAMAÇÃO (canais + grade, no estilo Saimo TV) -->
+    <!-- SEÇÃO GUIA DE PROGRAMAÇÃO (canais + grade lista/horária, no estilo Saimo TV) -->
     <section id="sectionGuide" class="content-section hidden">
-      <div class="guide-layout">
+      <div class="guide-toolbar">
+        <div class="guide-search-wrap">
+          <input id="inputGuideSearch" type="text" class="guide-search-input" placeholder="🔍 Buscar canal ou programa no ar agora..." tabindex="0">
+          <button type="button" id="btnGuideSearchOsk" class="ctrl-btn guide-tool-btn" tabindex="0" title="Teclado virtual">⌨️</button>
+        </div>
+        <div class="guide-toolbar-actions">
+          <button type="button" id="btnGuideViewToggle" class="ctrl-btn guide-tool-btn" tabindex="0">📊 Grade Horária</button>
+          <button type="button" id="btnGuideEditLcn" class="ctrl-btn guide-tool-btn" tabindex="0">🔢 Editar Nº (LCN)</button>
+        </div>
+      </div>
+      <div id="guideListLayout" class="guide-layout">
         <div class="col-pane col-guide-channels">
           <div class="pane-header">
             <span id="txtGuideChannelsTitle">📺 Canais</span>
@@ -275,6 +285,7 @@
           <div id="listGuidePrograms" class="pane-scroll scrollable-container" tabindex="0"></div>
         </div>
       </div>
+      <div id="guideTimelineGrid" class="guide-timeline-grid hidden scrollable-container" tabindex="0"></div>
     </section>
 
     <!-- SEÇÃO CONFIGURAÇÕES (CLONE VIZZION PLAY DAS FOTOS) -->
@@ -450,6 +461,8 @@
               </div>
               <div class="add-server-actions-col">
                 <button id="btnAddServerSubmit" class="ctrl-btn primary" style="width:100%; justify-content:center; padding: 12px 16px;" tabindex="0">💾 Salvar e Conectar</button>
+                <button type="button" id="btnImportM3uFile" class="ctrl-btn" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px; color: #38bdf8; border-color: rgba(56,189,248,0.45);" tabindex="0">📁 Importar Arquivo .m3u / .m3u8</button>
+                <input type="file" id="inputImportM3uFile" accept=".m3u,.m3u8,.txt" class="hidden">
                 <button id="btnLoadOfflineCache" class="ctrl-btn" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px; color: #ffd54f; border-color: rgba(255,213,79,0.5);" tabindex="0">📂 Carregar Cache Offline</button>
                 <button id="btnCancelEditServer" class="ctrl-btn hidden" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px;" tabindex="0">✕ Cancelar Edição</button>
                 <button id="btnRestoreDefaultServers" class="ctrl-btn" style="width:100%; justify-content:center; padding: 10px 14px; font-size: 15px; opacity: 0.9;" tabindex="0">🔄 Restaurar 7 Padrões</button>

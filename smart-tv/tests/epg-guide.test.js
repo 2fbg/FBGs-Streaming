@@ -195,3 +195,58 @@ test('summarizeChannel sem EPG devolve campos vazios sem quebrar', () => {
   assert.equal(summary.countdownText, '--:--');
   assert.equal(summary.isLive, false);
 });
+
+test('buildTimelineSlots e buildTimelineGridRows projetam blocos na grade horizontal Canal x Horario', () => {
+  const now = T20 + 15 * MIN;
+  const channels = [
+    { id: '1', name: 'Globo' },
+    { id: '2', name: 'ESPN' }
+  ];
+  const byCh = {
+    '1': [
+      { title: 'Jornal Nacional', start: T20, stop: T20 + HOUR },
+      { title: 'Novela', start: T20 + HOUR, stop: T20 + 2 * HOUR }
+    ],
+    '2': [
+      { title: 'SportsCenter', start: T20 - 30 * MIN, stop: T20 + 90 * MIN }
+    ]
+  };
+
+  const grid = EpgGuide.buildTimelineGridRows(channels, (ch) => byCh[ch.id] || [], now, 30, 6);
+  assert.equal(grid.axis.slots.length, 6);
+  assert.equal(grid.rows.length, 2);
+  assert.equal(grid.rows[0].blocks.length, 2);
+  assert.equal(grid.rows[0].blocks[0].isLive, true);
+  assert.equal(grid.rows[0].blocks[0].leftPct, 0);
+  assert.ok(grid.rows[0].blocks[0].widthPct > 30 && grid.rows[0].blocks[0].widthPct < 35);
+  // Programa que comecou antes da janela e recortado em leftPct=0
+  assert.equal(grid.rows[1].blocks[0].leftPct, 0);
+  assert.equal(grid.rows[1].blocks[0].widthPct, 50);
+});
+
+test('searchNowPlaying filtra por nome do canal ou pelo titulo/sinopse do programa NO AR (sem acento)', () => {
+  const now = T20 + 20 * MIN;
+  const channels = [
+    { id: '1', name: 'Globo SP' },
+    { id: '2', name: 'ESPN Brasil' },
+    { id: '3', name: 'SBT' }
+  ];
+  const byCh = {
+    '1': [{ title: 'Jornal Nacional', desc: 'Notícias do Brasil', start: T20, stop: T20 + HOUR }],
+    '2': [{ title: 'Futebol ao Vivo', desc: 'Copa Libertadores', start: T20, stop: T20 + HOUR }],
+    '3': [{ title: 'Programa do Ratinho', desc: 'Variedades', start: T20, stop: T20 + HOUR }]
+  };
+
+  const byProgramTitle = EpgGuide.searchNowPlaying(channels, (ch) => byCh[ch.id], 'futebol', now);
+  assert.equal(byProgramTitle.length, 1);
+  assert.equal(byProgramTitle[0].name, 'ESPN Brasil');
+
+  const byAccentInsensitiveDesc = EpgGuide.searchNowPlaying(channels, (ch) => byCh[ch.id], 'noticias', now);
+  assert.equal(byAccentInsensitiveDesc.length, 1);
+  assert.equal(byAccentInsensitiveDesc[0].name, 'Globo SP');
+
+  const byChannelName = EpgGuide.searchNowPlaying(channels, (ch) => byCh[ch.id], 'sbt', now);
+  assert.equal(byChannelName.length, 1);
+  assert.equal(byChannelName[0].name, 'SBT');
+});
+

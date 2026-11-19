@@ -33,6 +33,7 @@ const SINGLE_FILES = [
   'icon-512.png',
   'api/version.json',
   'api/proxy.js',
+  'api/epg.js',
   'assets/logo.png',
 ];
 

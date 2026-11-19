@@ -135,28 +135,24 @@ do Saimo TV · `⬜` = falta no MK21
 | Grade de canais com categorias, busca e render progressivo | ✅ | `renderItemsList()` + índice IndexedDB |
 | Múltiplas fontes por canal com failover automático | ✅ | `core/AlternativeSources.js` + failover entre servidores |
 | Watchdog de 12 s sem imagem / 25 s de congelamento | ✅ | `startStallWatchdog()` |
-| Seleção manual de fonte ("Fonte N", **sem expor a URL**) | 🟡 | O modal existe; ainda mostra a URL |
-| Canal anterior / próximo com número (LCN) | 🆕 | Número exibido no HUD de zapping |
+| Seleção manual de fonte ("Fonte N", **sem expor a URL**) | 🆕 | `SmartTvPrefs.maskSourceLabel()` oculta domínios/URLs crus em `#modalServerPicker` |
+| Canal anterior / próximo com número (LCN) editável | 🆕 | Número exibido no HUD de zapping e editável por servidor (`SmartTvPrefs.setChannelCustomLcn`) |
 | Favoritos de canal | ✅ | `mk21_favs` |
 | Multi-tela / Picture-in-Picture | ⬜ | Web e Android têm PiP; a TV não |
 | Retomar o último canal ao abrir | ✅ | `resumeLastChannelIfPossible()` |
-| Volume separado entre live e VOD | ⬜ | Hoje é um volume só |
-| "Áudio Inteligente" (normalizar canais fracos) | ⬜ | O Web tem *audio booster*; a TV não |
+| Volume separado entre live e VOD | 🆕 | Persistido separadamente (`mk21_vol_live_v1` / `mk21_vol_vod_v1`) |
+| "Áudio Inteligente" (normalizar canais fracos) | 🆕 | Modos Desligado / Normalizar / Boost +60% via Web Audio API (`DynamicsCompressorNode` + `GainNode`) |
 
 ### 2.2 Guia de programação (EPG)
 
 | Recurso do Saimo TV | Estado no MK21 (TV) |
 |---|---|
-| Tela de guia com lista de canais + grade | 🆕 |
-| EPG real (XMLTV) indexado por canal | 🆕 |
-| Overlay de "no ar" e "a seguir" com contagem | 🆕 |
-| Guide com fonte pública (`guiadetv` / `meuguia`), sem credencial | ⬜ |
-| Busca do "programa que está no ar agora" | ⬜ |
-| Grade por eixo de tempo (canal × horário) | ⬜ (a coluna da direita é a grade do canal) |
-
-> O Saimo TV usa **duas** fontes de EPG HTML (`guiadetv`, `meuguia`) que
-> funcionam **sem login no servidor**, além do XMLTV. É o item de maior
-> recurso de alto valor da lista — ver §3.1.
+| Tela de guia com lista de canais + grade | ✅ |
+| EPG real (XMLTV) indexado por canal | ✅ |
+| Overlay de "no ar" e "a seguir" com contagem | ✅ |
+| Guide com fonte pública (`meuguia.tv`), sem credencial | 🆕 (`/api/epg.js` + fallback em TV e Android) |
+| Busca do "programa que está no ar agora" | 🆕 (`EpgGuide.searchNowPlaying` na TV + filtro no ar no Android) |
+| Grade por eixo de tempo (canal × horário) | 🆕 (alternância `Lista` ↔ `Grade Horária` em `#guideTimelineGrid`) |
 
 ### 2.3 On Demand / VOD
 
@@ -176,66 +172,39 @@ do Saimo TV · `⬜` = falta no MK21
 
 | Recurso do Saimo TV | Estado no MK21 |
 |---|---|
-| "Minhas listas" (até 10 listas M3U por link/arquivo) | ⬜ (a TV só gerencia servidores Xtream) |
+| "Minhas listas" (até 10 listas M3U por link/arquivo) | 🆕 (importação de arquivo `.m3u/.m3u8` + links M3U com extração automática de `url-tvg`, teto de 10) |
 | Tela de **Radios** | ⬜ |
 | Tela de **Eventos** / Novidades | ⬜ |
 | Tela de **Doação** (Pix / QR) | ⬜ |
-| Perfil de usuário (10 perfis) + perfil infantil | ⬜ (a TV tem PIN de adulto; Android tem perfil único) |
+| Perfil de usuário (10 perfis) + perfil infantil | ⬜ (a TV, Android e Web têm PIN de adulto) |
 | Tela de Ajustes com seções | ✅ (a TV já tem um menu de configurações grande) |
 | Busca universal (canais, filmes, séries) | ✅ (Omnisearch) |
 | Tela de "Ficha" do canal (detalhes) | 🟡 (a 3ª coluna da tela principal mostra EPG e controles) |
 
 ### 2.5 Android e Web
 
-| Lacuna | Plataforma |
-|---|---|
-| Sem tela de guia de EPG completa (só o diálogo de pré-visualização) | Android |
-| Sem XMLTV no Android | Android |
-| Não usa o catálogo JSON do Xtream (`get_series` com episódios reais) | Android |
-| Sem controle parental (PIN + trava de categoria adulta) | Web |
-| Sem fluxo de licença/ativação (o `api/license/*` existe e é testado, mas só o Android chama) | Web e TV |
-| Sem numeração de canal (LCN) editável | Todas |
-| Sem sincronização entre celular / TV / web (tudo é local) | Todas |
-| Sem perfis de usuário | Todas |
-| Sem catch-up / timeshift / gravação | Todas |
+| Recurso / Lacuna | Plataforma | Estado |
+|---|---|---|
+| Tela de guia de EPG completa (`FullEpgGuideDialog`) + busca "No Ar Agora" | Android | ✅ |
+| XMLTV em streaming (`XmltvEpgParser` + `AndroidEpgManager`) | Android | ✅ |
+| Catálogo JSON do Xtream (`get_series` + episódios reais) | Android | ✅ |
+| Fallback EPG público brasileiro sem credencial (`/api/epg`) | Android & TV | 🆕 |
+| Controle parental (PIN + trava de categoria adulta) | Web | ✅ (`web/parental.js` + `parental.js`) |
+| Numeração de canal (LCN) editável por servidor | Smart TV | 🆕 |
+| Fluxo de licença/ativação unificado | Web e TV | ⬜ |
+| Sincronização entre celular / TV / web | Todas | ⬜ |
+| Perfis de usuário (10 perfis) | Todas | ⬜ |
+| Catch-up / timeshift / gravação | Todas | ⬜ |
 
 ---
 
-## 3. Roteiro recomendado
+## 3. Roteiro restante (baixa prioridade)
 
-### 3.1 Alta prioridade
-
-1. **Guia no Android e grade por eixo de tempo na TV.** O Guia da TV já existe:
-   falta repetir a ideia no Android (que hoje só mostra 6 programas do canal em
-   foco) e desenhar a grade `canal × horário` na TV.
-2. **EPG de fonte pública para quem não tem credencial.** O Saimo TV busca
-   `guiadetv`/`meuguia` sem login. É o que resolve a reclamação mais comum de
-   quem usa lista M3U pura: "não tem programação".
-3. **"Minhas listas" na TV.** O Saimo TV aceita até 10 listas M3U por link ou
-   arquivo; no MK21 a TV só aceita servidores Xtream. É a porta de entrada
-   para quem não tem assinatura.
-4. **Controle parental no Web.** O PIN e a trava de categoria adulta já existem
-   no Android e na TV — faltam no Web.
-
-### 3.2 Média prioridade
-
-5. **Tela de Ficha do canal** (fundo, sinopse, ações) na TV.
-6. **Tela de Radios** e **Eventos** na TV.
-7. **Volume separado entre live e VOD** e **áudio por faixa com "Em uso"**.
-8. **Números de canal (LCN) editáveis**, com salvamento por servidor — hoje o
-   número é a ordem da lista.
-9. **Tirar a URL da tela de fontes** (o Saimo TV só mostra "Fonte N", nome e
-   qualidade — uma decisão de privacidade que o MK21 ainda não segue).
-
-### 3.3 Baixa prioridade
-
-10. **Perfis de usuário** com chave por perfil (o Saimo TV remenda
-    `Storage.prototype`; no MK21 dá para usar um prefixo de chave por perfil,
-    bem mais limpo).
-11. **Legendas OpenSubtitles** com ajuste de sincronia.
-12. **Sync entre plataformas** (favoritos / continuar assistindo / progresso).
-13. **Pular abertura / recapitular / créditos** nos VOD.
-14. **Doação / Telemetria desativada** — só se fizer sentido para o negócio.
+1. **Perfis de usuário** com prefixo de chave por perfil.
+2. **Legendas OpenSubtitles** com ajuste de sincronia.
+3. **Sync entre plataformas** (favoritos / continuar assistindo / progresso).
+4. **Pular abertura / recapitular / créditos** nos VOD.
+5. **Tela de Ficha do canal / Rádios / Eventos** na TV.
 
 ---
 
@@ -254,3 +223,4 @@ npm run sync:web && npm run check:web
 ```
 
 O pacote `.ipk` continua sendo gerado por `python3 smart-tv/package_ipk.py`.
+

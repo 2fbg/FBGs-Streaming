@@ -85,8 +85,17 @@ import com.example.ui.theme.GoldPremium
 import com.example.ui.theme.NetflixRed
 import com.example.ui.theme.SophisticatedRedStart
 import com.example.viewmodel.AppViewModel
+import java.text.Normalizer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private val DIACRITICS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
+
+private fun normalizeGuideQuery(raw: String): String {
+    if (raw.isBlank()) return ""
+    val nfd = Normalizer.normalize(raw.trim().lowercase(), Normalizer.Form.NFD)
+    return DIACRITICS_REGEX.replace(nfd, "")
+}
 
 /**
  * Guia de Programação completo (EPG XMLTV + Short EPG) estilo Smart TV / Saimo TV.
@@ -130,14 +139,23 @@ fun FullEpgGuideDialog(
         listOf("Todas") + unique
     }
 
-    val filteredChannels = remember(liveChannels, selectedCategory, searchQuery) {
-        val q = searchQuery.trim().lowercase()
+    val filteredChannels = remember(liveChannels, selectedCategory, searchQuery, xmltvIndex, nowMs, shortEpgOverride) {
+        val q = normalizeGuideQuery(searchQuery)
         liveChannels.filter { ch ->
             val catOk = selectedCategory == "Todas" || ch.category == selectedCategory
-            val qOk = q.isEmpty() ||
-                ch.name.lowercase().contains(q) ||
-                ch.category.lowercase().contains(q)
-            catOk && qOk
+            if (!catOk) return@filter false
+            if (q.isEmpty()) return@filter true
+            if (normalizeGuideQuery(ch.name).contains(q) || normalizeGuideQuery(ch.category).contains(q)) {
+                return@filter true
+            }
+            // Busca "No Ar Agora" (título e sinopse do programa atual no XMLTV/Short EPG/público)
+            val (nowProg, _) = AndroidEpgManager.getNowAndNext(ch, nowMs)
+            if (nowProg != null) {
+                normalizeGuideQuery(nowProg.title).contains(q) ||
+                    normalizeGuideQuery(nowProg.description).contains(q)
+            } else {
+                false
+            }
         }
     }
 
@@ -517,7 +535,7 @@ private fun EpgGuideHeader(
                             Box(modifier = Modifier.weight(1f)) {
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        text = "Filtrar canais no guia...",
+                                        text = "Buscar canal ou programa no ar agora...",
                                         color = Color.Gray,
                                         fontSize = 13.sp
                                     )

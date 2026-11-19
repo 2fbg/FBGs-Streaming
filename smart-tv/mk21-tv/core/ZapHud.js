@@ -81,15 +81,37 @@ function parseChannelNumber(raw) {
  * A numeração segue a ordem da lista, começando em 1 — é o mesmo critério
  * usado pelo "digite o número do canal" do MK21.
  */
-function buildChannelNumberMap(channels) {
+function buildChannelNumberMap(channels, customOverrides) {
   const map = new Map();
+  const overrides = (customOverrides && typeof customOverrides === 'object') ? customOverrides : null;
   if (!Array.isArray(channels)) return map;
+
+  const usedNumbers = new Set();
+  // Primeiro aplica LCNs editados pelo usuário
+  if (overrides) {
+    for (let i = 0; i < channels.length; i++) {
+      const ch = channels[i];
+      if (!ch) continue;
+      const key = channelKey(ch);
+      if (!key || map.has(key)) continue;
+      const customNum = parseChannelNumber(overrides[key]);
+      if (customNum !== null && !usedNumbers.has(customNum)) {
+        map.set(key, customNum);
+        usedNumbers.add(customNum);
+      }
+    }
+  }
+
+  let autoNum = 1;
   for (let i = 0; i < channels.length; i++) {
     const ch = channels[i];
     if (!ch) continue;
     const key = channelKey(ch);
     if (!key || map.has(key)) continue;
-    map.set(key, i + 1);
+    while (usedNumbers.has(autoNum)) autoNum += 1;
+    map.set(key, autoNum);
+    usedNumbers.add(autoNum);
+    autoNum += 1;
   }
   return map;
 }
