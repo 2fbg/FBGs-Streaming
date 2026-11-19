@@ -533,15 +533,90 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun fetchShortEpgForChannel(item: PlaylistItem): List<com.example.data.parser.XmltvProgramme> {
-        val creds = resolveActiveXtreamCredentials() ?: return emptyList()
+        val creds = resolveActiveXtreamCredentials()
         return com.example.data.service.AndroidEpgManager.fetchShortEpgForChannel(
             item = item,
-            baseUrl = creds.first,
-            username = creds.second,
-            password = creds.third,
+            baseUrl = creds?.first.orEmpty(),
+            username = creds?.second.orEmpty(),
+            password = creds?.third.orEmpty(),
             client = okHttpClient
         )
     }
+
+    /**
+     * Varre a grade EPG real (XMLTV indexado + Short EPG Xtream + fallback público `/api/epg`)
+     * para localizar transmissões AO VIVO AGORA e EM BREVE correspondentes a um time, jogo ou programa.
+     */
+    suspend fun searchLiveEpgForCopilot(prompt: String): com.example.ai.CopilotEpgSearchResult =
+        withContext(Dispatchers.IO) {
+            val playlist = _activePlaylistName.value
+            val nowMs = System.currentTimeMillis()
+
+            // Reúne canais ao vivo da playlist ativa + esportes globais (sem duplicar por URL)
+            val activeLive = try {
+                playlistItemDao.getItemsByPlaylistAndTypeSync(playlist, ContentType.LIVE.name)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val globalSports = try {
+                playlistItemDao.getLiveSportsChannelsGlobal()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val candidates = LinkedHashMap<String, PlaylistItem>(activeLive.size + globalSports.size).apply {
+                activeLive.forEach { put(it.url, it) }
+                globalSports.forEach { putIfAbsent(it.url, it) }
+            }.values.toList()
+
+            if (candidates.isEmpty()) {
+                return@withContext com.example.ai.CopilotEpgMatcher.matchProgrammes(
+                    prompt = prompt,
+                    channels = emptyList(),
+                    nowMs = nowMs
+                ) { emptyList() }
+            }
+
+            // 1. Verifica quais canais prioritários (esportes e TV aberta) ainda estão sem EPG em cache/XMLTV
+            val priorityChannels = com.example.ai.CopilotEpgMatcher.selectPriorityEpgChannels(
+                channels = candidates,
+                maxCount = 14
+            )
+            val missingEpgPriority = priorityChannels.filter { ch ->
+                com.example.data.service.AndroidEpgManager.getRealProgrammes(ch, nowMs).isEmpty()
+            }
+
+            // 2. Hidrata EPG em paralelo (Xtream Short EPG -> fallback público meuguia.tv `/api/epg`) com timeout enxuto
+            if (missingEpgPriority.isNotEmpty()) {
+                withTimeoutOrNull(4_500L) {
+                    coroutineScope {
+                        missingEpgPriority.map { ch ->
+                            async {
+                                try {
+                                    fetchShortEpgForChannel(ch)
+                                } catch (_: Exception) {
+                                    emptyList()
+                                }
+                            }
+                        }.forEach { deferred ->
+                            try {
+                                deferred.await()
+                            } catch (_: Exception) {
+                                // ignora falha pontual de um canal
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Cruza todos os canais ao vivo com o EPG real já indexado/hidratado
+            com.example.ai.CopilotEpgMatcher.matchProgrammes(
+                prompt = prompt,
+                channels = candidates,
+                nowMs = nowMs
+            ) { ch ->
+                com.example.data.service.AndroidEpgManager.getRealProgrammes(ch, nowMs)
+            }
+        }
 
     suspend fun fetchXtreamSeriesEpisodes(seriesItem: PlaylistItem, seriesTitle: String): List<PlaylistItem> =
         withContext(Dispatchers.IO) {
@@ -569,43 +644,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     suspend fun getRelevantItemsForCopilot(prompt: String): List<PlaylistItem> = withContext(Dispatchers.IO) {
         val playlist = _activePlaylistName.value
-        val lower = prompt.lowercase()
-
-        val isSportsIntent = lower.contains("palmeiras") || lower.contains("santos") ||
-                lower.contains("flamengo") || lower.contains("corinthians") ||
-                lower.contains("são paulo") || lower.contains("sao paulo") ||
-                lower.contains("gremio") || lower.contains("grêmio") ||
-                lower.contains("inter") || lower.contains("internacional") ||
-                lower.contains("vasco") || lower.contains("botafogo") ||
-                lower.contains("fluminense") || lower.contains("cruzeiro") ||
-                lower.contains("atletico") || lower.contains("atlético") ||
-                lower.contains("bahia") || lower.contains("fortaleza") ||
-                lower.contains("futebol") || lower.contains("jogo") ||
-                lower.contains("jogos") || lower.contains("esporte") ||
-                lower.contains("onde assistir") || lower.contains("assistir") ||
-                lower.contains("campeonato") || lower.contains("paulistão") ||
-                lower.contains("brasileirão") || lower.contains("libertadores") ||
-                lower.contains("premiere") || lower.contains("sportv") ||
-                lower.contains("espn") || lower.contains("cazé") || lower.contains("caze")
+        val isSportsIntent = com.example.ai.CopilotEpgMatcher.isSportsOrTeamPrompt(prompt)
 
         if (isSportsIntent) {
             try {
+                val activeLive = playlistItemDao.getItemsByPlaylistAndTypeSync(playlist, ContentType.LIVE.name)
+                val activeSports = activeLive
+                    .filter { com.example.ai.CopilotEpgMatcher.isSportsOrOpenBroadcastChannel(it) }
+                    .sortedByDescending { com.example.ai.CopilotEpgMatcher.qualityScore(it.name) }
+                if (activeSports.isNotEmpty()) {
+                    return@withContext activeSports.take(50)
+                }
                 val globalSports = playlistItemDao.getLiveSportsChannelsGlobal()
                 if (globalSports.isNotEmpty()) {
                     return@withContext globalSports
-                }
-                val liveChannels = playlistItemDao.getItemsByType(playlist, ContentType.LIVE.name).first()
-                val sportsMatches = liveChannels.filter { item ->
-                    val n = item.name.uppercase()
-                    val c = item.category.uppercase()
-                    n.contains("PREMIERE") || n.contains("SPORTV") || n.contains("ESPN") ||
-                    n.contains("GLOBO") || n.contains("CAZÉ") || n.contains("CAZE") ||
-                    n.contains("TNT") || n.contains("BAND") || n.contains("RECORD") ||
-                    n.contains("COMBATE") || n.contains("DAZN") ||
-                    c.contains("ESPORTE") || c.contains("FUTEBOL") || c.contains("SPORTS")
-                }
-                if (sportsMatches.isNotEmpty()) {
-                    return@withContext sportsMatches.take(50)
                 }
             } catch (e: Exception) {
                 // fallback

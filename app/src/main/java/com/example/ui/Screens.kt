@@ -2886,6 +2886,7 @@ fun HomeScreen(
                 currentPlaying = currentPlayingItem,
                 catalog = itemsList,
                 relevantCatalogFetcher = { query -> viewModel.getRelevantItemsForCopilot(query) },
+                epgSearcher = { query -> viewModel.searchLiveEpgForCopilot(query) },
                 onDismiss = { showGeminiDialog = false },
                 onSelectItem = { item ->
                     viewModel.playContent(item)

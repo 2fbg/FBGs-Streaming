@@ -33,24 +33,34 @@ class GeminiAiService {
     fun streamCopilotResponse(
         userPrompt: String,
         currentPlaying: PlaylistItem?,
-        catalogSample: List<PlaylistItem>
+        catalogSample: List<PlaylistItem>,
+        epgSearchResult: CopilotEpgSearchResult? = null
     ): Flow<String> = flow {
         val promptBuilder = StringBuilder()
         promptBuilder.appendLine("Você é o MK21 AI Copilot, assistente inteligente de IPTV e streaming do app MK21.")
         promptBuilder.appendLine("Responda sempre em português do Brasil, de forma direta, concisa, altamente assertiva e objetiva.")
         promptBuilder.appendLine("Diretrizes obrigatórias:")
-        promptBuilder.appendLine("1. Se o usuário perguntar sobre jogos de futebol ou onde assistir a partidas (ex: 'palmeiras X santos onde assistir?', 'jogo do flamengo', etc.):")
-        promptBuilder.appendLine("   - Informe imediatamente as emissoras e serviços que transmitem a partida no Brasil (como Premiere, SporTV, CazéTV, Globo, Record, TNT/Max, ESPN).")
+        promptBuilder.appendLine("1. Se houver seção 'PROGRAMAÇÃO EPG REAL CONSULTADA AGORA' abaixo:")
+        promptBuilder.appendLine("   - PRIORIZE os canais e programas confirmados em [NO AR AGORA] e [EM BREVE] no EPG real.")
+        promptBuilder.appendLine("   - Cite explicitamente o nome do canal da playlist, o título do programa no EPG e o horário.")
+        promptBuilder.appendLine("   - Se o EPG real foi consultado e NÃO encontrou nenhum jogo do time no ar agora, seja transparente informando isso e liste os canais esportivos da playlist onde o time costuma passar.")
+        promptBuilder.appendLine("2. Se o usuário perguntar sobre jogos de futebol ou onde assistir a partidas (ex: 'palmeiras X santos onde assistir?', 'jogo do flamengo', etc.):")
+        promptBuilder.appendLine("   - Informe as emissoras e serviços que transmitem a partida no Brasil (como Premiere, SporTV, CazéTV, Globo, Record, TNT/Max, ESPN).")
         promptBuilder.appendLine("   - Selecione e liste EXCLUSIVAMENTE os canais de esportes correspondentes disponíveis na amostra da lista abaixo.")
         promptBuilder.appendLine("   - NUNCA recomende filmes ou séries quando a pergunta for sobre futebol ou esportes!")
-        promptBuilder.appendLine("2. Se o usuário perguntar sobre filmes ou séries, recomende títulos relevantes do catálogo respeitando o gênero solicitado.")
-        promptBuilder.appendLine("3. Se o usuário perguntar sobre funcionalidades do app (fontes, super resolução, TV), explique de forma simples e direta.")
+        promptBuilder.appendLine("3. Se o usuário perguntar sobre filmes ou séries, recomende títulos relevantes do catálogo respeitando o gênero solicitado.")
+        promptBuilder.appendLine("4. Se o usuário perguntar sobre funcionalidades do app (fontes, super resolução, TV), explique de forma simples e direta.")
 
         if (currentPlaying != null) {
             promptBuilder.appendLine("\nConteúdo atualmente selecionado/em reprodução:")
             promptBuilder.appendLine("- Título: ${currentPlaying.name}")
             promptBuilder.appendLine("- Categoria: ${currentPlaying.category}")
             promptBuilder.appendLine("- Tipo: ${currentPlaying.contentType}")
+        }
+
+        val epgContext = CopilotEpgMatcher.buildEpgPromptContext(epgSearchResult)
+        if (epgContext.isNotBlank()) {
+            promptBuilder.appendLine(epgContext)
         }
 
         if (catalogSample.isNotEmpty()) {
@@ -62,7 +72,7 @@ class GeminiAiService {
 
         promptBuilder.appendLine("\nPergunta do usuário:")
         promptBuilder.appendLine(userPrompt)
-        promptBuilder.appendLine("\nSeja assertivo, cite os canais recomendados em tópicos claros com emojis e indique como encontrá-los na lista.")
+        promptBuilder.appendLine("\nSeja assertivo, cite os canais recomendados em tópicos claros com emojis e informe que o usuário pode tocar diretamente nos cartões de canal abaixo para sintonizar.")
 
         val fullPrompt = promptBuilder.toString()
         Log.d(TAG, "Initiating Gemini stream with prompt length: ${fullPrompt.length}")
@@ -86,7 +96,7 @@ class GeminiAiService {
         } catch (e: Exception) {
             Log.w(TAG, "Firebase AI Logic inference encountered issue (${e.message}), generating intelligent catalog synthesis", e)
             if (!hasEmitted) {
-                val fallbackText = generateCatalogSynthesis(userPrompt, currentPlaying, catalogSample)
+                val fallbackText = generateCatalogSynthesis(userPrompt, currentPlaying, catalogSample, epgSearchResult)
                 emit(fallbackText)
             }
         }
@@ -94,38 +104,59 @@ class GeminiAiService {
 
     /**
      * Intelligent local synthesis engine that provides instant, highly-accurate recommendations
-     * directly from the user's active playlist whenever cloud attestation is completing or unavailable.
+     * directly from the user's active playlist and real EPG whenever cloud attestation is completing or unavailable.
      */
     private fun generateCatalogSynthesis(
         prompt: String,
         currentPlaying: PlaylistItem?,
-        catalog: List<PlaylistItem>
+        catalog: List<PlaylistItem>,
+        epgSearchResult: CopilotEpgSearchResult? = null
     ): String {
         val lower = prompt.lowercase()
         val sb = StringBuilder()
 
+        // 0. Prioridade absoluta: resultados reais do EPG (NO AR AGORA / EM BREVE)
+        if (epgSearchResult != null && epgSearchResult.hasMatches) {
+            val subject = if (epgSearchResult.detectedTerms.isNotEmpty()) {
+                epgSearchResult.detectedTerms.joinToString(" / ")
+            } else {
+                "Esportes e Programação Ao Vivo"
+            }
+            sb.appendLine("📡 **Grade EPG Real — $subject:**\n")
+
+            if (epgSearchResult.liveNowMatches.isNotEmpty()) {
+                sb.appendLine("🔴 **NO AR AGORA:**")
+                epgSearchResult.liveNowMatches.take(5).forEach { m ->
+                    val quality = m.qualityBadge?.let { " [$it]" }.orEmpty()
+                    sb.appendLine("• **${m.item.name}**$quality — ${m.programTitle} (${m.timeRange} • restam ${m.remainingMinutes} min)")
+                }
+                sb.appendLine()
+            }
+
+            if (epgSearchResult.upcomingMatches.isNotEmpty()) {
+                sb.appendLine("🕒 **EM BREVE NO EPG:**")
+                epgSearchResult.upcomingMatches.take(4).forEach { m ->
+                    val quality = m.qualityBadge?.let { " [$it]" }.orEmpty()
+                    sb.appendLine("• **${m.item.name}**$quality — ${m.programTitle} (${m.timeRange})")
+                }
+                sb.appendLine()
+            }
+
+            sb.appendLine("▶ *Toque em qualquer canal abaixo para abrir a transmissão ao vivo imediatamente.*")
+            return sb.toString().trim()
+        }
+
         // 1. Detecção aprofundada de Futebol e Jogos (Palmeiras, Santos, Flamengo, Corinthians, etc.)
-        val isMatchQuery = lower.contains("palmeiras") || lower.contains("santos") ||
-                lower.contains("flamengo") || lower.contains("corinthians") ||
-                lower.contains("são paulo") || lower.contains("sao paulo") ||
-                lower.contains("vasco") || lower.contains("botafogo") ||
-                lower.contains("fluminense") || lower.contains("gremio") ||
-                lower.contains("grêmio") || lower.contains("inter") ||
-                lower.contains("internacional") || lower.contains("cruzeiro") ||
-                lower.contains("atletico") || lower.contains("atlético") ||
-                lower.contains("bahia") || lower.contains("fortaleza") ||
-                lower.contains("real madrid") || lower.contains("barcelona") ||
-                lower.contains("futebol") || lower.contains("jogo") ||
-                lower.contains("jogos") || lower.contains("onde assistir") ||
-                lower.contains("assistir") || lower.contains("partida") ||
-                lower.contains("paulistão") || lower.contains("paulistao") ||
-                lower.contains("brasileirão") || lower.contains("brasileirao") ||
-                lower.contains("libertadores") || lower.contains("champions") ||
-                lower.contains("copa") || lower.contains("premiere") ||
-                lower.contains("sportv") || lower.contains("espn") ||
-                lower.contains("cazé") || lower.contains("caze")
+        val isMatchQuery = CopilotEpgMatcher.isSportsOrTeamPrompt(prompt) ||
+                lower.contains("onde assistir") || lower.contains("assistir")
 
         if (isMatchQuery) {
+            if (epgSearchResult != null && epgSearchResult.channelsWithEpgCount > 0 && epgSearchResult.detectedTerms.isNotEmpty()) {
+                val targetName = epgSearchResult.detectedTerms.joinToString(", ")
+                sb.appendLine("📡 **Consulta EPG ao vivo para $targetName:**")
+                sb.appendLine("Verifiquei ${epgSearchResult.channelsWithEpgCount} canais com grade EPG ativa e não há nenhuma transmissão de **$targetName** passando neste momento ou nas próximas 18h.\n")
+            }
+
             // Identificação específica do clássico ou times
             if (lower.contains("palmeiras") && lower.contains("santos")) {
                 sb.appendLine("⚽ **Palmeiras x Santos — Onde Assistir Ao Vivo:**\n")
@@ -174,12 +205,12 @@ class GeminiAiService {
             }
 
             if (sportsChannels.isNotEmpty()) {
-                sb.appendLine("📺 **Canais disponíveis na sua lista para sintonizar agora:**")
+                sb.appendLine("📺 **Canais esportivos disponíveis na sua lista para sintonizar agora:**")
                 sportsChannels.distinctBy { it.name }.take(8).forEach { item ->
-                    val badge = if (item.name.contains("4K", ignoreCase = true)) " [4K]" else " [HD]"
+                    val badge = CopilotEpgMatcher.detectQualityBadge(item.name)?.let { " [$it]" }.orEmpty()
                     sb.appendLine("• **${item.name}**$badge — *${item.category}*")
                 }
-                sb.appendLine("\n💡 *Dica:* Toque no canal desejado na grade do aplicativo para iniciar a transmissão imediatamente!")
+                sb.appendLine("\n💡 *Dica:* Toque no canal abaixo para iniciar a transmissão imediatamente!")
             } else {
                 sb.appendLine("📺 **Dica de sintonização:** Vá para a aba **Ao Vivo** e acesse a categoria **Esportes / Premiere** para sintonizar o sinal ao vivo.")
             }
