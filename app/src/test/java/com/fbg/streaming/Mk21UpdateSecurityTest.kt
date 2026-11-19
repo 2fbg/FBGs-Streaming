@@ -378,6 +378,66 @@ class Mk21UpdateSecurityTest {
         }
     }
 
+    @Test
+    fun `checkForUpdatesDetailed returns NotPublishedYet when apkUrl responds 404 and silent check does not prompt`() = runBlocking {
+        val manifest = """
+            {
+              "versionCode": 9999,
+              "versionName": "9.9.9",
+              "apkUrl": "https://github.com/2fbg/FBGs-Streaming/releases/download/v9.9.9/mk21.apk",
+              "apkSha256": "${"a".repeat(64)}",
+              "sizeBytes": 5777533,
+              "changelog": "Nova versão em publicação"
+            }
+        """.trimIndent()
+
+        val clientWith404Apk = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url.toString()
+                val isManifest = url.endsWith("version.json")
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(if (isManifest) 200 else 404)
+                    .message(if (isManifest) "OK" else "Not Found")
+                    .body((if (isManifest) manifest else "Not Found").toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val manager = Mk21UpdateManager(context, httpClient = clientWith404Apk, minApkSizeBytes = 10L)
+        val outcome = manager.checkForUpdatesDetailed(291, "2.9.1")
+        assertTrue(outcome is com.fbg.streaming.update.UpdateCheckOutcome.NotPublishedYet)
+
+        val app = context.applicationContext as android.app.Application
+        val vm = AppViewModel(app)
+        vm.updateManagerFactory = { ctx ->
+            Mk21UpdateManager(ctx, httpClient = clientWith404Apk, minApkSizeBytes = 10L)
+        }
+        vm.checkForUpdatesSilently()
+        kotlinx.coroutines.delay(250)
+        assertNull(vm.pendingUpdateBanner.value)
+        assertEquals(Mk21UpdateManager.RELEASES_LATEST_URL, vm.getPreferredBrowserUpdateUrl())
+
+        // Quando o APK passa a responder 200, o aviso automático deve aparecer e respeitar dismiss
+        vm.updateManagerFactory = { ctx ->
+            Mk21UpdateManager(ctx, httpClient = clientReturning(200, manifest), minApkSizeBytes = 10L)
+        }
+        vm.checkForUpdatesSilently()
+        val banner = withTimeout(5_000) {
+            vm.pendingUpdateBanner.first { it != null }
+        }
+        assertEquals("9.9.9", banner?.tagName)
+
+        vm.dismissUpdateBanner()
+        assertNull(vm.pendingUpdateBanner.value)
+
+        // Nova checagem silenciosa para a mesma versão dispensada não deve reabrir o aviso
+        vm.checkForUpdatesSilently()
+        kotlinx.coroutines.delay(250)
+        assertNull(vm.pendingUpdateBanner.value)
+    }
+
     private fun clientReturning(code: Int, bodyText: String): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor { chain ->

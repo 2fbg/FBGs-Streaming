@@ -1305,6 +1305,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             delay(1500L)
             loadXmltvForActiveServer(force = false)
         }
+
+        // Verifica atualizações automaticamente ao iniciar (4s) e periodicamente a cada 30 min
+        viewModelScope.launch {
+            delay(4000L)
+            while (true) {
+                checkForUpdatesSilently()
+                delay(30L * 60L * 1000L)
+            }
+        }
         
         // Autoload current configurations or do silent caching check
         viewModelScope.launch {
@@ -2417,6 +2426,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _updateCheckState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
     val updateCheckState = _updateCheckState.asStateFlow()
 
+    private val _pendingUpdateBanner = MutableStateFlow<GithubReleaseInfo?>(null)
+    val pendingUpdateBanner = _pendingUpdateBanner.asStateFlow()
+
+    private val _latestAvailableUpdateInfo = MutableStateFlow<GithubReleaseInfo?>(null)
+    val latestAvailableUpdateInfo = _latestAvailableUpdateInfo.asStateFlow()
+
+    @Volatile
+    private var dismissedUpdateVersion: String? = null
+
     @Volatile
     private var lastAvailableUpdate: UpdateInfo? = null
 
@@ -2445,7 +2463,78 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPreferredBrowserUpdateUrl(): String {
         return lastAvailableUpdate?.apkUrl
-            ?: "https://github.com/2fbg/FBGs-Streaming/releases/latest"
+            ?: Mk21UpdateManager.RELEASES_LATEST_URL
+    }
+
+    fun dismissUpdateBanner() {
+        dismissedUpdateVersion = _pendingUpdateBanner.value?.tagName ?: dismissedUpdateVersion
+        _pendingUpdateBanner.value = null
+    }
+
+    private fun toGithubReleaseInfo(info: UpdateInfo): GithubReleaseInfo {
+        val effectiveBody = if (hasConfiguredCertPin()) {
+            info.changelog
+        } else {
+            "${info.changelog}\n\nAviso de segurança: instalação automática no app desabilitada até configurar EXPECTED_CERT_SHA256 no build. Use \"Baixar via Navegador Externo\"."
+        }
+        return GithubReleaseInfo(
+            tagName = info.versionName,
+            name = info.title,
+            body = effectiveBody,
+            downloadUrl = info.apkUrl,
+            expectedSha256 = info.sha256,
+            expectedSizeBytes = info.expectedSizeBytes,
+            isNewer = true
+        )
+    }
+
+    /**
+     * Verificação silenciosa disparada ao iniciar o app e periodicamente em segundo plano.
+     * Só exibe o aviso se o APK da nova versão já estiver publicado e acessível (HTTP 200/206),
+     * evitando alarmes falsos ou erros 404 enquanto o GitHub Actions ainda gera a release.
+     */
+    fun checkForUpdatesSilently() {
+        val currentState = _updateCheckState.value
+        if (currentState is UpdateCheckState.Downloading || currentState is UpdateCheckState.ReadyToInstall) {
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val manager = updateManagerFactory(getApplication())
+                when (
+                    val outcome = manager.checkForUpdatesDetailed(
+                        currentVersionCode = BuildConfig.VERSION_CODE,
+                        currentVersionName = BuildConfig.VERSION_NAME
+                    )
+                ) {
+                    is UpdateCheckOutcome.Available -> {
+                        val info = outcome.info
+                        lastAvailableUpdate = info
+                        val releaseInfo = toGithubReleaseInfo(info)
+                        _latestAvailableUpdateInfo.value = releaseInfo
+                        if (_updateCheckState.value !is UpdateCheckState.Downloading &&
+                            _updateCheckState.value !is UpdateCheckState.ReadyToInstall
+                        ) {
+                            _updateCheckState.value = UpdateCheckState.Available(releaseInfo)
+                        }
+                        if (dismissedUpdateVersion != releaseInfo.tagName) {
+                            _pendingUpdateBanner.value = releaseInfo
+                        }
+                    }
+                    is UpdateCheckOutcome.UpToDate -> {
+                        lastAvailableUpdate = null
+                        _latestAvailableUpdateInfo.value = null
+                        _pendingUpdateBanner.value = null
+                    }
+                    is UpdateCheckOutcome.NotPublishedYet,
+                    is UpdateCheckOutcome.Failure -> {
+                        // Silencioso: não incomoda o usuário nem exibe 404 durante build de release
+                    }
+                }
+            } catch (_: Throwable) {
+                // Silencioso em background
+            }
+        }
     }
 
     fun checkForUpdates() {
@@ -2461,25 +2550,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 is UpdateCheckOutcome.Available -> {
                     val info = outcome.info
                     lastAvailableUpdate = info
-                    val effectiveBody = if (hasConfiguredCertPin()) {
-                        info.changelog
-                    } else {
-                        "${info.changelog}\n\nAviso de segurança: instalação automática no app desabilitada até configurar EXPECTED_CERT_SHA256 no build. Use \"Baixar via Navegador Externo\"."
-                    }
-                    _updateCheckState.value = UpdateCheckState.Available(
-                        GithubReleaseInfo(
-                            tagName = info.versionName,
-                            name = info.title,
-                            body = effectiveBody,
-                            downloadUrl = info.apkUrl,
-                            expectedSha256 = info.sha256,
-                            expectedSizeBytes = info.expectedSizeBytes,
-                            isNewer = true
-                        )
+                    val releaseInfo = toGithubReleaseInfo(info)
+                    _latestAvailableUpdateInfo.value = releaseInfo
+                    _updateCheckState.value = UpdateCheckState.Available(releaseInfo)
+                }
+                is UpdateCheckOutcome.NotPublishedYet -> {
+                    lastAvailableUpdate = null
+                    _latestAvailableUpdateInfo.value = null
+                    _pendingUpdateBanner.value = null
+                    _updateCheckState.value = UpdateCheckState.Error(
+                        "A versão v${outcome.versionName} está sendo compilada e publicada no GitHub Releases. Aguarde alguns minutos e toque em Tentar Novamente."
                     )
                 }
                 is UpdateCheckOutcome.UpToDate -> {
                     lastAvailableUpdate = null
+                    _latestAvailableUpdateInfo.value = null
+                    _pendingUpdateBanner.value = null
                     _updateCheckState.value = UpdateCheckState.UpToDate(
                         "Seu app está na versão mais recente (v${BuildConfig.VERSION_NAME})"
                     )

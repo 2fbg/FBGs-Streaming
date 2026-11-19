@@ -159,40 +159,287 @@ object Routes {
 fun AppNavigation(viewModel: AppViewModel) {
     val isPremiumActive by viewModel.isPremiumActive.collectAsState()
     val trialDaysLeft by viewModel.trialDaysLeft.collectAsState()
-    
-    val isTrialExpired = trialDaysLeft <= 0 && !isPremiumActive
-    
-    if (isTrialExpired) {
-        TrialExpiredScreen(viewModel = viewModel)
-    } else {
-        val initialScreen = remember {
-            if (viewModel.isCredentialsConfigured()) Routes.HOME else Routes.SERVER_CONFIG
-        }
-        var currentScreen by remember { mutableStateOf(initialScreen) }
+    val pendingUpdateBanner by viewModel.pendingUpdateBanner.collectAsState()
+    val updateCheckState by viewModel.updateCheckState.collectAsState()
+    val currentPlayingItem by viewModel.currentPlayingItem.collectAsState()
 
-        Crossfade(targetState = currentScreen, label = "ScreenTransition") { screen ->
-            when (screen) {
-                Routes.STARTUP_GATE -> {
-                    StartupGateScreen()
+    val isTrialExpired = trialDaysLeft <= 0 && !isPremiumActive
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (isTrialExpired) {
+            TrialExpiredScreen(viewModel = viewModel)
+        } else {
+            val initialScreen = remember {
+                if (viewModel.isCredentialsConfigured()) Routes.HOME else Routes.SERVER_CONFIG
+            }
+            var currentScreen by remember { mutableStateOf(initialScreen) }
+
+            Crossfade(targetState = currentScreen, label = "ScreenTransition") { screen ->
+                when (screen) {
+                    Routes.STARTUP_GATE -> {
+                        StartupGateScreen()
+                    }
+                    Routes.SERVER_CONFIG -> {
+                        ServerConfigScreen(
+                            viewModel = viewModel,
+                            onNavigateToHome = { currentScreen = Routes.HOME }
+                        )
+                    }
+                    Routes.HOME -> {
+                        HomeScreen(
+                            viewModel = viewModel,
+                            onNavigateToSettings = { currentScreen = Routes.SETTINGS },
+                            onNavigateToConfig = { currentScreen = Routes.SERVER_CONFIG }
+                        )
+                    }
+                    Routes.SETTINGS -> {
+                        SettingsScreen(
+                            viewModel = viewModel,
+                            onNavigateBack = { currentScreen = Routes.HOME }
+                        )
+                    }
                 }
-                Routes.SERVER_CONFIG -> {
-                    ServerConfigScreen(
-                        viewModel = viewModel,
-                        onNavigateToHome = { currentScreen = Routes.HOME }
-                    )
+            }
+        }
+
+        // Aviso automático de nova versão (só exibe quando não está reproduzindo vídeo em tela cheia)
+        val availableUpdate = pendingUpdateBanner
+        if (availableUpdate != null && currentPlayingItem == null) {
+            StartupUpdatePromptDialog(
+                releaseInfo = availableUpdate,
+                updateState = updateCheckState,
+                viewModel = viewModel,
+                onDismiss = { viewModel.dismissUpdateBanner() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun StartupUpdatePromptDialog(
+    releaseInfo: com.example.viewmodel.AppViewModel.GithubReleaseInfo,
+    updateState: com.example.viewmodel.AppViewModel.UpdateCheckState,
+    viewModel: AppViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val isDownloading = updateState is com.example.viewmodel.AppViewModel.UpdateCheckState.Downloading
+    SafeDialog(onDismissRequest = { if (!isDownloading) onDismiss() }) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF141317)),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.2.dp, GoldPremium.copy(alpha = 0.45f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 420.dp)
+                .padding(8.dp)
+                .testTag("startup_update_dialog")
+        ) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(GoldPremium.copy(alpha = 0.14f))
+                            .border(1.dp, GoldPremium.copy(alpha = 0.4f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = "Nova atualização disponível",
+                            tint = GoldPremium,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Atualização Disponível",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "v${com.example.BuildConfig.VERSION_NAME} → v${releaseInfo.tagName}",
+                            color = GoldPremium,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
-                Routes.HOME -> {
-                    HomeScreen(
-                        viewModel = viewModel,
-                        onNavigateToSettings = { currentScreen = Routes.SETTINGS },
-                        onNavigateToConfig = { currentScreen = Routes.SERVER_CONFIG }
-                    )
-                }
-                Routes.SETTINGS -> {
-                    SettingsScreen(
-                        viewModel = viewModel,
-                        onNavigateBack = { currentScreen = Routes.HOME }
-                    )
+
+                when (updateState) {
+                    is com.example.viewmodel.AppViewModel.UpdateCheckState.Downloading -> {
+                        Text(
+                            text = "Baixando v${releaseInfo.tagName}: ${updateState.progressPercent}%",
+                            color = GoldPremium,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        LinearProgressIndicator(
+                            progress = { updateState.progressPercent / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = GoldPremium,
+                            trackColor = Color.White.copy(alpha = 0.12f)
+                        )
+                        val downloadedMb = updateState.downloadedBytes / (1024 * 1024f)
+                        val totalMb = updateState.totalBytes / (1024 * 1024f)
+                        Text(
+                            text = if (totalMb > 0f) String.format("%.1f MB / %.1f MB", downloadedMb, totalMb) else "Baixando pacote APK...",
+                            color = Color.LightGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    is com.example.viewmodel.AppViewModel.UpdateCheckState.ReadyToInstall -> {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Download concluído",
+                            tint = Color(0xFF69F0AE),
+                            modifier = Modifier.size(34.dp)
+                        )
+                        Text(
+                            text = "Download concluído! Toque abaixo para instalar.",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(
+                            onClick = { viewModel.installApk(context, updateState.apkFile) },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("startup_update_install_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("INSTALAR AGORA", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                    is com.example.viewmodel.AppViewModel.UpdateCheckState.Error -> {
+                        Text(
+                            text = updateState.error,
+                            color = Color(0xFFFF6B6B),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                            ) {
+                                Text("FECHAR", color = Color.LightGray, fontSize = 11.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.openBrowserDownload(context, viewModel.getPreferredBrowserUpdateUrl())
+                                    onDismiss()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("NAVEGADOR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    else -> {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1D1B22)),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = releaseInfo.body,
+                                color = Color.LightGray,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp,
+                                maxLines = 5,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                if (viewModel.hasConfiguredCertPin()) {
+                                    viewModel.startInAppDownloadAndInstall(
+                                        context = context,
+                                        downloadUrl = releaseInfo.downloadUrl,
+                                        expectedSha256 = releaseInfo.expectedSha256,
+                                        expectedSizeBytes = releaseInfo.expectedSizeBytes
+                                    )
+                                } else {
+                                    viewModel.openBrowserDownload(context, releaseInfo.downloadUrl)
+                                    onDismiss()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("startup_update_now_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ATUALIZAR AGORA", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("startup_update_later_button"),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                            ) {
+                                Text("DEPOIS", color = Color.LightGray, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.openBrowserDownload(context, releaseInfo.downloadUrl)
+                                    onDismiss()
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("startup_update_browser_button"),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.35f))
+                            ) {
+                                Text("NAVEGADOR", color = GoldPremium, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -7462,6 +7709,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
     val isActivatingLicense by viewModel.isActivatingLicense.collectAsState()
     val trialDaysLeft by viewModel.trialDaysLeft.collectAsState()
     val useAmoledMode by viewModel.useAmoledMode.collectAsState()
+    val latestAvailableUpdateInfo by viewModel.latestAvailableUpdateInfo.collectAsState()
     val adultPin = viewModel.preferencesService.adultPin
     val context = androidx.compose.ui.platform.LocalContext.current
     
@@ -7647,14 +7895,16 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                                 }
                                                 "Modo AMOLED" -> if (useAmoledMode) "Ativo (Preto Absoluto)" else "Inativo (Padrão)"
                                                 "Espelhar com a TV" -> "Como sincronizar com a TV"
+                                                "Atualizações do App" -> latestAvailableUpdateInfo?.let { "Nova versão v${it.tagName} disponível!" } ?: "Instalada: v${com.example.BuildConfig.VERSION_NAME}"
                                                 else -> ""
                                             }
                                             
                                             if (subtext.isNotEmpty()) {
                                                 Text(
                                                     text = subtext,
-                                                    color = Color.Gray,
+                                                    color = if (title == "Atualizações do App" && latestAvailableUpdateInfo != null) Color(0xFF69F0AE) else Color.Gray,
                                                     fontSize = 9.sp,
+                                                    fontWeight = if (title == "Atualizações do App" && latestAvailableUpdateInfo != null) FontWeight.Bold else FontWeight.Normal,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     modifier = Modifier.padding(top = 2.dp)
@@ -9365,7 +9615,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
         if (showGitHubUpdateDialog) {
             val updateState by viewModel.updateCheckState.collectAsState()
 
-            Dialog(onDismissRequest = { showGitHubUpdateDialog = false }) {
+            SafeDialog(onDismissRequest = { showGitHubUpdateDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141315)),
                     shape = RoundedCornerShape(16.dp),
@@ -9540,7 +9790,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                                 fontSize = 11.sp
                                             )
                                             Text(
-                                                text = "Se o instalador recusar ou disser 'App não instalado', isso ocorre pelo Android detectar uma chave de assinatura diferente da versão instalada anteriormente no aparelho.\n\n👉 Solução: Desinstale o aplicativo antigo do seu aparelho uma única vez e instale esta nova v1.0.0. A partir desta versão, todas as atualizações serão aceitas automaticamente!",
+                                                text = "Se o instalador recusar ou disser 'App não instalado', isso ocorre pelo Android detectar uma chave de assinatura diferente da versão instalada anteriormente no aparelho.\n\n👉 Solução: Desinstale o aplicativo antigo do seu aparelho uma única vez e instale a versão atual. A partir dela, todas as atualizações assinadas serão aceitas automaticamente!",
                                                 color = Color.LightGray,
                                                 fontSize = 10.sp,
                                                 lineHeight = 14.sp
@@ -9563,16 +9813,27 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             is com.example.viewmodel.AppViewModel.UpdateCheckState.Error -> {
                                 Column(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(state.error, color = Color.Red, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(state.error, color = Color(0xFFFF6B6B), fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                                     Button(
                                         onClick = { viewModel.checkForUpdates() },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
-                                        shape = RoundedCornerShape(6.dp)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text("TENTAR NOVAMENTE", color = Color.White, fontSize = 10.sp)
+                                        Text("TENTAR NOVAMENTE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.openBrowserDownload(context, viewModel.getPreferredBrowserUpdateUrl())
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.4f))
+                                    ) {
+                                        Text("ABRIR RELEASES NO NAVEGADOR", color = GoldPremium, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }

@@ -31,6 +31,10 @@ data class UpdateInfo(
 
 sealed class UpdateCheckOutcome {
     data class Available(val info: UpdateInfo) : UpdateCheckOutcome()
+    data class NotPublishedYet(
+        val versionName: String,
+        val fallbackReleasesUrl: String = Mk21UpdateManager.RELEASES_LATEST_URL
+    ) : UpdateCheckOutcome()
     data class UpToDate(val currentVersionCode: Int) : UpdateCheckOutcome()
     data class Failure(val reason: String) : UpdateCheckOutcome()
 }
@@ -55,6 +59,8 @@ class Mk21UpdateManager(
         const val DEFAULT_MIN_APK_SIZE_BYTES = 1_000_000L
         const val DEFAULT_VERSION_JSON_URL =
             "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/version.json"
+        const val RELEASES_LATEST_URL =
+            "https://github.com/2fbg/FBGs-Streaming/releases/latest"
 
         val DEFAULT_ALLOWED_HOSTS: Set<String> = setOf(
             "raw.githubusercontent.com",
@@ -136,6 +142,15 @@ class Mk21UpdateManager(
                     )
                 }
 
+                // Confirma que o binário da release já está no ar (evita HTTP 404 enquanto o CI ainda publica o APK).
+                if (!probeApkReachable(apkUrl)) {
+                    Log.i(TAG, "Release v$versionName declarada no manifesto, mas o APK ainda não está disponível ($apkUrl).")
+                    return@withContext UpdateCheckOutcome.NotPublishedYet(
+                        versionName = versionName,
+                        fallbackReleasesUrl = RELEASES_LATEST_URL
+                    )
+                }
+
                 UpdateCheckOutcome.Available(
                     UpdateInfo(
                         versionCode = remoteVersionCode,
@@ -198,7 +213,12 @@ class Mk21UpdateManager(
             executeWithValidatedRedirects(updateInfo.apkUrl).use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "Falha HTTP ao baixar atualização: ${response.code}")
-                    return@withContext DownloadVerificationResult.Failure("Servidor respondeu HTTP ${response.code}.")
+                    val friendly = if (response.code == 404) {
+                        "Arquivo da versão v${updateInfo.versionName} ainda não publicado no GitHub Releases (HTTP 404). Aguarde alguns minutos."
+                    } else {
+                        "Servidor respondeu HTTP ${response.code}."
+                    }
+                    return@withContext DownloadVerificationResult.Failure(friendly)
                 }
                 val body = response.body
                     ?: return@withContext DownloadVerificationResult.Failure("Resposta de download vazia.")
@@ -277,7 +297,30 @@ class Mk21UpdateManager(
         }
     }
 
-    private fun executeWithValidatedRedirects(initialUrl: String): Response {
+    private fun probeApkReachable(apkUrl: String): Boolean {
+        return try {
+            executeWithValidatedRedirects(apkUrl, method = "HEAD").use { headResp ->
+                if (headResp.code == 200 || headResp.code == 206) return true
+                if (headResp.code != 405 && headResp.code != 501) return false
+            }
+            executeWithValidatedRedirects(
+                apkUrl,
+                method = "GET",
+                extraHeaders = mapOf("Range" to "bytes=0-0")
+            ).use { rangeResp ->
+                rangeResp.code == 200 || rangeResp.code == 206
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Falha ao validar disponibilidade do APK ($apkUrl): ${e.message}")
+            false
+        }
+    }
+
+    private fun executeWithValidatedRedirects(
+        initialUrl: String,
+        method: String = "GET",
+        extraHeaders: Map<String, String> = emptyMap()
+    ): Response {
         val strictClient = httpClient.newBuilder()
             .followRedirects(false)
             .followSslRedirects(false)
@@ -289,12 +332,17 @@ class Mk21UpdateManager(
             if (!isAllowedUpdateUrl(currentUrl)) {
                 throw SecurityException("URL bloqueada pela política de atualização HTTPS: $currentUrl")
             }
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(currentUrl)
                 .header("User-Agent", "MK21-Android")
                 .header("Cache-Control", "no-cache")
-                .build()
-            val response = strictClient.newCall(request).execute()
+            extraHeaders.forEach { (k, v) -> requestBuilder.header(k, v) }
+            if (method.equals("HEAD", ignoreCase = true)) {
+                requestBuilder.head()
+            } else {
+                requestBuilder.get()
+            }
+            val response = strictClient.newCall(requestBuilder.build()).execute()
             if (response.isRedirect) {
                 val location = response.header("Location")
                 val baseHttpUrl = currentUrl.toHttpUrlOrNull()
