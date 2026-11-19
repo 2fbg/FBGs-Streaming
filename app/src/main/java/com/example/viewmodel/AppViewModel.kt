@@ -105,6 +105,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _isActivatingLicense = MutableStateFlow(false)
     val isActivatingLicense: StateFlow<Boolean> = _isActivatingLicense.asStateFlow()
 
+    // Cloud Sync (Android ↔ Smart TV ↔ Web)
+    private val _cloudSyncCode = MutableStateFlow(preferencesService.cloudSyncCode)
+    val cloudSyncCode: StateFlow<String> = _cloudSyncCode.asStateFlow()
+
+    private val _isCloudSyncing = MutableStateFlow(false)
+    val isCloudSyncing: StateFlow<Boolean> = _isCloudSyncing.asStateFlow()
+
+    private val _cloudSyncStatus = MutableStateFlow("")
+    val cloudSyncStatus: StateFlow<String> = _cloudSyncStatus.asStateFlow()
+
+    private val _lastCloudSyncAt = MutableStateFlow(preferencesService.lastCloudSyncAt)
+    val lastCloudSyncAt: StateFlow<Long> = _lastCloudSyncAt.asStateFlow()
+
     val virtualMacAddress: String
         get() = preferencesService.virtualMac
 
@@ -2472,5 +2485,264 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             Toast.makeText(context, "Não foi possível abrir o navegador: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // ==================== VOD RESUME & CLOUD SYNC (TV ↔ CELULAR ↔ WEB) ====================
+
+    fun saveVodResumePosition(url: String, positionMs: Long, durationMs: Long) {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isEmpty() || durationMs <= 0L) return
+        val posSec = (positionMs / 1000L).toInt().coerceAtLeast(0)
+        val durSec = (durationMs / 1000L).toInt().coerceAtLeast(1)
+        if (posSec < 5) return
+        try {
+            val root = runCatching { JSONObject(preferencesService.vodResumePositionsJson) }
+                .getOrElse { JSONObject() }
+            if (posSec >= (durSec * 0.95).toInt()) {
+                root.remove(cleanUrl)
+            } else {
+                root.put(
+                    cleanUrl,
+                    JSONObject().apply {
+                        put("pos", posSec)
+                        put("dur", durSec)
+                        put("ts", System.currentTimeMillis())
+                    }
+                )
+            }
+            // Limita para não crescer indefinidamente nas prefs
+            if (root.length() > 150) {
+                val keys = mutableListOf<Pair<String, Long>>()
+                val iter = root.keys()
+                while (iter.hasNext()) {
+                    val k = iter.next()
+                    keys.add(k to (root.optJSONObject(k)?.optLong("ts", 0L) ?: 0L))
+                }
+                keys.sortedBy { it.second }.take(root.length() - 120).forEach { root.remove(it.first) }
+            }
+            preferencesService.vodResumePositionsJson = root.toString()
+        } catch (_: Throwable) {
+            // Não interromper reprodução se SharedPreferences falhar
+        }
+    }
+
+    fun getVodResumePositionMs(url: String): Long {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isEmpty()) return 0L
+        return try {
+            val root = JSONObject(preferencesService.vodResumePositionsJson)
+            val entry = root.optJSONObject(cleanUrl) ?: return 0L
+            val posSec = entry.optInt("pos", 0)
+            val durSec = entry.optInt("dur", 0)
+            if (posSec >= 5 && (durSec == 0 || posSec < (durSec * 0.95).toInt())) {
+                posSec * 1000L
+            } else {
+                0L
+            }
+        } catch (_: Throwable) {
+            0L
+        }
+    }
+
+    fun generateCloudSyncCode(): String {
+        val code = com.example.data.service.CloudSyncManager.generateSyncCode()
+        preferencesService.cloudSyncCode = code
+        _cloudSyncCode.value = code
+        _cloudSyncStatus.value = "Código gerado! Use o mesmo código na Smart TV ou Web."
+        return code
+    }
+
+    fun updateCloudSyncCode(raw: String): String {
+        val normalized = com.example.data.service.CloudSyncManager.normalizeSyncCode(raw)
+        if (normalized.isNotEmpty()) {
+            preferencesService.cloudSyncCode = normalized
+            _cloudSyncCode.value = normalized
+        } else if (raw.isBlank()) {
+            preferencesService.cloudSyncCode = ""
+            _cloudSyncCode.value = ""
+        }
+        return normalized
+    }
+
+    fun performCloudSync(
+        overrideCode: String? = null,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        if (_isCloudSyncing.value) return
+        val candidate = overrideCode?.trim().takeUnless { it.isNullOrEmpty() } ?: _cloudSyncCode.value
+        val code = com.example.data.service.CloudSyncManager.normalizeSyncCode(candidate)
+        if (!com.example.data.service.CloudSyncManager.isValidSyncCode(code)) {
+            val msg = "Código inválido. Informe ou gere um código no formato MK21-XXXX-XXXX."
+            _cloudSyncStatus.value = msg
+            onResult(false, msg)
+            return
+        }
+
+        preferencesService.cloudSyncCode = code
+        _cloudSyncCode.value = code
+        _isCloudSyncing.value = true
+        _cloudSyncStatus.value = "Sincronizando favoritos e progresso..."
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val now = System.currentTimeMillis()
+                val activePlaylist = _activePlaylistName.value
+                val favItems = playlistItemDao.getAllFavoriteItems()
+                val resumeMap = runCatching { JSONObject(preferencesService.vodResumePositionsJson) }
+                    .getOrElse { JSONObject() }
+
+                val localFavorites = favItems.mapNotNull { item ->
+                    val url = item.url.trim()
+                    if (!url.startsWith("http", ignoreCase = true)) return@mapNotNull null
+                    com.example.data.service.SyncFavoriteItem(
+                        key = url,
+                        name = item.name,
+                        url = url,
+                        logo = item.logoUrl ?: "",
+                        group = item.category,
+                        contentType = item.contentType,
+                        deleted = false,
+                        updatedAt = if (item.lastWatchedTime > 0L) item.lastWatchedTime else now
+                    )
+                }
+
+                val continueMovies = playlistItemDao.getContinueWatching(activePlaylist, ContentType.MOVIE.name).first()
+                val continueSeries = playlistItemDao.getContinueWatching(activePlaylist, ContentType.SERIES.name).first()
+                val localContinue = (continueMovies + continueSeries).mapNotNull { item ->
+                    val url = item.url.trim()
+                    if (!url.startsWith("http", ignoreCase = true)) return@mapNotNull null
+                    val posEntry = resumeMap.optJSONObject(url)
+                    com.example.data.service.SyncContinueItem(
+                        key = url,
+                        name = item.name,
+                        url = url,
+                        logo = item.logoUrl ?: "",
+                        group = item.category,
+                        contentType = item.contentType,
+                        positionSec = posEntry?.optInt("pos", 0) ?: 0,
+                        durationSec = posEntry?.optInt("dur", 0) ?: 0,
+                        deleted = false,
+                        updatedAt = maxOf(item.lastWatchedTime, posEntry?.optLong("ts", 0L) ?: 0L, now)
+                    )
+                }
+
+                val localPayload = com.example.data.service.CloudSyncPayload(
+                    favorites = localFavorites,
+                    continueWatching = localContinue,
+                    updatedAt = now
+                )
+
+                val result = com.example.data.service.CloudSyncManager.syncWithServer(
+                    code = code,
+                    localPayload = localPayload,
+                    client = okHttpClient
+                )
+
+                if (!result.ok || result.payload == null) {
+                    val err = result.error ?: "Falha na sincronização em nuvem."
+                    withContext(Dispatchers.Main) {
+                        _isCloudSyncing.value = false
+                        _cloudSyncStatus.value = err
+                        onResult(false, err)
+                    }
+                    return@launch
+                }
+
+                // Aplicar favoritos remotos no catálogo local ativo (por URL ou nome)
+                var appliedFavs = 0
+                var appliedProgress = 0
+                val activeItemsByUrl = HashMap<String, PlaylistItem>()
+                val activeItemsByName = HashMap<String, PlaylistItem>()
+                listOf(ContentType.LIVE.name, ContentType.MOVIE.name, ContentType.SERIES.name).forEach { type ->
+                    playlistItemDao.getItemsByPlaylistAndTypeSync(activePlaylist, type).forEach { it ->
+                        activeItemsByUrl[it.url.trim()] = it
+                        activeItemsByName[it.name.trim().lowercase()] = it
+                    }
+                }
+
+                for (fav in result.payload.favorites) {
+                    val matched = activeItemsByUrl[fav.url.trim()]
+                        ?: activeItemsByName[fav.name.trim().lowercase()]
+                    if (matched != null) {
+                        val desired = !fav.deleted
+                        if (matched.isFavorite != desired) {
+                            playlistItemDao.setFavorite(matched.id, desired)
+                            appliedFavs++
+                        }
+                    }
+                }
+
+                // Aplicar progresso VOD remoto no Room + mapa de posições em segundos
+                val updatedResume = runCatching { JSONObject(preferencesService.vodResumePositionsJson) }
+                    .getOrElse { JSONObject() }
+                for (cont in result.payload.continueWatching) {
+                    if (cont.deleted) {
+                        updatedResume.remove(cont.url.trim())
+                        continue
+                    }
+                    val matched = activeItemsByUrl[cont.url.trim()]
+                        ?: activeItemsByName[cont.name.trim().lowercase()]
+                    val targetUrl = matched?.url?.trim()?.ifEmpty { cont.url.trim() } ?: cont.url.trim()
+                    if (cont.positionSec >= 5) {
+                        val existing = updatedResume.optJSONObject(targetUrl)
+                        val existingTs = existing?.optLong("ts", 0L) ?: 0L
+                        if (cont.updatedAt >= existingTs) {
+                            updatedResume.put(
+                                targetUrl,
+                                JSONObject().apply {
+                                    put("pos", cont.positionSec)
+                                    put("dur", cont.durationSec)
+                                    put("ts", cont.updatedAt)
+                                }
+                            )
+                            appliedProgress++
+                        }
+                    }
+                    if (matched != null && cont.updatedAt > matched.lastWatchedTime) {
+                        playlistItemDao.updateLastWatched(matched.id, cont.updatedAt)
+                    }
+                }
+                preferencesService.vodResumePositionsJson = updatedResume.toString()
+
+                val syncTs = result.updatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+                preferencesService.lastCloudSyncAt = syncTs
+                val summary = "Sincronizado! ${result.payload.favorites.count { !it.deleted }} favs · ${result.payload.continueWatching.count { !it.deleted }} VODs (+$appliedFavs favs, +$appliedProgress retomadas)"
+                withContext(Dispatchers.Main) {
+                    _lastCloudSyncAt.value = syncTs
+                    _isCloudSyncing.value = false
+                    _cloudSyncStatus.value = summary
+                    onResult(true, summary)
+                }
+            } catch (e: Throwable) {
+                val err = "Erro ao sincronizar: ${e.message ?: "falha inesperada"}"
+                withContext(Dispatchers.Main) {
+                    _isCloudSyncing.value = false
+                    _cloudSyncStatus.value = err
+                    onResult(false, err)
+                }
+            }
+        }
+    }
+
+    suspend fun searchOpenSubtitles(
+        title: String,
+        languages: String = "pt-br,pt-pt,en"
+    ): com.example.data.service.SubtitleSearchResult = withContext(Dispatchers.IO) {
+        com.example.data.service.SubtitleAndSkipManager.searchOpenSubtitles(
+            query = title,
+            client = okHttpClient,
+            languages = languages
+        )
+    }
+
+    suspend fun downloadOpenSubtitle(
+        fileId: Long,
+        offsetSec: Double = 0.0
+    ): com.example.data.service.SubtitleDownloadResult = withContext(Dispatchers.IO) {
+        com.example.data.service.SubtitleAndSkipManager.downloadSubtitleVtt(
+            fileId = fileId,
+            client = okHttpClient,
+            offsetSec = offsetSec
+        )
     }
 }

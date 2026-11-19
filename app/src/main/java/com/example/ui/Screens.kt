@@ -4430,9 +4430,15 @@ fun VideoPlayerUI(
         }
     }
 
-    // Helper function to build appropriate MediaItem with proper MIME type if needed
-    val createMediaItem: (String) -> MediaItem = remember {
-        { rawUrl ->
+    // Estado de legendas externas (OpenSubtitles) e ajuste fino de sincronia (±0.5s)
+    var externalSubtitleRawVtt by remember { mutableStateOf<String?>(null) }
+    var externalSubtitleLabel by remember { mutableStateOf("") }
+    var activeExternalSubtitleUri by remember { mutableStateOf<Uri?>(null) }
+    var subtitleOffsetSec by remember { mutableStateOf(0.0) }
+
+    // Helper function to build appropriate MediaItem with proper MIME type and optional external WebVTT subtitle
+    val createMediaItem: (String, Uri?) -> MediaItem = remember {
+        { rawUrl, extSubUri ->
             val builder = MediaItem.Builder().setUri(rawUrl)
             val lower = rawUrl.lowercase()
             when {
@@ -4451,6 +4457,15 @@ fun VideoPlayerUI(
                 lower.contains(".mkv") -> {
                     builder.setMimeType(MimeTypes.VIDEO_MATROSKA)
                 }
+            }
+            if (extSubUri != null) {
+                val subConfig = MediaItem.SubtitleConfiguration.Builder(extSubUri)
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage("pt")
+                    .setLabel(externalSubtitleLabel.ifBlank { "OpenSubtitles" })
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .build()
+                builder.setSubtitleConfigurations(listOf(subConfig))
             }
             builder.build()
         }
@@ -4571,14 +4586,80 @@ fun VideoPlayerUI(
     // Remembered PlayerView reference to guarantee order of synchronization upon disposal without leaking context
     var playerViewInstance by remember { mutableStateOf<PlayerView?>(null) }
 
+    fun applyExternalSubtitleToPlayer(rawVtt: String, label: String, offsetSec: Double) {
+        try {
+            val shifted = com.example.data.service.SubtitleAndSkipManager.shiftVttTimestamps(rawVtt, offsetSec)
+            val subFile = java.io.File(context.cacheDir, "mk21_ext_sub_${System.currentTimeMillis()}.vtt")
+            // Limpa arquivos antigos de legenda no cache
+            context.cacheDir.listFiles { f -> f.name.startsWith("mk21_ext_sub_") }?.forEach { runCatching { it.delete() } }
+            subFile.writeText(shifted, Charsets.UTF_8)
+            externalSubtitleRawVtt = rawVtt
+            externalSubtitleLabel = label
+            subtitleOffsetSec = com.example.data.service.SubtitleAndSkipManager.clampOffset(offsetSec)
+            activeExternalSubtitleUri = Uri.fromFile(subFile)
+            if (playlistItem.contentType != "LIVE" && exoPlayer.currentMediaItem != null) {
+                requestedResumePositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+            }
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setPreferredTextLanguage("pt")
+                .build()
+            sourceSwitchTrigger++
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(context, "Falha ao aplicar legenda: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Estado do botão flutuante Pular Abertura / Pular Créditos (VOD)
+    var activeVodSkipPrompt by remember { mutableStateOf<com.example.data.service.VodSkipPrompt?>(null) }
+    var dismissedSkipLabel by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(playlistItem) {
         retryCount = 0
         selectedSourceIndex = 0
         attemptedSourceIndexes = setOf(0)
         sourceSwitchTrigger = 0
         activePlaybackUrl = playlistItem.url.trim()
-        requestedResumePositionMs = C.TIME_UNSET
+        externalSubtitleRawVtt = null
+        externalSubtitleLabel = ""
+        activeExternalSubtitleUri = null
+        subtitleOffsetSec = 0.0
+        activeVodSkipPrompt = null
+        dismissedSkipLabel = null
+        val savedResume = if (playlistItem.contentType != "LIVE") {
+            viewModel.getVodResumePositionMs(playlistItem.url.trim())
+        } else 0L
+        requestedResumePositionMs = if (savedResume > 0L) savedResume else C.TIME_UNSET
         isResolvingSource = false
+    }
+
+    // Monitora progresso VOD para detectar Pular Abertura / Pular Créditos e salvar ponto de retomada (Cloud Sync)
+    LaunchedEffect(exoPlayer, playlistItem) {
+        if (playlistItem.contentType == ContentType.MOVIE.name || playlistItem.contentType == ContentType.SERIES.name) {
+            var tick = 0
+            while (isActive) {
+                try {
+                    if (exoPlayer.playbackState != Player.STATE_IDLE) {
+                        val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
+                        val dur = exoPlayer.duration.coerceAtLeast(0L)
+                        val prompt = com.example.data.service.SubtitleAndSkipManager.detectSkipPrompt(
+                            positionMs = pos,
+                            durationMs = dur,
+                            contentType = playlistItem.contentType
+                        )
+                        activeVodSkipPrompt = if (prompt != null && prompt.label != dismissedSkipLabel) prompt else null
+                        if (prompt == null) dismissedSkipLabel = null
+                        if (tick % 10 == 0 && pos >= 5_000L && dur > 0L) {
+                            viewModel.saveVodResumePosition(playlistItem.url.trim(), pos, dur)
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                }
+                tick++
+                delay(1000L)
+            }
+        }
     }
 
     LaunchedEffect(playlistItem, activePlaybackUrl, retryCount, sourceSwitchTrigger) {
@@ -4603,7 +4684,7 @@ fun VideoPlayerUI(
             } catch (e: Exception) {
                 // Ignore player transient reset errors
             }
-            val item = createMediaItem(url)
+            val item = createMediaItem(url, activeExternalSubtitleUri)
             val resumePositionMs = requestedResumePositionMs
             requestedResumePositionMs = C.TIME_UNSET
             if (resumePositionMs != C.TIME_UNSET && playlistItem.contentType != "LIVE") {
@@ -5666,6 +5747,50 @@ fun VideoPlayerUI(
             }
         }
 
+        // Botão flutuante Pular Abertura / Pular Créditos (visível mesmo com controles recolhidos)
+        AnimatedVisibility(
+            visible = activeVodSkipPrompt != null && errorMessage == null,
+            enter = fadeIn() + slideInHorizontally { it },
+            exit = fadeOut() + slideOutHorizontally { it },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 24.dp, bottom = if (controlsVisible) 118.dp else 36.dp)
+        ) {
+            val prompt = activeVodSkipPrompt
+            if (prompt != null) {
+                Button(
+                    onClick = {
+                        try {
+                            exoPlayer.seekTo(prompt.targetMs)
+                            dismissedSkipLabel = prompt.label
+                            activeVodSkipPrompt = null
+                        } catch (_: Exception) {}
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xE6141418)),
+                    border = BorderStroke(1.5.dp, GoldPremium),
+                    shape = RoundedCornerShape(24.dp),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 48.dp)
+                        .testTag("vod_skip_prompt_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FastForward,
+                        contentDescription = prompt.label,
+                        tint = GoldPremium,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = prompt.label,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
+
         if (showAudioSubDialog) {
             var selectedAudio by remember { mutableStateOf("") }
             var selectedSub by remember { mutableStateOf("des") }
@@ -5732,30 +5857,43 @@ fun VideoPlayerUI(
                 selectedSub = exoPlayer.trackSelectionParameters.preferredTextLanguages.firstOrNull() ?: "des"
             }
 
-            Dialog(onDismissRequest = { showAudioSubDialog = false }) {
+            var openSubQuery by remember(playlistItem) {
+                mutableStateOf(
+                    com.example.data.service.SubtitleAndSkipManager.buildSubtitleQuery(playlistItem.name)
+                        .ifEmpty { playlistItem.name }
+                )
+            }
+            var openSubResults by remember { mutableStateOf<List<com.example.data.service.SubtitleSearchItem>>(emptyList()) }
+            var openSubLoading by remember { mutableStateOf(false) }
+            var openSubStatus by remember { mutableStateOf("") }
+
+            SafeDialog(onDismissRequest = { showAudioSubDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF111115)),
                     shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        modifier = Modifier
+                            .padding(20.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Áudio & Legendas",
+                            text = "Áudio, Legendas & OpenSubtitles",
                             color = GoldPremium,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Row(modifier = Modifier.fillMaxWidth()) {
                             // Audio Column
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("ÁUDIO", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                // Se não houver mais de uma opção para trocar o áudio, aparece vazio
+                                Spacer(modifier = Modifier.height(6.dp))
                                 if (audioTracks.size > 1) {
                                     audioTracks.forEach { (code, label) ->
                                         Row(
@@ -5769,7 +5907,7 @@ fun VideoPlayerUI(
                                                         .setPreferredAudioLanguage(code)
                                                         .build()
                                                 }
-                                                .padding(vertical = 6.dp)
+                                                .padding(vertical = 4.dp)
                                         ) {
                                             RadioButton(
                                                 selected = selectedAudio == code,
@@ -5787,18 +5925,16 @@ fun VideoPlayerUI(
                                         }
                                     }
                                 } else {
-                                    // Aparece vazio conforme solicitado pelo usuário
-                                    Spacer(modifier = Modifier.height(80.dp))
+                                    Text("Faixa padrão", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 }
                             }
 
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
 
                             // Subtitle Column
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("LEGENDAS", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                // Se não houver opções de legenda para trocar, aparece vazio
+                                Spacer(modifier = Modifier.height(6.dp))
                                 if (subtitleTracks.isNotEmpty()) {
                                     val subsWithDisable = listOf("des" to "Desativado") + subtitleTracks
                                     subsWithDisable.forEach { (code, label) ->
@@ -5816,7 +5952,7 @@ fun VideoPlayerUI(
                                                     }
                                                     exoPlayer.trackSelectionParameters = builder.build()
                                                 }
-                                                .padding(vertical = 6.dp)
+                                                .padding(vertical = 4.dp)
                                         ) {
                                             RadioButton(
                                                 selected = selectedSub == code,
@@ -5837,13 +5973,177 @@ fun VideoPlayerUI(
                                         }
                                     }
                                 } else {
-                                    // Aparece vazio conforme solicitado pelo usuário
-                                    Spacer(modifier = Modifier.height(80.dp))
+                                    Text("Nenhuma embutida", color = Color.DarkGray, fontSize = 11.sp, modifier = Modifier.padding(vertical = 8.dp))
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Divider(color = Color.White.copy(alpha = 0.1f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Ajuste de Sincronia de Legenda (±0.5s)
+                        Text(
+                            text = "SINCRONIA DA LEGENDA: ${com.example.data.service.SubtitleAndSkipManager.formatOffsetLabel(subtitleOffsetSec)}",
+                            color = GoldPremium,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val next = com.example.data.service.SubtitleAndSkipManager.clampOffset(subtitleOffsetSec - 0.5)
+                                    subtitleOffsetSec = next
+                                    val raw = externalSubtitleRawVtt
+                                    if (raw != null) applyExternalSubtitleToPlayer(raw, externalSubtitleLabel, next)
+                                },
+                                modifier = Modifier.weight(1f).testTag("subtitle_sync_minus"),
+                                contentPadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                Text("-0.5s", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    subtitleOffsetSec = 0.0
+                                    val raw = externalSubtitleRawVtt
+                                    if (raw != null) applyExternalSubtitleToPlayer(raw, externalSubtitleLabel, 0.0)
+                                },
+                                modifier = Modifier.weight(1f).testTag("subtitle_sync_reset"),
+                                contentPadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                Text("0.0s", color = GoldPremium, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val next = com.example.data.service.SubtitleAndSkipManager.clampOffset(subtitleOffsetSec + 0.5)
+                                    subtitleOffsetSec = next
+                                    val raw = externalSubtitleRawVtt
+                                    if (raw != null) applyExternalSubtitleToPlayer(raw, externalSubtitleLabel, next)
+                                },
+                                modifier = Modifier.weight(1f).testTag("subtitle_sync_plus"),
+                                contentPadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                Text("+0.5s", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (playlistItem.contentType != ContentType.LIVE.name) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "BUSCAR LEGENDA ONLINE (OPENSUBTITLES)",
+                                color = Color.LightGray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = openSubQuery,
+                                    onValueChange = { openSubQuery = it },
+                                    singleLine = true,
+                                    placeholder = { Text("Título do filme ou série", color = Color.Gray, fontSize = 11.sp) },
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 12.sp),
+                                    modifier = Modifier.weight(1f).testTag("opensubtitles_query_input"),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = GoldPremium,
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                                    )
+                                )
+                                Button(
+                                    onClick = {
+                                        if (openSubLoading) return@Button
+                                        openSubLoading = true
+                                        openSubStatus = "Buscando legendas..."
+                                        coroutineScope.launch {
+                                            val res = viewModel.searchOpenSubtitles(openSubQuery)
+                                            openSubLoading = false
+                                            if (res.ok) {
+                                                openSubResults = res.items.take(6)
+                                                openSubStatus = if (res.items.isEmpty()) "Nenhuma legenda encontrada." else "${res.items.size} legendas encontradas:"
+                                            } else {
+                                                openSubResults = emptyList()
+                                                openSubStatus = res.error ?: "Erro na busca."
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                                    modifier = Modifier.testTag("opensubtitles_search_button")
+                                ) {
+                                    Icon(Icons.Default.Search, contentDescription = "Buscar", tint = Color.Black, modifier = Modifier.size(18.dp))
+                                }
+                            }
+
+                            if (openSubStatus.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = openSubStatus,
+                                    color = if (openSubResults.isNotEmpty()) Color(0xFF4CAF50) else Color.Gray,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            openSubResults.forEach { subItem ->
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.White.copy(alpha = 0.06f))
+                                        .clickable {
+                                            if (openSubLoading) return@clickable
+                                            openSubLoading = true
+                                            openSubStatus = "Baixando legenda..."
+                                            coroutineScope.launch {
+                                                val dl = viewModel.downloadOpenSubtitle(subItem.fileId, 0.0)
+                                                openSubLoading = false
+                                                if (dl.ok && dl.vttContent.isNotBlank()) {
+                                                    applyExternalSubtitleToPlayer(
+                                                        rawVtt = dl.vttContent,
+                                                        label = "${subItem.language.uppercase()} • ${subItem.release.take(24)}",
+                                                        offsetSec = subtitleOffsetSec
+                                                    )
+                                                    openSubStatus = "Legenda aplicada: ${subItem.release.take(36)}"
+                                                    android.widget.Toast.makeText(context, "Legenda aplicada!", android.widget.Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    openSubStatus = dl.error ?: "Não foi possível baixar a legenda."
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = subItem.language.uppercase(),
+                                        color = GoldPremium,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.width(42.dp)
+                                    )
+                                    Text(
+                                        text = subItem.release,
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = { showAudioSubDialog = false },
@@ -7046,6 +7346,10 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
     var showSyncAllListsDialog by remember { mutableStateOf(false) }
     var showHideProgressDialog by remember { mutableStateOf(false) }
     var showDiagnosticLogsDialog by remember { mutableStateOf(false) }
+    var showCloudSyncDialog by remember { mutableStateOf(false) }
+    val cloudSyncCodeState by viewModel.cloudSyncCode.collectAsState()
+    val isCloudSyncing by viewModel.isCloudSyncing.collectAsState()
+    val cloudSyncStatus by viewModel.cloudSyncStatus.collectAsState()
 
     Box(
         modifier = Modifier
@@ -7231,6 +7535,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                     )
 
                     val syncSettingsList = listOf(
+                        Triple("Nuvem (TV ↔ Celular)", Icons.Default.CloudSync, cloudSyncCodeState.ifEmpty { "Parear dispositivos" }),
                         Triple("Frequência", Icons.Default.Refresh, "Frequência: " + viewModel.preferencesService.syncIntervalFrequency),
                         Triple("Sincronizar todas", Icons.Default.Sync, if (viewModel.preferencesService.syncAllListsBackground) "Todas em 2º plano" else "Apenas ativa"),
                         Triple("Progresso de carga", Icons.Default.VisibilityOff, if (viewModel.preferencesService.hideBackgroundProgress) "Ocultar na inicial" else "Exibir status")
@@ -7245,6 +7550,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                 Card(
                                     onClick = {
                                         when (title) {
+                                            "Nuvem (TV ↔ Celular)" -> showCloudSyncDialog = true
                                             "Frequência" -> showSyncIntervalDialog = true
                                             "Sincronizar todas" -> showSyncAllListsDialog = true
                                             "Progresso de carga" -> showHideProgressDialog = true
@@ -9296,6 +9602,150 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             color = Color.Gray,
                             fontSize = 9.sp
                         )
+                    }
+                }
+            }
+        }
+
+        // Dialog: Sincronização em Nuvem (Android ↔ Smart TV ↔ Web)
+        if (showCloudSyncDialog) {
+            var codeInput by remember(cloudSyncCodeState) { mutableStateOf(cloudSyncCodeState) }
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
+            SafeDialog(onDismissRequest = { showCloudSyncDialog = false }) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF141315)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                        .testTag("cloud_sync_dialog")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, tint = GoldPremium, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                "Sincronização em Nuvem",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+
+                        Text(
+                            text = "Sincronize seus Favoritos e Continuar Assistindo (VOD) entre Android, Smart TV e Web usando o mesmo código de pareamento.",
+                            color = Color.Gray,
+                            fontSize = 11.sp
+                        )
+
+                        OutlinedTextField(
+                            value = codeInput,
+                            onValueChange = { codeInput = it.uppercase().take(16) },
+                            label = { Text("Código de Pareamento", fontSize = 11.sp) },
+                            placeholder = { Text("MK21-XXXX-XXXX", color = Color.DarkGray, fontSize = 12.sp) },
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = GoldPremium,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("cloud_sync_code_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldPremium,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                            )
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val generated = viewModel.generateCloudSyncCode()
+                                    codeInput = generated
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("cloud_sync_generate_button"),
+                                border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("GERAR CÓDIGO", color = GoldPremium, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val norm = com.example.data.service.CloudSyncManager.normalizeSyncCode(codeInput)
+                                    if (norm.isNotEmpty()) {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(norm))
+                                        android.widget.Toast.makeText(context, "Código $norm copiado!", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("COPIAR", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (cloudSyncStatus.isNotEmpty()) {
+                            Text(
+                                text = cloudSyncStatus,
+                                color = if (cloudSyncStatus.startsWith("Sincronizado") || cloudSyncStatus.startsWith("Código gerado")) Color(0xFF4CAF50) else Color(0xFFFFB74D),
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { showCloudSyncDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("FECHAR", color = Color.White, fontSize = 11.sp)
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.performCloudSync(overrideCode = codeInput) { ok, msg ->
+                                        if (ok) {
+                                            codeInput = viewModel.cloudSyncCode.value
+                                        }
+                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = !isCloudSyncing,
+                                colors = ButtonDefaults.buttonColors(containerColor = NetflixRed),
+                                modifier = Modifier
+                                    .weight(1.4f)
+                                    .testTag("cloud_sync_now_button"),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                if (isCloudSyncing) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                } else {
+                                    Text("SINCRONIZAR AGORA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                            }
+                        }
                     }
                 }
             }

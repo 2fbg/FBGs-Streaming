@@ -19,3 +19,11 @@ CREATE TABLE IF NOT EXISTS licenses (
 
 CREATE INDEX IF NOT EXISTS idx_licenses_order_active
   ON licenses (order_code, revoked);
+
+-- Sincronização em nuvem entre dispositivos (Favoritos e Continuar Assistindo)
+CREATE TABLE IF NOT EXISTS user_sync_state (
+  sync_code TEXT PRIMARY KEY,
+  payload JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+

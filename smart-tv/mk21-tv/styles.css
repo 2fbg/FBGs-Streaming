@@ -5306,4 +5306,58 @@ div[style*="overflow"], .pane-scroll, .list-container,
   color: var(--text-muted);
 }
 
+/* ==========================================================================
+   PULO DE ABERTURA / CRÉDITOS VOD + SINCRONIA DE LEGENDAS OPENSUBTITLES
+   ========================================================================== */
+.vod-skip-pill {
+  position: absolute;
+  right: 22px;
+  bottom: 92px;
+  z-index: 45;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 2px solid #ffd54f;
+  background: rgba(10, 12, 20, 0.92);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+
+.vod-skip-pill:focus,
+.vod-skip-pill:hover {
+  background: #e50914;
+  border-color: #ffffff;
+  transform: scale(1.04);
+  outline: none;
+}
+
+.subtitle-sync-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subtitle-sync-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.subtitle-sync-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffd54f;
+  margin-right: auto;
+}
+
+
 

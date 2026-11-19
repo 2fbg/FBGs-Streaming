@@ -324,6 +324,18 @@ class PreferencesService(context: Context) {
         get() = try { prefs.getString("saimo_super_resolution", "off") ?: "off" } catch (e: Throwable) { "off" }
         set(value) { try { prefs.edit().putString("saimo_super_resolution", value).apply() } catch (e: Throwable) {} }
 
+    var cloudSyncCode: String
+        get() = try { prefs.getString("mk21_cloud_sync_code", "") ?: "" } catch (e: Throwable) { "" }
+        set(value) { try { prefs.edit().putString("mk21_cloud_sync_code", value).apply() } catch (e: Throwable) {} }
+
+    var lastCloudSyncAt: Long
+        get() = try { prefs.getLong("mk21_cloud_sync_last_at", 0L) } catch (e: Throwable) { 0L }
+        set(value) { try { prefs.edit().putLong("mk21_cloud_sync_last_at", value).apply() } catch (e: Throwable) {} }
+
+    var vodResumePositionsJson: String
+        get() = try { prefs.getString("mk21_vod_resume_positions", "{}") ?: "{}" } catch (e: Throwable) { "{}" }
+        set(value) { try { prefs.edit().putString("mk21_vod_resume_positions", value).apply() } catch (e: Throwable) {} }
+
     fun isCredentialsConfigured(predefinedNames: Set<String>): Boolean {
         val isPredefined = predefinedNames.contains(activePlaylistName)
         return activePlaylistName.isNotEmpty() && (

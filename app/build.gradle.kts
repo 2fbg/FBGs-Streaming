@@ -120,8 +120,8 @@ android {
     applicationId = "com.aistudio.multiservidor.iptvmk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 290
-    versionName = "2.9.0"
+    versionCode = 291
+    versionName = "2.9.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -270,6 +270,7 @@ secrets {
   defaultPropertiesFileName = ".env.example"
   // Chaves exclusivas de servidor (Vercel) ou já tratadas explicitamente em defaultConfig/signingConfigs
   ignoreList.add("DATABASE_URL")
+  ignoreList.add("OPENSUBTITLES_API_KEY")
   ignoreList.add("LICENSE_SIGNING_KEY")
   ignoreList.add("LICENSE_PUBKEY_B64")
   ignoreList.add("LICENSE_SECRET")

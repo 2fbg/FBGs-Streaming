@@ -34,6 +34,8 @@ const SINGLE_FILES = [
   'api/version.json',
   'api/proxy.js',
   'api/epg.js',
+  'api/sync.js',
+  'api/subtitles.js',
   'assets/logo.png',
 ];
 

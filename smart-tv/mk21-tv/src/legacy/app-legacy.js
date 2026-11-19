@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.8.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.9.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -26,6 +26,8 @@ const EpgGuide = require('../../core/EpgGuide.js');
 const ZapHud = require('../../core/ZapHud.js');
 const OnScreenKeyboard = require('../../core/OnScreenKeyboard.js');
 const SmartTvPrefs = require('../../core/SmartTvPrefs.js');
+const CloudSync = require('../../core/CloudSync.js');
+const SubtitleAndSkip = require('../../core/SubtitleAndSkip.js');
 const $ = id => document.getElementById(id);
 
 // Fase 2: o legado deixou de viver no escopo global (agora e um IIFE bundlado).
@@ -52,7 +54,10 @@ window.mk21App = {
   openOsk: function (target) { return mk21OpenOsk(target); },
   closeOsk: function (commit) { return mk21CloseOsk(commit); },
   oskState: function () { return mk21Osk; },
-  prefs: SmartTvPrefs
+  runCloudSync: function (manual) { return mk21RunCloudSync(manual); },
+  prefs: SmartTvPrefs,
+  cloudSync: CloudSync,
+  subtitles: SubtitleAndSkip
 };
 
 // ==================== FASE 2: LIGACAO COM O PLAYERSERVICE ====================
@@ -3226,9 +3231,43 @@ function prefetchNextChannelStream(nextItem) {
 // v1.2.0 FASE 2: PERSISTÊNCIA "CONTINUAR ASSISTINDO" (A CADA 10 SEGUNDOS)
 // ==========================================================================
 let progressSaveInterval = null;
+let mk21VodSkipInterval = null;
+let mk21ActiveVodSkipAction = null;
+
+function mk21HideVodSkipPill() {
+  mk21ActiveVodSkipAction = null;
+  const pill = $('btnVodSkipPill');
+  if (pill) pill.classList.add('hidden');
+}
+
+function mk21UpdateVodSkipPill(item) {
+  const pill = $('btnVodSkipPill');
+  const video = $('tvPlayer');
+  if (!pill || !video || !item || item.contentType === 'LIVE' || !video.duration || isNaN(video.duration)) {
+    mk21HideVodSkipPill();
+    return;
+  }
+  const action = SubtitleAndSkip.detectVodSkipAction(video.currentTime, video.duration, item.contentType);
+  if (!action) {
+    mk21HideVodSkipPill();
+    return;
+  }
+  mk21ActiveVodSkipAction = action;
+  pill.textContent = action.label;
+  pill.classList.remove('hidden');
+  pill.onclick = () => {
+    try {
+      video.currentTime = action.targetSec;
+      showChannelBanner(action.type === 'skip_intro' ? '⏩ Abertura pulada' : '⏭️ Créditos pulados');
+    } catch (e) {}
+    mk21HideVodSkipPill();
+  };
+}
 
 function startProgressTracker(item) {
   clearInterval(progressSaveInterval);
+  clearInterval(mk21VodSkipInterval);
+  mk21HideVodSkipPill();
   if (!item || item.contentType === 'LIVE') return;
 
   progressSaveInterval = setInterval(() => {
@@ -3236,6 +3275,10 @@ function startProgressTracker(item) {
     if (!video || video.paused || !video.duration || isNaN(video.duration)) return;
     saveProgress(item.url, video.currentTime, video.duration);
   }, 10000);
+
+  mk21VodSkipInterval = setInterval(() => {
+    mk21UpdateVodSkipPill(item);
+  }, 1500);
 }
 
 function saveProgress(contentId, currentTime, duration) {
@@ -5334,8 +5377,198 @@ function openAudioSubsModal() {
     subsList.appendChild(p);
   }
 
+  // Sincronia de Legendas (±0.5s) + Busca no OpenSubtitles (paridade Saimo TV)
+  const syncBox = document.createElement('div');
+  syncBox.className = 'subtitle-sync-box';
+
+  const syncRow = document.createElement('div');
+  syncRow.className = 'subtitle-sync-row';
+  const syncLbl = document.createElement('span');
+  syncLbl.className = 'subtitle-sync-label';
+  syncLbl.textContent = `⏱️ Sincronia: ${SubtitleAndSkip.formatOffsetLabel(mk21SubSyncState.offsetSec)}`;
+
+  const btnSubMinus = document.createElement('button');
+  btnSubMinus.type = 'button';
+  btnSubMinus.className = 'track-item-btn';
+  btnSubMinus.style.width = 'auto';
+  btnSubMinus.setAttribute('tabindex', '0');
+  btnSubMinus.textContent = '⏪ -0.5s';
+  btnSubMinus.onclick = () => {
+    mk21ShiftActiveSubtitles(-0.5);
+    openAudioSubsModal();
+  };
+
+  const btnSubPlus = document.createElement('button');
+  btnSubPlus.type = 'button';
+  btnSubPlus.className = 'track-item-btn';
+  btnSubPlus.style.width = 'auto';
+  btnSubPlus.setAttribute('tabindex', '0');
+  btnSubPlus.textContent = '⏩ +0.5s';
+  btnSubPlus.onclick = () => {
+    mk21ShiftActiveSubtitles(0.5);
+    openAudioSubsModal();
+  };
+
+  const btnSubReset = document.createElement('button');
+  btnSubReset.type = 'button';
+  btnSubReset.className = 'track-item-btn';
+  btnSubReset.style.width = 'auto';
+  btnSubReset.setAttribute('tabindex', '0');
+  btnSubReset.textContent = '0.0s';
+  btnSubReset.onclick = () => {
+    mk21ShiftActiveSubtitles(-mk21SubSyncState.offsetSec);
+    openAudioSubsModal();
+  };
+
+  syncRow.appendChild(syncLbl);
+  syncRow.appendChild(btnSubMinus);
+  syncRow.appendChild(btnSubPlus);
+  syncRow.appendChild(btnSubReset);
+  syncBox.appendChild(syncRow);
+
+  const btnOpenSubSearch = document.createElement('button');
+  btnOpenSubSearch.type = 'button';
+  btnOpenSubSearch.className = 'track-item-btn';
+  btnOpenSubSearch.setAttribute('tabindex', '0');
+  btnOpenSubSearch.textContent = '🔍 Buscar Legenda PT-BR / EN (OpenSubtitles)';
+  btnOpenSubSearch.onclick = () => mk21SearchOpenSubtitlesUI(syncBox);
+  syncBox.appendChild(btnOpenSubSearch);
+
+  subsList.appendChild(syncBox);
+
   const firstBtn = modal.querySelector('.track-item-btn');
   if (firstBtn) firstBtn.focus();
+}
+
+const mk21SubSyncState = {
+  offsetSec: 0,
+  rawVtt: '',
+  label: '',
+  blobUrl: ''
+};
+
+function mk21AttachExternalVtt(vttText, label) {
+  const video = $('tvPlayer');
+  if (!video) return;
+  try {
+    const oldTracks = video.querySelectorAll('track[data-mk21-ext="1"]');
+    oldTracks.forEach(t => t.remove());
+    if (mk21SubSyncState.blobUrl) {
+      try { URL.revokeObjectURL(mk21SubSyncState.blobUrl); } catch (e) {}
+      mk21SubSyncState.blobUrl = '';
+    }
+    const shifted = SubtitleAndSkip.shiftVttTimestamps(vttText, mk21SubSyncState.offsetSec);
+    const blob = new Blob([shifted], { type: 'text/vtt;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    mk21SubSyncState.blobUrl = url;
+
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = label || 'OpenSubtitles';
+    track.srclang = 'pt';
+    track.src = url;
+    track.default = true;
+    track.setAttribute('data-mk21-ext', '1');
+    video.appendChild(track);
+    setTimeout(() => {
+      if (video.textTracks && video.textTracks.length) {
+        for (let i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode = (i === video.textTracks.length - 1) ? 'showing' : 'disabled';
+        }
+      }
+    }, 80);
+  } catch (e) {}
+}
+
+function mk21ShiftActiveSubtitles(deltaSec) {
+  const prev = mk21SubSyncState.offsetSec;
+  const next = SubtitleAndSkip.clampOffset(prev + deltaSec);
+  const actualDelta = next - prev;
+  mk21SubSyncState.offsetSec = next;
+
+  if (mk21SubSyncState.rawVtt) {
+    mk21AttachExternalVtt(mk21SubSyncState.rawVtt, mk21SubSyncState.label);
+  } else {
+    const video = $('tvPlayer');
+    if (video && video.textTracks) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const tr = video.textTracks[i];
+        if (tr.mode === 'showing' && tr.cues) {
+          for (let j = 0; j < tr.cues.length; j++) {
+            try {
+              tr.cues[j].startTime = Math.max(0, tr.cues[j].startTime + actualDelta);
+              tr.cues[j].endTime = Math.max(tr.cues[j].startTime + 0.2, tr.cues[j].endTime + actualDelta);
+            } catch (e) {}
+          }
+        }
+      }
+    }
+  }
+  showChannelBanner(`⏱️ Sincronia de legenda: ${SubtitleAndSkip.formatOffsetLabel(next)}`);
+}
+
+async function mk21SearchOpenSubtitlesUI(container) {
+  if (!container) return;
+  const rawName = (activeItem && activeItem.name) || '';
+  const query = SubtitleAndSkip.buildSubtitleQuery(rawName);
+  if (query.length < 2) {
+    showChannelBanner('Abra um filme ou episódio para buscar legendas.');
+    return;
+  }
+
+  let resultsBox = container.querySelector('.opensub-results');
+  if (!resultsBox) {
+    resultsBox = document.createElement('div');
+    resultsBox.className = 'opensub-results';
+    container.appendChild(resultsBox);
+  }
+  resultsBox.innerHTML = '<p style="color:#ffd54f;font-size:13px;">⏳ Buscando legendas para "' + escapeHtml(query) + '"…</p>';
+
+  try {
+    const res = await fetch(
+      SubtitleAndSkip.SUBTITLES_ENDPOINT + '?action=search&query=' + encodeURIComponent(query) + '&lang=pt-br,pt-pt,en'
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      resultsBox.innerHTML = '<p style="color:#f87171;font-size:13px;">' + escapeHtml(data.error || 'Falha ao consultar OpenSubtitles.') + '</p>';
+      return;
+    }
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      resultsBox.innerHTML = '<p style="color:#94a3b8;font-size:13px;">Nenhuma legenda encontrada para "' + escapeHtml(query) + '".</p>';
+      return;
+    }
+    resultsBox.innerHTML = '';
+    items.slice(0, 6).forEach((sub) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'track-item-btn';
+      btn.setAttribute('tabindex', '0');
+      btn.textContent = `💬 [${String(sub.language || 'pt').toUpperCase()}] ${sub.release}`;
+      btn.onclick = async () => {
+        showChannelBanner('⏳ Baixando legenda...');
+        try {
+          const dl = await fetch(
+            SubtitleAndSkip.SUBTITLES_ENDPOINT + '?action=download&file_id=' + encodeURIComponent(sub.fileId)
+          );
+          if (!dl.ok) {
+            showChannelBanner('Falha ao baixar legenda.');
+            return;
+          }
+          const vtt = await dl.text();
+          mk21SubSyncState.rawVtt = vtt;
+          mk21SubSyncState.label = `${String(sub.language || 'PT').toUpperCase()} • OpenSubtitles`;
+          mk21AttachExternalVtt(vtt, mk21SubSyncState.label);
+          showChannelBanner('💬 Legenda OpenSubtitles ativada!');
+        } catch (err) {
+          showChannelBanner('Erro de rede ao baixar legenda.');
+        }
+      };
+      resultsBox.appendChild(btn);
+    });
+  } catch (e) {
+    resultsBox.innerHTML = '<p style="color:#f87171;font-size:13px;">Sem conexão com o serviço de legendas.</p>';
+  }
 }
 
 $('btnCloseAudioSubs').onclick = () => {
@@ -5578,7 +5811,7 @@ function renderSettings(sec) {
 
       <!-- ATUALIZAÇÃO DIRETA PELO APLICATIVO (OTA SMART TV) -->
       <h3 style="margin:0 0 16px 0; font-size:24px; border-bottom:1px solid #333; padding-bottom:8px;">Atualização de Sistema (OTA)</h3>
-      <div style="background:#1a1e2d; border:1px solid rgba(255,213,79,0.35); border-radius:12px; padding:18px 22px; display:flex; justify-content:space-between; align-items:center;">
+      <div style="background:#1a1e2d; border:1px solid rgba(255,213,79,0.35); border-radius:12px; padding:18px 22px; display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
         <div>
           <div style="font-size:14px; color:#ffd54f; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px;">Atualização Direta no Aplicativo</div>
           <div style="font-size:16px; color:#fff; margin-top:4px;">Versão Instalada: <strong>v${CURRENT_APP_VERSION}</strong> (LG webOS / Tizen)</div>
@@ -5588,12 +5821,55 @@ function renderSettings(sec) {
           🚀 Atualizar Agora
         </button>
       </div>
+
+      <!-- SINCRONIZAÇÃO EM NUVEM MULTIPLATAFORMA (ANDROID ↔ SMART TV ↔ WEB) -->
+      <h3 style="margin:0 0 16px 0; font-size:24px; border-bottom:1px solid #333; padding-bottom:8px;">☁️ Sincronização entre Dispositivos</h3>
+      <div style="background:#1a1e2d; border:1px solid rgba(255,255,255,0.12); border-radius:12px; padding:18px 22px; display:flex; flex-direction:column; gap:12px;">
+        <div style="font-size:14px; color:#cbd5e1;">Use o mesmo código <strong>MK21-XXXX-XXXX</strong> na TV, no Android e no Web para sincronizar Favoritos e Continuar Assistindo.</div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input id="inputCloudSyncCode" type="text" value="${escapeHtml(CloudSync.getStoredSyncCode() || '')}" placeholder="MK21-XXXX-XXXX"
+            style="flex:1 1 220px; padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:#0d1018; color:#ffd54f; font-weight:800; font-size:16px; letter-spacing:1px;">
+          <button id="btnCloudSyncOsk" type="button" class="ctrl-btn" tabindex="0">⌨️</button>
+          <button id="btnCloudSyncGen" type="button" class="ctrl-btn" tabindex="0">✨ Gerar Código</button>
+          <button id="btnCloudSyncNow" type="button" class="ctrl-btn primary" tabindex="0">🔄 Sincronizar Agora</button>
+        </div>
+        <div id="txtCloudSyncStatus" style="font-size:13px; color:#94a3b8;">${CloudSync.getLastSyncAt() ? ('Última sincronização: ' + new Date(CloudSync.getLastSyncAt()).toLocaleString('pt-BR')) : 'Nenhuma sincronização realizada neste aparelho.'}</div>
+      </div>
     `;
 
     const btnUp = $('btnOpenUpdateModal');
     if (btnUp) btnUp.onclick = () => openAppUpdateModal(true);
     const btnAccLogout = $('btnAccountLogout');
     if (btnAccLogout) btnAccLogout.onclick = () => logout();
+    const syncInput = $('inputCloudSyncCode');
+    if ($('btnCloudSyncOsk') && syncInput) {
+      $('btnCloudSyncOsk').onclick = () => mk21OpenOsk(syncInput);
+    }
+    if ($('btnCloudSyncGen') && syncInput) {
+      $('btnCloudSyncGen').onclick = () => {
+        const fresh = CloudSync.generateSyncCode();
+        syncInput.value = fresh;
+        CloudSync.setStoredSyncCode(fresh);
+        showChannelBanner('☁️ Código gerado: ' + fresh);
+      };
+    }
+    if ($('btnCloudSyncNow') && syncInput) {
+      $('btnCloudSyncNow').onclick = async () => {
+        const code = CloudSync.setStoredSyncCode(syncInput.value);
+        if (!CloudSync.isValidSyncCode(code)) {
+          if ($('txtCloudSyncStatus')) $('txtCloudSyncStatus').textContent = '❌ Código inválido. Use o formato MK21-XXXX-XXXX.';
+          return;
+        }
+        syncInput.value = code;
+        if ($('txtCloudSyncStatus')) $('txtCloudSyncStatus').textContent = '⏳ Sincronizando favoritos e progresso VOD...';
+        const res = await mk21RunCloudSync(true);
+        if ($('txtCloudSyncStatus')) {
+          $('txtCloudSyncStatus').textContent = res.ok
+            ? `✅ Sincronizado (${res.favCount} favoritos, ${res.continueCount} em andamento).`
+            : `❌ ${res.error}`;
+        }
+      };
+    }
   } else if (sec === 'speedtest') {
     runSpeedTest();
   } else if (sec === 'fonte') {
@@ -7579,7 +7855,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.8.0';
+const BASE_PACKAGE_VERSION = '2.9.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -11220,3 +11496,63 @@ if (document.readyState === 'loading') {
   mk21BindQualityButtons();
 }
 setTimeout(mk21BindQualityButtons, 1500);
+
+// ==========================================================================
+// SINCRONIZAÇÃO EM NUVEM MULTIPLATAFORMA (Smart TV <-> Android <-> Web)
+// ==========================================================================
+function mk21LookupCatalogItemByUrl(url) {
+  if (!url || typeof allCatalog === 'undefined') return null;
+  const buckets = [allCatalog.LIVE, allCatalog.MOVIE, allCatalog.SERIES];
+  for (let b = 0; b < buckets.length; b++) {
+    const arr = buckets[b];
+    if (!Array.isArray(arr)) continue;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i] && arr[i].url === url) return arr[i];
+    }
+  }
+  return null;
+}
+
+async function mk21RunCloudSync(manual) {
+  const code = CloudSync.getStoredSyncCode();
+  if (!CloudSync.isValidSyncCode(code)) {
+    return { ok: false, error: 'Nenhum código MK21 configurado.' };
+  }
+  const localPayload = CloudSync.buildSmartTvPayload(
+    typeof favoriteUrls !== 'undefined' ? favoriteUrls : new Set(),
+    typeof continueWatchingList !== 'undefined' ? continueWatchingList : [],
+    mk21LookupCatalogItemByUrl
+  );
+  const res = await CloudSync.syncWithServer(code, localPayload);
+  if (!res.ok) {
+    if (manual) showChannelBanner('❌ Sync falhou: ' + res.error);
+    return res;
+  }
+
+  const merged = CloudSync.applyMergedToSmartTv(
+    res.payload,
+    typeof favoriteUrls !== 'undefined' ? favoriteUrls : new Set(),
+    typeof continueWatchingList !== 'undefined' ? continueWatchingList : []
+  );
+
+  if (typeof favoriteUrls !== 'undefined') {
+    favoriteUrls.clear();
+    merged.favoriteUrls.forEach(u => favoriteUrls.add(u));
+    try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
+  }
+  if (typeof continueWatchingList !== 'undefined') {
+    continueWatchingList = merged.continueWatchingList;
+    try { localStorage.setItem('mk21_continue_watching', JSON.stringify(continueWatchingList)); } catch (e) {}
+  }
+  CloudSync.setLastSyncAt(Date.now());
+  try { renderItemsList(); } catch (e) {}
+  if (manual) {
+    showChannelBanner(`☁️ Sincronizado (${merged.favoriteUrls.size} favoritos, ${merged.continueWatchingList.length} VOD)`);
+  }
+  return {
+    ok: true,
+    favCount: merged.favoriteUrls.size,
+    continueCount: merged.continueWatchingList.length
+  };
+}
+

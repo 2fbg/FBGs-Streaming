@@ -2,14 +2,13 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
-## [Não publicado] — Paridade com o Saimo TV (Smart TV)
+## [2.9.1] - 2026-11-19
 
-- **Guia de Programação na Smart TV (LG webOS / Tizen):** nova aba **GUIA** com duas colunas — canais à esquerda (número, logo, nome e o que está *no ar*) e a grade do canal selecionado à direita (faixa de horário, selo **NO AR**, sinopse e barra de progresso). Navegação 100 % por D-pad (`▲▼` coluna ativa, `◀▶` troca de coluna, `OK` abre/sintoniza, `VOLTAR` fecha).
-- **EPG real (XMLTV) na Smart TV:** a TV não tinha **nenhum** carregador de XMLTV — `matchEPG()` era código morto e `epgCache` nunca era preenchido; só existia o `get_short_epg` do canal em foco e uma grade simulada. Agora o `xmltv.php` do servidor (ou o `url-tvg=` da playlist) é baixado, indexado por canal e usado no Guia e no HUD de zapping. Parser por regex (sem DOMParser) para não estourar a memória das TVs antigas, com teto de 250 000 programas; amarração por `tvg-id`/`epg_channel_id`, por id do XMLTV e por `<display-name>` normalizado, preservando o cache IndexedDB (`mk21_epg_tv_v1`).
-- **HUD de zapping:** cartão no topo durante a troca de canal com número (LCN), logo, selo **NO AR**, barra de progresso, **A SEGUIR** e contagem regressiva que atualiza a cada segundo, com auto-hide em 7 s. Acionado por `CH +/-`, digitação de número e pelo Guia.
-- **Teclado virtual (D-pad):** QWERTY PT-BR (com `ç` e acentos) para a busca, com 4 modos (`abc`/`ABC`/`123`/`#+=`), linha de controle (modo, espaço, backspace, limpar), seleção que avança como um teclado de celular e trava nas bordas do grid. Botão `⌨️` ao lado do campo de busca.
-- **Testes:** 3 módulos puros novos em `smart-tv/mk21-tv/core/` (`EpgGuide.js`, `ZapHud.js`, `OnScreenKeyboard.js`) com 42 testes unitários em Node, mais um teste de integração em Chromium que sobe um servidor IPTV simulado (Xtream + XMLTV), faz login no app de verdade e valida o Guia, a navegação por D-pad, o VOLTAR, o HUD de zapping e o teclado virtual. O Playwright é opcional — sem ele o teste é ignorado, não quebrado.
-- **Documentação:** `docs/SAIMO-TV-PARITY.md` (comparativo Saimo TV × MK21 e roteiro do que falta), `docs/MK21-FEATURE-INVENTORY.md` e `docs/SAIMO-TV-FEATURE-INVENTORY.md`.
+- **Sincronização em Nuvem Multiplataforma (`/api/sync`):** sincronização de **Favoritos** e **Continuar Assistindo (VOD)** entre **Android ↔ Smart TV ↔ Web** usando código de pareamento `MK21-XXXX-XXXX`, banco Neon Postgres (`user_sync_state`) e merge determinístico Last-Write-Wins (LWW) sem sobrescrever edições entre aparelhos.
+- **OpenSubtitles + Ajuste de Sincronia (`±0.5s`) + Pular Abertura/Créditos:** novo proxy `/api/subtitles` (conversão SRT → WebVTT + deslocamento de timestamps), busca de legendas online no diálogo Áudio/Legendas (Android e Smart TV) e botão flutuante **Pular Abertura / Pular Créditos** em filmes e séries.
+- **Guia de Programação & EPG Público (`/api/epg`):** nova aba **GUIA** em duas colunas e grade **Timeline** na Smart TV (D-pad 100%), carregador XMLTV por regex sem DOMParser, fallback público `/api/epg` (meuguia.tv) sem credenciais Xtream (Smart TV e Android), busca **No Ar Agora**, **LCN editável**, importação local de `.m3u`, mascaramento de URLs/credenciais e áudio independente Live/VOD + Smart Audio.
+- **HUD de zapping & Teclado Virtual D-pad:** cartão de zapping com contagem regressiva e teclado QWERTY PT-BR (4 modos) na Smart TV.
+- **Estabilidade Android Compose & CI:** `SafeDialog` + `SafeAndroidTextToolbar` eliminando crashes de `FloatingActionMode` no `DecorView`; guarda no `validate.yml` para bumps de versão antes da publicação do `release.yml`; bump multiplataforma sincronizado para **v2.9.1 (Code 291)**.
 
 ## [2.9.0] - 2026-11-15
 

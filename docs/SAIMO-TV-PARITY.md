@@ -161,9 +161,9 @@ do Saimo TV · `⬜` = falta no MK21
 | Catálogo de filmes/séries com trilhas (rails) e TMDB | ✅ (opcional) |
 | Filtros por ano, faixa etária, nota e ordenação | 🟡 (ordem e filtro por categoria) |
 | Ficha do título (sinopse, elenco, relate) | ⬜ |
-| Pular abertura / recapitular / créditos | ⬜ |
-| Legendas via OpenSubtitles com ajuste de sincronia | 🟡 (escolha de faixa, sem OpenSubtitles) |
-| Retomar VOD de onde parou | ✅ (`mk21_vod_resume_progress`) |
+| Pular abertura / créditos | 🆕 (botão flutuante em VOD na Smart TV e Android) |
+| Legendas via OpenSubtitles com ajuste de sincronia | 🆕 (`/api/subtitles` + busca e ajuste `±0.5s` em Smart TV e Android) |
+| Retomar VOD de onde parou | ✅ (`mk21_vod_resume_progress` + sincronizado na nuvem) |
 | "Continue assistindo" com barra de progresso | ✅ |
 | Addons (Stremio) / Debrid | ⬜ |
 | Download offline | ⬜ |
@@ -191,8 +191,9 @@ do Saimo TV · `⬜` = falta no MK21
 | Fallback EPG público brasileiro sem credencial (`/api/epg`) | Android & TV | 🆕 |
 | Controle parental (PIN + trava de categoria adulta) | Web | ✅ (`web/parental.js` + `parental.js`) |
 | Numeração de canal (LCN) editável por servidor | Smart TV | 🆕 |
+| Sincronização em nuvem (Favoritos + Continuar Assistindo via `MK21-XXXX-XXXX`) | Android, TV & Web | 🆕 (`/api/sync` + Neon Postgres LWW) |
+| Legendas OpenSubtitles + ajuste de sincronia (`±0.5s`) + Pular Abertura/Créditos | Android & TV | 🆕 (`/api/subtitles` + `SubtitleAndSkip`) |
 | Fluxo de licença/ativação unificado | Web e TV | ⬜ |
-| Sincronização entre celular / TV / web | Todas | ⬜ |
 | Perfis de usuário (10 perfis) | Todas | ⬜ |
 | Catch-up / timeshift / gravação | Todas | ⬜ |
 
@@ -201,10 +202,8 @@ do Saimo TV · `⬜` = falta no MK21
 ## 3. Roteiro restante (baixa prioridade)
 
 1. **Perfis de usuário** com prefixo de chave por perfil.
-2. **Legendas OpenSubtitles** com ajuste de sincronia.
-3. **Sync entre plataformas** (favoritos / continuar assistindo / progresso).
-4. **Pular abertura / recapitular / créditos** nos VOD.
-5. **Tela de Ficha do canal / Rádios / Eventos** na TV.
+2. **Tela de Ficha do canal / Rádios / Eventos** na TV.
+3. **Catch-up / Timeshift** nos servidores Xtream com suporte a archive.
 
 ---
 
