@@ -6,11 +6,19 @@ import com.example.data.parser.XmltvEpgParser
 import com.example.data.parser.XmltvProgramme
 import java.text.Normalizer
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+enum class CopilotEpgDayBucket {
+    LIVE_NOW,
+    TODAY,
+    TOMORROW,
+    THIS_WEEK
+}
+
 /**
- * Canal da playlist do usuário correlacionado com um programa real do EPG (ao vivo agora ou em breve).
+ * Canal da playlist do usuário correlacionado com um programa real do EPG (ao vivo agora, hoje ou nos próximos 7 dias).
  */
 data class CopilotEpgChannelMatch(
     val item: PlaylistItem,
@@ -21,11 +29,13 @@ data class CopilotEpgChannelMatch(
     val progressPercent: Float,
     val remainingMinutes: Int,
     val startMs: Long,
+    val dayBucket: CopilotEpgDayBucket = if (isLiveNow) CopilotEpgDayBucket.LIVE_NOW else CopilotEpgDayBucket.TODAY,
+    val dayLabel: String = if (isLiveNow) "NO AR AGORA" else "HOJE",
     val qualityBadge: String? = CopilotEpgMatcher.detectQualityBadge(item.name)
 )
 
 /**
- * Resultado consolidado da varredura de EPG real para uma consulta no MK21 AI Copilot.
+ * Resultado consolidado da varredura de EPG real (janela completa de 7 dias / 1 semana) para o MK21 AI Copilot.
  */
 data class CopilotEpgSearchResult(
     val detectedTerms: List<String>,
@@ -55,7 +65,7 @@ data class CopilotEpgQueryIntent(
 }
 
 /**
- * Motor puro e determinístico para busca de times, jogos e programação ao vivo no EPG real (XMLTV / Short EPG / Público).
+ * Motor puro e determinístico para busca de times, jogos e programação na janela de 7 dias (1 semana) do EPG real.
  */
 object CopilotEpgMatcher {
 
@@ -63,8 +73,8 @@ object CopilotEpgMatcher {
     private val NON_ALNUM_REGEX = Regex("[^a-z0-9\\s-]")
     private val MULTI_SPACE_REGEX = Regex("\\s+")
 
-    // Janela futura de 18h para exibir jogos "EM BREVE" além dos que já estão "NO AR AGORA".
-    private const val UPCOMING_WINDOW_MS = 18L * 60L * 60L * 1000L
+    // Janela futura completa de 7 dias (1 semana) para cobrir toda a grade XMLTV/EPG semanal.
+    const val UPCOMING_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
 
     private data class TeamAlias(
         val canonical: String,
@@ -146,19 +156,20 @@ object CopilotEpgMatcher {
 
     private val LIVE_NOW_KEYWORDS = setOf(
         "agora", "ao vivo", "no ar", "passando", "passa", "vai passar", "hoje",
-        "epg", "grade", "programacao", "que canal", "qual canal", "onde passa",
-        "onde assistir", "sintonizar", "transmissao", "transmite"
+        "amanha", "semana", "proximos", "epg", "grade", "programacao", "que canal",
+        "qual canal", "onde passa", "onde assistir", "sintonizar", "transmissao", "transmite"
     )
 
     private val STOP_WORDS = setOf(
         "qual", "quais", "canal", "canais", "onde", "passa", "passando", "passar",
-        "assistir", "ver", "agora", "hoje", "jogo", "jogos", "time", "times",
-        "futebol", "partida", "partidas", "com", "para", "pra", "que", "esta",
-        "estao", "vai", "vao", "tem", "dos", "das", "nos", "nas", "pelo", "pela",
-        "sobre", "como", "quem", "epg", "grade", "programacao", "vivo", "lista",
-        "buscar", "busca", "trazer", "traz", "mostra", "mostrar", "quero", "meu",
-        "minha", "aqui", "algum", "alguma", "melhor", "melhores", "proximo",
-        "proximos", "filme", "filmes", "serie", "series"
+        "assistir", "ver", "agora", "hoje", "amanha", "semana", "dias", "dia",
+        "jogo", "jogos", "time", "times", "futebol", "partida", "partidas",
+        "com", "para", "pra", "que", "esta", "estao", "vai", "vao", "tem",
+        "dos", "das", "nos", "nas", "pelo", "pela", "sobre", "como", "quem",
+        "epg", "grade", "programacao", "vivo", "lista", "buscar", "busca",
+        "trazer", "traz", "mostra", "mostrar", "quero", "meu", "minha", "aqui",
+        "algum", "alguma", "melhor", "melhores", "proximo", "proximos", "filme",
+        "filmes", "serie", "series"
     )
 
     private val PRIORITY_SPORTS_CHANNEL_TOKENS = listOf(
@@ -225,8 +236,6 @@ object CopilotEpgMatcher {
         val isSportsIntent = canonicalTeams.isNotEmpty() || SPORTS_KEYWORDS.any { containsWholeTerm(norm, it) }
         val isEpgIntent = isLiveNowIntent || norm.contains("epg") || norm.contains("programacao") || norm.contains("grade")
 
-        // Se o usuário digitou um time não listado (ex: "Novorizontino") ou um programa específico (ex: "Jornal Nacional"),
-        // extrai palavras-chave relevantes ignorando stopwords.
         if (canonicalTeams.isEmpty()) {
             norm.split(" ")
                 .asSequence()
@@ -275,6 +284,7 @@ object CopilotEpgMatcher {
         }
         if (upper.contains("H265") || upper.contains("HEVC")) score += 2
         if (upper.contains("BACKUP") || upper.contains("ALT") || upper.contains("BKP")) score -= 6
+        if (channelName.any { it == '¹' || it == '²' || it == '³' }) score -= 2
         return score
     }
 
@@ -285,6 +295,30 @@ object CopilotEpgMatcher {
         return PRIORITY_SPORTS_CHANNEL_TOKENS.any { token ->
             upperName.contains(token) || upperCat.contains(token)
         }
+    }
+
+    /**
+     * Deduplica canais repetidos da mesma família (ex: GLOBO SP 4K, FHD, HD, SD, ALT),
+     * mantendo sempre o representante de melhor qualidade e ordenando por prioridade esportiva.
+     */
+    fun deduplicateChannelsByFamily(
+        channels: List<PlaylistItem>,
+        maxCount: Int = 6
+    ): List<PlaylistItem> {
+        val sorted = channels.sortedWith(
+            compareByDescending<PlaylistItem> { priorityChannelWeight(it) }
+                .thenByDescending { qualityScore(it.name) }
+        )
+        val picked = ArrayList<PlaylistItem>(maxCount)
+        val seenFamilies = HashSet<String>()
+        for (ch in sorted) {
+            if (picked.size >= maxCount) break
+            val family = canonicalChannelFamily(ch.name)
+            if (family.isNotEmpty() && seenFamilies.add(family)) {
+                picked.add(ch)
+            }
+        }
+        return picked
     }
 
     /**
@@ -337,20 +371,53 @@ object CopilotEpgMatcher {
     }
 
     private fun canonicalChannelFamily(name: String): String {
-        val norm = XmltvEpgParser.normalizeChannelKey(name)
+        val cleanSuperscripts = name
+            .replace("¹", "")
+            .replace("²", "")
+            .replace("³", "")
+        val norm = XmltvEpgParser.normalizeChannelKey(cleanSuperscripts)
         val stripped = XmltvEpgParser.stripQualityTokens(norm)
         return stripped.ifEmpty { norm }
     }
 
+    fun classifyDayBucketAndLabel(
+        startMs: Long,
+        isLiveNow: Boolean,
+        nowMs: Long,
+        locale: Locale = Locale("pt", "BR")
+    ): Pair<CopilotEpgDayBucket, String> {
+        if (isLiveNow) return CopilotEpgDayBucket.LIVE_NOW to "NO AR AGORA"
+
+        val nowCal = Calendar.getInstance().apply { timeInMillis = nowMs }
+        val startCal = Calendar.getInstance().apply { timeInMillis = startMs }
+
+        val nowDayKey = nowCal.get(Calendar.YEAR) * 1000 + nowCal.get(Calendar.DAY_OF_YEAR)
+        val startDayKey = startCal.get(Calendar.YEAR) * 1000 + startCal.get(Calendar.DAY_OF_YEAR)
+
+        if (startDayKey == nowDayKey) {
+            return CopilotEpgDayBucket.TODAY to "HOJE"
+        }
+
+        val tomorrowCal = (nowCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+        val tomorrowKey = tomorrowCal.get(Calendar.YEAR) * 1000 + tomorrowCal.get(Calendar.DAY_OF_YEAR)
+        if (startDayKey == tomorrowKey) {
+            return CopilotEpgDayBucket.TOMORROW to "AMANHÃ"
+        }
+
+        val dayFmt = SimpleDateFormat("EEE dd/MM", locale)
+        val formatted = dayFmt.format(Date(startMs)).replace(".", "").uppercase(locale)
+        return CopilotEpgDayBucket.THIS_WEEK to formatted
+    }
+
     /**
-     * Varre a lista de canais ao vivo cruzando com a programação real do EPG fornecida por [programmesProvider].
+     * Varre a lista de canais ao vivo cruzando com a programação real do EPG (janela completa de 7 dias).
      */
     fun matchProgrammes(
         prompt: String,
         channels: List<PlaylistItem>,
         nowMs: Long = System.currentTimeMillis(),
-        maxLiveResults: Int = 6,
-        maxUpcomingResults: Int = 6,
+        maxLiveResults: Int = 8,
+        maxUpcomingResults: Int = 16,
         programmesProvider: (PlaylistItem) -> List<XmltvProgramme>
     ): CopilotEpgSearchResult {
         val intent = extractIntent(prompt)
@@ -380,7 +447,6 @@ object CopilotEpgMatcher {
                 var relevance = 0
 
                 if (intent.canonicalTeams.isNotEmpty()) {
-                    // Busca específica por time(s): o time precisa aparecer no título, descrição ou nome do canal.
                     var matchedTeamCount = 0
                     for (teamCanonical in intent.canonicalTeams) {
                         val aliases = TEAM_ALIASES.firstOrNull { it.canonical == teamCanonical }?.aliases
@@ -400,13 +466,11 @@ object CopilotEpgMatcher {
                         }
                     }
                     if (matchedTeamCount == 0) continue
-                    // Bônus se ambos os times de um confronto ("Flamengo x Palmeiras") aparecem no programa
                     if (intent.canonicalTeams.size >= 2 && matchedTeamCount >= 2) {
                         relevance += 100
                     }
                     if (isSportsChannel) relevance += 15
                 } else if (hasSpecificTerms && !intent.isSportsIntent) {
-                    // Busca genérica por programa/palavra-chave no EPG (ex: "Jornal Nacional", "BBB")
                     var hits = 0
                     for (term in intent.searchTerms) {
                         if (containsWholeTerm(normTitle, term)) {
@@ -422,7 +486,6 @@ object CopilotEpgMatcher {
                     }
                     if (hits == 0) continue
                 } else {
-                    // Busca ampla de esportes/jogos passando agora ("jogos passando agora", "futebol agora")
                     val combined = "$normTitle $normDesc $normCat"
                     val hasSpecificSportsTerm = intent.searchTerms.any { term ->
                         containsWholeTerm(normTitle, term) || containsWholeTerm(normDesc, term)
@@ -442,6 +505,12 @@ object CopilotEpgMatcher {
                     }
                 }
 
+                val (dayBucket, dayLabel) = classifyDayBucketAndLabel(
+                    startMs = prog.startMs,
+                    isLiveNow = isLive,
+                    nowMs = nowMs
+                )
+
                 val match = CopilotEpgChannelMatch(
                     item = channel,
                     programTitle = prog.title.trim(),
@@ -450,7 +519,9 @@ object CopilotEpgMatcher {
                     isLiveNow = isLive,
                     progressPercent = if (isLive) prog.progressAt(nowMs) else 0f,
                     remainingMinutes = if (isLive) prog.remainingMinutesAt(nowMs) else 0,
-                    startMs = prog.startMs
+                    startMs = prog.startMs,
+                    dayBucket = dayBucket,
+                    dayLabel = dayLabel
                 )
                 rawMatches.add(
                     ScoredMatch(
@@ -479,9 +550,15 @@ object CopilotEpgMatcher {
             .take(maxLiveResults)
             .map { it.match }
 
+        // Para os próximos 7 dias, ordena cronologicamente (mais cedo primeiro)
         val upcomingMatches = deduped
             .filter { !it.match.isLiveNow }
-            .distinctBy { "${it.match.item.url}|${it.match.startMs}" }
+            .sortedWith(
+                compareBy<ScoredMatch> { it.match.startMs }
+                    .thenByDescending { it.relevance }
+                    .thenByDescending { it.quality }
+            )
+            .distinctBy { "${canonicalChannelFamily(it.match.item.name)}|${it.match.startMs}" }
             .take(maxUpcomingResults)
             .map { it.match }
 
@@ -503,16 +580,16 @@ object CopilotEpgMatcher {
     }
 
     /**
-     * Formata o resultado real do EPG para injeção no prompt do Gemini.
+     * Formata o resultado real do EPG semanal (7 dias) para injeção no prompt do Gemini.
      */
     fun buildEpgPromptContext(
         result: CopilotEpgSearchResult?,
         nowMs: Long = System.currentTimeMillis()
     ): String {
         if (result == null) return ""
-        val nowTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nowMs))
+        val nowTime = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(nowMs))
         val sb = StringBuilder()
-        sb.appendLine("\n=== PROGRAMAÇÃO EPG REAL CONSULTADA AGORA ($nowTime) ===")
+        sb.appendLine("\n=== PROGRAMAÇÃO EPG REAL DE 7 DIAS CONSULTADA AGORA ($nowTime) ===")
         if (result.detectedTerms.isNotEmpty()) {
             sb.appendLine("Termos/Times detectados: ${result.detectedTerms.joinToString(", ")}")
         }
@@ -527,18 +604,18 @@ object CopilotEpgMatcher {
         }
 
         if (result.upcomingMatches.isNotEmpty()) {
-            sb.appendLine("\n[EM BREVE NA GRADE EPG (próximas 18h)]:")
+            sb.appendLine("\n[AGENDA DOS PRÓXIMOS 7 DIAS NO EPG]:")
             result.upcomingMatches.forEach { m ->
                 val quality = m.qualityBadge?.let { " [$it]" }.orEmpty()
-                sb.appendLine("- ${m.item.name}$quality (${m.item.category}) → \"${m.programTitle}\" (${m.timeRange})")
+                sb.appendLine("- [${m.dayLabel} ${m.timeRange}] ${m.item.name}$quality → \"${m.programTitle}\"")
             }
         }
 
         if (!result.hasMatches) {
             if (result.channelsWithEpgCount > 0) {
-                sb.appendLine("\nNenhuma transmissão com esse termo/time foi encontrada passando agora ou nas próximas 18h na grade EPG consultada.")
+                sb.appendLine("\nNenhuma transmissão com esse termo/time foi encontrada na grade EPG dos próximos 7 dias.")
             } else {
-                sb.appendLine("\nA grade EPG dos canais ainda não retornou programação detalhada para este servidor neste momento.")
+                sb.appendLine("\nA grade EPG semanal ainda está sendo sincronizada ou não retornou programação detalhada para este servidor.")
             }
         }
         return sb.toString()

@@ -257,6 +257,48 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Consulta `/api/license/trial` usando o Virtual MAC determinístico do aparelho.
+     * Impede que desinstalar e reinstalar o APK zere o período de avaliação de 5 dias,
+     * preservando o `first_seen_at` original gravado no servidor e atualizando o piso do relógio.
+     */
+    private fun syncTrialAnchorWithServer() {
+        if (preferencesService.isLicenseValid()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val payloadJson = JSONObject().apply {
+                    put("deviceId", virtualMacAddress)
+                }.toString()
+
+                val request = Request.Builder()
+                    .url("$LICENSE_API_BASE_URL/trial")
+                    .post(payloadJson.toRequestBody(JSON_MEDIA_TYPE))
+                    .build()
+
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use
+                    val rawBody = response.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(rawBody) }.getOrNull() ?: return@use
+                    if (!json.optBoolean("ok", false)) return@use
+
+                    val firstSeenAtMs = json.optLong("firstSeenAtMs", 0L)
+                    val serverNowMs = json.optLong("serverNowMs", 0L)
+                    if (firstSeenAtMs > 0L || serverNowMs > 0L) {
+                        preferencesService.anchorTrialFromServer(
+                            firstSeenAtMs = firstSeenAtMs,
+                            serverNowMs = serverNowMs
+                        )
+                        withContext(Dispatchers.Main) {
+                            syncLicenseState()
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+                // Silencioso offline: mantém contagem local até haver conexão
+            }
+        }
+    }
+
     companion object {
         private const val LICENSE_API_BASE_URL = "https://bgstreaming.vercel.app/api/license"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -576,6 +618,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 ) { emptyList() }
             }
 
+            // 0. Se o índice XMLTV de 7 dias ainda não estiver carregado na sessão, tenta carregar agora (timeout enxuto)
+            if (com.example.data.service.AndroidEpgManager.xmltvIndex.value == null) {
+                val creds = resolveActiveXtreamCredentials()
+                val m3uXmltv = com.example.data.service.AndroidEpgManager.discoveredM3uXmltvUrl
+                if (creds != null || !m3uXmltv.isNullOrBlank()) {
+                    withTimeoutOrNull(4_500L) {
+                        com.example.data.service.AndroidEpgManager.loadXmltv(
+                            baseUrl = creds?.first.orEmpty(),
+                            username = creds?.second.orEmpty(),
+                            password = creds?.third.orEmpty(),
+                            force = false,
+                            client = okHttpClient
+                        )
+                    }
+                }
+            }
+
             // 1. Verifica quais canais prioritários (esportes e TV aberta) ainda estão sem EPG em cache/XMLTV
             val priorityChannels = com.example.ai.CopilotEpgMatcher.selectPriorityEpgChannels(
                 channels = candidates,
@@ -608,7 +667,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // 3. Cruza todos os canais ao vivo com o EPG real já indexado/hidratado
+            // 3. Cruza todos os canais ao vivo com o EPG real de 7 dias já indexado/hidratado
             com.example.ai.CopilotEpgMatcher.matchProgrammes(
                 prompt = prompt,
                 channels = candidates,
@@ -1235,8 +1294,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             preferencesService.trialStartDate = System.currentTimeMillis()
         }
 
+        // Ancora o trial no servidor (impede reset ao desinstalar/reinstalar)
+        syncTrialAnchorWithServer()
+
         // Silent background license refresh when fewer than 30 days remain
         refreshLicenseIfNeeded()
+
+        // Pré-carrega a grade XMLTV de 7 dias em background para busca instantânea no Guia e Copilot
+        viewModelScope.launch {
+            delay(1500L)
+            loadXmltvForActiveServer(force = false)
+        }
         
         // Autoload current configurations or do silent caching check
         viewModelScope.launch {

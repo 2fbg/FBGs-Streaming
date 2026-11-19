@@ -17,8 +17,16 @@ private const val TAG = "GeminiAiViewModel"
 
 sealed interface GeminiUiState {
     data object Idle : GeminiUiState
-    data class Loading(val statusLabel: String = "Consultando Gemini...") : GeminiUiState
-    data class Streaming(val text: String) : GeminiUiState
+    data class Loading(
+        val statusLabel: String = "Consultando Gemini...",
+        val epgPreviewMatches: List<CopilotEpgChannelMatch> = emptyList()
+    ) : GeminiUiState
+
+    data class Streaming(
+        val text: String,
+        val epgPreviewMatches: List<CopilotEpgChannelMatch> = emptyList()
+    ) : GeminiUiState
+
     data class Success(val text: String) : GeminiUiState
     data class Error(val message: String) : GeminiUiState
 }
@@ -42,7 +50,7 @@ class GeminiAiViewModel(
         listOf(
             CopilotMessage(
                 sender = "gemini",
-                text = "Olá! Sou o MK21 AI Copilot. Digite o nome de um time (ex: **Flamengo**, **Palmeiras**, **Corinthians**) para eu buscar os canais com **EPG ao vivo agora**, ou peça recomendações de filmes e séries da sua lista."
+                text = "Olá! Sou o MK21 AI Copilot. Digite o nome de um time (ex: **Palmeiras**, **Flamengo**, **Corinthians**) para ver os canais com **EPG real de 7 dias** (agora, hoje e na semana), ou peça recomendações de filmes e séries."
             )
         )
     )
@@ -68,12 +76,12 @@ class GeminiAiViewModel(
         currentJob = viewModelScope.launch {
             val shouldSearchEpg = epgSearcher != null && CopilotEpgMatcher.shouldSearchEpg(trimmedPrompt)
             _uiState.value = GeminiUiState.Loading(
-                statusLabel = if (shouldSearchEpg) "Consultando EPG ao vivo..." else "Consultando catálogo..."
+                statusLabel = if (shouldSearchEpg) "Consultando EPG de 7 dias..." else "Consultando catálogo..."
             )
             val accumulated = StringBuilder()
 
             try {
-                // Executa busca de catálogo e varredura de EPG real em paralelo para menor latência.
+                // Executa busca de catálogo e varredura de EPG semanal em paralelo para resposta rápida.
                 val (targetCatalog, epgResult) = coroutineScope {
                     val catalogDeferred = async {
                         if (relevantCatalogFetcher != null) {
@@ -104,15 +112,19 @@ class GeminiAiViewModel(
                     catalogDeferred.await() to epgDeferred.await()
                 }
 
+                val instantEpgMatches = epgResult?.allMatches?.take(18).orEmpty()
+
+                // Já exibe imediatamente os cartões de EPG encontrados enquanto o Gemini faz streaming do resumo!
                 _uiState.value = GeminiUiState.Loading(
-                    statusLabel = if (epgResult?.hasMatches == true) {
-                        "EPG encontrado • Gerando resposta..."
+                    statusLabel = if (instantEpgMatches.isNotEmpty()) {
+                        "${instantEpgMatches.size} transmissões no EPG • Gerando resumo..."
                     } else {
                         "Gerando resposta..."
-                    }
+                    },
+                    epgPreviewMatches = instantEpgMatches
                 )
 
-                // Stream response token-by-token com contexto real de EPG
+                // Stream response token-by-token com contexto real de EPG semanal
                 aiService.streamCopilotResponse(
                     userPrompt = trimmedPrompt,
                     currentPlaying = currentPlaying,
@@ -120,39 +132,42 @@ class GeminiAiViewModel(
                     epgSearchResult = epgResult
                 ).collect { chunk ->
                     accumulated.append(chunk)
-                    _uiState.value = GeminiUiState.Streaming(accumulated.toString())
+                    _uiState.value = GeminiUiState.Streaming(
+                        text = accumulated.toString(),
+                        epgPreviewMatches = instantEpgMatches
+                    )
                 }
 
                 val finalOutput = accumulated.toString().trim()
                 if (finalOutput.isNotEmpty()) {
                     _uiState.value = GeminiUiState.Success(finalOutput)
 
-                    val epgMatches = epgResult?.allMatches?.take(8).orEmpty()
-                    val epgUrls = epgMatches.map { it.item.url }.toHashSet()
+                    val epgUrls = instantEpgMatches.map { it.item.url }.toHashSet()
 
-                    // Só exibe sugestões genéricas extras quando não há match direto no EPG ou como complemento sem duplicação
-                    val matchedSuggestions = if (epgMatches.isNotEmpty()) {
+                    // Deduplica sugestões por família de canal para nunca repetir 6 cópias de GLOBO SP (4K/FHD/HD/SD)
+                    val matchedSuggestions = if (instantEpgMatches.isNotEmpty()) {
                         emptyList()
                     } else {
                         val isSports = CopilotEpgMatcher.isSportsOrTeamPrompt(trimmedPrompt)
                         if (isSports) {
-                            targetCatalog
-                                .filter { CopilotEpgMatcher.isSportsOrOpenBroadcastChannel(it) && it.url !in epgUrls }
-                                .sortedByDescending { CopilotEpgMatcher.qualityScore(it.name) }
-                                .distinctBy { it.name }
-                                .take(5)
+                            CopilotEpgMatcher.deduplicateChannelsByFamily(
+                                channels = targetCatalog.filter {
+                                    CopilotEpgMatcher.isSportsOrOpenBroadcastChannel(it) && it.url !in epgUrls
+                                },
+                                maxCount = 6
+                            )
                         } else {
                             val words = CopilotEpgMatcher.normalize(trimmedPrompt)
                                 .split(" ")
                                 .filter { it.length >= 3 }
-                            targetCatalog
-                                .filter { item ->
+                            CopilotEpgMatcher.deduplicateChannelsByFamily(
+                                channels = targetCatalog.filter { item ->
                                     val normName = CopilotEpgMatcher.normalize(item.name)
                                     val normCat = CopilotEpgMatcher.normalize(item.category)
                                     words.any { kw -> normName.contains(kw) || normCat.contains(kw) }
-                                }
-                                .distinctBy { it.name }
-                                .take(4)
+                                },
+                                maxCount = 5
+                            )
                         }
                     }
 
@@ -160,13 +175,12 @@ class GeminiAiViewModel(
                         sender = "gemini",
                         text = finalOutput,
                         suggestedItems = matchedSuggestions,
-                        epgMatches = epgMatches
+                        epgMatches = instantEpgMatches
                     )
                 } else {
                     _uiState.value = GeminiUiState.Error("O modelo não retornou conteúdo.")
                 }
             } catch (e: CancellationException) {
-                // Mandatory: re-throw to allow cooperative coroutine cancellation
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Gemini copilot query failed", e)
@@ -212,7 +226,7 @@ class GeminiAiViewModel(
         _messages.value = listOf(
             CopilotMessage(
                 sender = "gemini",
-                text = "Conversa reiniciada. Digite um time para buscar no EPG ao vivo ou pergunte sobre canais, filmes e séries!"
+                text = "Conversa reiniciada. Digite um time para consultar a grade EPG de 7 dias ou pergunte sobre canais, filmes e séries!"
             )
         )
     }

@@ -115,14 +115,14 @@ class GeminiAiService {
         val lower = prompt.lowercase()
         val sb = StringBuilder()
 
-        // 0. Prioridade absoluta: resultados reais do EPG (NO AR AGORA / EM BREVE)
+        // 0. Prioridade absoluta: resultados reais do EPG semanal (NO AR AGORA / HOJE / PRÓXIMOS 7 DIAS)
         if (epgSearchResult != null && epgSearchResult.hasMatches) {
             val subject = if (epgSearchResult.detectedTerms.isNotEmpty()) {
                 epgSearchResult.detectedTerms.joinToString(" / ")
             } else {
-                "Esportes e Programação Ao Vivo"
+                "Esportes e Programação da Semana"
             }
-            sb.appendLine("📡 **Grade EPG Real — $subject:**\n")
+            sb.appendLine("📡 **Grade EPG Real (7 dias) — $subject:**\n")
 
             if (epgSearchResult.liveNowMatches.isNotEmpty()) {
                 sb.appendLine("🔴 **NO AR AGORA:**")
@@ -134,15 +134,15 @@ class GeminiAiService {
             }
 
             if (epgSearchResult.upcomingMatches.isNotEmpty()) {
-                sb.appendLine("🕒 **EM BREVE NO EPG:**")
-                epgSearchResult.upcomingMatches.take(4).forEach { m ->
+                sb.appendLine("📅 **PRÓXIMOS NA GRADE (ATÉ 7 DIAS):**")
+                epgSearchResult.upcomingMatches.take(6).forEach { m ->
                     val quality = m.qualityBadge?.let { " [$it]" }.orEmpty()
-                    sb.appendLine("• **${m.item.name}**$quality — ${m.programTitle} (${m.timeRange})")
+                    sb.appendLine("• **${m.dayLabel} ${m.timeRange}** · **${m.item.name}**$quality — ${m.programTitle}")
                 }
                 sb.appendLine()
             }
 
-            sb.appendLine("▶ *Toque em qualquer canal abaixo para abrir a transmissão ao vivo imediatamente.*")
+            sb.appendLine("▶ Use os filtros **Agora / Hoje / 7 dias** abaixo e toque em qualquer canal para assistir.")
             return sb.toString().trim()
         }
 
@@ -153,8 +153,8 @@ class GeminiAiService {
         if (isMatchQuery) {
             if (epgSearchResult != null && epgSearchResult.channelsWithEpgCount > 0 && epgSearchResult.detectedTerms.isNotEmpty()) {
                 val targetName = epgSearchResult.detectedTerms.joinToString(", ")
-                sb.appendLine("📡 **Consulta EPG ao vivo para $targetName:**")
-                sb.appendLine("Verifiquei ${epgSearchResult.channelsWithEpgCount} canais com grade EPG ativa e não há nenhuma transmissão de **$targetName** passando neste momento ou nas próximas 18h.\n")
+                sb.appendLine("📡 **Consulta EPG (7 dias) para $targetName:**")
+                sb.appendLine("Verifiquei ${epgSearchResult.channelsWithEpgCount} canais com grade EPG ativa e não há nenhuma transmissão de **$targetName** agendada nos próximos 7 dias no EPG deste servidor.\n")
             }
 
             // Identificação específica do clássico ou times
@@ -193,24 +193,19 @@ class GeminiAiService {
                 sb.appendLine("Os jogos de futebol são transmitidos pelos canais Premiere, SporTV, ESPN, CazéTV, Globo e Record.\n")
             }
 
-            // Filtrar canais de esportes REAIS presentes na lista do usuário
-            val sportsChannels = catalog.filter {
-                val n = it.name.uppercase()
-                val c = it.category.uppercase()
-                n.contains("PREMIERE") || n.contains("SPORTV") || n.contains("ESPN") ||
-                n.contains("GLOBO") || n.contains("CAZÉ") || n.contains("CAZE") ||
-                n.contains("TNT") || n.contains("BAND") || n.contains("RECORD") ||
-                n.contains("COMBATE") || n.contains("DAZN") ||
-                c.contains("ESPORTE") || c.contains("FUTEBOL") || c.contains("SPORTS")
-            }
+            // Filtrar e deduplicar por família (evita listar 6 cópias do mesmo canal em SD/HD/FHD/4K)
+            val sportsChannels = CopilotEpgMatcher.deduplicateChannelsByFamily(
+                channels = catalog.filter { CopilotEpgMatcher.isSportsOrOpenBroadcastChannel(it) },
+                maxCount = 8
+            )
 
             if (sportsChannels.isNotEmpty()) {
-                sb.appendLine("📺 **Canais esportivos disponíveis na sua lista para sintonizar agora:**")
-                sportsChannels.distinctBy { it.name }.take(8).forEach { item ->
+                sb.appendLine("📺 **Principais canais esportivos da sua lista (melhor qualidade):**")
+                sportsChannels.forEach { item ->
                     val badge = CopilotEpgMatcher.detectQualityBadge(item.name)?.let { " [$it]" }.orEmpty()
-                    sb.appendLine("• **${item.name}**$badge — *${item.category}*")
+                    sb.appendLine("• **${item.name}**$badge — ${item.category}")
                 }
-                sb.appendLine("\n💡 *Dica:* Toque no canal abaixo para iniciar a transmissão imediatamente!")
+                sb.appendLine("\n💡 Dica: toque em qualquer canal abaixo para sintonizar imediatamente.")
             } else {
                 sb.appendLine("📺 **Dica de sintonização:** Vá para a aba **Ao Vivo** e acesse a categoria **Esportes / Premiere** para sintonizar o sinal ao vivo.")
             }

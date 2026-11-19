@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.ai.CopilotEpgDayBucket
 import com.example.ai.CopilotEpgMatcher
 import com.example.data.model.ContentType
 import com.example.data.model.PlaylistItem
@@ -77,7 +78,7 @@ class CopilotEpgMatcherTest {
         assertTrue(result.liveNowMatches.any { it.item.name == "SporTV 4K" && it.qualityBadge == "4K" })
         assertFalse(result.liveNowMatches.any { it.item.name == "SporTV SD" })
         assertTrue(result.liveNowMatches.any { it.item.name == "Premiere Clubes FHD" })
-        assertTrue(result.liveNowMatches.all { it.isLiveNow && it.remainingMinutes == 60 })
+        assertTrue(result.liveNowMatches.all { it.isLiveNow && it.remainingMinutes == 60 && it.dayBucket == CopilotEpgDayBucket.LIVE_NOW })
 
         assertEquals(1, result.upcomingMatches.size)
         assertEquals("ESPN HD", result.upcomingMatches.first().item.name)
@@ -86,8 +87,61 @@ class CopilotEpgMatcherTest {
         val promptContext = CopilotEpgMatcher.buildEpgPromptContext(result, baseNowMs)
         assertTrue(promptContext.contains("[NO AR AGORA"))
         assertTrue(promptContext.contains("SporTV 4K"))
-        assertTrue(promptContext.contains("[EM BREVE"))
+        assertTrue(promptContext.contains("PRÓXIMOS 7 DIAS"))
         assertTrue(promptContext.contains("ESPN HD"))
+    }
+
+    @Test
+    fun matchProgrammes_coversFullSevenDayWeekWindowAndExcludesBeyondSevenDays() {
+        val premiere = liveChannel("Premiere 1 4K", "http://stream/p1")
+        val sportv = liveChannel("SporTV 1 4K", "http://stream/s1")
+        val dayMs = 24L * 60L * 60L * 1000L
+
+        val tomorrowStart = baseNowMs + dayMs + 2 * 60 * 60_000L
+        val fiveDaysAheadStart = baseNowMs + 5 * dayMs
+        val nineDaysAheadStart = baseNowMs + 9 * dayMs
+
+        val epgByUrl = mapOf(
+            premiere.url to listOf(
+                XmltvProgramme("p1", "Palmeiras x Santos", "Paulistão", tomorrowStart, tomorrowStart + 2 * 60 * 60_000L),
+                XmltvProgramme("p1", "Palmeiras x Grêmio", "Brasileirão", nineDaysAheadStart, nineDaysAheadStart + 2 * 60 * 60_000L)
+            ),
+            sportv.url to listOf(
+                XmltvProgramme("s1", "Libertadores: Palmeiras x River Plate", "Quartas", fiveDaysAheadStart, fiveDaysAheadStart + 2 * 60 * 60_000L)
+            )
+        )
+
+        val result = CopilotEpgMatcher.matchProgrammes(
+            prompt = "Palmeiras na semana",
+            channels = listOf(premiere, sportv),
+            nowMs = baseNowMs
+        ) { epgByUrl[it.url].orEmpty() }
+
+        assertEquals(2, result.upcomingMatches.size)
+        assertEquals("Palmeiras x Santos", result.upcomingMatches[0].programTitle)
+        assertEquals(CopilotEpgDayBucket.TOMORROW, result.upcomingMatches[0].dayBucket)
+        assertEquals("AMANHÃ", result.upcomingMatches[0].dayLabel)
+
+        assertEquals("Libertadores: Palmeiras x River Plate", result.upcomingMatches[1].programTitle)
+        assertEquals(CopilotEpgDayBucket.THIS_WEEK, result.upcomingMatches[1].dayBucket)
+    }
+
+    @Test
+    fun deduplicateChannelsByFamily_removesDuplicateGloboVariantsAndKeepsBestQuality() {
+        val channels = listOf(
+            liveChannel("GLOBO SP SD", "http://1", "GLOBO"),
+            liveChannel("GLOBO SP HD [ALT]", "http://2", "GLOBO"),
+            liveChannel("GLOBO SP FHD¹", "http://3", "GLOBO"),
+            liveChannel("GLOBO SP 4k", "http://4", "CANAIS 4K"),
+            liveChannel("SPORTV 1 4k", "http://5", "CANAIS 4K"),
+            liveChannel("PREMIERE 1 4K", "http://6", "CANAIS 4K")
+        )
+
+        val deduped = CopilotEpgMatcher.deduplicateChannelsByFamily(channels, maxCount = 6)
+        assertEquals(3, deduped.size)
+        assertEquals("PREMIERE 1 4K", deduped[0].name)
+        assertEquals("SPORTV 1 4k", deduped[1].name)
+        assertEquals("GLOBO SP 4k", deduped[2].name)
     }
 
     @Test

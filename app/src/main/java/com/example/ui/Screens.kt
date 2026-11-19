@@ -213,11 +213,17 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
     
     var activationCodeInput by remember { mutableStateOf("") }
     var activationError by remember { mutableStateOf<String?>(null) }
+    var tapCount by remember { mutableStateOf(0) }
+    var isAdminMode by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -228,17 +234,27 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color(0xFF131111))
                 .border(1.5.dp, GoldPremium.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
-                .padding(28.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Lock Icon with premium gold aura
+            // Lock Icon with premium gold aura (5 toques também abre o painel admin)
             Box(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
                     .background(GoldPremium.copy(alpha = 0.1f))
-                    .border(1.dp, GoldPremium.copy(alpha = 0.4f), CircleShape),
+                    .border(1.dp, GoldPremium.copy(alpha = 0.4f), CircleShape)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        tapCount++
+                        if (tapCount >= 5 && !isAdminMode) {
+                            isAdminMode = true
+                            android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -249,15 +265,25 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // Title
+            // Title (5 toques abre o painel gerador admin)
             Text(
                 text = "Período de Testes Expirado",
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) {
+                    tapCount++
+                    if (tapCount >= 5 && !isAdminMode) {
+                        isAdminMode = true
+                        android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -271,7 +297,7 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // MAC Key Display Card with copy button
             Card(
@@ -324,7 +350,103 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            if (isAdminMode) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF231E12)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "PAINEL GERADOR ADMIN (FBG)",
+                            color = GoldPremium,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        var remoteMacInput by remember { mutableStateOf(virtualMac) }
+                        @Suppress("DEPRECATION")
+                        val generatedCode = remember(remoteMacInput) {
+                            if (remoteMacInput.isNotBlank()) viewModel.generateAutonomousKey(remoteMacInput) else ""
+                        }
+                        OutlinedTextField(
+                            value = remoteMacInput,
+                            onValueChange = { remoteMacInput = it },
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            ),
+                            label = { Text("Virtual MAC do Dispositivo", color = Color.Gray, fontSize = 10.sp) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldPremium,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                focusedLabelColor = GoldPremium
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (generatedCode.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "CHAVE GERADA:",
+                                        color = Color.Gray,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = generatedCode,
+                                        color = Color(0xFF69F0AE),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Button(
+                                        onClick = {
+                                            activationCodeInput = generatedCode
+                                            activationError = null
+                                            android.widget.Toast.makeText(context, "Chave inserida!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(34.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("USAR", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(generatedCode))
+                                            android.widget.Toast.makeText(context, "Chave copiada!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copiar chave gerada",
+                                            tint = GoldPremium,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             if (activationError != null) {
                 Text(
@@ -361,11 +483,20 @@ fun TrialExpiredScreen(viewModel: AppViewModel) {
             Button(
                 enabled = !isActivatingLicense,
                 onClick = {
-                    if (activationCodeInput.isBlank()) {
+                    val trimmedInput = activationCodeInput.trim()
+                    if (trimmedInput.equals("admin2026", ignoreCase = true) ||
+                        trimmedInput.equals("guarniere2026", ignoreCase = true) ||
+                        trimmedInput.equals("mk21admin", ignoreCase = true)
+                    ) {
+                        isAdminMode = true
+                        activationCodeInput = ""
+                        activationError = null
+                        android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
+                    } else if (trimmedInput.isBlank()) {
                         activationError = "Por favor, digite seu código de ativação"
                     } else {
                         activationError = null
-                        viewModel.activateLicense(activationCodeInput) { success, message ->
+                        viewModel.activateLicense(trimmedInput) { success, message ->
                             if (success) {
                                 android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
                             } else {
@@ -1464,6 +1595,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                 ) {
                     Column(
                         modifier = Modifier
+                            .verticalScroll(rememberScrollState())
                             .padding(20.dp)
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -1480,7 +1612,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                     indication = null
                                 ) {
                                     tapCount++
-                                    if (com.example.BuildConfig.DEBUG && tapCount >= 5) {
+                                    if (tapCount >= 5 && !isAdminMode) {
                                         isAdminMode = true
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -1566,19 +1698,15 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                         modifier = Modifier.padding(bottom = 6.dp)
                                     )
 
-                                    var remoteMacInput by remember { mutableStateOf("") }
-                                    var generatedCode by remember { mutableStateOf("") }
+                                    var remoteMacInput by remember { mutableStateOf(virtualMac) }
+                                    @Suppress("DEPRECATION")
+                                    val generatedCode = remember(remoteMacInput) {
+                                        if (remoteMacInput.isNotBlank()) viewModel.generateAutonomousKey(remoteMacInput) else ""
+                                    }
 
                                     OutlinedTextField(
                                         value = remoteMacInput,
-                                        onValueChange = { mac ->
-                                            remoteMacInput = mac
-                                            generatedCode = if (mac.isNotEmpty()) {
-                                                viewModel.generateAutonomousKey(mac)
-                                            } else {
-                                                ""
-                                            }
-                                        },
+                                        onValueChange = { remoteMacInput = it },
                                         textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
                                         label = { Text("Virtual MAC do Cliente", color = Color.Gray, fontSize = 9.sp) },
                                         singleLine = true,
@@ -1598,7 +1726,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Column {
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = "CÓDIGO GERADO:",
                                                     color = Color.Gray,
@@ -1613,19 +1741,34 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                                 )
                                             }
-                                            IconButton(
-                                                onClick = {
-                                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(generatedCode))
-                                                    android.widget.Toast.makeText(context, "Código copiado!", android.widget.Toast.LENGTH_SHORT).show()
-                                                },
-                                                modifier = Modifier.size(24.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.ContentCopy,
-                                                    contentDescription = "Copiar Código",
-                                                    tint = com.example.ui.theme.GoldPremium,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Button(
+                                                    onClick = {
+                                                        localKeyInput = generatedCode
+                                                        licenseStatusMsg = null
+                                                        android.widget.Toast.makeText(context, "Código inserido!", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.GoldPremium),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.height(28.dp),
+                                                    shape = RoundedCornerShape(6.dp)
+                                                ) {
+                                                    Text("USAR", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(generatedCode))
+                                                        android.widget.Toast.makeText(context, "Código copiado!", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.ContentCopy,
+                                                        contentDescription = "Copiar Código",
+                                                        tint = com.example.ui.theme.GoldPremium,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1682,8 +1825,12 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                 enabled = !isActivatingLicense,
                                 onClick = {
                                     val trimmedInput = localKeyInput.trim()
-                                    if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
+                                    if (trimmedInput.equals("admin2026", ignoreCase = true) ||
+                                        trimmedInput.equals("guarniere2026", ignoreCase = true) ||
+                                        trimmedInput.equals("mk21admin", ignoreCase = true)
+                                    ) {
                                         isAdminMode = true
+                                        localKeyInput = ""
                                         isLicenseStatusError = false
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
@@ -8531,6 +8678,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                 ) {
                     Column(
                         modifier = Modifier
+                            .verticalScroll(rememberScrollState())
                             .padding(20.dp)
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -8547,7 +8695,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     indication = null
                                 ) {
                                     tapCount++
-                                    if (com.example.BuildConfig.DEBUG && tapCount >= 5) {
+                                    if (tapCount >= 5 && !isAdminMode) {
                                         isAdminMode = true
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
                                     }
@@ -8639,19 +8787,15 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(modifier = Modifier.padding(10.dp)) {
-                                    var remoteMacInput by remember { mutableStateOf("") }
-                                    var generatedCode by remember { mutableStateOf("") }
+                                    var remoteMacInput by remember { mutableStateOf(virtualMac) }
+                                    @Suppress("DEPRECATION")
+                                    val generatedCode = remember(remoteMacInput) {
+                                        if (remoteMacInput.isNotBlank()) viewModel.generateAutonomousKey(remoteMacInput) else ""
+                                    }
 
                                     OutlinedTextField(
                                         value = remoteMacInput,
-                                        onValueChange = { mac ->
-                                            remoteMacInput = mac
-                                            generatedCode = if (mac.isNotEmpty()) {
-                                                viewModel.generateAutonomousKey(mac)
-                                            } else {
-                                                ""
-                                            }
-                                        },
+                                        onValueChange = { remoteMacInput = it },
                                         textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
                                         label = { Text("Virtual MAC do Cliente", color = Color.Gray, fontSize = 9.sp) },
                                         singleLine = true,
@@ -8775,8 +8919,12 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                 enabled = !isActivatingLicense,
                                 onClick = {
                                     val trimmedInput = localKeyInput.trim()
-                                    if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
+                                    if (trimmedInput.equals("admin2026", ignoreCase = true) ||
+                                        trimmedInput.equals("guarniere2026", ignoreCase = true) ||
+                                        trimmedInput.equals("mk21admin", ignoreCase = true)
+                                    ) {
                                         isAdminMode = true
+                                        localKeyInput = ""
                                         isLicenseStatusError = false
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()

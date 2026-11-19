@@ -110,8 +110,8 @@ class XmltvIndex(
 object XmltvEpgParser {
 
     const val MAX_PROGRAMMES = 250_000
-    private const val DEFAULT_PAST_WINDOW_MS = 6L * 60L * 60L * 1000L   // 6h atrás
-    private const val DEFAULT_FUTURE_WINDOW_MS = 48L * 60L * 60L * 1000L // 48h à frente
+    private const val DEFAULT_PAST_WINDOW_MS = 6L * 60L * 60L * 1000L         // 6h atrás
+    private const val DEFAULT_FUTURE_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L // 7 dias (1 semana) à frente
 
     private val CHANNEL_ID_ATTR_REGEX = Regex("""id\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val DISPLAY_NAME_REGEX = Regex("""<display-name\b[^>]*>([\s\S]*?)</display-name>""", RegexOption.IGNORE_CASE)

@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -63,11 +64,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ai.CopilotEpgChannelMatch
+import com.example.ai.CopilotEpgDayBucket
 import com.example.ai.CopilotEpgSearchResult
 import com.example.ai.GeminiAiViewModel
 import com.example.ai.GeminiUiState
 import com.example.data.model.PlaylistItem
 import kotlinx.coroutines.launch
+
+private enum class EpgWindowFilter(val label: String) {
+    ALL("Todos"),
+    LIVE_NOW("🔴 Agora"),
+    TODAY("📅 Hoje"),
+    WEEK("📆 7 dias")
+}
 
 @Composable
 fun GeminiCopilotDialog(
@@ -89,10 +98,14 @@ fun GeminiCopilotDialog(
 
     val imeBottom = WindowInsets.ime.getBottom(density)
     val isKeyboardOpen = imeBottom > 0
-    val streamingText = (uiState as? GeminiUiState.Streaming)?.text
-    val isStreaming = uiState is GeminiUiState.Streaming
+    val streamingState = uiState as? GeminiUiState.Streaming
+    val streamingText = streamingState?.text
+    val isStreaming = streamingState != null
     val loadingState = uiState as? GeminiUiState.Loading
     val isLoading = loadingState != null
+    val livePreviewMatches = streamingState?.epgPreviewMatches
+        ?: loadingState?.epgPreviewMatches
+        ?: emptyList()
 
     // Fecha o Copilot no botão/gesto Voltar do Android.
     BackHandler {
@@ -113,8 +126,8 @@ fun GeminiCopilotDialog(
         }
     }
 
-    // Acompanha automaticamente o scroll ao receber mensagens, iniciar streaming ou abrir teclado.
-    LaunchedEffect(messages.size, streamingText, isLoading, isKeyboardOpen) {
+    // Acompanha automaticamente o scroll ao receber mensagens, EPG instantâneo, streaming ou abrir teclado.
+    LaunchedEffect(messages.size, streamingText, isLoading, livePreviewMatches.size, isKeyboardOpen) {
         val totalItems = listState.layoutInfo.totalItemsCount
         if (totalItems > 0 && (isAtBottom || isKeyboardOpen)) {
             val targetIndex = totalItems - 1
@@ -232,7 +245,7 @@ fun GeminiCopilotDialog(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Busca de times com EPG ao vivo • Gemini",
+                                text = "Busca dinâmica de times • EPG 7 dias",
                                 fontSize = 11.sp,
                                 color = Color(0xFFFF9800),
                                 fontWeight = FontWeight.SemiBold,
@@ -364,7 +377,7 @@ fun GeminiCopilotDialog(
                                     )
                                 }
                                 Column(
-                                    modifier = Modifier.widthIn(max = 320.dp)
+                                    modifier = Modifier.widthIn(max = 330.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -383,37 +396,20 @@ fun GeminiCopilotDialog(
                                         MarkdownLiteText(text = msg.text)
                                     }
 
-                                    // Cartões de canais confirmados no EPG real (NO AR AGORA / EM BREVE)
+                                    // Grade EPG dinâmica de 7 dias com filtros inline (Todos / Agora / Hoje / 7 dias)
                                     if (!isUser && msg.epgMatches.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        val liveCount = msg.epgMatches.count { it.isLiveNow }
-                                        Text(
-                                            text = if (liveCount > 0) {
-                                                "📡 EPG ao vivo ($liveCount no ar agora) — toque para assistir:"
-                                            } else {
-                                                "📡 Grade EPG encontrada — toque para sintonizar:"
-                                            },
-                                            color = Color(0xFFFFC470),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
-                                        )
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            msg.epgMatches.forEachIndexed { index, epgMatch ->
-                                                CopilotEpgMatchCard(
-                                                    match = epgMatch,
-                                                    index = index,
-                                                    onPlay = {
-                                                        keyboard?.hide()
-                                                        onSelectItem?.invoke(epgMatch.item)
-                                                        onDismiss()
-                                                    }
-                                                )
+                                        DynamicEpgResultsSection(
+                                            matches = msg.epgMatches,
+                                            onPlay = { item ->
+                                                keyboard?.hide()
+                                                onSelectItem?.invoke(item)
+                                                onDismiss()
                                             }
-                                        }
+                                        )
                                     }
 
-                                    // Sugestões rápidas de catálogo quando não há match direto no EPG
+                                    // Sugestões deduplicadas de catálogo quando não há match direto no EPG
                                     if (!isUser && msg.suggestedItems.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
@@ -481,6 +477,27 @@ fun GeminiCopilotDialog(
                             }
                         }
 
+                        // Cartões instantâneos de EPG exibidos IMEDIATAMENTE enquanto o Gemini gera o resumo
+                        if (livePreviewMatches.isNotEmpty() && (isLoading || isStreaming)) {
+                            item(key = "instant_epg_preview") {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 28.dp)
+                                        .widthIn(max = 330.dp)
+                                ) {
+                                    DynamicEpgResultsSection(
+                                        matches = livePreviewMatches,
+                                        onPlay = { item ->
+                                            keyboard?.hide()
+                                            onSelectItem?.invoke(item)
+                                            onDismiss()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         // Streaming indicator com cursor piscante
                         if (streamingText != null) {
                             item(key = "streaming_bubble") {
@@ -529,7 +546,7 @@ fun GeminiCopilotDialog(
                             }
                         }
 
-                        // Indicador de carregamento com status dinâmico ("Consultando EPG ao vivo...")
+                        // Indicador de carregamento com status dinâmico ("Consultando EPG de 7 dias...")
                         if (loadingState != null) {
                             item(key = "typing_indicator") {
                                 Row(
@@ -623,7 +640,7 @@ fun GeminiCopilotDialog(
                         onValueChange = { inputText = it },
                         placeholder = {
                             Text(
-                                text = "Busque um time (ex: Flamengo), jogo ou canal...",
+                                text = "Busque um time (ex: Palmeiras), jogo ou canal...",
                                 fontSize = 12.sp,
                                 color = Color(0xFF8E96A8),
                                 maxLines = 1,
@@ -693,18 +710,115 @@ fun GeminiCopilotDialog(
 }
 
 @Composable
+private fun DynamicEpgResultsSection(
+    matches: List<CopilotEpgChannelMatch>,
+    onPlay: (PlaylistItem) -> Unit
+) {
+    val liveCount = remember(matches) { matches.count { it.dayBucket == CopilotEpgDayBucket.LIVE_NOW } }
+    val todayCount = remember(matches) {
+        matches.count { it.dayBucket == CopilotEpgDayBucket.LIVE_NOW || it.dayBucket == CopilotEpgDayBucket.TODAY }
+    }
+    val weekCount = matches.size
+
+    var selectedFilter by remember(matches) {
+        mutableStateOf(
+            when {
+                liveCount > 0 -> EpgWindowFilter.ALL
+                else -> EpgWindowFilter.ALL
+            }
+        )
+    }
+
+    val filteredMatches = remember(matches, selectedFilter) {
+        when (selectedFilter) {
+            EpgWindowFilter.ALL -> matches
+            EpgWindowFilter.LIVE_NOW -> matches.filter { it.dayBucket == CopilotEpgDayBucket.LIVE_NOW }
+            EpgWindowFilter.TODAY -> matches.filter {
+                it.dayBucket == CopilotEpgDayBucket.LIVE_NOW || it.dayBucket == CopilotEpgDayBucket.TODAY
+            }
+            EpgWindowFilter.WEEK -> matches
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = if (liveCount > 0) {
+                "📡 EPG de 7 dias ($liveCount no ar agora • $weekCount na semana):"
+            } else {
+                "📡 Agenda EPG de 7 dias ($weekCount transmissões encontradas):"
+            },
+            color = Color(0xFFFFC470),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+
+        // Filtros dinâmicos inline para alternar entre Agora / Hoje / Semana sem nova consulta
+        if (matches.size > 1) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val filterOptions = buildList {
+                    add(EpgWindowFilter.ALL to "Todos ($weekCount)")
+                    if (liveCount > 0) add(EpgWindowFilter.LIVE_NOW to "🔴 Agora ($liveCount)")
+                    if (todayCount > 0 && todayCount != weekCount) add(EpgWindowFilter.TODAY to "📅 Hoje ($todayCount)")
+                    if (weekCount > todayCount) add(EpgWindowFilter.WEEK to "📆 7 dias ($weekCount)")
+                }
+                items(filterOptions) { (filter, label) ->
+                    val active = selectedFilter == filter
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (active) Color(0xFFE50914) else Color(0xFF1A1E2B),
+                        border = BorderStroke(
+                            1.dp,
+                            if (active) Color(0xFFE50914) else Color.White.copy(alpha = 0.14f)
+                        ),
+                        modifier = Modifier
+                            .clickable { selectedFilter = filter }
+                            .testTag("copilot_epg_filter_${filter.name.lowercase()}")
+                    ) {
+                        Text(
+                            text = label,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            filteredMatches.take(10).forEachIndexed { index, epgMatch ->
+                CopilotEpgMatchCard(
+                    match = epgMatch,
+                    index = index,
+                    onPlay = { onPlay(epgMatch.item) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CopilotEpgMatchCard(
     match: CopilotEpgChannelMatch,
     index: Int,
     onPlay: () -> Unit
 ) {
-    val accentColor = if (match.isLiveNow) Color(0xFFE50914) else Color(0xFFFF9800)
+    val accentColor = when (match.dayBucket) {
+        CopilotEpgDayBucket.LIVE_NOW -> Color(0xFFE50914)
+        CopilotEpgDayBucket.TODAY -> Color(0xFFFF9800)
+        CopilotEpgDayBucket.TOMORROW, CopilotEpgDayBucket.THIS_WEEK -> Color(0xFF42A5F5)
+    }
     val containerColor = if (match.isLiveNow) Color(0xFF1F1620) else Color(0xFF1A1E2B)
 
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
-        border = BorderStroke(1.dp, accentColor.copy(alpha = if (match.isLiveNow) 0.7f else 0.4f)),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = if (match.isLiveNow) 0.72f else 0.42f)),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onPlay)
@@ -714,7 +828,7 @@ private fun CopilotEpgMatchCard(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Linha superior: selo NO AR AGORA / EM BREVE + horário + qualidade
+            // Linha superior: selo NO AR AGORA / HOJE / AMANHÃ / DIA DD/MM + horário + qualidade
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -736,13 +850,13 @@ private fun CopilotEpgMatchCard(
                         ) {
                             Icon(
                                 imageVector = if (match.isLiveNow) Icons.Default.LiveTv else Icons.Default.Schedule,
-                                contentDescription = if (match.isLiveNow) "No ar agora" else "Em breve",
+                                contentDescription = match.dayLabel,
                                 tint = accentColor,
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = if (match.isLiveNow) "NO AR AGORA" else "EM BREVE",
-                                color = if (match.isLiveNow) Color(0xFFFF6B6B) else Color(0xFFFFC470),
+                                text = match.dayLabel,
+                                color = if (match.isLiveNow) Color(0xFFFF6B6B) else Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -807,7 +921,7 @@ private fun CopilotEpgMatchCard(
                 }
             }
 
-            // Canal + botão Assistir com alvo de toque mínimo 48dp
+            // Canal + botão Assistir
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -906,7 +1020,7 @@ private fun TypingDotsIndicator(modifier: Modifier = Modifier) {
     }
 }
 
-private val INLINE_TOKEN_REGEX = Regex("""\*\*(.+?)\*\*|(https?://[^\s<>()]+)""")
+private val INLINE_TOKEN_REGEX = Regex("""\*\*(.+?)\*\*|\*([^*\n]+?)\*|(https?://[^\s<>()]+)""")
 
 @Composable
 private fun MarkdownLiteText(
@@ -967,10 +1081,15 @@ private fun AnnotatedString.Builder.appendInlineMarkdown(line: String) {
             append(line.substring(cursor, match.range.first))
         }
         val boldContent = match.groups[1]?.value
-        val urlContent = match.groups[2]?.value
+        val italicContent = match.groups[2]?.value
+        val urlContent = match.groups[3]?.value
         if (boldContent != null) {
             withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFFFFC470))) {
                 append(boldContent)
+            }
+        } else if (italicContent != null) {
+            withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = Color(0xFFD0D7E5))) {
+                append(italicContent)
             }
         } else if (urlContent != null) {
             val cleanUrl = urlContent.trimEnd('.', ',', ';', ':', '!', '?')
@@ -1003,8 +1122,9 @@ internal fun suggestionChipsFor(
 ): List<String> {
     val list = mutableListOf<String>()
 
-    // 1. Atalho principal de EPG ao vivo (sempre primeiro)
+    // 1. Atalhos principais de EPG ao vivo e semanal
     list.add("🔴 Jogos passando agora no EPG")
+    list.add("📆 Jogos da semana no EPG")
 
     // 2. Contexto do item em reprodução atual
     if (currentPlaying != null) {
@@ -1012,11 +1132,11 @@ internal fun suggestionChipsFor(
         list.add("ℹ️ Analisar $cleanName")
     }
 
-    // 3. Atalhos rápidos de times populares no EPG
-    list.add("⚽ Flamengo agora")
-    list.add("⚽ Palmeiras agora")
-    list.add("⚽ Corinthians agora")
-    list.add("⚽ São Paulo agora")
+    // 3. Atalhos rápidos de times populares no EPG de 7 dias
+    list.add("⚽ Palmeiras na semana")
+    list.add("⚽ Flamengo na semana")
+    list.add("⚽ Corinthians na semana")
+    list.add("⚽ São Paulo na semana")
 
     // 4. Contexto dinâmico baseado no texto da conversa
     val contextText = text.lowercase()
@@ -1037,18 +1157,17 @@ internal fun suggestionChipsFor(
         list.add("🔧 Evitar travamentos")
     }
 
-    // 5. Canais de esportes ativos extraídos do catálogo
-    val sportsChannels = catalog.filter { item ->
-        val n = item.name.uppercase()
-        n.contains("PREMIERE") || n.contains("SPORTV") || n.contains("ESPN") ||
-            n.contains("TNT") || n.contains("CAZÉ") || n.contains("BANDSPORTS")
-    }.take(2)
+    // 5. Canais de esportes ativos extraídos do catálogo (deduplicados por família)
+    val sportsChannels = com.example.ai.CopilotEpgMatcher.deduplicateChannelsByFamily(
+        channels = catalog.filter { com.example.ai.CopilotEpgMatcher.isSportsOrOpenBroadcastChannel(it) },
+        maxCount = 2
+    )
     for (ch in sportsChannels) {
         val nameShort = ch.name.trim().take(18)
-        if (list.size < 9 && list.none { it.contains(nameShort) }) {
+        if (list.size < 10 && list.none { it.contains(nameShort) }) {
             list.add("📺 EPG no $nameShort")
         }
     }
 
-    return list.distinct().take(8)
+    return list.distinct().take(9)
 }

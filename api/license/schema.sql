@@ -27,3 +27,12 @@ CREATE TABLE IF NOT EXISTS user_sync_state (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Âncora de período de avaliação por dispositivo (impede reset ao desinstalar/reinstalar)
+CREATE TABLE IF NOT EXISTS device_trials (
+  device_id TEXT PRIMARY KEY,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  install_count INT NOT NULL DEFAULT 1
+);
+
+

@@ -147,6 +147,28 @@ class PreferencesService(context: Context) {
         get() = try { prefs.getLong("trial_start_date", 0L) } catch (e: Throwable) { 0L }
         set(value) { try { prefs.edit().putLong("trial_start_date", value).apply() } catch (e: Throwable) {} }
 
+    var serverClockFloorMs: Long
+        get() = try { prefs.getLong("trial_server_clock_floor_ms", 0L) } catch (e: Throwable) { 0L }
+        set(value) { try { prefs.edit().putLong("trial_server_clock_floor_ms", value).apply() } catch (e: Throwable) {} }
+
+    /**
+     * Ancora o início da avaliação ao timestamp imutável do servidor (`/api/license/trial`).
+     * Preserva sempre o timestamp mais antigo (impedindo reset ao desinstalar/reinstalar)
+     * e mantém um piso de relógio do servidor contra retrocesso manual da data do aparelho.
+     */
+    fun anchorTrialFromServer(firstSeenAtMs: Long, serverNowMs: Long) {
+        if (firstSeenAtMs > 0L) {
+            val currentLocal = trialStartDate
+            val anchored = if (currentLocal > 0L) minOf(currentLocal, firstSeenAtMs) else firstSeenAtMs
+            if (anchored != currentLocal) {
+                trialStartDate = anchored
+            }
+        }
+        if (serverNowMs > serverClockFloorMs) {
+            serverClockFloorMs = serverNowMs
+        }
+    }
+
     var activationKey: String
         get() = try { prefs.getString("activation_key", "") ?: "" } catch (e: Throwable) { "" }
         set(value) { try { prefs.edit().putString("activation_key", value).apply() } catch (e: Throwable) {} }
@@ -172,15 +194,22 @@ class PreferencesService(context: Context) {
         cleanId.chunked(2).joinToString(":")
     }
 
+    fun normalizeMacAddress(rawMac: String): String {
+        val hexOnly = rawMac.replace("[^A-Fa-f0-9]".toRegex(), "").uppercase()
+        if (hexOnly.isEmpty()) return rawMac.trim().uppercase()
+        val padded = hexOnly.padEnd(12, 'F').take(12)
+        return padded.chunked(2).joinToString(":")
+    }
+
     /**
-     * LEGADO: gera chave HMAC-SHA256 local. Mantido apenas para compatibilidade temporária
-     * de ferramentas internas; não é aceito por [isLicenseValid].
+     * Gera chave HMAC-SHA256 local vinculada ao Virtual MAC normalizado (`XX:XX:XX:XX:XX:XX`).
      */
     @Deprecated("Substituído por token ECDSA P-256 assinado pelo servidor.")
     fun generateValidKeyForDevice(deviceMac: String, secret: String = BuildConfig.LICENSE_SECRET): String {
+        val normalizedMac = normalizeMacAddress(deviceMac)
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        val hashBytes = mac.doFinal(deviceMac.uppercase().trim().toByteArray(Charsets.UTF_8))
+        val hashBytes = mac.doFinal(normalizedMac.toByteArray(Charsets.UTF_8))
         val hexHash = hashBytes.joinToString("") { "%02X".format(it) }
         val p1 = hexHash.take(4)
         val p2 = hexHash.substring(4, 8)
@@ -193,9 +222,7 @@ class PreferencesService(context: Context) {
      */
     @Deprecated("Algoritmo legado e previsível; substituído por token ECDSA P-256 assinado pelo servidor.")
     fun generateAutonomousKeyForDevice(deviceMac: String): String {
-        val cleanMac = deviceMac.replace("[^A-Fa-f0-9]".toRegex(), "").take(12).uppercase()
-        val paddedMac = cleanMac.padEnd(12, 'F')
-        val formattedMac = paddedMac.chunked(2).joinToString(":")
+        val formattedMac = normalizeMacAddress(deviceMac)
         val salt = "MK21_GOLDEN_SALT_2026"
         val rawInput = formattedMac + salt
         return try {
@@ -268,16 +295,18 @@ class PreferencesService(context: Context) {
         return !isEcdsaConfigured() && isLocalHmacKeyValid()
     }
 
-    fun getTrialDaysRemaining(): Int {
+    fun getTrialDaysRemaining(nowMs: Long = System.currentTimeMillis()): Int {
         if (isLicenseValid()) return 9999
         val start = trialStartDate
         if (start == 0L) return 5
-        val now = System.currentTimeMillis()
-        val elapsedMs = now - start
-        val fiveDaysMs = 5 * 24 * 60 * 60 * 1000L
+        // Usa o maior entre o relógio local e o piso retornado pelo servidor (evita burlar voltando a data)
+        val effectiveNow = maxOf(nowMs, serverClockFloorMs)
+        val elapsedMs = (effectiveNow - start).coerceAtLeast(0L)
+        val fiveDaysMs = 5L * 24L * 60L * 60L * 1000L
         val remainingMs = fiveDaysMs - elapsedMs
-        if (remainingMs <= 0) return 0
-        return (remainingMs / (24 * 60 * 60 * 1000L)).toInt().coerceIn(0, 5)
+        if (remainingMs <= 0L) return 0
+        val dayMs = 24L * 60L * 60L * 1000L
+        return ((remainingMs + dayMs - 1L) / dayMs).toInt().coerceIn(1, 5)
     }
 
     fun setLastPlaylistUpdateTimestamp(playlistName: String, timestamp: Long) {
