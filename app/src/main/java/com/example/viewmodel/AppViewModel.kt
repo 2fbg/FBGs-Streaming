@@ -134,8 +134,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (_isActivatingLicense.value) return
 
-        // Modo de homologação: sem chave pública ECDSA no build, valida chave HMAC local offline
-        if (BuildConfig.LICENSE_PUBKEY_B64.isBlank()) {
+        // Modo de homologação: sem chave pública ECDSA válida no build, valida chave HMAC local offline
+        if (!preferencesService.isEcdsaConfigured()) {
             if (preferencesService.isLocalHmacKeyValid(trimmedCode)) {
                 preferencesService.activationKey = trimmedCode.uppercase()
                 _isPremiumActive.value = true

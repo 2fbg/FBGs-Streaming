@@ -115,7 +115,9 @@ class ExampleRobolectricTest {
     val validHmacKey = prefs.generateValidKeyForDevice(prefs.virtualMac)
     prefs.activationKey = validHmacKey
     org.junit.Assert.assertTrue(prefs.isLocalHmacKeyValid())
-    if (BuildConfig.LICENSE_PUBKEY_B64.isBlank()) {
+    org.junit.Assert.assertFalse(prefs.isEcdsaConfigured("LICENSE_PUBKEY"))
+    org.junit.Assert.assertFalse(prefs.isEcdsaConfigured(""))
+    if (!prefs.isEcdsaConfigured()) {
       org.junit.Assert.assertTrue(prefs.isLicenseValid())
     }
   }

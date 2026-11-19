@@ -73,7 +73,9 @@ class MainActivity : ComponentActivity() {
             }
             
             MyApplicationTheme(useAmoledMode = useAmoledMode) {
-                AppNavigation(viewModel = viewModel)
+                com.example.ui.ProvideSafeTextToolbar {
+                    AppNavigation(viewModel = viewModel)
+                }
             }
         }
     }

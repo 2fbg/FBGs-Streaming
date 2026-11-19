@@ -113,7 +113,7 @@ fun GeminiCopilotDialog(
         }
     }
 
-    Dialog(
+    SafeDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,

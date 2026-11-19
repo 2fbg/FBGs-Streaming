@@ -259,9 +259,13 @@ class PreferencesService(context: Context) {
         )
     }
 
+    fun isEcdsaConfigured(publicKeyB64: String = BuildConfig.LICENSE_PUBKEY_B64): Boolean {
+        return LicenseTokenVerifier.hasValidPublicKey(publicKeyB64)
+    }
+
     fun isLicenseValid(): Boolean {
         if (currentLicense() != null) return true
-        return BuildConfig.LICENSE_PUBKEY_B64.isBlank() && isLocalHmacKeyValid()
+        return !isEcdsaConfigured() && isLocalHmacKeyValid()
     }
 
     fun getTrialDaysRemaining(): Int {

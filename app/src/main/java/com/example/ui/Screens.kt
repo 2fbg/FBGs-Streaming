@@ -1242,7 +1242,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
             var inputListName by remember(editingPlaylist) { mutableStateOf(initialName) }
             var inputListUrl by remember(editingPlaylist) { mutableStateOf(initialUrl) }
             
-            Dialog(onDismissRequest = { 
+            SafeDialog(onDismissRequest = { 
                 showManualDialog = false 
                 editingPlaylist = null
             }) {
@@ -1338,7 +1338,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
         // Import Panel text directly into App and Manual Lists
         if (showImportPanelDialogInLogin) {
             var panelTextInput by remember { mutableStateOf("") }
-            Dialog(onDismissRequest = { 
+            SafeDialog(onDismissRequest = { 
                 showImportPanelDialogInLogin = false 
                 importStatusMsg = null
             }) {
@@ -1450,11 +1450,12 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
         if (showLicenseDialogInLogin) {
             var localKeyInput by remember { mutableStateOf("") }
             var licenseStatusMsg by remember { mutableStateOf<String?>(null) }
+            var isLicenseStatusError by remember { mutableStateOf(false) }
             val virtualMac = viewModel.virtualMacAddress
             var tapCount by remember { mutableStateOf(0) }
             var isAdminMode by remember { mutableStateOf(false) }
 
-            Dialog(onDismissRequest = { showLicenseDialogInLogin = false }) {
+            SafeDialog(onDismissRequest = { showLicenseDialogInLogin = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF131111)),
                     shape = RoundedCornerShape(16.dp),
@@ -1636,7 +1637,7 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                         if (licenseStatusMsg != null) {
                             Text(
                                 text = licenseStatusMsg!!,
-                                color = if (isPremiumActive || isAdminMode) Color.Green else Color.Red,
+                                color = if (isLicenseStatusError) Color(0xFFFF5252) else Color(0xFF4CAF50),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 6.dp)
@@ -1683,13 +1684,17 @@ fun ServerConfigScreen(viewModel: AppViewModel, onNavigateToHome: () -> Unit) {
                                     val trimmedInput = localKeyInput.trim()
                                     if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
                                         isAdminMode = true
+                                        isLicenseStatusError = false
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
                                     } else if (trimmedInput.isEmpty()) {
+                                        isLicenseStatusError = true
                                         licenseStatusMsg = "Insira um código válido"
                                     } else {
                                         licenseStatusMsg = null
+                                        isLicenseStatusError = false
                                         viewModel.activateLicense(trimmedInput) { success, message ->
+                                            isLicenseStatusError = !success
                                             licenseStatusMsg = if (success) "Premium Ativado!" else message
                                             if (success) {
                                                 android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
@@ -4147,7 +4152,7 @@ fun AdultPinDialog(onDismiss: () -> Unit, onPinVerify: (String) -> Boolean) {
     var pinValue by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    SafeDialog(onDismissRequest = onDismiss) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0C0C0F)),
             shape = RoundedCornerShape(16.dp),
@@ -6175,7 +6180,7 @@ fun SmartTvCastDialog(
 
     val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
-    Dialog(
+    SafeDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
@@ -7485,7 +7490,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
             var confirmInput by remember { mutableStateOf("") }
             var errorMessage by remember { mutableStateOf<String?>(null) }
 
-            Dialog(onDismissRequest = { showParentalControlDialog = false }) {
+            SafeDialog(onDismissRequest = { showParentalControlDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF00004C)), // Beautiful deep blue/indigo background mimicking the attachment
                     shape = RoundedCornerShape(12.dp),
@@ -8028,7 +8033,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
 
         if (showServersUrlDialog) {
             var urlInput by remember { mutableStateOf(viewModel.preferencesService.dynamicServersUrl) }
-            Dialog(onDismissRequest = { showServersUrlDialog = false }) {
+            SafeDialog(onDismissRequest = { showServersUrlDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF111115)),
                     shape = RoundedCornerShape(16.dp),
@@ -8112,7 +8117,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
 
         if (showImportTextDialog) {
             var textInput by remember { mutableStateOf("") }
-            Dialog(onDismissRequest = { showImportTextDialog = false }) {
+            SafeDialog(onDismissRequest = { showImportTextDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF111115)),
                     shape = RoundedCornerShape(16.dp),
@@ -8203,13 +8208,14 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
         if (showLicenseDialog) {
             var localKeyInput by remember { mutableStateOf("") }
             var licenseStatusMsg by remember { mutableStateOf<String?>(null) }
+            var isLicenseStatusError by remember { mutableStateOf(false) }
             val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
             val context = LocalContext.current
             val virtualMac = viewModel.virtualMacAddress
             var tapCount by remember { mutableStateOf(0) }
             var isAdminMode by remember { mutableStateOf(false) }
 
-            Dialog(onDismissRequest = { showLicenseDialog = false }) {
+            SafeDialog(onDismissRequest = { showLicenseDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF131111)),
                     shape = RoundedCornerShape(16.dp),
@@ -8417,7 +8423,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                         if (licenseStatusMsg != null) {
                             Text(
                                 text = licenseStatusMsg!!,
-                                color = if (isPremiumActive || isAdminMode) Color.Green else Color.Red,
+                                color = if (isLicenseStatusError) Color(0xFFFF5252) else Color(0xFF4CAF50),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 6.dp)
@@ -8464,13 +8470,17 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                                     val trimmedInput = localKeyInput.trim()
                                     if (com.example.BuildConfig.DEBUG && (trimmedInput == "admin2026" || trimmedInput == "guarniere2026" || trimmedInput == "mk21admin")) {
                                         isAdminMode = true
+                                        isLicenseStatusError = false
                                         licenseStatusMsg = "Modo Admin Liberado!"
                                         android.widget.Toast.makeText(context, "Painel Admin Ativado!", android.widget.Toast.LENGTH_SHORT).show()
                                     } else if (trimmedInput.isEmpty()) {
+                                        isLicenseStatusError = true
                                         licenseStatusMsg = "Insira um código válido"
                                     } else {
                                         licenseStatusMsg = null
+                                        isLicenseStatusError = false
                                         viewModel.activateLicense(trimmedInput) { success, message ->
+                                            isLicenseStatusError = !success
                                             licenseStatusMsg = if (success) "Premium Ativado!" else message
                                             if (success) {
                                                 android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
@@ -8788,7 +8798,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
             var backupStatus by remember { mutableStateOf<String?>(null) }
             val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
-            Dialog(onDismissRequest = { showBackupRestoreDialog = false }) {
+            SafeDialog(onDismissRequest = { showBackupRestoreDialog = false }) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141315)),
                     shape = RoundedCornerShape(16.dp),

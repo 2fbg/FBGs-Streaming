@@ -164,7 +164,7 @@ fun FullEpgGuideDialog(
         }
     }
 
-    Dialog(
+    SafeDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,

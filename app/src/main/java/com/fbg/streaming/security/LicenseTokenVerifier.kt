@@ -29,6 +29,12 @@ object LicenseTokenVerifier {
     private const val PEM_BEGIN = "-----BEGIN PUBLIC KEY-----"
     private const val PEM_END = "-----END PUBLIC KEY-----"
 
+    fun hasValidPublicKey(publicKeyB64: String): Boolean {
+        val trimmedKey = publicKeyB64.trim()
+        if (trimmedKey.isEmpty()) return false
+        return parsePublicKey(trimmedKey) != null
+    }
+
     fun verify(
         token: String,
         deviceId: String,
