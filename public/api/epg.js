@@ -179,7 +179,7 @@ function parseMeuGuiaHtml(html, referenceDateMs) {
   let dayOffset = 0;
   let prevMinutes = -1;
 
-  while ((match = itemRegex.exec(html)) !== null && entries.length < 48) {
+  while ((match = itemRegex.exec(html)) !== null && entries.length < 180) {
     const hour = parseInt(match[1], 10);
     const minute = parseInt(match[2], 10);
     if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) continue;

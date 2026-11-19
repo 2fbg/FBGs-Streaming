@@ -1,9 +1,10 @@
 name: Release
 
 on:
+  workflow_run:
+    workflows: ["Validate"]
+    types: [completed]
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -34,6 +35,11 @@ permissions: {}
 
 jobs:
   check-release-needed:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -44,6 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           sparse-checkout: |
             version.json
             app/build.gradle.kts
@@ -100,6 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -363,6 +371,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release-meta.outputs.tag }}
           VER: ${{ steps.release-meta.outputs.version }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
@@ -372,7 +381,7 @@ jobs:
             gh release edit "$TAG" --draft=false --title "MK21 Play ${TAG}" --notes "$NOTES"
           else
             gh release create "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS \
-              --target "$GITHUB_SHA" \
+              --target "$TARGET_SHA" \
               --title "MK21 Play ${TAG}" \
               --notes "$NOTES"
           fi
