@@ -100,4 +100,23 @@ class ExampleRobolectricTest {
     assertEquals("pro", license?.tier)
     assertEquals("ORD-ROBO-1", license?.orderCode)
   }
+
+  @Test
+  @Suppress("DEPRECATION")
+  fun `test hmac license fallback works when ecdsa pubkey is not configured`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val prefs = PreferencesService(context)
+
+    prefs.licenseToken = ""
+    prefs.activationKey = "MK-0000-0000-0000"
+    org.junit.Assert.assertFalse(prefs.isLocalHmacKeyValid())
+    org.junit.Assert.assertFalse(prefs.isLicenseValid())
+
+    val validHmacKey = prefs.generateValidKeyForDevice(prefs.virtualMac)
+    prefs.activationKey = validHmacKey
+    org.junit.Assert.assertTrue(prefs.isLocalHmacKeyValid())
+    if (BuildConfig.LICENSE_PUBKEY_B64.isBlank()) {
+      org.junit.Assert.assertTrue(prefs.isLicenseValid())
+    }
+  }
 }

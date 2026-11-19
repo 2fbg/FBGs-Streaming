@@ -148,8 +148,7 @@ jobs:
             exit 1
           fi
           if [ -z "${LICENSE_PUBKEY_B64:-}" ]; then
-            echo "::error::Secret LICENSE_PUBKEY_B64 ausente: chave pública ECDSA P-256 obrigatória para build de release com verificação offline."
-            exit 1
+            echo "::warning::Secret LICENSE_PUBKEY_B64 ausente: release seguirá em modo de homologação (HMAC via LICENSE_SECRET). Configure LICENSE_PUBKEY_B64 ao reativar ECDSA."
           fi
 
           KS="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mk21-upload.jks"

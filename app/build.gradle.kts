@@ -268,6 +268,16 @@ android {
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
+  // Chaves exclusivas de servidor (Vercel) ou já tratadas explicitamente em defaultConfig/signingConfigs
+  ignoreList.add("DATABASE_URL")
+  ignoreList.add("LICENSE_SIGNING_KEY")
+  ignoreList.add("LICENSE_PUBKEY_B64")
+  ignoreList.add("LICENSE_SECRET")
+  ignoreList.add("ALLOW_LEGACY_LICENSE")
+  ignoreList.add("STORE_PASSWORD")
+  ignoreList.add("KEY_PASSWORD")
+  ignoreList.add("KEYSTORE_PATH")
+  ignoreList.add("DEBUG_STORE_PASSWORD")
 }
 
 // Some unused dependencies are commented out below instead of being removed.

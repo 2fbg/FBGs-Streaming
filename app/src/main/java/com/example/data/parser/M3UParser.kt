@@ -46,7 +46,16 @@ object M3UParser {
                 }
 
                 if (currentLine.startsWith("#EXTM3U", ignoreCase = true)) {
-                    // Ignore header
+                    val xmltvAttr = extractAttribute(currentLine, "url-tvg")
+                        ?: extractAttribute(currentLine, "x-tvg-url")
+                    if (!xmltvAttr.isNullOrBlank()) {
+                        val firstUrl = xmltvAttr.split(',').firstOrNull()?.trim()
+                        if (!firstUrl.isNullOrBlank() &&
+                            (firstUrl.startsWith("http://", true) || firstUrl.startsWith("https://", true))
+                        ) {
+                            com.example.data.service.AndroidEpgManager.discoveredM3uXmltvUrl = firstUrl
+                        }
+                    }
                     continue
                 } else if (currentLine.startsWith("#EXTINF", ignoreCase = true)) {
                     currentMetaData = currentLine
@@ -77,7 +86,15 @@ object M3UParser {
                         if (currentMetaData != null) {
                             val metadata = currentMetaData
                             val item = parseItem(metadata, sanitizedUrl, playlistSource, currentGroup)
-                            items.add(ParsedEntry(item, extractAttribute(metadata, "tvg-id")))
+                            val tvgId = extractAttribute(metadata, "tvg-id")
+                            if (!tvgId.isNullOrBlank()) {
+                                com.example.data.service.AndroidEpgManager.registerChannelEpgId(
+                                    sanitizedUrl,
+                                    item.name,
+                                    tvgId
+                                )
+                            }
+                            items.add(ParsedEntry(item, tvgId))
                             currentMetaData = null
                             currentGroup = null
                         } else if (isValidUrl(sanitizedUrl)) {
@@ -401,7 +418,7 @@ object M3UParser {
         return com.example.data.model.ContentType.LIVE
     }
 
-    private fun isAdultContent(name: String, category: String): Boolean {
+    fun isAdultContent(name: String, category: String): Boolean {
         val pattern = listOf(
             "18+", "ADULTO", "ADULT", "XXX", "SEXY", "PLAYBOY", "PENTHOUSE", "VENUS", "HOT ", "HUSTLER", "FORBIDDEN", "FORA DA LEI", "S0X"
         )

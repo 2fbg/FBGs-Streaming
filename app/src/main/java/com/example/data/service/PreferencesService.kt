@@ -212,6 +212,38 @@ class PreferencesService(context: Context) {
     }
 
     /**
+     * Valida a chave HMAC-SHA256 local para homologação quando o token ECDSA ainda não está ativo
+     * (`LICENSE_PUBKEY_B64` vazio). Usa comparação em tempo constante.
+     */
+    @Suppress("DEPRECATION")
+    fun isLocalHmacKeyValid(candidateKey: String = activationKey): Boolean {
+        val normalized = candidateKey.trim().uppercase()
+        if (normalized.isEmpty()) return false
+        val secret = BuildConfig.LICENSE_SECRET.trim()
+        if (secret.isNotEmpty()) {
+            val expectedHmac = generateValidKeyForDevice(virtualMac, secret).uppercase()
+            if (MessageDigest.isEqual(
+                    normalized.toByteArray(Charsets.UTF_8),
+                    expectedHmac.toByteArray(Charsets.UTF_8)
+                )
+            ) {
+                return true
+            }
+        }
+        if (BuildConfig.LEGACY_LICENSE_ENABLED) {
+            val expectedLegacy = generateAutonomousKeyForDevice(virtualMac).uppercase()
+            if (MessageDigest.isEqual(
+                    normalized.toByteArray(Charsets.UTF_8),
+                    expectedLegacy.toByteArray(Charsets.UTF_8)
+                )
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
      * Valida offline o token ECDSA P-256 emitido pelo servidor (`MKL1.<payload>.<assinatura>`).
      * Retorna null se ausente, inválido, expirado ou pertencente a outro dispositivo.
      */
@@ -227,7 +259,10 @@ class PreferencesService(context: Context) {
         )
     }
 
-    fun isLicenseValid(): Boolean = currentLicense() != null
+    fun isLicenseValid(): Boolean {
+        if (currentLicense() != null) return true
+        return BuildConfig.LICENSE_PUBKEY_B64.isBlank() && isLocalHmacKeyValid()
+    }
 
     fun getTrialDaysRemaining(): Int {
         if (isLicenseValid()) return 9999

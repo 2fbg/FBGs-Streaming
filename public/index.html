@@ -1529,6 +1529,30 @@
                     <input type="checkbox" id="pref-chips-toggle" checked class="w-5 h-5 accent-[#E50914] cursor-pointer">
                 </div>
 
+                <div class="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl space-y-2.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <div>
+                            <div class="font-bold text-white flex items-center gap-1.5">
+                                <i class="fa-solid fa-shield-halved text-amber-400"></i>
+                                <span>Controle Parental (18+)</span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">Protege categorias e canais adultos com PIN (padrão: 0000).</div>
+                        </div>
+                        <input type="checkbox" id="pref-parental-toggle" checked onchange="window.toggleParentalControl(this.checked)" class="w-5 h-5 accent-[#E50914] cursor-pointer">
+                    </div>
+                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                        <span id="parental-status-badge" class="text-[10px] font-bold text-amber-400">Bloqueado</span>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="btn-parental-relock" onclick="window.relockParentalSession()" class="hidden px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg transition-colors">
+                                Bloquear agora
+                            </button>
+                            <button type="button" onclick="window.openParentalPinModal('change')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 text-[10px] font-bold rounded-lg border border-amber-500/30 transition-colors">
+                                Alterar PIN
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="pt-2 flex justify-end">
                     <button onclick="window.closeAccountModal(); showNotification('Preferências salvas!', 'success');" class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl transition-all">
                         Salvar
@@ -1541,6 +1565,44 @@
                 <i class="fa-solid fa-bell text-3xl text-slate-600"></i>
                 <div class="text-xs font-bold text-slate-400">Em breve — alertas de novos episódios e novidades.</div>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CONTROLE PARENTAL (PIN 18+) -->
+    <div id="parental-pin-modal" class="fixed inset-0 bg-black/85 z-[10000] pointer-events-auto backdrop-blur-md items-center justify-center hidden p-4 select-none">
+        <div class="glass-card bg-[#0e0e12]/98 border border-slate-800 rounded-3xl max-w-sm w-full p-6 text-white shadow-2xl relative">
+            <button type="button" onclick="window.closeParentalPinModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center gap-2.5 mb-2">
+                <div class="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <i class="fa-solid fa-lock text-base"></i>
+                </div>
+                <div>
+                    <h3 id="parental-pin-title" class="font-black text-base text-white">Conteúdo Adulto (18+)</h3>
+                    <p id="parental-pin-subtitle" class="text-[11px] text-slate-400">Digite o PIN para desbloquear nesta sessão.</p>
+                </div>
+            </div>
+
+            <form onsubmit="event.preventDefault(); window.submitParentalPinModal();" class="space-y-3 mt-4">
+                <div id="parental-current-pin-wrap" class="hidden">
+                    <label for="parental-current-pin-input" class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">PIN atual</label>
+                    <input type="password" inputmode="numeric" maxlength="6" id="parental-current-pin-input" autocomplete="off" placeholder="0000" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-xl px-4 py-2.5 text-center text-lg font-mono tracking-[0.4em] text-white outline-none">
+                </div>
+                <div>
+                    <label id="parental-pin-label" for="parental-pin-input" class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">PIN (padrão: 0000)</label>
+                    <input type="password" inputmode="numeric" maxlength="6" id="parental-pin-input" autocomplete="off" placeholder="••••" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-xl px-4 py-3 text-center text-xl font-mono tracking-[0.4em] text-white outline-none">
+                </div>
+                <div id="parental-pin-error" class="hidden text-xs font-bold text-red-400 text-center bg-red-950/40 border border-red-900/40 rounded-xl py-2 px-3"></div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button type="button" onclick="window.closeParentalPinModal()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-800 transition-colors">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="parental-pin-submit-btn" class="px-5 py-2 bg-[#E50914] hover:bg-red-600 text-white text-xs font-black rounded-xl transition-colors">
+                        Confirmar
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -2587,6 +2649,7 @@
                 const storedUser = localStorage.getItem('mk21_last_username') || 'Usuário MK21';
                 if (userDisplay) userDisplay.textContent = storedUser;
                 if (avatarBadge) avatarBadge.textContent = (storedUser.charAt(0) || 'M').toUpperCase();
+                if (window.syncParentalPreferencesUI) window.syncParentalPreferencesUI();
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
                 try {
@@ -2621,6 +2684,168 @@
                     if (content) content.classList.add('hidden');
                 }
             });
+            if (tab === 'preferences' && window.syncParentalPreferencesUI) {
+                window.syncParentalPreferencesUI();
+            }
+        };
+
+        // ==========================================
+        // CONTROLE PARENTAL (18+ PIN) — WEB PWA
+        // ==========================================
+        let parentalModalMode = 'unlock';
+        let pendingParentalAction = null;
+
+        window.syncParentalPreferencesUI = function () {
+            if (!window.MK21Parental) return;
+            const toggle = document.getElementById('pref-parental-toggle');
+            const badge = document.getElementById('parental-status-badge');
+            const relockBtn = document.getElementById('btn-parental-relock');
+            const enabled = window.MK21Parental.isEnabled();
+            const unlocked = window.MK21Parental.isUnlocked();
+            if (toggle) toggle.checked = enabled;
+            if (badge) {
+                if (!enabled) {
+                    badge.textContent = 'Desativado';
+                    badge.className = 'text-[10px] font-bold text-slate-400';
+                } else if (unlocked) {
+                    badge.textContent = 'Desbloqueado nesta sessão';
+                    badge.className = 'text-[10px] font-bold text-emerald-400';
+                } else {
+                    badge.textContent = 'Bloqueado (PIN exigido)';
+                    badge.className = 'text-[10px] font-bold text-amber-400';
+                }
+            }
+            if (relockBtn) {
+                if (enabled && unlocked) relockBtn.classList.remove('hidden');
+                else relockBtn.classList.add('hidden');
+            }
+        };
+
+        window.toggleParentalControl = function (enabled) {
+            if (!window.MK21Parental) return;
+            if (!enabled && window.MK21Parental.isEnabled() && !window.MK21Parental.isUnlocked()) {
+                // Exige PIN para desativar controle parental
+                const toggle = document.getElementById('pref-parental-toggle');
+                if (toggle) toggle.checked = true;
+                window.openParentalPinModal('disable', () => {
+                    window.MK21Parental.setEnabled(false);
+                    window.syncParentalPreferencesUI();
+                    renderCategories();
+                    renderMediaItems();
+                    showNotification('Controle parental desativado.', 'info');
+                });
+                return;
+            }
+            window.MK21Parental.setEnabled(enabled);
+            window.syncParentalPreferencesUI();
+            renderCategories();
+            renderMediaItems();
+            showNotification(enabled ? 'Controle parental ativado.' : 'Controle parental desativado.', 'success');
+        };
+
+        window.relockParentalSession = function () {
+            if (!window.MK21Parental) return;
+            window.MK21Parental.lockSession();
+            if (window.MK21Parental.shouldBlockCategory(activeCategory)) {
+                activeCategory = 'ALL';
+            }
+            window.syncParentalPreferencesUI();
+            renderCategories();
+            renderMediaItems();
+            showNotification('Conteúdo adulto bloqueado novamente.', 'info');
+        };
+
+        window.openParentalPinModal = function (mode, onSuccessCallback) {
+            parentalModalMode = mode || 'unlock';
+            pendingParentalAction = typeof onSuccessCallback === 'function' ? onSuccessCallback : null;
+            const modal = document.getElementById('parental-pin-modal');
+            const titleEl = document.getElementById('parental-pin-title');
+            const subEl = document.getElementById('parental-pin-subtitle');
+            const curWrap = document.getElementById('parental-current-pin-wrap');
+            const curInput = document.getElementById('parental-current-pin-input');
+            const pinLabel = document.getElementById('parental-pin-label');
+            const pinInput = document.getElementById('parental-pin-input');
+            const errEl = document.getElementById('parental-pin-error');
+            if (!modal) return;
+
+            if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+            if (curInput) curInput.value = '';
+            if (pinInput) pinInput.value = '';
+
+            if (parentalModalMode === 'change') {
+                if (titleEl) titleEl.textContent = 'Alterar PIN Parental';
+                if (subEl) subEl.textContent = 'Informe o PIN atual e escolha um novo PIN (4 a 6 dígitos).';
+                if (curWrap) curWrap.classList.remove('hidden');
+                if (pinLabel) pinLabel.textContent = 'Novo PIN (4 a 6 dígitos)';
+            } else if (parentalModalMode === 'disable') {
+                if (titleEl) titleEl.textContent = 'Desativar Controle Parental';
+                if (subEl) subEl.textContent = 'Confirme seu PIN atual para desativar o bloqueio.';
+                if (curWrap) curWrap.classList.add('hidden');
+                if (pinLabel) pinLabel.textContent = 'PIN atual';
+            } else {
+                if (titleEl) titleEl.textContent = 'Conteúdo Adulto (18+)';
+                if (subEl) subEl.textContent = 'Digite o PIN para desbloquear nesta sessão.';
+                if (curWrap) curWrap.classList.add('hidden');
+                if (pinLabel) pinLabel.textContent = 'PIN (padrão: 0000)';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                const target = parentalModalMode === 'change' ? curInput : pinInput;
+                if (target) target.focus();
+            }, 60);
+        };
+
+        window.closeParentalPinModal = function () {
+            const modal = document.getElementById('parental-pin-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+            pendingParentalAction = null;
+        };
+
+        window.submitParentalPinModal = function () {
+            if (!window.MK21Parental) return;
+            const curInput = document.getElementById('parental-current-pin-input');
+            const pinInput = document.getElementById('parental-pin-input');
+            const errEl = document.getElementById('parental-pin-error');
+            const showErr = (msg) => {
+                if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+            };
+
+            const entered = (pinInput ? pinInput.value : '').trim();
+            if (parentalModalMode === 'change') {
+                const curPin = (curInput ? curInput.value : '').trim();
+                if (curPin !== window.MK21Parental.getPin()) {
+                    showErr('PIN atual incorreto.');
+                    return;
+                }
+                const res = window.MK21Parental.setPin(entered);
+                if (!res.ok) {
+                    showErr(res.error);
+                    return;
+                }
+                window.closeParentalPinModal();
+                window.syncParentalPreferencesUI();
+                showNotification('PIN parental atualizado com sucesso!', 'success');
+                return;
+            }
+
+            if (!window.MK21Parental.verifyPin(entered)) {
+                showErr('PIN incorreto. Tente novamente.');
+                if (pinInput) { pinInput.value = ''; pinInput.focus(); }
+                return;
+            }
+
+            const cb = pendingParentalAction;
+            window.closeParentalPinModal();
+            window.syncParentalPreferencesUI();
+            renderCategories();
+            renderMediaItems();
+            if (cb) cb();
+            else showNotification('Conteúdo adulto desbloqueado nesta sessão.', 'success');
         };
 
         const hlsPlayer = new Hls({
@@ -4717,6 +4942,8 @@
         // Action: Logout
         function performLogout() {
             if (confirm('Deseja realmente desconectar e voltar ao login?')) {
+                // Rebloqueia controle parental ao sair da sessão
+                if (window.MK21Parental) window.MK21Parental.lockSession();
                 // Stop any running stream
                 stopStream();
 
@@ -5505,9 +5732,11 @@
                 const safeCat = escapeHtml(cat);
                 const count = categoryCounts[cat];
                 const isActive = (activeCategory === cat);
+                const isLockedAdult = window.MK21Parental && window.MK21Parental.shouldBlockCategory(cat);
+                const lockHtml = isLockedAdult ? '<i class="fa-solid fa-lock text-amber-400 text-[10px] mr-1.5" title="Protegido por PIN (18+)"></i>' : '';
                 html += `
                     <button data-cat="${safeCat}" class="cat-select-btn w-full text-left px-3 py-2.5 text-xs font-semibold rounded-xl flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-red-950/25 to-slate-900/10 text-red-500 border-l-[3px] border-l-[#E50914] pl-2 font-black shadow-md shadow-black/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850/40' }">
-                        <span class="truncate pr-2">${safeCat}</span>
+                        <span class="truncate pr-2 flex items-center">${lockHtml}<span class="truncate">${safeCat}</span></span>
                         <span class="text-[10px] bg-slate-950 px-1.5 py-0.5 rounded-md font-mono ${isActive ? 'text-red-400 border border-red-900/30' : 'text-slate-500 border border-slate-900'}">${count}</span>
                     </button>
                 `;
@@ -5534,8 +5763,11 @@
                     const cat = categories[i];
                     const safeCat = escapeHtml(cat);
                     const isActive = (activeCategory === cat);
+                    const isLockedAdult = window.MK21Parental && window.MK21Parental.shouldBlockCategory(cat);
+                    const lockIcon = isLockedAdult ? '<i class="fa-solid fa-lock text-amber-400 text-[10px]"></i>' : '';
                     chipsHtml += `
                         <button data-cat="${safeCat}" class="quick-cat-chip px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 shrink-0 flex items-center gap-1.5 ${isActive ? 'bg-[#E50914] text-white shadow-md shadow-red-950/40 font-black' : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800'}" tabindex="0">
+                            ${lockIcon}
                             <span class="truncate max-w-[150px]">${safeCat}</span>
                             <span class="text-[10px] font-mono opacity-75">(${categoryCounts[cat]})</span>
                         </button>
@@ -5545,19 +5777,27 @@
             }
 
             // Bind click events on all category buttons (sidebar, modal, horizontal chips)
+            const applyCategorySelection = (cat) => {
+                activeCategory = cat;
+                itemsLimit = 35;
+                mobileCategoryLabel.textContent = cat === 'ALL' ? 'Todas as Categorias' : (cat === 'FAVORITES' ? 'Meus Favoritos ❤️' : cat);
+
+                // Close mobile modal if open
+                mobileCategoryModal.classList.add('hidden');
+
+                renderCategories();
+                renderMediaItems();
+            };
+
             document.querySelectorAll('.cat-select-btn, .quick-cat-chip').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const cat = e.currentTarget.dataset.cat;
                     if (!cat) return;
-                    activeCategory = cat;
-                    itemsLimit = 35;
-                    mobileCategoryLabel.textContent = cat === 'ALL' ? 'Todas as Categorias' : (cat === 'FAVORITES' ? 'Meus Favoritos ❤️' : cat);
-
-                    // Close mobile modal if open
-                    mobileCategoryModal.classList.add('hidden');
-
-                    renderCategories();
-                    renderMediaItems();
+                    if (window.MK21Parental && window.MK21Parental.shouldBlockCategory(cat)) {
+                        window.openParentalPinModal('unlock', () => applyCategorySelection(cat));
+                        return;
+                    }
+                    applyCategorySelection(cat);
                 });
             });
         }
@@ -5617,6 +5857,11 @@
             // Match Search matching query
             if (query) {
                 items = items.filter(item => item.name.toLowerCase().includes(query) || item.category.toLowerCase().includes(query));
+            }
+
+            // Oculta itens adultos bloqueados em listagens gerais e busca até o PIN ser validado
+            if (window.MK21Parental) {
+                items = items.filter(item => !window.MK21Parental.shouldBlockItem(item));
             }
 
             mediaGrid.innerHTML = '';
@@ -6171,6 +6416,10 @@
 
         // Play Execution
         function playStream(item, preserveLayout = false, customProxyMethod = null) {
+            if (window.MK21Parental && window.MK21Parental.shouldBlockItem(item)) {
+                window.openParentalPinModal('unlock', () => playStream(item, preserveLayout, customProxyMethod));
+                return;
+            }
             currentStreamUrl = item.url;
             upgradedHttpsAttempted = false;
 
@@ -7261,10 +7510,11 @@
         };
     </script>
 
-    <!-- Accessibility, SEO, Performance, Smart TV Remote & PWA Modules -->
+    <!-- Accessibility, SEO, Performance, Parental Control, Smart TV Remote & PWA Modules -->
     <script src="js/performance.js"></script>
     <script src="js/accessibility.js"></script>
     <script src="js/seo-meta.js"></script>
+    <script src="js/parental-control.js"></script>
     <script src="js/tv-remote-and-pwa.js"></script>
 <script>function enterOfflineMode(){ alert("Entrando em modo Offline..."); window.location.href="offline.html"; }</script></body>
 </html>

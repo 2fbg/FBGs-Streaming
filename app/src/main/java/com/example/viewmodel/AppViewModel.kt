@@ -96,7 +96,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentLicenseInfo = MutableStateFlow(preferencesService.currentLicense())
     val currentLicenseInfo: StateFlow<LicenseInfo?> = _currentLicenseInfo.asStateFlow()
 
-    private val _isPremiumActive = MutableStateFlow(_currentLicenseInfo.value != null)
+    private val _isPremiumActive = MutableStateFlow(preferencesService.isLicenseValid())
     val isPremiumActive = _isPremiumActive.asStateFlow()
 
     private val _trialDaysLeft = MutableStateFlow(preferencesService.getTrialDaysRemaining())
@@ -117,13 +117,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun syncLicenseState() {
         val info = preferencesService.currentLicense()
         _currentLicenseInfo.value = info
-        _isPremiumActive.value = info != null
+        _isPremiumActive.value = preferencesService.isLicenseValid()
         _trialDaysLeft.value = preferencesService.getTrialDaysRemaining()
     }
 
     /**
-     * Ativa a licença via servidor (`/api/license/activate`), valida a assinatura ECDSA P-256
-     * recebida no token e persiste localmente para verificação offline.
+     * Ativa a licença: quando `LICENSE_PUBKEY_B64` está configurada, valida via servidor
+     * (`/api/license/activate`) com assinatura ECDSA P-256; em modo de homologação (sem chave
+     * pública ECDSA), utiliza a validação local HMAC-SHA256 (`LICENSE_SECRET`).
      */
     fun activateLicense(code: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
         val trimmedCode = code.trim()
@@ -132,8 +133,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (_isActivatingLicense.value) return
-        _isActivatingLicense.value = true
 
+        // Modo de homologação: sem chave pública ECDSA no build, valida chave HMAC local offline
+        if (BuildConfig.LICENSE_PUBKEY_B64.isBlank()) {
+            if (preferencesService.isLocalHmacKeyValid(trimmedCode)) {
+                preferencesService.activationKey = trimmedCode.uppercase()
+                _isPremiumActive.value = true
+                _trialDaysLeft.value = 9999
+                onResult(true, "Dispositivo ativado com sucesso!")
+            } else {
+                onResult(false, "Chave de ativação inválida para este dispositivo.")
+            }
+            return
+        }
+
+        _isActivatingLicense.value = true
         viewModelScope.launch(Dispatchers.IO) {
             val (success, message) = requestLicenseActivation(trimmedCode)
             withContext(Dispatchers.Main) {
@@ -433,6 +447,108 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
     )
+
+    /**
+     * Lista completa de canais ao vivo da playlist ativa (respeitando controle parental) para o Guia de EPG.
+     */
+    val liveChannelsForGuide: StateFlow<List<PlaylistItem>> = combine(
+        _activePlaylistName,
+        _adultPinGranted
+    ) { playlist, adultGranted ->
+        playlist to adultGranted
+    }.flatMapLatest { (playlist, adultGranted) ->
+        playlistItemDao.getItemsByType(playlist, ContentType.LIVE.name).map { list ->
+            if (adultGranted) list else list.filter { !it.isAdult && !isAdultCategory(it.category) }
+        }
+    }.flowOn(Dispatchers.IO).stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    /**
+     * Resolve (baseUrl, username, password) para chamadas Xtream/XMLTV a partir do servidor ativo ou URL manual.
+     */
+    fun resolveActiveXtreamCredentials(targetPlaylist: String = _activePlaylistName.value): Triple<String, String, String>? {
+        val predefinedServer = predefinedServers.find { it.name == targetPlaylist }
+        if (predefinedServer != null) {
+            val user = _username.value.trim()
+            val pass = _password.value.trim()
+            if (user.isNotEmpty() && pass.isNotEmpty()) {
+                val base = com.example.data.parser.XtreamCatalogClient.normalizeBaseUrl(predefinedServer.baseUrl)
+                if (base.isNotEmpty()) return Triple(base, user, pass)
+            }
+            return null
+        }
+
+        val manual = manualPlaylists.value.find { it.name == targetPlaylist }?.url?.trim().orEmpty()
+        if (manual.isNotEmpty()) {
+            val uri = try { android.net.Uri.parse(manual) } catch (_: Exception) { null }
+            val scheme = uri?.scheme
+            val host = uri?.host
+            val user = uri?.getQueryParameter("username")?.trim().orEmpty()
+            val pass = uri?.getQueryParameter("password")?.trim().orEmpty()
+            if (!scheme.isNullOrBlank() && !host.isNullOrBlank() && user.isNotEmpty() && pass.isNotEmpty()) {
+                val portPart = if (uri.port > 0) ":${uri.port}" else ""
+                return Triple("$scheme://$host$portPart", user, pass)
+            }
+        }
+        return null
+    }
+
+    fun loadXmltvForActiveServer(force: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val creds = resolveActiveXtreamCredentials()
+            if (creds != null) {
+                com.example.data.service.AndroidEpgManager.loadXmltv(
+                    baseUrl = creds.first,
+                    username = creds.second,
+                    password = creds.third,
+                    force = force,
+                    client = okHttpClient
+                )
+            } else if (!com.example.data.service.AndroidEpgManager.discoveredM3uXmltvUrl.isNullOrBlank()) {
+                com.example.data.service.AndroidEpgManager.loadXmltv(
+                    baseUrl = "",
+                    username = "",
+                    password = "",
+                    force = force,
+                    client = okHttpClient
+                )
+            }
+        }
+    }
+
+    suspend fun fetchShortEpgForChannel(item: PlaylistItem): List<com.example.data.parser.XmltvProgramme> {
+        val creds = resolveActiveXtreamCredentials() ?: return emptyList()
+        return com.example.data.service.AndroidEpgManager.fetchShortEpgForChannel(
+            item = item,
+            baseUrl = creds.first,
+            username = creds.second,
+            password = creds.third,
+            client = okHttpClient
+        )
+    }
+
+    suspend fun fetchXtreamSeriesEpisodes(seriesItem: PlaylistItem, seriesTitle: String): List<PlaylistItem> =
+        withContext(Dispatchers.IO) {
+            val seriesId = com.example.data.parser.XtreamCatalogClient.extractXtreamSeriesId(seriesItem.url)
+                ?: return@withContext emptyList()
+            val creds = resolveActiveXtreamCredentials(seriesItem.playlistSource)
+                ?: resolveActiveXtreamCredentials()
+                ?: return@withContext emptyList()
+            com.example.data.parser.XtreamCatalogClient.fetchSeriesEpisodes(
+                client = okHttpClient,
+                baseUrl = creds.first,
+                username = creds.second,
+                password = creds.third,
+                seriesId = seriesId,
+                seriesName = seriesTitle,
+                category = seriesItem.category,
+                logoUrl = seriesItem.logoUrl,
+                playlistSource = seriesItem.playlistSource
+            )
+        }
 
     /**
      * Searches database for the most relevant items across LIVE, MOVIES and SERIES for AI Copilot queries.
@@ -1615,6 +1731,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _errorMessage.value = null
             try {
                 val targetPlaylist = _activePlaylistName.value
+                val xtreamCreds = resolveActiveXtreamCredentials(targetPlaylist)
+
+                // 1. Prioriza API Xtream Codes JSON (player_api.php) — resiliente ao encerramento de M3U
+                if (xtreamCreds != null) {
+                    val xtreamResult = com.example.data.parser.XtreamCatalogClient.fetchCatalog(
+                        client = okHttpClient,
+                        baseUrl = xtreamCreds.first,
+                        username = xtreamCreds.second,
+                        password = xtreamCreds.third,
+                        playlistSource = targetPlaylist,
+                        liveFormat = preferencesService.liveStreamFormat
+                    ) { progress ->
+                        _loadingProgress.value = progress.coerceIn(5, 94)
+                    }
+                    if (xtreamResult != null && xtreamResult.items.isNotEmpty()) {
+                        com.example.data.service.AndroidEpgManager.registerBulkChannelEpgIds(
+                            xtreamResult.epgChannelIdsByUrl,
+                            xtreamResult.epgChannelIdsByName
+                        )
+                        _loadingProgress.value = 95
+                        savePlaylistStaged(targetPlaylist, xtreamResult.items, isSilent = false)
+                        loadXmltvForActiveServer(force = false)
+                        return@launch
+                    }
+                }
+
+                // 2. Fallback automático para M3U (get.php ou lista manual)
                 val candidateUrls = getActivePlaylistCandidateUrls(targetPlaylist)
                 
                 if (candidateUrls.isEmpty()) {
@@ -1666,6 +1809,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
                 _loadingProgress.value = 95 // saving cache
                 savePlaylistStaged(targetPlaylist, parsedItems, isSilent = false)
+                loadXmltvForActiveServer(force = false)
             } catch (e: Exception) {
                 _errorMessage.value = "Erro ao processar a lista: ${e.message}"
                 _loadingProgress.value = null
@@ -1676,6 +1820,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun downloadAndParsePlaylistSilently(targetPlaylist: String = _activePlaylistName.value): Boolean {
         return try {
+            // 1. Tenta ingestão silenciosa via Xtream JSON antes do fallback M3U
+            val xtreamCreds = resolveActiveXtreamCredentials(targetPlaylist)
+            if (xtreamCreds != null) {
+                val xtreamResult = try {
+                    com.example.data.parser.XtreamCatalogClient.fetchCatalog(
+                        client = okHttpClient,
+                        baseUrl = xtreamCreds.first,
+                        username = xtreamCreds.second,
+                        password = xtreamCreds.third,
+                        playlistSource = targetPlaylist,
+                        liveFormat = preferencesService.liveStreamFormat
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+                if (xtreamResult != null && xtreamResult.items.isNotEmpty()) {
+                    com.example.data.service.AndroidEpgManager.registerBulkChannelEpgIds(
+                        xtreamResult.epgChannelIdsByUrl,
+                        xtreamResult.epgChannelIdsByName
+                    )
+                    savePlaylistStaged(targetPlaylist, xtreamResult.items, isSilent = true)
+                    return true
+                }
+            }
+
+            // 2. Fallback M3U
             val candidateUrls = getActivePlaylistCandidateUrls(targetPlaylist)
             if (candidateUrls.isEmpty()) return false
 

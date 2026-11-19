@@ -1744,11 +1744,13 @@ fun HomeScreen(
     val errorMsg by viewModel.errorMessage.collectAsState()
     val continueWatching by viewModel.continueWatchingList.collectAsState()
     val backgroundLoadingState by viewModel.backgroundLoadingState.collectAsState()
+    val liveChannelsForGuide by viewModel.liveChannelsForGuide.collectAsState()
 
     var showPlaylistMenu by remember { mutableStateOf(false) }
     var selectedSeriesForDetail by remember { mutableStateOf<GroupedSeries?>(null) }
     var showSortOrderDialog by remember { mutableStateOf(false) }
     var showGeminiDialog by remember { mutableStateOf(false) }
+    var showFullEpgGuide by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -1968,6 +1970,19 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    // Botão Guia EPG completo (Landscape)
+                    IconButton(
+                        onClick = { showFullEpgGuide = true },
+                        modifier = Modifier.size(36.dp).testTag("open_epg_guide_button_landscape")
+                    ) {
+                        Icon(
+                            Icons.Default.CalendarMonth,
+                            contentDescription = "Guia de Programação (EPG)",
+                            tint = GoldPremium,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Direct Quick Sort Button on Home Screen
                     IconButton(onClick = { showSortOrderDialog = true }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Sort, contentDescription = "Ordenação", tint = Color.White, modifier = Modifier.size(20.dp))
@@ -2067,6 +2082,17 @@ fun HomeScreen(
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
+
+                    IconButton(
+                        onClick = { showFullEpgGuide = true },
+                        modifier = Modifier.testTag("open_epg_guide_button_portrait")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Guia de Programação (EPG)",
+                            tint = GoldPremium
+                        )
+                    }
 
                     IconButton(onClick = { viewModel.refreshActivePlaylist() }) {
                         Icon(
@@ -2541,10 +2567,24 @@ fun HomeScreen(
             }
         }
 
+        // Full XMLTV EPG Guide Dialog
+        if (showFullEpgGuide) {
+            FullEpgGuideDialog(
+                viewModel = viewModel,
+                liveChannels = liveChannelsForGuide,
+                onDismiss = { showFullEpgGuide = false },
+                onPlayChannel = { channelItem ->
+                    showFullEpgGuide = false
+                    viewModel.playContent(channelItem)
+                }
+            )
+        }
+
         // EPG Live Channel Preview Dialog
         if (selectedChannelForEpg != null) {
             ChannelEpgPreviewDialog(
                 item = selectedChannelForEpg!!,
+                viewModel = viewModel,
                 onDismiss = { selectedChannelForEpg = null },
                 onPlay = { channelItem ->
                     selectedChannelForEpg = null
@@ -2553,11 +2593,30 @@ fun HomeScreen(
             )
         }
 
-        // Series Detail and Episode picker dialog
+        // Series Detail and Episode picker dialog (com suporte a episódios Xtream via get_series_info)
         if (selectedSeriesForDetail != null) {
             val series = selectedSeriesForDetail!!
-            val groupedSeasons = remember(series.episodes) {
-                groupEpisodesBySeason(series.episodes)
+            var resolvedEpisodes by remember(series.title, series.episodes) {
+                mutableStateOf(series.episodes)
+            }
+            var isLoadingXtreamEpisodes by remember(series.title) { mutableStateOf(false) }
+
+            LaunchedEffect(series.title, series.episodes) {
+                val firstEp = series.episodes.firstOrNull()
+                if (series.episodes.size == 1 && firstEp != null &&
+                    com.example.data.parser.XtreamCatalogClient.extractXtreamSeriesId(firstEp.url) != null
+                ) {
+                    isLoadingXtreamEpisodes = true
+                    val fetched = viewModel.fetchXtreamSeriesEpisodes(firstEp, series.title)
+                    if (fetched.isNotEmpty()) {
+                        resolvedEpisodes = fetched
+                    }
+                    isLoadingXtreamEpisodes = false
+                }
+            }
+
+            val groupedSeasons = remember(resolvedEpisodes) {
+                groupEpisodesBySeason(resolvedEpisodes)
             }
             val seasonList = remember(groupedSeasons) { groupedSeasons.keys.toList() }
             var selectedSeason by remember(seasonList) {
@@ -2608,9 +2667,13 @@ fun HomeScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "${series.episodes.size} episódios • ${series.category}",
+                                    text = if (isLoadingXtreamEpisodes) {
+                                        "Carregando temporadas e episódios..."
+                                    } else {
+                                        "${resolvedEpisodes.size} episódios • ${series.category}"
+                                    },
                                     fontSize = 12.sp,
-                                    color = Color.Gray
+                                    color = if (isLoadingXtreamEpisodes) GoldPremium else Color.Gray
                                 )
                             }
                             IconButton(onClick = { selectedSeriesForDetail = null }) {
@@ -3139,6 +3202,12 @@ fun getChannelEpgSchedule(channelName: String): List<EpgProgramInfo> {
     if (!realList.isNullOrEmpty()) {
         return realList
     }
+    val xmltvProgrammes = com.example.data.service.AndroidEpgManager.xmltvIndex.value
+        ?.findProgrammes(channelName)
+        .orEmpty()
+    if (xmltvProgrammes.isNotEmpty()) {
+        return com.example.data.service.AndroidEpgManager.toEpgProgramInfoList(xmltvProgrammes)
+    }
     val cal = java.util.Calendar.getInstance()
     val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
     val minute = cal.get(java.util.Calendar.MINUTE)
@@ -3261,6 +3330,9 @@ fun getCurrentEpgProgram(channelName: String): String {
         val cur = realList.firstOrNull { it.isCurrent } ?: realList.firstOrNull()
         if (cur != null) return cur.title
     }
+    val (xmltvNow, xmltvNext) = com.example.data.service.AndroidEpgManager.xmltvIndex.value
+        ?.findNowAndNext(channelName) ?: (null to null)
+    (xmltvNow ?: xmltvNext)?.let { return it.title }
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val name = channelName.uppercase()
     return when {
@@ -3600,96 +3672,32 @@ fun GridItemCard(
 @Composable
 fun ChannelEpgPreviewDialog(
     item: PlaylistItem,
+    viewModel: AppViewModel? = null,
     onDismiss: () -> Unit,
     onPlay: (PlaylistItem) -> Unit
 ) {
     val context = LocalContext.current
-    var schedule by remember(item.name) { mutableStateOf(getChannelEpgSchedule(item.name)) }
+    var schedule by remember(item.name, item.url) {
+        val fromXmltv = com.example.data.service.AndroidEpgManager.getRealProgrammes(item)
+        mutableStateOf(
+            if (fromXmltv.isNotEmpty()) {
+                com.example.data.service.AndroidEpgManager.toEpgProgramInfoList(fromXmltv)
+            } else {
+                getChannelEpgSchedule(item.name)
+            }
+        )
+    }
     val currentProgram = remember(schedule) { schedule.firstOrNull { it.isCurrent } ?: schedule.firstOrNull() }
 
     LaunchedEffect(item.url) {
-        withContext(Dispatchers.IO) {
-            try {
-                val streamIdMatch = Regex("/([0-9]+)(?:\\.[a-zA-Z0-9]+)?$").find(item.url)
-                val streamId = streamIdMatch?.groupValues?.get(1)
-
-                val prefs = context.getSharedPreferences("app_preferences", android.content.Context.MODE_PRIVATE)
-                val user = prefs.getString("username", "") ?: ""
-                val pass = prefs.getString("password", "") ?: ""
-                val baseUrl = prefs.getString("base_url", "") ?: ""
-
-                if (streamId != null && baseUrl.isNotEmpty() && user.isNotEmpty() && pass.isNotEmpty()) {
-                    val cleanBase = baseUrl.trimEnd('/')
-                    val encUser = java.net.URLEncoder.encode(user, "UTF-8")
-                    val encPass = java.net.URLEncoder.encode(pass, "UTF-8")
-                    val encStreamId = java.net.URLEncoder.encode(streamId, "UTF-8")
-                    val epgApiUrl = "$cleanBase/player_api.php?username=$encUser&password=$encPass&action=get_short_epg&stream_id=$encStreamId&limit=10"
-                    val client = StreamHttpClients.baseClient.newBuilder()
-                        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                        .build()
-                    val req = okhttp3.Request.Builder().url(epgApiUrl).build()
-                    val resp = client.newCall(req).execute()
-                    if (resp.isSuccessful) {
-                        val body = resp.body?.string()
-                        if (body != null && body.contains("epg_listings")) {
-                            val json = org.json.JSONObject(body)
-                            val arr = json.optJSONArray("epg_listings")
-                            if (arr != null && arr.length() > 0) {
-                                val list = mutableListOf<EpgProgramInfo>()
-                                val now = System.currentTimeMillis()
-                                for (i in 0 until arr.length()) {
-                                    val obj = arr.getJSONObject(i)
-                                    var title = obj.optString("title", "Programa")
-                                    var desc = obj.optString("description", "")
-                                    try {
-                                        if (title.matches(Regex("^[A-Za-z0-9+/=]+$")) && title.length % 4 == 0) {
-                                            val dec = String(android.util.Base64.decode(title, android.util.Base64.DEFAULT), Charsets.UTF_8)
-                                            if (dec.isNotBlank()) title = dec
-                                        }
-                                        if (desc.matches(Regex("^[A-Za-z0-9+/=]+$")) && desc.length % 4 == 0) {
-                                            val dec = String(android.util.Base64.decode(desc, android.util.Base64.DEFAULT), Charsets.UTF_8)
-                                            if (dec.isNotBlank()) desc = dec
-                                        }
-                                    } catch (ignored: Exception) {}
-
-                                    val startTs = obj.optLong("start_timestamp", 0L) * 1000L
-                                    val stopTs = obj.optLong("stop_timestamp", 0L) * 1000L
-                                    val isCur = now in startTs..stopTs
-                                    val timeRange = if (startTs > 0 && stopTs > 0) {
-                                        val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                                        "${sdf.format(java.util.Date(startTs))} - ${sdf.format(java.util.Date(stopTs))}"
-                                    } else {
-                                        "Ao Vivo"
-                                    }
-                                    val progress = if (isCur && stopTs > startTs) {
-                                        ((now - startTs).toFloat() / (stopTs - startTs).toFloat()).coerceIn(0.05f, 0.98f)
-                                    } else 0f
-
-                                    list.add(
-                                        EpgProgramInfo(
-                                            title = title,
-                                            timeRange = timeRange,
-                                            description = desc.ifBlank { "Programação ao vivo transmitida pelo canal." },
-                                            isCurrent = isCur,
-                                            progressPercent = progress,
-                                            isReal = true
-                                        )
-                                    )
-                                }
-                                if (list.isNotEmpty()) {
-                                    withContext(Dispatchers.Main) {
-                                        schedule = list
-                                        AndroidRealEpgCache.put(item.name, list)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (ignored: Exception) {
-                // Keep simulated schedule
-            }
+        val existingReal = com.example.data.service.AndroidEpgManager.getRealProgrammes(item)
+        if (existingReal.isNotEmpty()) {
+            schedule = com.example.data.service.AndroidEpgManager.toEpgProgramInfoList(existingReal)
+            return@LaunchedEffect
+        }
+        val fetched = viewModel?.fetchShortEpgForChannel(item).orEmpty()
+        if (fetched.isNotEmpty()) {
+            schedule = com.example.data.service.AndroidEpgManager.toEpgProgramInfoList(fetched)
         }
     }
 
