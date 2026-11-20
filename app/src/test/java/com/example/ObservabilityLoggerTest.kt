@@ -102,7 +102,45 @@ class ObservabilityLoggerTest {
         assertTrue(diagFile.exists())
         val content = diagFile.readText(Charsets.UTF_8)
         assertTrue(content.contains("MK21 ANDROID DIAGNOSTIC BUNDLE"))
+        assertTrue(content.contains("diagnostics_trace_disabled"))
+        assertTrue(content.contains("ttl_expired"))
         assertFalse(content.contains("superSecretToken123"))
         diagFile.delete()
+    }
+
+    @Test
+    fun `buildDiagnosticPayload reflects live TRACE level, logs manual disable, and correlates channel_change timer`() {
+        var fakeNow = 1_700_000_000_000L
+        var fakeMono = 10_000L
+        ObservabilityLogger.wallClockProvider = { fakeNow }
+        ObservabilityLogger.monoClockProvider = { fakeMono }
+        ObservabilityLogger.init(context)
+
+        ObservabilityLogger.enableTemporaryTrace(45)
+        val zapCid = ObservabilityLogger.startTimer("channel_change")
+        assertTrue(ObservabilityLogger.hasActiveTimer("channel_change"))
+        fakeMono += 420L
+        ObservabilityLogger.endTimer(
+            key = "channel_change",
+            event = "channel_change_complete",
+            phase = "player",
+            meta = mapOf("contentType" to "LIVE", "host" to "cdn.example.com")
+        )
+        assertFalse(ObservabilityLogger.hasActiveTimer("channel_change"))
+
+        val livePayload = ObservabilityLogger.buildDiagnosticPayload(context, crashLog = null)
+        assertTrue(livePayload.contains("Nível: TRACE"))
+        assertTrue(livePayload.contains("\"event\":\"channel_change_complete\""))
+        assertTrue(livePayload.contains("\"durationMs\":420"))
+        assertTrue(livePayload.contains("\"correlationId\":\"$zapCid\""))
+
+        val suggestedName = ObservabilityLogger.suggestExportFilename()
+        assertTrue(suggestedName.startsWith("mk21-android-diagnostico-"))
+        assertTrue(suggestedName.endsWith(".txt"))
+
+        ObservabilityLogger.setLevel(ObservabilityLogger.Level.NORMAL)
+        val afterDisable = ObservabilityLogger.exportJsonl(context)
+        assertTrue(afterDisable.contains("\"event\":\"diagnostics_trace_disabled\""))
+        assertTrue(afterDisable.contains("\"reason\":\"manual\""))
     }
 }

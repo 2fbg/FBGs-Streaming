@@ -1256,6 +1256,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 meta = mapOf("task" to "sync_all_playlists")
             )
             var syncedCount = 0
+            var candidateCount = 0
+            var skippedFreshCount = 0
             try {
                 val configuredLists = mutableListOf<String>()
                 val active = _activePlaylistName.value
@@ -1276,7 +1278,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         configuredLists.add(m.name)
                     }
                 }
-                
+
+                candidateCount = configuredLists.size
                 for (listName in configuredLists) {
                     val lastUpdate = preferencesService.getLastPlaylistUpdateTimestamp(listName)
                     if (shouldSyncBasedOnFrequency(lastUpdate)) {
@@ -1284,6 +1287,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (downloadAndParsePlaylistSilently(listName)) syncedCount++
                         // Gentle 3s pause between servers to safeguard network and CPU
                         delay(3000L)
+                    } else {
+                        skippedFreshCount++
                     }
                 }
             } catch (e: Exception) {
@@ -1293,7 +1298,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     key = "bg_sync_all",
                     event = "background_task_end",
                     phase = "background",
-                    meta = mapOf("task" to "sync_all_playlists", "syncedCount" to syncedCount)
+                    meta = mapOf(
+                        "task" to "sync_all_playlists",
+                        "candidateCount" to candidateCount,
+                        "syncedCount" to syncedCount,
+                        "skippedFreshCount" to skippedFreshCount
+                    )
                 )
             }
         }
@@ -1456,16 +1466,46 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (item.isAdult && !_adultPinGranted.value) {
             _activePinPromptItem.value = item
         } else {
+            // Cancela prefetch de canal anterior imediatamente para não disputar conexão com o novo stream
+            prefetchJob?.cancel()
             val previous = _currentPlayingItem.value
+            val safeHost = com.example.utils.LogSanitizer.extractSafeHost(item.url)
             _currentPlayingItem.value = item
-            com.example.utils.ObservabilityLogger.logEvent(
-                event = if (previous != null) "channel_change_complete" else "player_open",
-                phase = "player",
-                meta = mapOf(
-                    "contentType" to item.contentType,
-                    "host" to com.example.utils.LogSanitizer.extractSafeHost(item.url)
+            if (previous == null) {
+                val openCid = com.example.utils.ObservabilityLogger.startTimer("player_ttff")
+                com.example.utils.ObservabilityLogger.logEvent(
+                    event = "player_open",
+                    phase = "player",
+                    correlationId = openCid,
+                    meta = mapOf(
+                        "contentType" to item.contentType,
+                        "host" to safeHost
+                    )
                 )
-            )
+            } else {
+                // Troca de canal enquanto player já está ativo: channel_change_complete será medido no 1º frame real do ExoPlayer
+                val zapCid = if (com.example.utils.ObservabilityLogger.hasActiveTimer("channel_change")) {
+                    com.example.utils.ObservabilityLogger.startTimer("player_ttff")
+                } else {
+                    val cid = com.example.utils.ObservabilityLogger.startTimer("channel_change")
+                    com.example.utils.ObservabilityLogger.startTimer("player_ttff", cid)
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "channel_change_start",
+                        phase = "player",
+                        correlationId = cid,
+                        meta = mapOf("direction" to "direct", "contentType" to item.contentType, "host" to safeHost)
+                    )
+                    cid
+                }
+                com.example.utils.ObservabilityLogger.logEvent(
+                    event = "player_item_switched",
+                    phase = "player",
+                    severity = com.example.utils.ObservabilityLogger.Severity.DEBUG,
+                    correlationId = zapCid,
+                    meta = mapOf("contentType" to item.contentType, "host" to safeHost),
+                    minLevel = com.example.utils.ObservabilityLogger.Level.TRACE
+                )
+            }
             viewModelScope.launch(Dispatchers.IO) {
                 playlistItemDao.updateLastWatched(item.id, System.currentTimeMillis())
                 prefetchAdjacentChannels(item)
@@ -1483,7 +1523,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun prefetchAdjacentChannels(currentItem: PlaylistItem) {
         prefetchJob?.cancel()
+        if (currentItem.contentType != "LIVE") return
         prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            // Aguarda estabilização do canal antes do prefetch para evitar rajada de conexões simultâneas no servidor IPTV durante zapping rápido
+            delay(2500L)
+            if (!isActive || _currentPlayingItem.value?.id != currentItem.id) return@launch
             val list = activeItemsList.value
             val currentIndex = list.indexOfFirst { it.id == currentItem.id }
             if (currentIndex == -1 || list.size <= 1) return@launch
@@ -1493,7 +1537,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             val adjacent = listOf(list[nextIndex], list[prevIndex])
             for (adj in adjacent) {
-                if (!isActive) break
+                if (!isActive || _currentPlayingItem.value?.id != currentItem.id) break
                 try {
                     val urlStr = adj.url
                     if (urlStr.startsWith("http://", ignoreCase = true) || urlStr.startsWith("https://", ignoreCase = true)) {
@@ -1585,12 +1629,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val list = activeItemsList.value
         val index = list.indexOfFirst { it.id == current.id }
         if (index != -1 && index < list.size - 1) {
+            val nextItem = list[index + 1]
+            val zapCid = com.example.utils.ObservabilityLogger.startTimer("channel_change")
             com.example.utils.ObservabilityLogger.logEvent(
                 event = "channel_change_start",
                 phase = "player",
-                meta = mapOf("direction" to "next")
+                correlationId = zapCid,
+                meta = mapOf(
+                    "direction" to "next",
+                    "contentType" to nextItem.contentType,
+                    "host" to com.example.utils.LogSanitizer.extractSafeHost(nextItem.url)
+                )
             )
-            playContent(list[index + 1])
+            playContent(nextItem)
         }
     }
 
@@ -1599,12 +1650,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val list = activeItemsList.value
         val index = list.indexOfFirst { it.id == current.id }
         if (index > 0) {
+            val prevItem = list[index - 1]
+            val zapCid = com.example.utils.ObservabilityLogger.startTimer("channel_change")
             com.example.utils.ObservabilityLogger.logEvent(
                 event = "channel_change_start",
                 phase = "player",
-                meta = mapOf("direction" to "previous")
+                correlationId = zapCid,
+                meta = mapOf(
+                    "direction" to "previous",
+                    "contentType" to prevItem.contentType,
+                    "host" to com.example.utils.LogSanitizer.extractSafeHost(prevItem.url)
+                )
             )
-            playContent(list[index - 1])
+            playContent(prevItem)
         }
     }
 
@@ -1950,12 +2008,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             xtreamResult.epgChannelIdsByName
                         )
                         _loadingProgress.value = 95
+                        val dbStartNs = System.nanoTime()
                         savePlaylistStaged(targetPlaylist, xtreamResult.items, isSilent = false)
+                        val dbWriteMs = (System.nanoTime() - dbStartNs) / 1_000_000L
                         com.example.utils.ObservabilityLogger.endTimer(
                             key = "playlist_load",
                             event = "playlist_load_complete",
                             phase = "catalog",
-                            meta = mapOf("source" to targetPlaylist, "method" to "xtream", "itemCount" to xtreamResult.items.size)
+                            meta = mapOf(
+                                "source" to targetPlaylist,
+                                "method" to "xtream",
+                                "itemCount" to xtreamResult.items.size,
+                                "liveCount" to xtreamResult.liveCount,
+                                "movieCount" to xtreamResult.movieCount,
+                                "seriesCount" to xtreamResult.seriesCount,
+                                "authMs" to xtreamResult.authMs,
+                                "liveMs" to xtreamResult.liveMs,
+                                "vodMs" to xtreamResult.vodMs,
+                                "seriesMs" to xtreamResult.seriesMs,
+                                "dbWriteMs" to dbWriteMs
+                            )
                         )
                         com.example.utils.ObservabilityLogger.logEvent(
                             event = "login_success",

@@ -127,6 +127,7 @@ object ObservabilityLogger {
     }
 
     fun setLevel(level: Level, traceTtlMs: Long = DEFAULT_TRACE_TTL_MS) {
+        val previous = currentLevel
         currentLevel = level
         traceExpiresAtMs = if (level == Level.TRACE) {
             val clamped = traceTtlMs.coerceIn(MIN_TRACE_TTL_MS, MAX_TRACE_TTL_MS)
@@ -135,6 +136,15 @@ object ObservabilityLogger {
             0L
         }
         persistLevelState()
+        if (previous == Level.TRACE && level != Level.TRACE) {
+            logEvent(
+                event = "diagnostics_trace_disabled",
+                phase = "diagnostics",
+                severity = Severity.INFO,
+                meta = mapOf("newLevel" to level.name, "reason" to "manual"),
+                force = true
+            )
+        }
     }
 
     fun enableTemporaryTrace(minutes: Int = 45) {
@@ -146,6 +156,12 @@ object ObservabilityLogger {
             meta = mapOf("ttlMinutes" to minutes.coerceIn(30, 60)),
             force = true
         )
+    }
+
+    fun hasActiveTimer(key: String): Boolean = activeTimers.containsKey(key)
+
+    fun cancelTimer(key: String) {
+        activeTimers.remove(key)
     }
 
     fun setScreen(screen: String) {
@@ -302,25 +318,47 @@ object ObservabilityLogger {
         return lines.joinToString("\n")
     }
 
-    fun exportDiagnosticFile(context: Context, crashLog: String? = CrashLogger.getLatestCrashLog(context)): File {
-        val diagDir = File(context.cacheDir, "diagnostics").apply { mkdirs() }
+    fun suggestExportFilename(): String {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }.format(Date(wallClockProvider()))
-        val outFile = File(diagDir, "mk21-android-diagnostico-$stamp.txt")
+        return "mk21-android-diagnostico-$stamp.txt"
+    }
+
+    fun buildDiagnosticPayload(
+        context: Context,
+        crashLog: String? = CrashLogger.getLatestCrashLog(context)
+    ): String {
+        val liveLevel = getLevel()
+        val remainingMins = getTraceRemainingMinutes()
+        val levelLabel = if (liveLevel == Level.TRACE && remainingMins > 0) {
+            "${liveLevel.name} (expira em ~${remainingMins} min)"
+        } else {
+            liveLevel.name
+        }
         val content = buildString {
             appendLine("=== MK21 ANDROID DIAGNOSTIC BUNDLE (REDACTED) ===")
-            appendLine("SessionId: $sessionId")
-            appendLine("Level: ${getLevel().name}")
+            appendLine("Sessão: $sessionId | Nível: $levelLabel")
             appendLine(CrashLogger.getSystemDiagnosticInfo(context))
-            appendLine("=== STRUCTURED EVENTS (JSONL) ===")
+            appendLine("=== EVENTOS ESTRUTURADOS (JSONL) ===")
             val jsonl = exportJsonl(context)
             appendLine(if (jsonl.isBlank()) "(nenhum evento registrado)" else jsonl)
             appendLine()
-            appendLine("=== LATEST CRASH REPORT ===")
+            appendLine("=== ÚLTIMO RELATÓRIO DE FALHA ===")
             appendLine(LogSanitizer.sanitizeText(crashLog ?: "Nenhum relatório de falha capturado."))
         }
-        outFile.writeText(LogSanitizer.sanitizeText(content), Charsets.UTF_8)
+        return LogSanitizer.sanitizeText(content)
+    }
+
+    fun exportDiagnosticFile(context: Context, crashLog: String? = CrashLogger.getLatestCrashLog(context)): File {
+        val diagDir = File(context.cacheDir, "diagnostics").apply { mkdirs() }
+        // Remove arquivos temporários antigos além dos 5 mais recentes para economizar cache
+        diagDir.listFiles()
+            ?.sortedByDescending { it.lastModified() }
+            ?.drop(5)
+            ?.forEach { runCatching { it.delete() } }
+        val outFile = File(diagDir, suggestExportFilename())
+        outFile.writeText(buildDiagnosticPayload(context, crashLog), Charsets.UTF_8)
         return outFile
     }
 
@@ -355,6 +393,13 @@ object ObservabilityLogger {
             currentLevel = Level.NORMAL
             traceExpiresAtMs = 0L
             persistLevelState()
+            logEvent(
+                event = "diagnostics_trace_disabled",
+                phase = "diagnostics",
+                severity = Severity.INFO,
+                meta = mapOf("newLevel" to Level.NORMAL.name, "reason" to "ttl_expired"),
+                force = true
+            )
         }
     }
 

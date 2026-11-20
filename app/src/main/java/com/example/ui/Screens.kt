@@ -4150,13 +4150,43 @@ fun ChannelEpgPreviewDialog(
     }
 
     DisposableEffect(miniPlayer) {
+        val miniHost = com.example.utils.LogSanitizer.extractSafeHost(item.url)
+        val miniCid = com.example.utils.ObservabilityLogger.startTimer("mini_player_ttff")
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 isMiniBuffering = state == Player.STATE_BUFFERING
             }
+
+            override fun onRenderedFirstFrame() {
+                com.example.utils.ObservabilityLogger.endTimer(
+                    key = "mini_player_ttff",
+                    event = "player_first_frame",
+                    phase = "player",
+                    meta = mapOf("miniPlayer" to true, "contentType" to item.contentType, "host" to miniHost)
+                )
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                val httpStatus = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                com.example.utils.ObservabilityLogger.logEvent(
+                    event = "player_error",
+                    phase = "player",
+                    severity = com.example.utils.ObservabilityLogger.Severity.ERROR,
+                    correlationId = miniCid,
+                    message = error.message,
+                    meta = buildMap {
+                        put("miniPlayer", true)
+                        put("errorCode", error.errorCode)
+                        put("errorCodeName", error.errorCodeName)
+                        if (httpStatus != null) put("httpStatus", httpStatus)
+                        put("host", miniHost)
+                    }
+                )
+            }
         }
         miniPlayer.addListener(listener)
         onDispose {
+            com.example.utils.ObservabilityLogger.cancelTimer("mini_player_ttff")
             miniPlayer.removeListener(listener)
             miniPlayer.stop()
             miniPlayer.release()
@@ -5067,6 +5097,12 @@ fun VideoPlayerUI(
         }
     }
 
+    val lastPlayerSwitchMonoRef = remember { longArrayOf(0L) }
+    val playerSessionStartMono = remember { android.os.SystemClock.elapsedRealtime() }
+    val currentPlaylistItemState = rememberUpdatedState(playlistItem)
+    val currentPlaybackUrlState = rememberUpdatedState(activePlaybackUrl)
+    val currentSourceIndexState = rememberUpdatedState(selectedSourceIndex)
+
     LaunchedEffect(playlistItem, activePlaybackUrl, retryCount, sourceSwitchTrigger) {
         if (isResolvingSource) return@LaunchedEffect
         errorMessage = null
@@ -5078,9 +5114,28 @@ fun VideoPlayerUI(
         }
         try {
             isBuffering = true
+            val nowMono = android.os.SystemClock.elapsedRealtime()
+            val sinceLastSwitch = nowMono - lastPlayerSwitchMonoRef[0]
+            val isBurstZap = retryCount == 0 &&
+                sourceSwitchTrigger == 0 &&
+                playlistItem.contentType == "LIVE" &&
+                lastPlayerSwitchMonoRef[0] > 0L &&
+                sinceLastSwitch in 1L..650L
+            lastPlayerSwitchMonoRef[0] = nowMono
+
             if (retryCount > 0) {
                 Log.d("PlayerScreen", "Auto-reconnecting stream: attempt $retryCount/2 in 2s...")
                 kotlinx.coroutines.delay(2000L)
+            } else if (isBurstZap) {
+                // Debounce curto em rajada de zapping: mantém o HUD instantâneo e evita conexões HTTP intermediárias (HTTP 429/403)
+                com.example.utils.ObservabilityLogger.logEvent(
+                    event = "zap_burst_debounced",
+                    phase = "player",
+                    severity = com.example.utils.ObservabilityLogger.Severity.DEBUG,
+                    meta = mapOf("debounceMs" to 260, "sinceLastSwitchMs" to sinceLastSwitch),
+                    minLevel = com.example.utils.ObservabilityLogger.Level.TRACE
+                )
+                kotlinx.coroutines.delay(260L)
             }
             // Stop and clear previous playback state first to prevent native decoding deadlocks/crashes!
             try {
@@ -5088,6 +5143,9 @@ fun VideoPlayerUI(
                 exoPlayer.clearMediaItems()
             } catch (e: Exception) {
                 // Ignore player transient reset errors
+            }
+            if (!com.example.utils.ObservabilityLogger.hasActiveTimer("player_ttff")) {
+                com.example.utils.ObservabilityLogger.startTimer("player_ttff")
             }
             val item = createMediaItem(url, activeExternalSubtitleUri)
             val resumePositionMs = requestedResumePositionMs
@@ -5100,8 +5158,20 @@ fun VideoPlayerUI(
             exoPlayer.prepare()
             exoPlayer.play()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             errorMessage = "Erro ao carregar mídia: ${e.localizedMessage ?: "Causa desconhecida"}"
             isBuffering = false
+            com.example.utils.ObservabilityLogger.logEvent(
+                event = "player_error",
+                phase = "player",
+                severity = com.example.utils.ObservabilityLogger.Severity.ERROR,
+                message = e.message,
+                meta = mapOf(
+                    "stage" to "prepare",
+                    "contentType" to playlistItem.contentType,
+                    "host" to com.example.utils.LogSanitizer.extractSafeHost(url)
+                )
+            )
         }
     }
 
@@ -5112,6 +5182,16 @@ fun VideoPlayerUI(
             if (isBuffering && !isResolvingSource) {
                 Log.d("PlayerScreen", "Playback source timed out; trying the next untried source.")
                 if (tryNextUntriedSource()) {
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "player_fallback_source",
+                        phase = "player",
+                        severity = com.example.utils.ObservabilityLogger.Severity.WARN,
+                        meta = mapOf(
+                            "reason" to "buffering_timeout_15s",
+                            "sourceIndex" to selectedSourceIndex,
+                            "host" to com.example.utils.LogSanitizer.extractSafeHost(activePlaybackUrl)
+                        )
+                    )
                     android.widget.Toast.makeText(
                         context,
                         "Reconectando via ${availableSources[selectedSourceIndex].first}...",
@@ -5143,7 +5223,99 @@ fun VideoPlayerUI(
         
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
+                val wasBuffering = isBuffering
                 isBuffering = state == Player.STATE_BUFFERING
+                val activeItem = currentPlaylistItemState.value
+                val safeHost = com.example.utils.LogSanitizer.extractSafeHost(currentPlaybackUrlState.value)
+                if (state == Player.STATE_BUFFERING && !com.example.utils.ObservabilityLogger.hasActiveTimer("player_buffering")) {
+                    val bufCid = com.example.utils.ObservabilityLogger.startTimer("player_buffering")
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "player_buffering_start",
+                        phase = "player",
+                        correlationId = bufCid,
+                        meta = mapOf("contentType" to activeItem.contentType, "host" to safeHost)
+                    )
+                } else if (state == Player.STATE_READY && (wasBuffering || com.example.utils.ObservabilityLogger.hasActiveTimer("player_buffering"))) {
+                    if (com.example.utils.ObservabilityLogger.hasActiveTimer("player_buffering")) {
+                        com.example.utils.ObservabilityLogger.endTimer(
+                            key = "player_buffering",
+                            event = "player_buffering_end",
+                            phase = "player",
+                            meta = mapOf("contentType" to activeItem.contentType, "host" to safeHost)
+                        )
+                    }
+                }
+            }
+
+            override fun onRenderedFirstFrame() {
+                val activeItem = currentPlaylistItemState.value
+                val safeHost = com.example.utils.LogSanitizer.extractSafeHost(currentPlaybackUrlState.value)
+                val baseMeta = mapOf(
+                    "contentType" to activeItem.contentType,
+                    "host" to safeHost,
+                    "sourceIndex" to currentSourceIndexState.value
+                )
+                if (com.example.utils.ObservabilityLogger.hasActiveTimer("channel_change")) {
+                    com.example.utils.ObservabilityLogger.endTimer(
+                        key = "channel_change",
+                        event = "channel_change_complete",
+                        phase = "player",
+                        meta = baseMeta
+                    )
+                }
+                if (com.example.utils.ObservabilityLogger.hasActiveTimer("player_ttff")) {
+                    com.example.utils.ObservabilityLogger.endTimer(
+                        key = "player_ttff",
+                        event = "player_first_frame",
+                        phase = "player",
+                        meta = baseMeta
+                    )
+                } else {
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "player_first_frame",
+                        phase = "player",
+                        meta = baseMeta
+                    )
+                }
+            }
+
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                var videoCodec: String? = null
+                var resolution: String? = null
+                var audioCodec: String? = null
+                var audioLang: String? = null
+                for (group in tracks.groups) {
+                    if (!group.isSelected) continue
+                    for (i in 0 until group.length) {
+                        if (!group.isTrackSelected(i)) continue
+                        val fmt = group.getTrackFormat(i)
+                        when (group.type) {
+                            C.TRACK_TYPE_VIDEO -> {
+                                videoCodec = fmt.sampleMimeType ?: fmt.codecs
+                                if (fmt.width > 0 && fmt.height > 0) resolution = "${fmt.width}x${fmt.height}"
+                            }
+                            C.TRACK_TYPE_AUDIO -> {
+                                audioCodec = fmt.sampleMimeType ?: fmt.codecs
+                                audioLang = fmt.language
+                            }
+                        }
+                    }
+                }
+                if (videoCodec != null || audioCodec != null) {
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "player_tracks",
+                        phase = "player",
+                        severity = com.example.utils.ObservabilityLogger.Severity.DEBUG,
+                        meta = buildMap {
+                            if (videoCodec != null) put("videoCodec", videoCodec)
+                            if (resolution != null) put("resolution", resolution)
+                            if (audioCodec != null) put("audioCodec", audioCodec)
+                            if (!audioLang.isNullOrBlank()) put("audioLang", audioLang)
+                            put("host", com.example.utils.LogSanitizer.extractSafeHost(currentPlaybackUrlState.value))
+                        },
+                        minLevel = com.example.utils.ObservabilityLogger.Level.TRACE
+                    )
+                }
             }
 
             override fun onIsPlayingChanged(isPlayingParam: Boolean) {
@@ -5152,13 +5324,45 @@ fun VideoPlayerUI(
 
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("PlayerScreen", "ExoPlayer playback error [code=${error.errorCode}, name=${error.errorCodeName}]: ${error.message}", error)
+                val activeItem = currentPlaylistItemState.value
+                val safeHost = com.example.utils.LogSanitizer.extractSafeHost(currentPlaybackUrlState.value)
+                val httpStatus = (error.cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                com.example.utils.ObservabilityLogger.logEvent(
+                    event = "player_error",
+                    phase = "player",
+                    severity = com.example.utils.ObservabilityLogger.Severity.ERROR,
+                    message = error.message,
+                    meta = buildMap {
+                        put("errorCode", error.errorCode)
+                        put("errorCodeName", error.errorCodeName)
+                        if (httpStatus != null) put("httpStatus", httpStatus)
+                        put("retryCount", latestRetryCount)
+                        put("sourceIndex", currentSourceIndexState.value)
+                        put("contentType", activeItem.contentType)
+                        put("host", safeHost)
+                    }
+                )
                 if (latestRetryCount < 2) {
-                    latestUpdateRetryCount(latestRetryCount + 1)
-                    Log.d("PlayerScreen", "Encountered player error on source $selectedSourceIndex, attempting auto-retry ${latestRetryCount + 1}/2: ${error.message}")
+                    val nextAttempt = latestRetryCount + 1
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "player_retry",
+                        phase = "player",
+                        severity = com.example.utils.ObservabilityLogger.Severity.WARN,
+                        meta = mapOf("attempt" to nextAttempt, "sourceIndex" to currentSourceIndexState.value, "host" to safeHost)
+                    )
+                    latestUpdateRetryCount(nextAttempt)
+                    Log.d("PlayerScreen", "Encountered player error on source $selectedSourceIndex, attempting auto-retry $nextAttempt/2: ${error.message}")
                 } else {
                     val detail = error.errorCodeName.replace("ERROR_CODE_", "").replace("_", " ").lowercase()
                     coroutineScope.launch {
-                        if (!latestTryNextUntriedSource()) {
+                        if (latestTryNextUntriedSource()) {
+                            com.example.utils.ObservabilityLogger.logEvent(
+                                event = "player_fallback_source",
+                                phase = "player",
+                                severity = com.example.utils.ObservabilityLogger.Severity.WARN,
+                                meta = mapOf("reason" to error.errorCodeName, "sourceIndex" to currentSourceIndexState.value, "host" to safeHost)
+                            )
+                        } else {
                             latestUpdatePlaybackFailure(detail)
                             latestStopPlayer()
                         }
@@ -5169,6 +5373,19 @@ fun VideoPlayerUI(
         exoPlayer.addListener(listener)
 
         onDispose {
+            val sessionMs = (android.os.SystemClock.elapsedRealtime() - playerSessionStartMono).coerceAtLeast(0L)
+            com.example.utils.ObservabilityLogger.cancelTimer("player_buffering")
+            com.example.utils.ObservabilityLogger.cancelTimer("player_ttff")
+            com.example.utils.ObservabilityLogger.cancelTimer("channel_change")
+            com.example.utils.ObservabilityLogger.logEvent(
+                event = "player_close",
+                phase = "player",
+                durationMs = sessionMs,
+                meta = mapOf(
+                    "contentType" to currentPlaylistItemState.value.contentType,
+                    "host" to com.example.utils.LogSanitizer.extractSafeHost(currentPlaybackUrlState.value)
+                )
+            )
             viewModel.togglePlayPauseAction = null
             try {
                 LocalCastServer.stopServer()
@@ -9870,19 +10087,26 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
             var obsCount by remember { mutableStateOf(com.example.utils.ObservabilityLogger.getBufferedCount()) }
             var traceMins by remember { mutableStateOf(com.example.utils.ObservabilityLogger.getTraceRemainingMinutes()) }
             val diagInfo = remember { com.example.utils.CrashLogger.getSystemDiagnosticInfo(context) }
-            val buildExportPayload: () -> String = {
-                buildString {
-                    appendLine("MK21 Android - Logs Estruturados de Diagnóstico (Redigidos)")
-                    appendLine("Sessão: ${com.example.utils.ObservabilityLogger.getSessionId()} | Nível: ${obsLevel.name}")
-                    appendLine(diagInfo)
-                    appendLine("=== EVENTOS ESTRUTURADOS (JSONL) ===")
-                    val jsonl = com.example.utils.ObservabilityLogger.exportJsonl(context)
-                    appendLine(if (jsonl.isBlank()) "(nenhum evento registrado)" else jsonl)
-                    appendLine()
-                    appendLine("=== ÚLTIMO RELATÓRIO DE FALHA ===")
-                    appendLine(crashLog ?: "Nenhum relatório de falha capturado.")
-                }.let(com.example.utils.LogSanitizer::sanitizeText)
+
+            fun createShareableDiagnosticIntent(targetPackage: String? = null): Intent {
+                val diagFile = com.example.utils.ObservabilityLogger.exportDiagnosticFile(context, crashLog)
+                val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    diagFile
+                )
+                return Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "MK21 Android - Diagnóstico (${diagFile.name})")
+                    putExtra(Intent.EXTRA_STREAM, fileUri)
+                    clipData = android.content.ClipData.newRawUri("MK21 Diagnóstico", fileUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    if (!targetPackage.isNullOrBlank()) {
+                        setPackage(targetPackage)
+                    }
+                }
             }
+
             val saveLogLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.CreateDocument("text/plain")
             ) { uri ->
@@ -9890,8 +10114,11 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                     try {
                         val output = context.contentResolver.openOutputStream(uri)
                             ?: error("Não foi possível abrir o arquivo selecionado.")
-                        val payload = buildExportPayload()
+                        // Lê o nível ativo em tempo real (evita closure desatualizada após ativar TRACE)
+                        val payload = com.example.utils.ObservabilityLogger.buildDiagnosticPayload(context, crashLog)
                         output.bufferedWriter(Charsets.UTF_8).use { it.write(payload) }
+                        obsLevel = com.example.utils.ObservabilityLogger.getLevel()
+                        traceMins = com.example.utils.ObservabilityLogger.getTraceRemainingMinutes()
                         obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
                         android.widget.Toast.makeText(context, "Logs exportados com sucesso (dados sensíveis redigidos).", android.widget.Toast.LENGTH_SHORT).show()
                     } catch (error: Exception) {
@@ -9931,7 +10158,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                         )
 
-                        // Ação: Ativar diagnóstico temporário (TRACE 45 min) + seletor rápido de nível
+                        // Ação: Ativar diagnóstico temporário (TRACE 45 min)
                         Button(
                             onClick = {
                                 if (obsLevel == com.example.utils.ObservabilityLogger.Level.TRACE) {
@@ -9994,36 +10221,55 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             }
                         }
 
-                        // Ações principais: Exportar logs + Compartilhar logs
+                        // Ação rápida: Salvar direto no Google Drive (com fallback para Share Sheet se o app Drive não estiver instalado)
+                        Button(
+                            onClick = {
+                                try {
+                                    val driveIntent = createShareableDiagnosticIntent("com.google.android.apps.docs")
+                                    if (driveIntent.resolveActivity(context.packageManager) != null) {
+                                        context.startActivity(driveIntent)
+                                    } else {
+                                        val fallbackIntent = createShareableDiagnosticIntent(null)
+                                        context.startActivity(Intent.createChooser(fallbackIntent, "Salvar logs no Google Drive ou compartilhar"))
+                                    }
+                                    obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
+                                } catch (error: Exception) {
+                                    try {
+                                        val fallbackIntent = createShareableDiagnosticIntent(null)
+                                        context.startActivity(Intent.createChooser(fallbackIntent, "Salvar logs no Google Drive ou compartilhar"))
+                                    } catch (fallbackErr: Exception) {
+                                        android.widget.Toast.makeText(context, "Falha ao abrir Drive/Compartilhar: ${fallbackErr.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F9D58)),
+                            modifier = Modifier.fillMaxWidth().testTag("btn_save_logs_drive"),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("SALVAR NO GOOGLE DRIVE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+
+                        // Ações principais: Exportar arquivo local (SAF com timestamp) + Compartilhar
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = { saveLogLauncher.launch("mk21-android-diagnostico.jsonl") },
+                                onClick = { saveLogLauncher.launch(com.example.utils.ObservabilityLogger.suggestExportFilename()) },
                                 colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
                                 modifier = Modifier.weight(1f).testTag("btn_export_logs"),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("EXPORTAR LOGS", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                Text("EXPORTAR ARQUIVO", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                             }
                             Button(
                                 onClick = {
                                     try {
-                                        val diagFile = com.example.utils.ObservabilityLogger.exportDiagnosticFile(context, crashLog)
-                                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
-                                            context,
-                                            "${context.packageName}.fileprovider",
-                                            diagFile
-                                        )
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_SUBJECT, "MK21 Android - Diagnóstico Redigido")
-                                            putExtra(Intent.EXTRA_STREAM, fileUri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
+                                        val shareIntent = createShareableDiagnosticIntent(null)
                                         context.startActivity(Intent.createChooser(shareIntent, "Compartilhar logs de diagnóstico"))
                                         obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
                                     } catch (error: Exception) {
@@ -10047,7 +10293,8 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                         ) {
                             OutlinedButton(
                                 onClick = {
-                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(buildExportPayload()))
+                                    val payload = com.example.utils.ObservabilityLogger.buildDiagnosticPayload(context, crashLog)
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(payload))
                                     obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
                                     android.widget.Toast.makeText(context, "Logs redigidos copiados!", android.widget.Toast.LENGTH_SHORT).show()
                                 },

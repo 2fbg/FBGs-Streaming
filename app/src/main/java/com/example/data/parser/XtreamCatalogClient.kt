@@ -16,7 +16,11 @@ data class XtreamCatalogResult(
     val epgChannelIdsByName: Map<String, String>,
     val liveCount: Int,
     val movieCount: Int,
-    val seriesCount: Int
+    val seriesCount: Int,
+    val authMs: Long = 0L,
+    val liveMs: Long = 0L,
+    val vodMs: Long = 0L,
+    val seriesMs: Long = 0L
 )
 
 /**
@@ -125,11 +129,13 @@ object XtreamCatalogClient {
 
         onProgress(15)
         // 1. Handshake/auth probe
+        val authStartNs = System.nanoTime()
         val authBody = try {
             fetchJsonString(client, apiBase)
         } catch (_: Exception) {
             null
         } ?: return null
+        val authMs = (System.nanoTime() - authStartNs) / 1_000_000L
 
         checkAuthError(authBody)?.let { authError ->
             throw IllegalStateException(authError)
@@ -141,6 +147,7 @@ object XtreamCatalogClient {
 
         // 2. Live TV
         onProgress(25)
+        val liveStartNs = System.nanoTime()
         val liveCats = parseCategoriesMap(fetchJsonArray(client, "$apiBase&action=get_live_categories"))
         val liveStreams = fetchJsonArray(client, "$apiBase&action=get_live_streams")
         val liveCount = parseLiveStreams(
@@ -155,9 +162,11 @@ object XtreamCatalogClient {
             outEpgByUrl = epgByUrl,
             outEpgByName = epgByName
         )
+        val liveMs = (System.nanoTime() - liveStartNs) / 1_000_000L
 
         onProgress(55)
         // 3. VOD (Filmes)
+        val vodStartNs = System.nanoTime()
         val vodCats = parseCategoriesMap(fetchJsonArray(client, "$apiBase&action=get_vod_categories"))
         val vodStreams = fetchJsonArray(client, "$apiBase&action=get_vod_streams")
         val movieCount = parseVodStreams(
@@ -169,9 +178,11 @@ object XtreamCatalogClient {
             playlistSource = playlistSource,
             outItems = items
         )
+        val vodMs = (System.nanoTime() - vodStartNs) / 1_000_000L
 
         onProgress(78)
         // 4. Séries
+        val seriesStartNs = System.nanoTime()
         val seriesCats = parseCategoriesMap(fetchJsonArray(client, "$apiBase&action=get_series_categories"))
         val seriesList = fetchJsonArray(client, "$apiBase&action=get_series")
         val seriesCount = parseSeriesStreams(
@@ -183,6 +194,7 @@ object XtreamCatalogClient {
             playlistSource = playlistSource,
             outItems = items
         )
+        val seriesMs = (System.nanoTime() - seriesStartNs) / 1_000_000L
 
         if (items.isEmpty()) return null
 
@@ -193,7 +205,11 @@ object XtreamCatalogClient {
             epgChannelIdsByName = epgByName,
             liveCount = liveCount,
             movieCount = movieCount,
-            seriesCount = seriesCount
+            seriesCount = seriesCount,
+            authMs = authMs,
+            liveMs = liveMs,
+            vodMs = vodMs,
+            seriesMs = seriesMs
         )
     }
 
