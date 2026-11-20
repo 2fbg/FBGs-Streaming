@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.9.5 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.9.6 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -1279,20 +1279,37 @@ function groupSeriesItems(items) {
   return Object.values(map).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// LEITOR INCREMENTAL DE LISTAS M3U + FALLBACK XTREAM JSON API (player_api.php)
-async function parseM3uTextStream(res, onItem, onProgress) {
+// LEITOR INCREMENTAL DE LISTAS M3U + CATÁLOGO XTREAM JSON API (player_api.php) COMO FONTE PRINCIPAL
+async function parseM3uTextStream(res, onItem, onProgress, hooks) {
+  const streamHooks = hooks || {};
+  const isBackground = Boolean(streamHooks.isBackground);
+  const contentType = String(streamHooks.contentType || (res.headers && res.headers.get && res.headers.get('content-type')) || '').toLowerCase();
   let itemCount = 0;
   const wrappedOnItem = (item) => {
     itemCount++;
     onItem(item);
   };
 
+  if (CatalogUtils.detectHtmlPayload('', contentType)) {
+    const htmlErr = new Error('Servidor retornou página HTML em vez de M3U');
+    htmlErr.isHtmlResponse = true;
+    throw htmlErr;
+  }
+
   if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
     const text = await res.text();
+    const byteLen = text ? text.length : 0;
+    if (streamHooks.onChunk) streamHooks.onChunk(byteLen);
+    if (streamHooks.stats) {
+      streamHooks.stats.receivedBytes = byteLen;
+      streamHooks.stats.totalBytes = byteLen;
+    }
     if (!text || text.length < 30) throw new Error('Lista M3U vazia');
-    const trimmedStart = text.trim().slice(0, 250).toLowerCase();
-    if (trimmedStart.includes('<!doctype html') || trimmedStart.includes('<html')) {
-      throw new Error('Servidor retornou página HTML em vez de M3U');
+    const trimmedStart = text.trim().slice(0, 320).toLowerCase();
+    if (CatalogUtils.detectHtmlPayload(trimmedStart, contentType)) {
+      const htmlErr = new Error('Servidor retornou página HTML em vez de M3U');
+      htmlErr.isHtmlResponse = true;
+      throw htmlErr;
     }
     if (trimmedStart.includes('invalid username') || trimmedStart.includes('invalid password')) {
       const authErr = new Error('Usuário ou senha inválidos no servidor');
@@ -1306,7 +1323,7 @@ async function parseM3uTextStream(res, onItem, onProgress) {
       const line = raw.trim();
       if (line.startsWith('#EXTM3U')) {
         const xm = line.match(/(?:url-tvg|x-tvg-url)="([^"]*)"/i);
-        if (xm && xm[1]) window.serverXmltvUrl = xm[1].trim();
+        if (xm && xm[1] && !isBackground) window.serverXmltvUrl = xm[1].trim();
       } else if (line.startsWith('#EXTINF:')) {
         const comma = line.lastIndexOf(',');
         const gm = line.match(/group-title="([^"]*)"/i);
@@ -1334,6 +1351,7 @@ async function parseM3uTextStream(res, onItem, onProgress) {
         pendingHeaders = null;
       }
     }
+    if (streamHooks.stats) streamHooks.stats.itemCount = itemCount;
     if (itemCount === 0) throw new Error('Lista M3U sem canais válidos');
     return itemCount;
   }
@@ -1347,6 +1365,8 @@ async function parseM3uTextStream(res, onItem, onProgress) {
   let pendingHeaders = null;
   let received = 0;
   const total = parseInt(res.headers && res.headers.get && res.headers.get('content-length') || '0', 10) || 0;
+  if (streamHooks.stats) streamHooks.stats.totalBytes = total;
+
   const quickAttr = (str, key) => {
     const k = key + '="';
     const idx = str.indexOf(k);
@@ -1354,6 +1374,23 @@ async function parseM3uTextStream(res, onItem, onProgress) {
     const start = idx + k.length;
     const end = str.indexOf('"', start);
     return end !== -1 ? str.slice(start, end).trim() : '';
+  };
+
+  const checkHeaderSample = (sample) => {
+    const low = String(sample || '').trim().toLowerCase();
+    if (!low) return;
+    if (CatalogUtils.detectHtmlPayload(low, contentType)) {
+      try { reader.cancel(); } catch (e) {}
+      const htmlErr = new Error('Servidor retornou página HTML em vez de M3U');
+      htmlErr.isHtmlResponse = true;
+      throw htmlErr;
+    }
+    if (low.includes('invalid username') || low.includes('invalid password')) {
+      try { reader.cancel(); } catch (e) {}
+      const authErr = new Error('Usuário ou senha inválidos no servidor');
+      authErr.isAuthError = true;
+      throw authErr;
+    }
   };
 
   const consume = (raw) => {
@@ -1383,7 +1420,7 @@ async function parseM3uTextStream(res, onItem, onProgress) {
         }
       } else if (line.startsWith('#EXTM3U')) {
         const xm = quickAttr(line, 'url-tvg') || quickAttr(line, 'x-tvg-url');
-        if (xm) window.serverXmltvUrl = xm;
+        if (xm && !isBackground) window.serverXmltvUrl = xm;
       }
     } else if (meta && (line.startsWith('http://') || line.startsWith('https://'))) {
       const type = determineType(meta.name, meta.group, line);
@@ -1399,22 +1436,14 @@ async function parseM3uTextStream(res, onItem, onProgress) {
     const part = await reader.read();
     if (part.done) break;
     received += part.value.byteLength || part.value.length || 0;
+    if (streamHooks.stats) streamHooks.stats.receivedBytes = received;
+    if (streamHooks.onChunk) streamHooks.onChunk(received);
     const chunk = decoder.decode(part.value, { stream: true });
     if (!headerChecked) {
       headerSample += chunk.slice(0, 320);
-      if (headerSample.length >= 60) {
+      if (headerSample.length >= 40) {
         headerChecked = true;
-        const low = headerSample.trim().toLowerCase();
-        if (low.includes('<!doctype html') || low.includes('<html')) {
-          try { reader.cancel(); } catch (e) {}
-          throw new Error('Servidor retornou página HTML em vez de M3U');
-        }
-        if (low.includes('invalid username') || low.includes('invalid password')) {
-          try { reader.cancel(); } catch (e) {}
-          const authErr = new Error('Usuário ou senha inválidos no servidor');
-          authErr.isAuthError = true;
-          throw authErr;
-        }
+        checkHeaderSample(headerSample);
       }
     }
     buffer += chunk;
@@ -1423,50 +1452,110 @@ async function parseM3uTextStream(res, onItem, onProgress) {
     for (const line of lines) consume(line);
     if (onProgress) onProgress(received, total);
   }
+  if (!headerChecked && headerSample) {
+    checkHeaderSample(headerSample);
+  }
   buffer += decoder.decode();
   if (buffer) consume(buffer);
+  if (streamHooks.stats) streamHooks.stats.itemCount = itemCount;
   if (itemCount === 0) throw new Error('Lista M3U vazia (0 itens)');
   return itemCount;
 }
 
-async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onProgress) {
+async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onProgress, options) {
+  const opts = options || {};
+  const isBackground = Boolean(opts.isBackground);
   const cleanBase = baseUrl.replace(/\/+$/, '');
+  const safeHost = CatalogUtils.extractSafeHost(cleanBase);
   const encUser = encodeURIComponent(user);
   const encPass = encodeURIComponent(pass);
   const apiBase = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}`;
+  const catalogStart = Date.now();
+  let totalBytesReceived = 0;
 
-  const fetchJsonWithTimeout = async (url, timeoutMs = 20000) => {
-    const c = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = c ? setTimeout(() => c.abort(), timeoutMs) : null;
-    const onAbort = () => { if (c) c.abort(); };
-    if (signal && signal.addEventListener) signal.addEventListener('abort', onAbort, { once: true });
+  // Leitura com timeouts por estado (20s resposta inicial, 30s sem dados por chunk, teto 3 min por endpoint)
+  const fetchJsonWithWatchdog = async (url, actionLabel, ceilingMs = 180000) => {
+    const watchdog = CatalogUtils.createStallAwareAbortController(signal, {
+      initialResponseMs: CatalogUtils.PLAYLIST_TIMEOUTS.initialResponseMs,
+      stallWatchdogMs: CatalogUtils.PLAYLIST_TIMEOUTS.stallWatchdogMs,
+      hardCeilingMs: ceilingMs
+    });
+    const reqStart = Date.now();
+    let reqBytes = 0;
     try {
-      const res = await fetch(url, c ? { signal: c.signal, mode: 'cors' } : { mode: 'cors' });
-      const rawText = await res.text();
+      const res = await fetch(url, watchdog.signal ? { signal: watchdog.signal, mode: 'cors' } : { mode: 'cors' });
+      watchdog.markResponseReceived();
+      const ct = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+
+      let rawText = '';
+      if (res.body && typeof res.body.getReader === 'function' && typeof TextDecoder !== 'undefined') {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        const chunks = [];
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          reqBytes += part.value.byteLength || part.value.length || 0;
+          watchdog.touchChunk();
+          chunks.push(decoder.decode(part.value, { stream: true }));
+        }
+        chunks.push(decoder.decode());
+        rawText = chunks.join('');
+      } else {
+        rawText = await res.text();
+        reqBytes = rawText ? rawText.length : 0;
+        watchdog.touchChunk();
+      }
+      totalBytesReceived += reqBytes;
+
       if (!res.ok && res.status !== 401 && res.status !== 403) {
-        throw new Error('HTTP ' + res.status);
+        const isHtml = CatalogUtils.detectHtmlPayload(rawText, ct);
+        const httpErr = new Error('HTTP ' + res.status + (isHtml ? ' (página HTML em vez de JSON)' : ''));
+        httpErr.status = res.status;
+        httpErr.isHtmlResponse = isHtml;
+        throw httpErr;
       }
       return CatalogUtils.parseSafeJsonResponse(rawText, res.status);
+    } catch (err) {
+      const abortReason = watchdog.getAbortReason();
+      if (abortReason === 'parent' || (err && err.name === 'AbortError' && signal && signal.aborted)) {
+        throw err;
+      }
+      if (abortReason) {
+        const elapsed = Date.now() - reqStart;
+        const baseDesc = watchdog.describeAbortReason();
+        const transferInfo = reqBytes > 0
+          ? ' · ' + CatalogUtils.formatBytesMb(reqBytes) + ' em ' + CatalogUtils.formatDurationPtBr(elapsed) + ' · ' + CatalogUtils.formatSpeedMbPerSec(reqBytes, elapsed)
+          : '';
+        const tErr = new Error(baseDesc + ' (' + actionLabel + ')' + transferInfo);
+        tErr.timeoutReason = abortReason;
+        throw tErr;
+      }
+      throw err;
     } finally {
-      if (timer) clearTimeout(timer);
-      if (signal && signal.removeEventListener) signal.removeEventListener('abort', onAbort);
+      watchdog.cleanup();
     }
   };
 
-  addDevLog('[Rede] Tentando API Xtream em ' + cleanBase + '/player_api.php', 'info');
-  const authData = await fetchJsonWithTimeout(apiBase, 10000);
+  const authData = await fetchJsonWithWatchdog(apiBase, 'auth', 60000);
   if (authData && authData.user_info && Number(authData.user_info.auth) === 0) {
     const authErr = new Error('Usuário ou senha inválidos/expirados neste servidor.');
     authErr.isAuthError = true;
     throw authErr;
   }
 
+  // Deriva URL de EPG (/xmltv.php) no modo JSON usando o mesmo host e credenciais do servidor
+  const derivedXmltv = CatalogUtils.buildXtreamXmltvUrl(cleanBase, user, pass);
+  if (!isBackground && derivedXmltv) {
+    window.serverXmltvUrl = derivedXmltv;
+  }
+
   let totalEmitted = 0;
   const liveExt = localStorage.getItem('mk21_stream_format') === 'hls' ? 'm3u8' : 'ts';
 
   const [liveCats, liveStreams] = await Promise.all([
-    fetchJsonWithTimeout(apiBase + '&action=get_live_categories', 20000).catch(() => []),
-    fetchJsonWithTimeout(apiBase + '&action=get_live_streams', 30000)
+    fetchJsonWithWatchdog(apiBase + '&action=get_live_categories', 'live_categories', 60000).catch(() => []),
+    fetchJsonWithWatchdog(apiBase + '&action=get_live_streams', 'live_streams', 180000)
   ]);
 
   const liveCatMap = Object.create(null);
@@ -1498,8 +1587,8 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
   if (loadMovies) {
     try {
       const [vodCats, vodStreams] = await Promise.all([
-        fetchJsonWithTimeout(apiBase + '&action=get_vod_categories', 15000).catch(() => []),
-        fetchJsonWithTimeout(apiBase + '&action=get_vod_streams', 35000).catch(() => [])
+        fetchJsonWithWatchdog(apiBase + '&action=get_vod_categories', 'vod_categories', 60000).catch(() => []),
+        fetchJsonWithWatchdog(apiBase + '&action=get_vod_streams', 'vod_streams', 180000).catch(() => [])
       ]);
       const vodCatMap = Object.create(null);
       if (Array.isArray(vodCats)) {
@@ -1534,8 +1623,8 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
   if (loadSeries) {
     try {
       const [serCats, seriesList] = await Promise.all([
-        fetchJsonWithTimeout(apiBase + '&action=get_series_categories', 15000).catch(() => []),
-        fetchJsonWithTimeout(apiBase + '&action=get_series', 35000).catch(() => [])
+        fetchJsonWithWatchdog(apiBase + '&action=get_series_categories', 'series_categories', 60000).catch(() => []),
+        fetchJsonWithWatchdog(apiBase + '&action=get_series', 'series', 180000).catch(() => [])
       ]);
       const serCatMap = Object.create(null);
       if (Array.isArray(serCats)) {
@@ -1568,25 +1657,60 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
   if (totalEmitted === 0) {
     throw new Error('API Xtream respondeu vazia (0 itens)');
   }
-  addDevLog('[Rede] Catálogo carregado via player_api.php (' + totalEmitted + ' itens)', 'success');
+  const elapsedMs = Date.now() - catalogStart;
+  addDevLog(
+    '[Rede] Catálogo JSON recebido (' + safeHost + '): ' +
+    totalEmitted.toLocaleString('pt-BR') + ' itens · ' +
+    CatalogUtils.formatBytesMb(totalBytesReceived) + ' em ' +
+    CatalogUtils.formatDurationPtBr(elapsedMs) + ' · ' +
+    CatalogUtils.formatSpeedMbPerSec(totalBytesReceived, elapsedMs),
+    'success'
+  );
   return totalEmitted;
 }
 
-async function streamPlaylistContent(url, signal, onItem, onProgress) {
+async function streamPlaylistContent(url, signal, onItem, onProgress, options) {
+  const opts = options || {};
+  const isBackground = Boolean(opts.isBackground);
   const rawUrl = String(url || '').trim();
   const creds = getSavedCredentials() || { user: '', pass: '' };
   const savedUser = creds.user;
   const savedPass = creds.pass;
-  const isDirectM3u = rawUrl.includes('get.php') || rawUrl.includes('.m3u') || rawUrl.includes('.ts') || rawUrl.includes('.m3u8');
+  const isDirectM3u = CatalogUtils.isDirectPlaylistUrl(rawUrl);
 
   if (!isDirectM3u && (!savedUser || !savedPass)) {
     throw new Error('Credenciais ausentes. Faça login novamente.');
   }
 
+  let catalogModePref = 'json';
+  try { catalogModePref = localStorage.getItem('mk21_catalog_mode') || 'json'; } catch (e) {}
+  const catalogMode = CatalogUtils.normalizeCatalogMode(catalogModePref);
+  const preferJson = CatalogUtils.shouldPreferXtreamJson(rawUrl, catalogMode);
+
   const fmtPref = localStorage.getItem('mk21_stream_format') === 'hls' ? 'hls' : 'ts';
   const cleanBase = rawUrl.replace(/\/+$/, '');
+  const safeHost = CatalogUtils.extractSafeHost(cleanBase || rawUrl);
   const encU = encodeURIComponent(savedUser);
   const encP = encodeURIComponent(savedPass);
+
+  let lastErr = null;
+  const attemptSummaries = [];
+
+  // 1. Catálogo JSON (player_api.php) como fonte principal (evita baixar listas M3U de 50-108 MB)
+  if (preferJson && !isDirectM3u) {
+    addDevLog('[Rede] Catálogo JSON (player_api.php) como fonte principal: ' + redactDiagnosticLog(cleanBase), 'info');
+    try {
+      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress, { isBackground });
+      return;
+    } catch (apiErr) {
+      if (apiErr && apiErr.name === 'AbortError' && signal && signal.aborted) throw apiErr;
+      if (apiErr && apiErr.isAuthError) throw apiErr;
+      lastErr = apiErr;
+      const reason = (apiErr && apiErr.message) ? apiErr.message : String(apiErr);
+      attemptSummaries.push(safeHost + ' JSON: ' + reason);
+      addDevLog('[Rede] Falha no catálogo JSON em ' + safeHost + ': ' + reason + '. Alternando para lista M3U...', 'warn');
+    }
+  }
 
   const candidateUrls = isDirectM3u
     ? [rawUrl]
@@ -1597,7 +1721,6 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
         `${cleanBase}/get.php?username=${encU}&password=${encP}`
       ];
 
-  let lastErr = null;
   for (let i = 0; i < candidateUrls.length; i++) {
     if (signal && signal.aborted) {
       const ab = new Error('Aborted');
@@ -1606,54 +1729,129 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     }
     const targetUrl = candidateUrls[i];
     const safeUrlLog = redactDiagnosticLog(targetUrl);
+    const attemptHost = CatalogUtils.extractSafeHost(targetUrl);
     console.log('[MK21] Streaming da lista:', safeUrlLog);
-    addDevLog('[Rede] Tentando lista: ' + safeUrlLog, 'debug');
+    addDevLog('[Rede] Tentando lista ' + (i + 1) + '/' + candidateUrls.length + ': ' + safeUrlLog, 'debug');
 
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
-    const onParentAbort = () => { if (controller) controller.abort(); };
-    if (signal && signal.addEventListener) signal.addEventListener('abort', onParentAbort, { once: true });
+    const watchdog = CatalogUtils.createStallAwareAbortController(signal, {
+      initialResponseMs: CatalogUtils.PLAYLIST_TIMEOUTS.initialResponseMs,
+      stallWatchdogMs: CatalogUtils.PLAYLIST_TIMEOUTS.stallWatchdogMs,
+      hardCeilingMs: CatalogUtils.PLAYLIST_TIMEOUTS.hardCeilingMs
+    });
+    const attemptStart = Date.now();
+    const streamStats = { receivedBytes: 0, totalBytes: 0, itemCount: 0 };
 
     try {
-      const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
-      const res = await fetch(targetUrl, options);
+      const optionsFetch = watchdog.signal ? { signal: watchdog.signal, mode: 'cors' } : { mode: 'cors' };
+      const res = await fetch(targetUrl, optionsFetch);
+      watchdog.markResponseReceived();
+      const ttfbMs = Date.now() - attemptStart;
+      const contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+      const contentLength = parseInt((res.headers && res.headers.get && res.headers.get('content-length')) || '0', 10) || 0;
+
       if (res.status === 401 || res.status === 403) {
         const authErr = new Error('Credenciais inválidas ou bloqueadas pelo servidor (HTTP ' + res.status + ').');
         authErr.isAuthError = true;
         authErr.status = res.status;
-        addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status + ' (credenciais)', 'error');
+        addDevLog('[Rede] ' + attemptHost + ' -> HTTP ' + res.status + ' (credenciais) · ' + CatalogUtils.formatDurationPtBr(ttfbMs), 'error');
         throw authErr;
       }
+
       if (!res.ok) {
-        const httpErr = new Error('HTTP ' + res.status);
-        addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status, 'warn');
+        let isHtmlError = CatalogUtils.detectHtmlPayload('', contentType);
+        if (!isHtmlError) {
+          try {
+            const snippet = await res.text();
+            isHtmlError = CatalogUtils.detectHtmlPayload(snippet, contentType);
+          } catch (eRead) {}
+        }
+        const statusDetail = 'HTTP ' + res.status + (isHtmlError ? ' (página HTML em vez de M3U)' : '');
+        const httpErr = new Error(statusDetail);
+        httpErr.status = res.status;
+        httpErr.isHtmlResponse = isHtmlError;
+        addDevLog('[Rede] ' + attemptHost + ' -> ' + statusDetail + ' · ' + CatalogUtils.formatDurationPtBr(ttfbMs), 'warn');
+        attemptSummaries.push(attemptHost + ' ' + statusDetail);
         lastErr = httpErr;
         continue;
       }
-      const parsedCount = await parseM3uTextStream(res, onItem, onProgress);
-      addDevLog('[Rede] Lista M3U recebida (' + parsedCount + ' itens)', 'success');
+
+      const sizeLabel = contentLength > 0 ? CatalogUtils.formatBytesMb(contentLength) : 'tamanho desconhecido';
+      addDevLog('[Rede] ' + attemptHost + ' -> HTTP ' + res.status + ' · ' + sizeLabel + ' · ' + CatalogUtils.formatDurationPtBr(ttfbMs), 'info');
+
+      const parsedCount = await parseM3uTextStream(res, onItem, onProgress, {
+        onChunk: (bytes) => {
+          streamStats.receivedBytes = bytes;
+          watchdog.touchChunk();
+        },
+        stats: streamStats,
+        contentType,
+        isBackground
+      });
+      const elapsedMs = Date.now() - attemptStart;
+      const finalBytes = streamStats.receivedBytes || contentLength;
+      addDevLog(
+        '[Rede] Lista M3U recebida: ' + parsedCount.toLocaleString('pt-BR') + ' itens · ' +
+        CatalogUtils.formatBytesMb(finalBytes) + ' em ' +
+        CatalogUtils.formatDurationPtBr(elapsedMs) + ' · ' +
+        CatalogUtils.formatSpeedMbPerSec(finalBytes, elapsedMs),
+        'success'
+      );
       return;
     } catch (err) {
-      if (err && err.name === 'AbortError' && signal && signal.aborted) throw err;
+      const abortReason = watchdog.getAbortReason();
+      if (abortReason === 'parent' || (err && err.name === 'AbortError' && signal && signal.aborted)) {
+        throw err;
+      }
       if (err && err.isAuthError) throw err;
-      lastErr = err;
-      addDevLog('[Rede] Falha em ' + safeUrlLog + ': ' + (err && err.message ? err.message : err), 'warn');
+
+      const elapsedMs = Date.now() - attemptStart;
+      let errDetail = (err && err.message) ? err.message : String(err);
+      let finalErr = err;
+      if (abortReason) {
+        const reasonDesc = watchdog.describeAbortReason();
+        const bytesPart = streamStats.receivedBytes > 0
+          ? ' · ' + CatalogUtils.formatBytesMb(streamStats.receivedBytes) + ' em ' + CatalogUtils.formatDurationPtBr(elapsedMs) + ' · ' + CatalogUtils.formatSpeedMbPerSec(streamStats.receivedBytes, elapsedMs)
+          : ' · ' + CatalogUtils.formatDurationPtBr(elapsedMs);
+        errDetail = reasonDesc + bytesPart;
+        finalErr = new Error(errDetail);
+        finalErr.timeoutReason = abortReason;
+        finalErr.technicalDetail = errDetail;
+      } else if (streamStats.receivedBytes > 0) {
+        errDetail = errDetail + ' · ' + CatalogUtils.formatBytesMb(streamStats.receivedBytes) + ' em ' + CatalogUtils.formatDurationPtBr(elapsedMs) + ' · ' + CatalogUtils.formatSpeedMbPerSec(streamStats.receivedBytes, elapsedMs);
+      }
+
+      lastErr = finalErr;
+      attemptSummaries.push(attemptHost + ' ' + errDetail);
+      addDevLog('[Rede] Falha em ' + attemptHost + ': ' + errDetail, 'warn');
     } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-      if (signal && signal.removeEventListener) signal.removeEventListener('abort', onParentAbort);
+      watchdog.cleanup();
     }
   }
 
-  // Fallback para API JSON Xtream (player_api.php) quando get.php retorna 404 ou lista vazia
-  if (!isDirectM3u) {
+  // Fallback para API JSON Xtream (player_api.php) quando modo M3U foi forçado e falhou
+  if (!preferJson && !isDirectM3u) {
     try {
-      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress);
+      addDevLog('[Rede] Tentando fallback JSON (player_api.php): ' + redactDiagnosticLog(cleanBase), 'info');
+      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress, { isBackground });
       return;
     } catch (apiErr) {
       if (apiErr && apiErr.name === 'AbortError' && signal && signal.aborted) throw apiErr;
+      if (apiErr && apiErr.isAuthError) throw apiErr;
       lastErr = apiErr;
-      addDevLog('[Rede] Fallback player_api.php falhou: ' + (apiErr && apiErr.message ? apiErr.message : apiErr), 'warn');
+      const reason = (apiErr && apiErr.message) ? apiErr.message : String(apiErr);
+      attemptSummaries.push(safeHost + ' JSON: ' + reason);
+      addDevLog('[Rede] Fallback player_api.php falhou em ' + safeHost + ': ' + reason, 'warn');
     }
+  }
+
+  if (attemptSummaries.length > 0) {
+    const summaryText = attemptSummaries.join(' | ');
+    addDevLog('[Rede] Todas as tentativas falharam: ' + summaryText, 'error');
+    const outErr = lastErr || new Error('Não foi possível baixar a lista do servidor');
+    if (outErr && !outErr.technicalDetail) {
+      outErr.technicalDetail = summaryText;
+    }
+    throw outErr;
   }
 
   throw lastErr || new Error('Não foi possível baixar a lista do servidor');
@@ -7415,8 +7613,13 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     triggerBtn.disabled = true;
     triggerBtn.textContent = '⏳ ...';
   }
+  const syncStart = Date.now();
+  let bgTimedOut = false;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), 50000) : null;
+  const timeout = controller ? setTimeout(() => {
+    bgTimedOut = true;
+    controller.abort();
+  }, CatalogUtils.PLAYLIST_TIMEOUTS.backgroundSyncMs) : null;
   try {
     const target = { LIVE: [], MOVIE: [], SERIES: [] };
     const indexWriter = await createCatalogIndexWriter(srv.id);
@@ -7438,7 +7641,8 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
           }
         }
       },
-      null
+      null,
+      { isBackground: true }
     );
     const total = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
     if (total > 0) {
@@ -7448,14 +7652,23 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
       try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
       const m = computeAndSaveServerMetrics(srv.id, target, null, false);
       updateServerRowMetricsBadge(srv.id, m);
-      addDevLog('[Sync Lista] ' + cleanServerName(srv.name) + ': ' + total + ' itens salvos.', 'success');
+      addDevLog('[Sync Lista] ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens salvos · ' + CatalogUtils.formatDurationPtBr(Date.now() - syncStart), 'success');
       if (!getHideBackgroundProgress()) {
         showChannelBanner('✓ ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens sincronizados');
       }
     }
     return true;
   } catch (err) {
-    addDevLog('[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + CatalogUtils.formatFriendlyLoadError(err), 'warn');
+    const elapsedLabel = CatalogUtils.formatDurationPtBr(Date.now() - syncStart);
+    const effectiveErr = bgTimedOut
+      ? new Error('tempo esgotado no sync em segundo plano (limite de ' + CatalogUtils.formatDurationPtBr(CatalogUtils.PLAYLIST_TIMEOUTS.backgroundSyncMs) + ')')
+      : err;
+    const friendly = CatalogUtils.formatFriendlyLoadError(effectiveErr);
+    const rawDetail = effectiveErr && effectiveErr.technicalDetail
+      ? String(effectiveErr.technicalDetail)
+      : (effectiveErr && effectiveErr.message && effectiveErr.message !== friendly ? String(effectiveErr.message) : '');
+    const detailSuffix = rawDetail && !friendly.includes(rawDetail) ? ' (' + rawDetail + ')' : '';
+    addDevLog('[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + friendly + detailSuffix + ' · ' + elapsedLabel, 'warn');
     if (triggerBtn && !getHideBackgroundProgress()) {
       showChannelBanner('⚠️ Falha ao sincronizar ' + cleanServerName(srv.name));
     }
@@ -8011,7 +8224,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.9.5';
+const BASE_PACKAGE_VERSION = '2.9.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');

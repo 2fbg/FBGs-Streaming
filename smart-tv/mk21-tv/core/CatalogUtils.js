@@ -134,11 +134,183 @@ function parseSafeJsonResponse(rawText, httpStatus) {
   }
 }
 
+const PLAYLIST_TIMEOUTS = {
+  initialResponseMs: 20000,
+  stallWatchdogMs: 30000,
+  hardCeilingMs: 300000,
+  backgroundSyncMs: 240000
+};
+
+function normalizeCatalogMode(mode) {
+  const clean = String(mode || '').trim().toLowerCase();
+  if (clean === 'm3u' || clean === 'auto' || clean === 'json') return clean;
+  return 'json';
+}
+
+function isDirectPlaylistUrl(rawUrl) {
+  const u = String(rawUrl || '').trim().toLowerCase();
+  return u.includes('get.php') || u.includes('.m3u') || u.includes('.ts') || u.includes('.m3u8');
+}
+
+function shouldPreferXtreamJson(rawUrl, mode) {
+  if (isDirectPlaylistUrl(rawUrl)) return false;
+  return normalizeCatalogMode(mode) !== 'm3u';
+}
+
+function buildXtreamXmltvUrl(baseUrl, user, pass) {
+  const cleanBase = String(baseUrl || '').trim().replace(/\/+$/, '');
+  const u = String(user || '').trim();
+  const p = String(pass || '').trim();
+  if (!cleanBase || !u || !p) return '';
+  return `${cleanBase}/xmltv.php?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
+}
+
+function extractSafeHost(rawUrl) {
+  const input = String(rawUrl || '').trim();
+  if (!input) return 'servidor';
+  try {
+    const parsed = new URL(input);
+    return parsed.host || input;
+  } catch (e) {
+    const stripped = input.replace(/^https?:\/\//i, '').split(/[/?#]/)[0];
+    return stripped.replace(/^[^@]+@/, '') || 'servidor';
+  }
+}
+
+function formatDurationPtBr(ms) {
+  const safeMs = Math.max(0, Number(ms) || 0);
+  const totalSec = Math.round(safeMs / 1000);
+  if (totalSec < 60) return totalSec + 's';
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  return mins + 'min ' + String(secs).padStart(2, '0') + 's';
+}
+
+function formatBytesMb(bytes) {
+  const mb = Math.max(0, Number(bytes) || 0) / (1024 * 1024);
+  return mb.toFixed(1).replace('.', ',') + ' MB';
+}
+
+function formatSpeedMbPerSec(bytes, elapsedMs) {
+  const sec = Math.max(0.1, (Number(elapsedMs) || 0) / 1000);
+  const mbPerSec = (Math.max(0, Number(bytes) || 0) / (1024 * 1024)) / sec;
+  return mbPerSec.toFixed(1).replace('.', ',') + ' MB/s';
+}
+
+function detectHtmlPayload(sampleText, contentType) {
+  const ct = String(contentType || '').toLowerCase();
+  if (ct.includes('text/html') || ct.includes('application/xhtml')) return true;
+  const head = String(sampleText || '').trim().slice(0, 320).toLowerCase();
+  if (!head) return false;
+  if (head.startsWith('<!doctype html') || head.startsWith('<html') || head.startsWith('<head') || head.startsWith('<body')) {
+    return true;
+  }
+  if (head.includes('<!doctype html') || head.includes('<html') || head.includes('xui - debug mode')) {
+    return true;
+  }
+  return false;
+}
+
+function createStallAwareAbortController(parentSignal, options) {
+  const opts = options || {};
+  const initialResponseMs = Number(opts.initialResponseMs) > 0 ? Number(opts.initialResponseMs) : PLAYLIST_TIMEOUTS.initialResponseMs;
+  const stallWatchdogMs = Number(opts.stallWatchdogMs) > 0 ? Number(opts.stallWatchdogMs) : PLAYLIST_TIMEOUTS.stallWatchdogMs;
+  const hardCeilingMs = Number(opts.hardCeilingMs) > 0 ? Number(opts.hardCeilingMs) : PLAYLIST_TIMEOUTS.hardCeilingMs;
+  const setTimer = (opts.timerApi && opts.timerApi.setTimeout) || setTimeout;
+  const clearTimer = (opts.timerApi && opts.timerApi.clearTimeout) || clearTimeout;
+
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  let abortReason = null;
+  let cleaned = false;
+  let initialTimer = null;
+  let stallTimer = null;
+  let ceilingTimer = null;
+
+  const triggerAbort = (reason) => {
+    if (cleaned || abortReason) return;
+    abortReason = reason;
+    if (controller) {
+      try { controller.abort(); } catch (e) {}
+    }
+  };
+
+  const onParentAbort = () => triggerAbort('parent');
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      triggerAbort('parent');
+    } else if (parentSignal.addEventListener) {
+      parentSignal.addEventListener('abort', onParentAbort, { once: true });
+    }
+  }
+
+  const armStallWatchdog = () => {
+    if (cleaned || abortReason) return;
+    if (stallTimer) clearTimer(stallTimer);
+    stallTimer = setTimer(() => triggerAbort('stall_timeout'), stallWatchdogMs);
+  };
+
+  if (!abortReason) {
+    initialTimer = setTimer(() => triggerAbort('initial_timeout'), initialResponseMs);
+    ceilingTimer = setTimer(() => triggerAbort('ceiling_timeout'), hardCeilingMs);
+  }
+
+  return {
+    signal: controller ? controller.signal : null,
+    markResponseReceived() {
+      if (initialTimer) {
+        clearTimer(initialTimer);
+        initialTimer = null;
+      }
+      armStallWatchdog();
+    },
+    touchChunk() {
+      if (initialTimer) {
+        clearTimer(initialTimer);
+        initialTimer = null;
+      }
+      armStallWatchdog();
+    },
+    getAbortReason() {
+      return abortReason;
+    },
+    describeAbortReason() {
+      if (abortReason === 'initial_timeout') {
+        return 'tempo esgotado (sem resposta inicial após ' + formatDurationPtBr(initialResponseMs) + ')';
+      }
+      if (abortReason === 'stall_timeout') {
+        return 'tempo esgotado (sem dados) após ' + formatDurationPtBr(stallWatchdogMs);
+      }
+      if (abortReason === 'ceiling_timeout') {
+        return 'tempo esgotado (limite máximo de ' + formatDurationPtBr(hardCeilingMs) + ')';
+      }
+      if (abortReason === 'parent') {
+        return 'conexão cancelada';
+      }
+      return '';
+    },
+    cleanup() {
+      cleaned = true;
+      if (initialTimer) { clearTimer(initialTimer); initialTimer = null; }
+      if (stallTimer) { clearTimer(stallTimer); stallTimer = null; }
+      if (ceilingTimer) { clearTimer(ceilingTimer); ceilingTimer = null; }
+      if (parentSignal && parentSignal.removeEventListener) {
+        parentSignal.removeEventListener('abort', onParentAbort);
+      }
+    }
+  };
+}
+
 function formatFriendlyLoadError(err) {
   const msg = err && err.message ? String(err.message) : String(err || '');
   if (!msg) return 'A conexão foi interrompida antes da lista terminar.';
   if (/unexpected token\s*<?\s*in json|json\.parse/i.test(msg)) {
     return 'O servidor respondeu em formato HTML inválido em vez de JSON/M3U.';
+  }
+  if (/página html em vez de/i.test(msg)) {
+    return msg;
+  }
+  if (/tempo esgotado/i.test(msg)) {
+    return msg;
   }
   if (/failed to fetch|networkerror|load failed/i.test(msg)) {
     return 'Não foi possível conectar ao servidor. Verifique a rede ou troque de fonte.';
@@ -152,10 +324,21 @@ function formatFriendlyLoadError(err) {
 module.exports = {
   BG_SYNC_INTERVALS_MS,
   BG_SYNC_LABELS,
+  PLAYLIST_TIMEOUTS,
   normalizeBgSyncFrequency,
   getBgSyncIntervalMs,
   shouldSyncServer,
   computeCatalogMetrics,
   parseSafeJsonResponse,
+  normalizeCatalogMode,
+  isDirectPlaylistUrl,
+  shouldPreferXtreamJson,
+  buildXtreamXmltvUrl,
+  extractSafeHost,
+  formatDurationPtBr,
+  formatBytesMb,
+  formatSpeedMbPerSec,
+  detectHtmlPayload,
+  createStallAwareAbortController,
   formatFriendlyLoadError
 };
