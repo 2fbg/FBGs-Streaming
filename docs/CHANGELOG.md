@@ -2,7 +2,10 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
-## [Não lançado]
+## [2.9.6] - 2026-11-20
+
+- **Catálogo JSON como fonte principal na Smart TV:** em vez de baixar a lista M3U inteira (77–108 MB nos servidores atuais), o app passou a montar o catálogo por `player_api.php` (`get_live_streams`, `get_vod_streams`, `get_series` + categorias), com fallback automático para o M3U. Medido: ~16 MB/4 s no VLOG e ~46 MB/8 s no MK21 PRÓ, contra 77 MB/13 s e 108 MB/>20 s do M3U. Preferência ajustável em `localStorage.mk21_catalog_mode` (`json`, `m3u`, `auto`).
+- **Carga de listas na Smart TV (IPK):** o timeout de 45 s por formato derrubava listas XUI grandes (50–108 MB) no meio do streaming; agora são 20 s para a primeira resposta, 30 s de tolerância sem receber dados e teto de 5 min, com watchdog reiniciado a cada chunk. O sync em segundo plano do servidor saiu de 50 s para 4 min. O diagnóstico em tempo real passou a registrar host, HTTP, tamanho, bytes recebidos, tempo, velocidade, itens parseados e o motivo exato do abort (sem dados / sem resposta / limite).
 
 - **Busca de legendas por IMDb ID (`/api/subtitles`):** o proxy agora consulta o OpenSubtitles pelo ID do IMDb (`imdb_id`) em vez do título, evitando legenda de outro filme. Se o app não mandar `imdb_id`, o proxy resolve o título no catálogo do IMDb (catálogo com cache de 24h) e usa o ID exato; episódios `SxxEyy` passam a buscar por `parent_imdb_id` + `season_number`/`episode_number`. Quando a resolução falha, mantém a busca por título. A resposta inclui `imdbId` e `matchedBy`. Android, Smart TV e Web não precisam de mudança: continuam chamando o mesmo endpoint.
 

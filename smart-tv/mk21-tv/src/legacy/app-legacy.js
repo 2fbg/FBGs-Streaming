@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.9.5 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.9.6 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -1280,7 +1280,21 @@ function groupSeriesItems(items) {
 }
 
 // LEITOR INCREMENTAL DE LISTAS M3U + FALLBACK XTREAM JSON API (player_api.php)
-async function parseM3uTextStream(res, onItem, onProgress) {
+function formatBytesShort(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1).replace('.', ',') + ' KB';
+  return (n / 1048576).toFixed(1).replace('.', ',') + ' MB';
+}
+
+function formatDurationShort(ms) {
+  const s = Math.max(0, Math.round(Number(ms) / 1000));
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  return m + 'min ' + String(s % 60).padStart(2, '0') + 's';
+}
+
+async function parseM3uTextStream(res, onItem, onProgress, stats) {
   let itemCount = 0;
   const wrappedOnItem = (item) => {
     itemCount++;
@@ -1289,6 +1303,7 @@ async function parseM3uTextStream(res, onItem, onProgress) {
 
   if (!res.body || typeof res.body.getReader !== 'function' || typeof TextDecoder === 'undefined') {
     const text = await res.text();
+    if (stats) stats.bytes = (stats.bytes || 0) + text.length;
     if (!text || text.length < 30) throw new Error('Lista M3U vazia');
     const trimmedStart = text.trim().slice(0, 250).toLowerCase();
     if (trimmedStart.includes('<!doctype html') || trimmedStart.includes('<html')) {
@@ -1399,6 +1414,10 @@ async function parseM3uTextStream(res, onItem, onProgress) {
     const part = await reader.read();
     if (part.done) break;
     received += part.value.byteLength || part.value.length || 0;
+    if (stats) {
+      stats.bytes = received;
+      if (stats.onActivity) stats.onActivity(received);
+    }
     const chunk = decoder.decode(part.value, { stream: true });
     if (!headerChecked) {
       headerSample += chunk.slice(0, 320);
@@ -1598,6 +1617,38 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
       ];
 
   let lastErr = null;
+  const attempts = [];
+
+  // Catálogo JSON primeiro: as listas XUI passam de 100 MB e a TV leva minutos
+  // para baixar/parsear. player_api.php entrega os mesmos itens em JSON, por
+  // categoria. Preferência ajustável em localStorage: mk21_catalog_mode = json | m3u | auto.
+  const catalogMode = (() => {
+    try { return String(localStorage.getItem('mk21_catalog_mode') || 'auto'); } catch (e) { return 'auto'; }
+  })();
+
+  if (!isDirectM3u && catalogMode !== 'm3u') {
+    const jsonStartedAt = Date.now();
+    try {
+      addDevLog('[Rede] Catálogo JSON (player_api.php) como fonte principal: ' + cleanBase, 'info');
+      const jsonCount = await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress);
+      if (!window.serverXmltvUrl) {
+        window.serverXmltvUrl = `${cleanBase}/xmltv.php?username=${encU}&password=${encP}`;
+      }
+      addDevLog(
+        '[Rede] Catálogo JSON concluído: ' + jsonCount.toLocaleString('pt-BR') + ' itens em ' + formatDurationShort(Date.now() - jsonStartedAt),
+        'success'
+      );
+      return;
+    } catch (jsonErr) {
+      if (jsonErr && jsonErr.name === 'AbortError' && signal && signal.aborted) throw jsonErr;
+      if (jsonErr && jsonErr.isAuthError) throw jsonErr;
+      const jsonMsg = jsonErr && jsonErr.diagnostic ? jsonErr.diagnostic : (jsonErr && jsonErr.message ? jsonErr.message : jsonErr);
+      addDevLog('[Rede] Catálogo JSON falhou em ' + formatDurationShort(Date.now() - jsonStartedAt) + ': ' + jsonMsg + ' — tentando a lista M3U', 'warn');
+      lastErr = jsonErr;
+      attempts.push('JSON ' + jsonMsg);
+    }
+  }
+
   for (let i = 0; i < candidateUrls.length; i++) {
     if (signal && signal.aborted) {
       const ab = new Error('Aborted');
@@ -1606,42 +1657,93 @@ async function streamPlaylistContent(url, signal, onItem, onProgress) {
     }
     const targetUrl = candidateUrls[i];
     const safeUrlLog = redactDiagnosticLog(targetUrl);
+    const hostLabel = (() => { try { return new URL(targetUrl).host; } catch (e) { return 'servidor'; } })();
     console.log('[MK21] Streaming da lista:', safeUrlLog);
-    addDevLog('[Rede] Tentando lista: ' + safeUrlLog, 'debug');
+    addDevLog('[Rede] Tentando lista ' + (i + 1) + '/' + candidateUrls.length + ': ' + safeUrlLog, 'debug');
 
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 45000) : null;
-    const onParentAbort = () => { if (controller) controller.abort(); };
+    // Listas XUI passam de 100 MB: limite curto derruba o download no meio.
+    // 20s para a primeira resposta, 30s de tolerância sem receber dados, 5min de teto.
+    const HEADER_TIMEOUT_MS = 20000;
+    const STALL_TIMEOUT_MS = 30000;
+    const HARD_LIMIT_MS = 300000;
+    const startedAt = Date.now();
+    const stats = { bytes: 0 };
+    let abortReason = '';
+    let timeoutId = null;
+    const armWatchdog = () => {
+      if (!controller) return;
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => { abortReason = 'sem dados'; controller.abort(); }, STALL_TIMEOUT_MS);
+    };
+    const headerTimeoutId = controller ? setTimeout(() => { abortReason = 'sem resposta'; controller.abort(); }, HEADER_TIMEOUT_MS) : null;
+    const hardLimitId = controller ? setTimeout(() => { abortReason = 'limite de 5min'; controller.abort(); }, HARD_LIMIT_MS) : null;
+    const onParentAbort = () => { abortReason = abortReason || 'cancelado'; if (controller) controller.abort(); };
     if (signal && signal.addEventListener) signal.addEventListener('abort', onParentAbort, { once: true });
+    stats.onActivity = () => armWatchdog();
+
+    const elapsed = () => Date.now() - startedAt;
+    const speedLabel = () => {
+      const ms = elapsed();
+      if (!ms || !stats.bytes) return '';
+      return ' · ' + formatBytesShort(Math.round(stats.bytes / (ms / 1000))) + '/s';
+    };
 
     try {
       const options = controller ? { signal: controller.signal, mode: 'cors' } : { mode: 'cors' };
       const res = await fetch(targetUrl, options);
+      if (headerTimeoutId) clearTimeout(headerTimeoutId);
       if (res.status === 401 || res.status === 403) {
         const authErr = new Error('Credenciais inválidas ou bloqueadas pelo servidor (HTTP ' + res.status + ').');
         authErr.isAuthError = true;
         authErr.status = res.status;
-        addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status + ' (credenciais)', 'error');
+        addDevLog('[Rede] ' + hostLabel + ' -> HTTP ' + res.status + ' (credenciais recusadas)', 'error');
         throw authErr;
       }
       if (!res.ok) {
         const httpErr = new Error('HTTP ' + res.status);
-        addDevLog('[Rede] ' + safeUrlLog + ' -> HTTP ' + res.status, 'warn');
+        httpErr.httpStatus = res.status;
+        addDevLog('[Rede] ' + hostLabel + ' -> HTTP ' + res.status + ' (' + formatDurationShort(elapsed()) + ')', 'warn');
         lastErr = httpErr;
+        attempts.push(hostLabel + ' HTTP ' + res.status);
         continue;
       }
-      const parsedCount = await parseM3uTextStream(res, onItem, onProgress);
-      addDevLog('[Rede] Lista M3U recebida (' + parsedCount + ' itens)', 'success');
+      const expected = parseInt((res.headers && res.headers.get && res.headers.get('content-length')) || '0', 10) || 0;
+      addDevLog('[Rede] ' + hostLabel + ' -> HTTP 200 · ' + formatBytesShort(expected) + ' · ' + formatDurationShort(elapsed()), 'info');
+      const parsedCount = await parseM3uTextStream(res, onItem, onProgress, stats);
+      addDevLog(
+        '[Rede] Lista M3U recebida: ' + parsedCount.toLocaleString('pt-BR') + ' itens · ' +
+        formatBytesShort(stats.bytes) + ' em ' + formatDurationShort(elapsed()) + speedLabel(),
+        'success'
+      );
       return;
     } catch (err) {
       if (err && err.name === 'AbortError' && signal && signal.aborted) throw err;
       if (err && err.isAuthError) throw err;
+      let friendly = err && err.message ? err.message : err;
+      if (err && err.name === 'AbortError') {
+        friendly = 'tempo esgotado (' + (abortReason || 'conexão interrompida') + ') após ' + formatDurationShort(elapsed());
+      } else if (err && err.httpStatus) {
+        friendly = 'HTTP ' + err.httpStatus;
+      }
+      if (err) err.diagnostic = friendly;
       lastErr = err;
-      addDevLog('[Rede] Falha em ' + safeUrlLog + ': ' + (err && err.message ? err.message : err), 'warn');
+      attempts.push(hostLabel + ' ' + friendly + ' · ' + formatBytesShort(stats.bytes));
+      addDevLog(
+        '[Rede] Falha em ' + hostLabel + ': ' + friendly +
+        ' · ' + formatBytesShort(stats.bytes) + ' em ' + formatDurationShort(elapsed()) + speedLabel(),
+        'warn'
+      );
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
+      if (headerTimeoutId) clearTimeout(headerTimeoutId);
+      if (hardLimitId) clearTimeout(hardLimitId);
       if (signal && signal.removeEventListener) signal.removeEventListener('abort', onParentAbort);
     }
+  }
+
+  if (attempts.length) {
+    addDevLog('[Rede] Todas as tentativas de lista falharam: ' + attempts.join(' | '), 'error');
   }
 
   // Fallback para API JSON Xtream (player_api.php) quando get.php retorna 404 ou lista vazia
@@ -7416,7 +7518,9 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     triggerBtn.textContent = '⏳ ...';
   }
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeout = controller ? setTimeout(() => controller.abort(), 50000) : null;
+  // 50s era menor que o tempo real de uma lista de 100 MB; 4min cobre a cauda longa
+  const timeout = controller ? setTimeout(() => controller.abort(), 240000) : null;
+  const startedAt = Date.now();
   try {
     const target = { LIVE: [], MOVIE: [], SERIES: [] };
     const indexWriter = await createCatalogIndexWriter(srv.id);
@@ -7455,7 +7559,12 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     }
     return true;
   } catch (err) {
-    addDevLog('[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + CatalogUtils.formatFriendlyLoadError(err), 'warn');
+    const detail = err && err.diagnostic ? err.diagnostic : '';
+    addDevLog(
+      '[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + CatalogUtils.formatFriendlyLoadError(err) +
+      (detail ? ' (' + detail + ')' : '') + ' · ' + formatDurationShort(Date.now() - startedAt),
+      'warn'
+    );
     if (triggerBtn && !getHideBackgroundProgress()) {
       showChannelBanner('⚠️ Falha ao sincronizar ' + cleanServerName(srv.name));
     }
@@ -8011,7 +8120,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.9.5';
+const BASE_PACKAGE_VERSION = '2.9.6';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
