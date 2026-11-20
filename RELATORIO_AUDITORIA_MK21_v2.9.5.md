@@ -2,6 +2,7 @@
 
 **Escopo:** rastreabilidade entre tag, commit carimbado e binários publicados (APK/IPK/SHA256SUMS).
 **Modo:** somente leitura. Nenhuma tag foi movida e nenhum asset foi reenviado/sobrescrito durante a auditoria.
+**Snapshot:** as refs e hashes abaixo foram coletados em 2026-11-20 ~16:55 UTC, antes do commit deste próprio relatório. Depois disso a `main` avançou com commits de documentação; a tag `v2.9.5` e os assets permanecem intactos.
 **Prompt aplicado:** `Prompt_Auditor_MK21_Streaming_v2.9.4.md` (estrutura do relatório final), adaptado ao recorte pedido.
 
 ---
@@ -24,7 +25,7 @@ Diferente da 2.9.4 — em que a tag `c3dc8fb` apontava para o commit **pré-cari
 | # | Afirmação | Fonte / comando | Resultado | Confiança |
 |---|---|---|---|---|
 | E1 | A tag `v2.9.5` é leve e aponta para o commit carimbado | `git cat-file -t refs/tags/v2.9.5` / `git rev-parse` | `commit`; `ff3325ef90901fba3ac17ab3428b7faacaecc39c` | alta |
-| E2 | `main` e a tag são o mesmo commit | `git ls-remote origin main`, `git ls-remote --tags origin v2.9.5` | `ff3325ef…` nos dois refs | alta |
+| E2 | No snapshot, `main` e a tag apontavam para o mesmo commit | `git ls-remote origin main`, `git ls-remote --tags origin v2.9.5` | `ff3325ef…` nos dois refs | alta |
 | E3 | Não há diferença de árvore entre tag e `main` | `git diff --stat FETCH_HEAD refs/tags/v2.9.5` | saída vazia | alta |
 | E4 | O commit carimbado é filho direto do bump | `git log --oneline -3 refs/tags/v2.9.5` | `ff3325e` ← `9d394e9 chore(release): bump para 2.9.5/295` | alta |
 | E5 | O APK dentro da árvore da tag é o binário publicado | `git show FETCH_HEAD:mk21.apk \| sha256sum` | `d9c7c4289811c7b4542d73be7455be258f289d0e0c7abc2e9a3008a3a0131873` | alta |
