@@ -365,47 +365,11 @@ jobs:
           } > SHA256SUMS
           cat SHA256SUMS
 
-      - name: Create or update GitHub Release
-        if: steps.release-meta.outputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release-meta.outputs.tag }}
-          VER: ${{ steps.release-meta.outputs.version }}
-          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: |
-          set -euo pipefail
-          IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
-          NOTES=$(python3 -c 'import json, sys; print(json.load(open("version.json", encoding="utf-8")).get("releaseNotes", f"Release {sys.argv[1]}"))' "$TAG")
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS --clobber
-            gh release edit "$TAG" --draft=false --title "MK21 Play ${TAG}" --notes "$NOTES"
-          else
-            gh release create "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS \
-              --target "$TARGET_SHA" \
-              --title "MK21 Play ${TAG}" \
-              --notes "$NOTES"
-          fi
-
-      - name: Verify published remote release assets
-        if: steps.release-meta.outputs.dry_run != 'true'
-        env:
-          TAG: ${{ steps.release-meta.outputs.tag }}
-          VER: ${{ steps.release-meta.outputs.version }}
-        run: |
-          set -euo pipefail
-          IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
-          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "$IPK_PATH" --require-release-url --remote
-
-          # Prova que o SHA256SUMS publicado corresponde aos binários publicados.
-          TMPD=$(mktemp -d)
-          trap 'rm -rf "$TMPD"' EXIT
-          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
-          curl -fsSL -o "$TMPD/mk21.apk" "$BASE/mk21.apk"
-          curl -fsSL -o "$TMPD/mk21play_${VER}_all.ipk" "$BASE/mk21play_${VER}_all.ipk"
-          curl -fsSL -o "$TMPD/SHA256SUMS" "$BASE/SHA256SUMS"
-          ( cd "$TMPD" && sha256sum -c SHA256SUMS )
-
-      - name: Commit updated manifests and fallback APK [skip ci]
+      # Ordem correta de rastreabilidade: os binários e manifestos finais são commitados ANTES
+      # de a tag existir. Assim a tag aponta para um commit que contém exatamente o APK/IPK
+      # publicados, e não para o commit pré-carimbo.
+      - name: Commit stamped manifests and binaries [skip ci]
+        id: commit-manifests
         if: steps.release-meta.outputs.dry_run != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -436,19 +400,71 @@ jobs:
             public/apps.json \
             smart-tv/apps.json
 
-          if git diff --cached --quiet; then
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): stamp ${TAG} manifests and binaries [skip ci]"
+            gh auth setup-git
+            if ! git push origin "HEAD:main"; then
+              BRANCH="chore/release-manifests-${TAG}"
+              git push origin "HEAD:${BRANCH}"
+              gh pr create \
+                --base main \
+                --head "$BRANCH" \
+                --title "chore(release): atualizar manifestos e binários ${TAG}" \
+                --body "Atualização automática da release ${TAG} com SHA-256 real do APK/IPK publicados. [skip ci]" || true
+              echo "::warning::Push direto em main recusado; commit da release enviado para $BRANCH. A tag apontará para esse commit."
+            fi
+          else
             echo "Nenhuma alteração nos manifestos ou binários para commitar."
-            exit 0
           fi
 
-          git commit -m "chore(release): publish ${TAG} manifests and binaries [skip ci]"
-          gh auth setup-git
-          if ! git push origin "HEAD:main"; then
-            BRANCH="chore/release-manifests-${TAG}"
-            git push origin "HEAD:${BRANCH}"
-            gh pr create \
-              --base main \
-              --head "$BRANCH" \
-              --title "chore(release): atualizar manifestos e binários ${TAG}" \
-              --body "Atualização automática pós-release ${TAG} com SHA-256 real do APK/IPK publicados. [skip ci]"
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        if: steps.release-meta.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release-meta.outputs.tag }}
+          VER: ${{ steps.release-meta.outputs.version }}
+          TARGET_SHA: ${{ steps.commit-manifests.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
+          NOTES=$(python3 -c 'import json, sys; print(json.load(open("version.json", encoding="utf-8")).get("releaseNotes", f"Release {sys.argv[1]}"))' "$TAG")
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS --clobber
+            gh release edit "$TAG" --draft=false --title "MK21 Play ${TAG}" --notes "$NOTES"
+          else
+            # A tag é criada por este comando, já no commit carimbado (TARGET_SHA):
+            # o commit contém exatamente o APK/IPK publicados, então tag e asset coincidem.
+            if ! gh release create "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS \
+              --target "$TARGET_SHA" \
+              --title "MK21 Play ${TAG}" \
+              --notes "$NOTES"; then
+              echo "::warning::Não foi possível criar a release com --target ${TARGET_SHA} (tag pré-existente?). Anexando à tag já existente; nesse caso a tag pode não coincidir com o commit carimbado."
+              gh release create "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS \
+                --verify-tag \
+                --title "MK21 Play ${TAG}" \
+                --notes "$NOTES"
+            fi
           fi
+
+          echo "Release ${TAG} publicada a partir de ${TARGET_SHA}."
+
+      - name: Verify published remote release assets
+        if: steps.release-meta.outputs.dry_run != 'true'
+        env:
+          TAG: ${{ steps.release-meta.outputs.tag }}
+          VER: ${{ steps.release-meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
+          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "$IPK_PATH" --require-release-url --remote
+
+          # Prova que o SHA256SUMS publicado corresponde aos binários publicados.
+          TMPD=$(mktemp -d)
+          trap 'rm -rf "$TMPD"' EXIT
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          curl -fsSL -o "$TMPD/mk21.apk" "$BASE/mk21.apk"
+          curl -fsSL -o "$TMPD/mk21play_${VER}_all.ipk" "$BASE/mk21play_${VER}_all.ipk"
+          curl -fsSL -o "$TMPD/SHA256SUMS" "$BASE/SHA256SUMS"
+          ( cd "$TMPD" && sha256sum -c SHA256SUMS )
