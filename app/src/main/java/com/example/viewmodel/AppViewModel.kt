@@ -1248,6 +1248,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun syncAllConfiguredPlaylistsInBackground() {
         if (!preferencesService.syncAllListsBackground) return
         viewModelScope.launch(Dispatchers.IO) {
+            val taskCid = com.example.utils.ObservabilityLogger.startTimer("bg_sync_all")
+            com.example.utils.ObservabilityLogger.logEvent(
+                event = "background_task_start",
+                phase = "background",
+                correlationId = taskCid,
+                meta = mapOf("task" to "sync_all_playlists")
+            )
+            var syncedCount = 0
             try {
                 val configuredLists = mutableListOf<String>()
                 val active = _activePlaylistName.value
@@ -1273,13 +1281,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val lastUpdate = preferencesService.getLastPlaylistUpdateTimestamp(listName)
                     if (shouldSyncBasedOnFrequency(lastUpdate)) {
                         Log.d("MK21_VM", "Starting background pre-sync of playlist: $listName")
-                        downloadAndParsePlaylistSilently(listName)
+                        if (downloadAndParsePlaylistSilently(listName)) syncedCount++
                         // Gentle 3s pause between servers to safeguard network and CPU
                         delay(3000L)
                     }
                 }
             } catch (e: Exception) {
                 Log.e("MK21_VM", "Error preloading background playlists", e)
+            } finally {
+                com.example.utils.ObservabilityLogger.endTimer(
+                    key = "bg_sync_all",
+                    event = "background_task_end",
+                    phase = "background",
+                    meta = mapOf("task" to "sync_all_playlists", "syncedCount" to syncedCount)
+                )
             }
         }
     }
@@ -1359,6 +1374,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _password.value = passwordInput
         preferencesService.username = usernameInput
         preferencesService.password = passwordInput
+        com.example.utils.ObservabilityLogger.logEvent(
+            event = "login_request_start",
+            phase = "auth",
+            meta = mapOf("hasUsername" to usernameInput.isNotBlank(), "hasPassword" to passwordInput.isNotBlank())
+        )
     }
 
     fun setAdultPin(newPin: String) {
@@ -1386,7 +1406,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (isCredentialsConfigured()) {
                     val count = playlistItemDao.getItemsByType(playlistName, ContentType.LIVE.name).first().size
                     if (count == 0) {
+                        com.example.utils.ObservabilityLogger.logEvent(
+                            event = "cache_miss",
+                            phase = "room_cache",
+                            meta = mapOf("source" to playlistName, "liveCount" to 0)
+                        )
                         refreshActivePlaylist()
+                    } else {
+                        com.example.utils.ObservabilityLogger.logEvent(
+                            event = "cache_hit",
+                            phase = "room_cache",
+                            meta = mapOf("source" to playlistName, "liveCount" to count)
+                        )
                     }
                 }
             } catch (e: Throwable) {
@@ -1425,7 +1456,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (item.isAdult && !_adultPinGranted.value) {
             _activePinPromptItem.value = item
         } else {
+            val previous = _currentPlayingItem.value
             _currentPlayingItem.value = item
+            com.example.utils.ObservabilityLogger.logEvent(
+                event = if (previous != null) "channel_change_complete" else "player_open",
+                phase = "player",
+                meta = mapOf(
+                    "contentType" to item.contentType,
+                    "host" to com.example.utils.LogSanitizer.extractSafeHost(item.url)
+                )
+            )
             viewModelScope.launch(Dispatchers.IO) {
                 playlistItemDao.updateLastWatched(item.id, System.currentTimeMillis())
                 prefetchAdjacentChannels(item)
@@ -1545,6 +1585,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val list = activeItemsList.value
         val index = list.indexOfFirst { it.id == current.id }
         if (index != -1 && index < list.size - 1) {
+            com.example.utils.ObservabilityLogger.logEvent(
+                event = "channel_change_start",
+                phase = "player",
+                meta = mapOf("direction" to "next")
+            )
             playContent(list[index + 1])
         }
     }
@@ -1554,6 +1599,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val list = activeItemsList.value
         val index = list.indexOfFirst { it.id == current.id }
         if (index > 0) {
+            com.example.utils.ObservabilityLogger.logEvent(
+                event = "channel_change_start",
+                phase = "player",
+                meta = mapOf("direction" to "previous")
+            )
             playContent(list[index - 1])
         }
     }
@@ -1871,8 +1921,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             _loadingProgress.value = 0
             _errorMessage.value = null
+            val loadCid = com.example.utils.ObservabilityLogger.startTimer("playlist_load")
             try {
                 val targetPlaylist = _activePlaylistName.value
+                com.example.utils.ObservabilityLogger.logEvent(
+                    event = "playlist_load_start",
+                    phase = "catalog",
+                    correlationId = loadCid,
+                    meta = mapOf("source" to targetPlaylist)
+                )
                 val xtreamCreds = resolveActiveXtreamCredentials(targetPlaylist)
 
                 // 1. Prioriza API Xtream Codes JSON (player_api.php) — resiliente ao encerramento de M3U
@@ -1894,6 +1951,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         )
                         _loadingProgress.value = 95
                         savePlaylistStaged(targetPlaylist, xtreamResult.items, isSilent = false)
+                        com.example.utils.ObservabilityLogger.endTimer(
+                            key = "playlist_load",
+                            event = "playlist_load_complete",
+                            phase = "catalog",
+                            meta = mapOf("source" to targetPlaylist, "method" to "xtream", "itemCount" to xtreamResult.items.size)
+                        )
+                        com.example.utils.ObservabilityLogger.logEvent(
+                            event = "login_success",
+                            phase = "auth",
+                            correlationId = loadCid,
+                            meta = mapOf("method" to "xtream")
+                        )
                         loadXmltvForActiveServer(force = false)
                         return@launch
                     }

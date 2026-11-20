@@ -173,6 +173,16 @@ fun AppNavigation(viewModel: AppViewModel) {
                 if (viewModel.isCredentialsConfigured()) Routes.HOME else Routes.SERVER_CONFIG
             }
             var currentScreen by remember { mutableStateOf(initialScreen) }
+            LaunchedEffect(currentScreen) {
+                com.example.utils.ObservabilityLogger.setScreen(currentScreen)
+                if (currentScreen == Routes.SERVER_CONFIG) {
+                    com.example.utils.ObservabilityLogger.logEvent(
+                        event = "login_screen_open",
+                        phase = "auth",
+                        screen = currentScreen
+                    )
+                }
+            }
 
             Crossfade(targetState = currentScreen, label = "ScreenTransition") { screen ->
                 when (screen) {
@@ -9852,18 +9862,26 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
             }
         }
 
-        // Dialog: Diagnóstico e Logs de Falha
+        // Dialog: Diagnóstico e Logs Estruturados (JSONL + Falhas)
         if (showDiagnosticLogsDialog) {
             val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
             var crashLog by remember { mutableStateOf(com.example.utils.CrashLogger.getLatestCrashLog(context)) }
+            var obsLevel by remember { mutableStateOf(com.example.utils.ObservabilityLogger.getLevel()) }
+            var obsCount by remember { mutableStateOf(com.example.utils.ObservabilityLogger.getBufferedCount()) }
+            var traceMins by remember { mutableStateOf(com.example.utils.ObservabilityLogger.getTraceRemainingMinutes()) }
             val diagInfo = remember { com.example.utils.CrashLogger.getSystemDiagnosticInfo(context) }
-            val exportText = remember(crashLog, diagInfo) {
+            val buildExportPayload: () -> String = {
                 buildString {
-                    appendLine("MK21 Android - Logs de diagnóstico")
+                    appendLine("MK21 Android - Logs Estruturados de Diagnóstico (Redigidos)")
+                    appendLine("Sessão: ${com.example.utils.ObservabilityLogger.getSessionId()} | Nível: ${obsLevel.name}")
                     appendLine(diagInfo)
+                    appendLine("=== EVENTOS ESTRUTURADOS (JSONL) ===")
+                    val jsonl = com.example.utils.ObservabilityLogger.exportJsonl(context)
+                    appendLine(if (jsonl.isBlank()) "(nenhum evento registrado)" else jsonl)
                     appendLine()
+                    appendLine("=== ÚLTIMO RELATÓRIO DE FALHA ===")
                     appendLine(crashLog ?: "Nenhum relatório de falha capturado.")
-                }.let(::redactDiagnosticLog)
+                }.let(com.example.utils.LogSanitizer::sanitizeText)
             }
             val saveLogLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.CreateDocument("text/plain")
@@ -9872,10 +9890,12 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                     try {
                         val output = context.contentResolver.openOutputStream(uri)
                             ?: error("Não foi possível abrir o arquivo selecionado.")
-                        output.bufferedWriter(Charsets.UTF_8).use { it.write(exportText) }
-                        android.widget.Toast.makeText(context, "Log salvo com sucesso.", android.widget.Toast.LENGTH_SHORT).show()
+                        val payload = buildExportPayload()
+                        output.bufferedWriter(Charsets.UTF_8).use { it.write(payload) }
+                        obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
+                        android.widget.Toast.makeText(context, "Logs exportados com sucesso (dados sensíveis redigidos).", android.widget.Toast.LENGTH_SHORT).show()
                     } catch (error: Exception) {
-                        android.widget.Toast.makeText(context, "Falha ao salvar o log: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+                        android.widget.Toast.makeText(context, "Falha ao exportar logs: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -9884,25 +9904,68 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141315)),
                     shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                    border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth().padding(8.dp).testTag("diagnostic_logs_dialog")
                 ) {
                     Column(
-                        modifier = Modifier.padding(18.dp),
+                        modifier = Modifier
+                            .padding(18.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.BugReport, contentDescription = null, tint = GoldPremium, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Diagnóstico & Logs de Falha", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("Logs & Diagnóstico Estruturado", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
 
                         Text(
-                            text = diagInfo,
+                            text = buildString {
+                                append(diagInfo)
+                                appendLine("• Sessão: ${com.example.utils.ObservabilityLogger.getSessionId()}")
+                                appendLine("• Nível ativo: ${obsLevel.name}" + if (obsLevel == com.example.utils.ObservabilityLogger.Level.TRACE && traceMins > 0) " (expira em ~${traceMins} min)" else "")
+                                append("• Eventos JSONL em memória: $obsCount")
+                            },
                             color = Color.LightGray,
                             fontSize = 10.sp,
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                         )
+
+                        // Ação: Ativar diagnóstico temporário (TRACE 45 min) + seletor rápido de nível
+                        Button(
+                            onClick = {
+                                if (obsLevel == com.example.utils.ObservabilityLogger.Level.TRACE) {
+                                    com.example.utils.ObservabilityLogger.setLevel(com.example.utils.ObservabilityLogger.Level.NORMAL)
+                                } else {
+                                    com.example.utils.ObservabilityLogger.enableTemporaryTrace(45)
+                                }
+                                obsLevel = com.example.utils.ObservabilityLogger.getLevel()
+                                traceMins = com.example.utils.ObservabilityLogger.getTraceRemainingMinutes()
+                                obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
+                                val msg = if (obsLevel == com.example.utils.ObservabilityLogger.Level.TRACE) {
+                                    "Diagnóstico temporário (TRACE) ativado por 45 min."
+                                } else {
+                                    "Nível de diagnóstico restaurado para NORMAL."
+                                }
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (obsLevel == com.example.utils.ObservabilityLogger.Level.TRACE) Color(0xFF1B5E20) else Color(0xFF263238)
+                            ),
+                            modifier = Modifier.fillMaxWidth().testTag("btn_toggle_temp_trace"),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = if (obsLevel == com.example.utils.ObservabilityLogger.Level.TRACE) {
+                                    "DIAGNÓSTICO TEMPORÁRIO ATIVO (${traceMins}m) — DESATIVAR"
+                                } else {
+                                    "ATIVAR DIAGNÓSTICO TEMPORÁRIO (TRACE 45 MIN)"
+                                },
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            )
+                        }
 
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
@@ -9917,7 +9980,7 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 100.dp, max = 220.dp)
+                                    .heightIn(min = 90.dp, max = 180.dp)
                                     .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                                     .padding(8.dp)
                                     .verticalScroll(rememberScrollState())
@@ -9931,84 +9994,97 @@ fun SettingsScreen(viewModel: AppViewModel, onNavigateBack: () -> Unit) {
                             }
                         }
 
+                        // Ações principais: Exportar logs + Compartilhar logs
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = { saveLogLauncher.launch("mk21-android-logs.txt") },
+                                onClick = { saveLogLauncher.launch("mk21-android-diagnostico.jsonl") },
                                 colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).testTag("btn_export_logs"),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("SALVAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                Text("EXPORTAR LOGS", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                             }
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     try {
-                                        context.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://github.com/2fbg/FBGs-Streaming/upload/main/logs")
-                                            )
+                                        val diagFile = com.example.utils.ObservabilityLogger.exportDiagnosticFile(context, crashLog)
+                                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            diagFile
                                         )
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(Intent.EXTRA_SUBJECT, "MK21 Android - Diagnóstico Redigido")
+                                            putExtra(Intent.EXTRA_STREAM, fileUri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Compartilhar logs de diagnóstico"))
+                                        obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
                                     } catch (error: Exception) {
-                                        android.widget.Toast.makeText(context, "Não foi possível abrir o GitHub: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
+                                        android.widget.Toast.makeText(context, "Falha ao compartilhar logs: ${error.message}", android.widget.Toast.LENGTH_LONG).show()
                                     }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
+                                modifier = Modifier.weight(1f).testTag("btn_share_logs"),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("COMPARTILHAR", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            }
+                        }
+
+                        // Ações secundárias: Copiar + Limpar logs + Fechar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(buildExportPayload()))
+                                    obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
+                                    android.widget.Toast.makeText(context, "Logs redigidos copiados!", android.widget.Toast.LENGTH_SHORT).show()
                                 },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, Color(0xFF4C8DFF).copy(alpha = 0.6f))
+                                border = BorderStroke(1.dp, GoldPremium.copy(alpha = 0.5f))
                             ) {
-                                Text("GITHUB", color = Color(0xFF9CC2FF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Text("COPIAR", color = GoldPremium, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                             }
+
+                            OutlinedButton(
+                                onClick = {
+                                    com.example.utils.CrashLogger.clearLogs(context)
+                                    com.example.utils.ObservabilityLogger.clear(context)
+                                    crashLog = null
+                                    obsCount = com.example.utils.ObservabilityLogger.getBufferedCount()
+                                    android.widget.Toast.makeText(context, "Logs limpos com sucesso!", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f).testTag("btn_clear_logs"),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                            ) {
+                                Text("LIMPAR LOGS", color = Color.LightGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+
                             Button(
                                 onClick = { showDiagnosticLogsDialog = false },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(0.9f),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text("FECHAR", color = Color.White, fontSize = 10.sp)
                             }
                         }
 
-                        if (crashLog != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = {
-                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(exportText))
-                                        android.widget.Toast.makeText(context, "Log copiado para a Área de Transferência!", android.widget.Toast.LENGTH_SHORT).show()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = GoldPremium),
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("COPIAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        com.example.utils.CrashLogger.clearLogs(context)
-                                        crashLog = null
-                                        android.widget.Toast.makeText(context, "Logs limpos com sucesso!", android.widget.Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                                ) {
-                                    Text("LIMPAR", color = Color.LightGray, fontSize = 10.sp)
-                                }
-                            }
-                        }
                         Text(
-                            "Salve o arquivo e envie-o manualmente para 2fbg/FBGs-Streaming/logs. O app não publica logs automaticamente.",
+                            "Senhas, PINs, tokens, cookies e URLs autenticadas são redigidos automaticamente antes da gravação e exportação. O app nunca envia logs sem sua ação.",
                             color = Color.Gray,
                             fontSize = 9.sp
                         )

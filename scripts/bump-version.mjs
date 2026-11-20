@@ -99,11 +99,22 @@ for (const rel of versionManifests) {
   writeJson(rel, data);
 }
 
-// 2. manifest.json, package.json e appinfo.json (webOS)
-for (const rel of ['manifest.json', 'package.json', 'smart-tv/mk21-tv/appinfo.json', 'smart-tv/webos/appinfo.json']) {
+// 2. manifest.json, package.json, web/package.json e appinfo.json (webOS)
+for (const rel of ['manifest.json', 'package.json', 'web/package.json', 'smart-tv/mk21-tv/appinfo.json', 'smart-tv/webos/appinfo.json']) {
   const data = readJson(rel);
   data.version = nextVersion;
   writeJson(rel, data);
+}
+
+// 2b. Defaults de versão/build no logger estruturado Web e Smart TV
+for (const rel of ['js/observability.js', 'smart-tv/mk21-tv/observability.js']) {
+  const abs = path.join(ROOT_DIR, rel);
+  if (fs.existsSync(abs)) {
+    let js = fs.readFileSync(abs, 'utf8');
+    js = js.replace(/var version = String\(opts\.version \|\| '\d+\.\d+\.\d+'\);/, `var version = String(opts.version || '${nextVersion}');`);
+    js = js.replace(/var build = Number\(opts\.build \|\| \d+\);/, `var build = Number(opts.build || ${nextCode});`);
+    fs.writeFileSync(abs, js, 'utf8');
+  }
 }
 
 // 3. apps.json e smart-tv/apps.json

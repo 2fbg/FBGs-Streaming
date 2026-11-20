@@ -40,8 +40,9 @@ class MainActivity : ComponentActivity() {
         // STEP 1: Configure App Check with launch intent before any UI or Firebase operations
         com.example.utils.configureAppCheck(this, intent)
         
-        // Initialize autonomous Crash Logger to capture full diagnostics and stack traces
+        // Initialize autonomous Crash Logger and structured JSONL Observability Logger
         com.example.utils.CrashLogger.init(applicationContext)
+        com.example.utils.ObservabilityLogger.init(applicationContext)
 
         // Proper edgeToEdge execution to extend views elegantly under notches
         enableEdgeToEdge()

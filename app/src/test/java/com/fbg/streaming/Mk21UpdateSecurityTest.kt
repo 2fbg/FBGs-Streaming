@@ -168,8 +168,8 @@ class Mk21UpdateSecurityTest {
         )
         assertFalse(redirectResult)
 
-        // 3. Hash divergente deve rejeitar e remover arquivo parcial
-        val payloadBytes = "fake-apk-binary-content-123456".toByteArray()
+        // 3. Hash divergente deve rejeitar e remover arquivo parcial (com cabeçalho ZIP/APK válido)
+        val payloadBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04) + "fake-apk-binary-content-123456".toByteArray()
         val mismatchClient = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 Response.Builder()
@@ -299,7 +299,7 @@ class Mk21UpdateSecurityTest {
         val pinnedHex = "f".repeat(64)
         vm.expectedCertPinOverride = pinnedHex
 
-        val payloadBytes = "fake-apk-payload-for-cert-pin-check".toByteArray()
+        val payloadBytes = byteArrayOf(0x50, 0x4B, 0x03, 0x04) + "fake-apk-payload-for-cert-pin-check".toByteArray()
         val payloadSha = MessageDigest.getInstance("SHA-256")
             .digest(payloadBytes)
             .joinToString("") { "%02x".format(it) }
@@ -436,6 +436,72 @@ class Mk21UpdateSecurityTest {
         vm.checkForUpdatesSilently()
         kotlinx.coroutines.delay(250)
         assertNull(vm.pendingUpdateBanner.value)
+    }
+
+    @Test
+    fun `downloadAndVerifyApkDetailed rejects HTML response and non-ZIP payloads and deletes invalid files`() = runTest {
+        val htmlBody = "<!doctype html><html><body>404 Not Found</body></html>"
+        val htmlSha = MessageDigest.getInstance("SHA-256")
+            .digest(htmlBody.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+        // 1. Content-Type text/html deve ser rejeitado imediatamente
+        val htmlClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .header("Content-Type", "text/html; charset=utf-8")
+                    .body(htmlBody.toResponseBody("text/html".toMediaType()))
+                    .build()
+            }
+            .build()
+        val htmlManager = Mk21UpdateManager(context, httpClient = htmlClient, minApkSizeBytes = 10L)
+        val htmlOutcome = htmlManager.downloadAndVerifyApkDetailed(
+            updateInfo = UpdateInfo(
+                versionCode = 293,
+                versionName = "2.9.3",
+                apkUrl = "https://github.com/2fbg/FBGs-Streaming/releases/download/v2.9.3/mk21.apk",
+                sha256 = htmlSha,
+                changelog = ""
+            ),
+            autoLaunchInstaller = false,
+            onProgress = { _, _, _ -> }
+        )
+        assertTrue(htmlOutcome is com.fbg.streaming.update.DownloadVerificationResult.Failure)
+        assertTrue((htmlOutcome as com.fbg.streaming.update.DownloadVerificationResult.Failure).reason.contains("HTML", ignoreCase = true))
+
+        // 2. HTML disfarçado como application/octet-stream deve ser rejeitado pela validação de cabeçalho ZIP/APK
+        val disguisedClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .header("Content-Type", "application/octet-stream")
+                    .body(htmlBody.toResponseBody("application/octet-stream".toMediaType()))
+                    .build()
+            }
+            .build()
+        val disguisedManager = Mk21UpdateManager(context, httpClient = disguisedClient, minApkSizeBytes = 10L)
+        val disguisedOutcome = disguisedManager.downloadAndVerifyApkDetailed(
+            updateInfo = UpdateInfo(
+                versionCode = 293,
+                versionName = "2.9.3",
+                apkUrl = "https://github.com/2fbg/FBGs-Streaming/releases/download/v2.9.3/mk21.apk",
+                sha256 = htmlSha,
+                changelog = ""
+            ),
+            autoLaunchInstaller = false,
+            onProgress = { _, _, _ -> }
+        )
+        assertTrue(disguisedOutcome is com.fbg.streaming.update.DownloadVerificationResult.Failure)
+        val updatesDir = File(context.externalCacheDir ?: context.cacheDir, "updates")
+        assertFalse(File(updatesDir, "mk21_2.9.3.apk").exists())
+        assertFalse(File(updatesDir, "mk21_2.9.3.apk.part").exists())
     }
 
     private fun clientReturning(code: Int, bodyText: String): OkHttpClient {
