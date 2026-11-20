@@ -71,6 +71,149 @@ test('buildSubtitleQuery limpa tags técnicas preservando episódio e detectVodS
   assert.ok(credits.label.includes('Pular Créditos'));
 });
 
+function imdbSuggestion(entries) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ d: entries }),
+  };
+}
+
+function createFetch({ calls, suggestion, subtitles }) {
+  return async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('/suggestion/')) return suggestion();
+    if (String(url).includes('/subtitles?')) return subtitles();
+    if (String(url).includes('/download')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ link: 'https://cdn.opensubtitles.example/matrix.srt' }),
+      };
+    }
+    return { ok: true, status: 200, text: async () => SAMPLE_SRT };
+  };
+}
+
+function subtitlesResponse() {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      data: [
+        {
+          attributes: {
+            language: 'pt-br',
+            release: 'The.Matrix.1999.1080p',
+            download_count: 5400,
+            fps: 23.976,
+            files: [{ file_id: 98765, file_name: 'matrix.pt-br.srt' }],
+          },
+        },
+      ],
+    }),
+  };
+}
+
+test('busca de legendas usa imdb_id do catálogo IMDb em vez do título', async () => {
+  const calls = [];
+  const handler = subsApi.createSubtitlesHandler({
+    getApiKey: () => 'test-key-123',
+    fetch: createFetch({
+      calls,
+      suggestion: () => imdbSuggestion([{ id: 'tt0133093', l: 'The Matrix', qid: 'movie', y: 1999 }]),
+      subtitles: subtitlesResponse,
+    }),
+  });
+
+  const res = createMockRes();
+  await handler({ method: 'GET', url: '/api/subtitles?action=search&query=Matrix&lang=pt-br' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().imdbId, 'tt0133093');
+  assert.equal(res.json().matchedBy, 'imdb_id');
+
+  const searchCall = calls.find((u) => u.includes('/subtitles?'));
+  assert.ok(searchCall.includes('imdb_id=tt0133093'), searchCall);
+  assert.ok(!searchCall.includes('query='), searchCall);
+});
+
+test('imdb_id explícito vindo do app dispensa resolução por título', async () => {
+  const calls = [];
+  const handler = subsApi.createSubtitlesHandler({
+    getApiKey: () => 'test-key-123',
+    fetch: createFetch({ calls, suggestion: () => imdbSuggestion([]), subtitles: subtitlesResponse }),
+  });
+
+  const res = createMockRes();
+  await handler({ method: 'GET', url: '/api/subtitles?action=search&imdb_id=tt0317248&lang=pt-br' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().matchedBy, 'imdb_id');
+  assert.equal(calls.filter((u) => u.includes('/suggestion/')).length, 0);
+  assert.ok(calls.find((u) => u.includes('/subtitles?')).includes('imdb_id=tt0317248'));
+});
+
+test('episódio de série busca por parent_imdb_id + temporada/episódio', async () => {
+  const calls = [];
+  const handler = subsApi.createSubtitlesHandler({
+    getApiKey: () => 'test-key-123',
+    fetch: createFetch({
+      calls,
+      suggestion: () => imdbSuggestion([{ id: 'tt0903747', l: 'Breaking Bad', qid: 'tvSeries', rank: 55, y: 2008 }]),
+      subtitles: subtitlesResponse,
+    }),
+  });
+
+  const res = createMockRes();
+  await handler({ method: 'GET', url: '/api/subtitles?action=search&query=Breaking%20Bad%20S01E02&lang=pt-br' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().matchedBy, 'parent_imdb_id');
+
+  const suggestionCall = calls.find((u) => u.includes('/suggestion/'));
+  assert.ok(!/S01E02/i.test(decodeURIComponent(suggestionCall)), suggestionCall);
+  assert.ok(decodeURIComponent(suggestionCall).includes('Breaking Bad'), suggestionCall);
+
+  const searchCall = calls.find((u) => u.includes('/subtitles?'));
+  assert.ok(searchCall.includes('parent_imdb_id=tt0903747'), searchCall);
+  assert.ok(searchCall.includes('season_number=1'), searchCall);
+  assert.ok(searchCall.includes('episode_number=2'), searchCall);
+});
+
+test('resultado obscuro do IMDb (rank alto / fora de filme-série) é descartado', async () => {
+  const calls = [];
+  const handler = subsApi.createSubtitlesHandler({
+    getApiKey: () => 'test-key-123',
+    fetch: createFetch({
+      calls,
+      suggestion: () => imdbSuggestion([
+        { id: 'tt7688106', l: 'Sobre um filme que não acabou', qid: 'short', rank: 1336547 },
+        { id: 'tt5742666', l: 'Time Does Not Exist Where We Are', qid: 'movie', rank: 1407461 },
+      ]),
+      subtitles: subtitlesResponse,
+    }),
+  });
+
+  const res = createMockRes();
+  await handler({ method: 'GET', url: '/api/subtitles?action=search&query=Filme%20Que%20Nao%20Existe%209999' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().matchedBy, 'query');
+  assert.equal(res.json().imdbId, '');
+});
+
+test('sem IMDb resolvido, busca cai no título (comportamento antigo)', async () => {
+  const calls = [];
+  const handler = subsApi.createSubtitlesHandler({
+    getApiKey: () => 'test-key-123',
+    fetch: createFetch({ calls, suggestion: () => imdbSuggestion([]), subtitles: subtitlesResponse }),
+  });
+
+  const res = createMockRes();
+  await handler({ method: 'GET', url: '/api/subtitles?action=search&query=Filmexyz&lang=pt-br' }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().matchedBy, 'query');
+  assert.equal(res.json().imdbId, '');
+  assert.ok(calls.find((u) => u.includes('/subtitles?')).includes('query=Filmexyz'));
+});
+
 test('handler /api/subtitles retorna 503 sem API key e executa search + download SRT→VTT', async () => {
   const unconfigured = subsApi.createSubtitlesHandler({ getApiKey: () => '' });
   const res503 = createMockRes();
@@ -78,6 +221,9 @@ test('handler /api/subtitles retorna 503 sem API key e executa search + download
   assert.equal(res503.statusCode, 503);
 
   const mockFetch = async (url) => {
+    if (String(url).includes('/suggestion/')) {
+      return imdbSuggestion([{ id: 'tt0133093', l: 'The Matrix', qid: 'movie', y: 1999 }]);
+    }
     if (String(url).includes('/subtitles?')) {
       return {
         ok: true,

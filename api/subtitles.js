@@ -3,7 +3,13 @@
  *
  * Endpoints:
  *   GET /api/subtitles?action=search&query=Matrix&lang=pt-br,pt-pt,en
+ *   GET /api/subtitles?action=search&imdb_id=tt0133093&lang=pt-br,en
  *   GET /api/subtitles?action=download&file_id=12345&offset=0.5
+ *
+ * Busca por IMDb: com `imdb_id` (tt0133093) o OpenSubtitles é consultado por
+ * esse ID exato, não pelo título. Sem `imdb_id`, o proxy resolve o ID no
+ * catálogo do IMDb a partir do título e busca por ID; só usa o título puro
+ * quando a resolução falha.
  *
  * Requer OPENSUBTITLES_API_KEY configurada nas variáveis de ambiente da Vercel.
  * Converte automaticamente SRT para WebVTT e aplica offset de sincronia (±30s)
@@ -11,7 +17,14 @@
  */
 
 const OPENSUBTITLES_BASE = 'https://api.opensubtitles.com/api/v1';
+const IMDB_SUGGEST_BASE = 'https://v3.sg.media-imdb.com/suggestion/x/';
 const USER_AGENT = 'MK21Play v2.9';
+const IMDB_ID_RE = /^tt\d{7,9}$/;
+const SEASON_EPISODE_RE = /\bS(\d{1,2})\s*E(\d{1,3})\b/i;
+const IMDB_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Resultados fora do catálogo de filmes/séries ou muito obscuros (rank alto) são descartados
+const IMDB_MAX_RANK = 250000;
+const IMDB_FEATURE_KINDS = ['movie', 'tvMovie', 'tvSeries', 'tvMiniSeries', 'video'];
 const MAX_OFFSET_SEC = 60;
 
 function setCors(res) {
@@ -95,6 +108,55 @@ function shiftVttTimestamps(inputText, offsetSec) {
   );
 }
 
+/**
+ * Resolve o título no catálogo do IMDb e devolve o ID exato (tt0133093).
+ * Cache em memória por 24h para não repetir a consulta a cada busca.
+ */
+function createImdbResolver(fetchImpl) {
+  const cache = new Map();
+
+  return async function resolveImdbId(rawTitle) {
+    // "Breaking Bad S01E02" precisa ser resolvido como a série, não como episódio
+    const title = String(rawTitle || '').replace(SEASON_EPISODE_RE, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (title.length < 2) return null;
+
+    const now = Date.now();
+    const cached = cache.get(title);
+    if (cached && now - cached.at < IMDB_CACHE_TTL_MS) return cached.value;
+
+    try {
+      const url = IMDB_SUGGEST_BASE + encodeURIComponent(title) + '.json';
+      const resp = await fetchImpl(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (MK21Play)', Accept: 'application/imdb+json, application/json' },
+      });
+      if (!resp.ok) {
+        cache.set(title, { at: now, value: null });
+        return null;
+      }
+      const json = await resp.json();
+      const list = Array.isArray(json && json.d) ? json.d : [];
+      let match = null;
+      for (let i = 0; i < list.length; i++) {
+        const it = list[i] || {};
+        if (!IMDB_ID_RE.test(String(it.id || ''))) continue;
+        if (!IMDB_FEATURE_KINDS.includes(String(it.qid || ''))) continue;
+        const rank = Number(it.rank);
+        if (Number.isFinite(rank) && rank > IMDB_MAX_RANK) continue;
+        match = it;
+        break;
+      }
+      const value = match
+        ? { imdbId: match.id, kind: String(match.qid || ''), title: match.l || title, year: Number(match.y) || 0 }
+        : null;
+      cache.set(title, { at: now, value });
+      return value;
+    } catch (err) {
+      cache.set(title, { at: now, value: null });
+      return null;
+    }
+  };
+}
+
 function sanitizeLanguages(raw) {
   const clean = String(raw || 'pt-br,pt-pt,en')
     .toLowerCase()
@@ -108,6 +170,7 @@ function sanitizeLanguages(raw) {
 function createSubtitlesHandler(deps = {}) {
   const getApiKey = deps.getApiKey || (() => (process.env.OPENSUBTITLES_API_KEY || '').trim());
   const fetchImpl = deps.fetch || globalThis.fetch;
+  const resolveImdbId = deps.resolveImdbId || createImdbResolver(fetchImpl);
 
   return async function handler(req, res) {
     if (req.method === 'OPTIONS') {
@@ -134,11 +197,36 @@ function createSubtitlesHandler(deps = {}) {
     try {
       if (action === 'search') {
         const query = (parsedUrl.searchParams.get('query') || '').trim().slice(0, 120);
-        if (query.length < 2) {
-          return sendJson(res, 400, { ok: false, error: 'Informe ao menos 2 caracteres no parâmetro query.' });
+        const imdbRaw = String(parsedUrl.searchParams.get('imdb_id') || parsedUrl.searchParams.get('imdbId') || '').trim();
+        const imdbFromClient = IMDB_ID_RE.test(imdbRaw) ? imdbRaw : '';
+        const resolved = !imdbFromClient && query.length >= 2 ? await resolveImdbId(query) : null;
+        const imdbId = imdbFromClient || (resolved && resolved.imdbId) || '';
+
+        if (!imdbId && query.length < 2) {
+          return sendJson(res, 400, { ok: false, error: 'Informe ao menos 2 caracteres em query ou um imdb_id válido (tt0000000).' });
         }
+
+        // "Breaking Bad S01E02" -> busca episódio exato pela série (parent_imdb_id + temporada/episódio)
+        const seasonEpisode = query.match(SEASON_EPISODE_RE);
+        const isSeriesHit = !!resolved && resolved.kind !== 'movie' && resolved.kind !== 'video';
+
         const languages = sanitizeLanguages(parsedUrl.searchParams.get('lang'));
-        const searchUrl = `${OPENSUBTITLES_BASE}/subtitles?query=${encodeURIComponent(query)}&languages=${encodeURIComponent(languages)}&order_by=download_count`;
+        const searchParams = [`languages=${encodeURIComponent(languages)}`, 'order_by=download_count'];
+        let matchedBy = 'query';
+        if (seasonEpisode && imdbId) {
+          searchParams.unshift(`parent_imdb_id=${imdbId}`);
+          searchParams.push(`season_number=${parseInt(seasonEpisode[1], 10)}`);
+          searchParams.push(`episode_number=${parseInt(seasonEpisode[2], 10)}`);
+          matchedBy = 'parent_imdb_id';
+        } else if (imdbId && (imdbFromClient || !isSeriesHit)) {
+          // Filme (ou ID explícito vindo do app): busca pelo ID exato do IMDb
+          searchParams.unshift(`imdb_id=${imdbId}`);
+          matchedBy = 'imdb_id';
+        } else {
+          // Série sem temporada/episódio: o ID do IMDb é da série inteira, então o título é mais preciso
+          searchParams.unshift(`query=${encodeURIComponent(query)}`);
+        }
+        const searchUrl = `${OPENSUBTITLES_BASE}/subtitles?${searchParams.join('&')}`;
 
         const resp = await fetchImpl(searchUrl, {
           headers: {
@@ -162,7 +250,7 @@ function createSubtitlesHandler(deps = {}) {
           items.push({
             fileId: Number(file.file_id),
             fileName: String(file.file_name || attr.release || 'legenda.srt'),
-            release: String(attr.release || file.file_name || query),
+            release: String(attr.release || file.file_name || query || imdbId),
             language: String(attr.language || 'pt-br'),
             downloads: Number(attr.download_count || 0),
             fps: Number(attr.fps || 0),
@@ -170,7 +258,13 @@ function createSubtitlesHandler(deps = {}) {
         }
 
         res.setHeader('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=300');
-        return sendJson(res, 200, { ok: true, query, items });
+        return sendJson(res, 200, {
+          ok: true,
+          query,
+          imdbId,
+          matchedBy,
+          items,
+        });
       }
 
       if (action === 'download') {
@@ -223,6 +317,7 @@ function createSubtitlesHandler(deps = {}) {
 
 const defaultHandler = createSubtitlesHandler();
 defaultHandler.createSubtitlesHandler = createSubtitlesHandler;
+defaultHandler.createImdbResolver = createImdbResolver;
 defaultHandler.parseTimestampMs = parseTimestampMs;
 defaultHandler.formatVttTimestamp = formatVttTimestamp;
 defaultHandler.srtToVtt = srtToVtt;

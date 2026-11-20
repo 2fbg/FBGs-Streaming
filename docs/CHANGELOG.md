@@ -2,6 +2,10 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [Não lançado]
+
+- **Busca de legendas por IMDb ID (`/api/subtitles`):** o proxy agora consulta o OpenSubtitles pelo ID do IMDb (`imdb_id`) em vez do título, evitando legenda de outro filme. Se o app não mandar `imdb_id`, o proxy resolve o título no catálogo do IMDb (catálogo com cache de 24h) e usa o ID exato; episódios `SxxEyy` passam a buscar por `parent_imdb_id` + `season_number`/`episode_number`. Quando a resolução falha, mantém a busca por título. A resposta inclui `imdbId` e `matchedBy`. Android, Smart TV e Web não precisam de mudança: continuam chamando o mesmo endpoint.
+
 ## [2.9.1] - 2026-11-19
 
 - **Sincronização em Nuvem Multiplataforma (`/api/sync`):** sincronização de **Favoritos** e **Continuar Assistindo (VOD)** entre **Android ↔ Smart TV ↔ Web** usando código de pareamento `MK21-XXXX-XXXX`, banco Neon Postgres (`user_sync_state`) e merge determinístico Last-Write-Wins (LWW) sem sobrescrever edições entre aparelhos.
