@@ -3,7 +3,8 @@
 **Escopo:** rastreabilidade entre tag, commit carimbado e binários publicados (APK/IPK/SHA256SUMS).
 **Modo:** somente leitura. Nenhuma tag foi movida e nenhum asset foi reenviado/sobrescrito durante a auditoria.
 **Snapshot:** as refs e hashes abaixo foram coletados em 2026-11-20 ~16:55 UTC, antes do commit deste próprio relatório. Depois disso a `main` avançou com commits de documentação; a tag `v2.9.5` e os assets permanecem intactos.
-**Prompt aplicado:** `Prompt_Auditor_MK21_Streaming_v2.9.4.md` (estrutura do relatório final), adaptado ao recorte pedido.
+**Prompt aplicado:** estrutura do relatório final do prompt da 2.9.4, adaptada ao recorte pedido.
+**Prompt sucessor:** `Prompt_Auditor_MK21_Streaming_v2.9.5.md` (2.9.5/295, com os hashes e a rastreabilidade tag×commit desta versão e o teste de convergência da seção 1.1).
 
 ---
 
@@ -45,7 +46,7 @@ Diferente da 2.9.4 — em que a tag `c3dc8fb` apontava para o commit **pré-cari
 
 | ID | Severidade | Área | Evidência | Impacto | Correção exigida | Bloqueia release? |
 |---|---|---|---|---|---|---|
-| I1 | INFORMATIVA | Documentação | `Prompt_Auditor_MK21_Streaming_v2.9.4.md` e `RELATORIO_AUDITORIA_MK21_v2.9.4.md` citam 2.9.4/294 | auditor reexecuta o prompt com versão antiga | gerar prompt/relatório 2.9.5 quando for auditar a próxima | não |
+| I1 | INFORMATIVA | Documentação | `Prompt_Auditor_MK21_Streaming_v2.9.4.md` e `RELATORIO_AUDITORIA_MK21_v2.9.4.md` ainda citam 2.9.4/294 | auditor pode reexecutar o prompt antigo | **resolvido**: `Prompt_Auditor_MK21_Streaming_v2.9.5.md` gerado com 2.9.5/295, hashes e teste de rastreabilidade | não |
 | I2 | INFORMATIVA | Assinatura | keystore do CI = `CN=FBGs Streaming` RSA 3072 (`8ca07de4…`), **não** a keystore local `my-upload-key.jks` (RSA 4096, `CN=Fabio Guarniere`) | nenhum: mantém continuidade com 2.9.3/2.9.4 e OTA | decisão explícita se houver rotação de chave | não |
 | I3 | BAIXA | Repositório | IPKs antigos versionados em `smart-tv/` (2.9.1 → 2.9.5) | crescimento do repositório | arquivar/limpar versões antigas | não |
 | I4 | BAIXA | Testes | `app/src/androidTest/.../ExampleInstrumentedTest.kt` (1 teste) não roda no CI | cobertura instrumentada nula | job com emulador, se desejado | não |
@@ -115,6 +116,6 @@ Interpretação: release publicada e com rastreabilidade completa (tag = commit 
 
 1. `.github/workflows/release.yml` — manter a ordem atual e adicionar um teste de regressão que compare `git rev-parse vX.Y.Z` com o commit gravado em `version.json`/assets (evita regressão silenciosa).
 2. `app/src/androidTest` — decidir entre job com emulador ou remoção do teste instrumentado órfão.
-3. `Prompt_Auditor_MK21_Streaming_v2.9.4.md` — atualizar o prompt para 2.9.5 antes da próxima auditoria de produto.
+3. ~~`Prompt_Auditor_MK21_Streaming_v2.9.4.md` — atualizar o prompt para 2.9.5~~ — **feito**: `Prompt_Auditor_MK21_Streaming_v2.9.5.md` (seção 1.1 traz o teste de convergência tag × commit carimbado × assets).
 4. `smart-tv/` — política de retenção para IPKs antigos.
 5. `Mk21UpdateManager.kt` — pendências de magic bytes/rollback herdadas do relatório 2.9.4.
