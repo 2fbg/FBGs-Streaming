@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.9.8 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.9.9 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -353,12 +353,85 @@ function getFastCache(id) {
   return null;
 }
 
-async function getStoredDataFromCatalogIndex(serverId) {
+function getServerBaseUrlById(serverId) {
+  if (!serverId || !Array.isArray(SERVERS)) return '';
+  for (let i = 0; i < SERVERS.length; i++) {
+    if (SERVERS[i] && SERVERS[i].id === serverId) {
+      return SERVERS[i].url || '';
+    }
+  }
+  return '';
+}
+
+function hydrateIndexedItem(raw, serverId, serverBaseUrl, creds) {
+  if (!raw || typeof raw !== 'object') return raw;
+  if (!raw.url && raw.ref) {
+    const base = serverBaseUrl || getServerBaseUrlById(serverId || raw.serverId);
+    const c = creds || getSavedCredentials();
+    raw.url = CatalogUtils.expandStreamUrl(raw, base, c);
+  }
+  if (typeof raw.logo === 'undefined') raw.logo = '';
+  if (typeof raw.tvgId === 'undefined') raw.tvgId = '';
+  if (typeof raw.tvgName === 'undefined') raw.tvgName = '';
+  if (typeof raw.rating === 'undefined') raw.rating = '';
+  return normalizeCachedItem(raw);
+}
+
+function getHiddenCategoriesSet() {
+  try {
+    const arr = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
+    return Array.isArray(arr) && arr.length ? new Set(arr) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Migração leve única para índices IndexedDB criados antes da v2.9.9 (sem `meta.groupCounts`):
+ * percorre apenas os registros de MOVIE/SERIES sem reter itens em RAM, gera `groupCounts`
+ * e salva de volta em `CATALOG_META_STORE`.
+ */
+function buildGroupCountsFromIndexStore(db, serverId) {
+  return new Promise(resolve => {
+    const acc = CatalogUtils.createStreamingCatalogMetricsAccumulator();
+    try {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
+      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
+      const req = index.openCursor(IDBKeyRange.bound([serverId, 'LIVE'], [serverId, 'SERIES']));
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (!cursor) return;
+        const v = cursor.value;
+        if (v) {
+          acc.add({
+            contentType: v.contentType,
+            group: v.group,
+            tvgId: v.tvgId,
+            isAdult: Boolean(v.isAdult)
+          });
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = () => resolve({
+        groupCounts: acc.getGroupCounts(),
+        metrics: acc.snapshot(false)
+      });
+      tx.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function getStoredDataFromCatalogIndex(serverId, options) {
   if (!serverId) return null;
+  const liveOnly = !(options && options.liveOnly === false);
   const meta = await getCatalogIndexMeta(serverId);
   if (!meta || !(Number(meta.itemCount) > 0)) return null;
   const db = await openCatalogIndexDb();
   if (!db) return null;
+  const baseUrl = getServerBaseUrlById(serverId);
+  const creds = getSavedCredentials();
   const readByType = (type) => new Promise(resolve => {
     try {
       const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
@@ -383,22 +456,62 @@ async function getStoredDataFromCatalogIndex(serverId) {
     } catch (e) { resolve([]); }
   });
   try {
-    // Leitura sequencial por tipo reduz em ~60% o pico de RAM do structured-clone no IndexedDB em LG webOS
+    let effectiveMeta = meta;
+    if (liveOnly) {
+      // Fase 1 (v2.9.9): mantém SOMENTE canais LIVE em RAM; VOD e Séries ficam 100% sob demanda no IndexedDB.
+      if (!effectiveMeta.groupCounts || !effectiveMeta.metrics) {
+        const upgraded = await buildGroupCountsFromIndexStore(db, serverId);
+        if (upgraded) {
+          effectiveMeta = Object.assign({}, effectiveMeta, {
+            groupCounts: effectiveMeta.groupCounts || upgraded.groupCounts,
+            metrics: effectiveMeta.metrics || upgraded.metrics
+          });
+          try {
+            await new Promise(resolve => {
+              const tx = db.transaction(CATALOG_META_STORE, 'readwrite');
+              tx.objectStore(CATALOG_META_STORE).put(effectiveMeta);
+              tx.oncomplete = resolve;
+              tx.onerror = resolve;
+            });
+          } catch (_) {}
+        }
+      }
+      const liveItems = await readByType('LIVE');
+      for (let i = 0; i < liveItems.length; i++) {
+        hydrateIndexedItem(liveItems[i], serverId, baseUrl, creds);
+      }
+      const m = effectiveMeta.metrics || {};
+      const totalFromMeta = (Number(m.totalChannels) || 0) + (Number(m.totalVOD) || 0) + (Number(m.totalSeries) || 0);
+      if (liveItems.length === 0 && totalFromMeta === 0) return null;
+      return {
+        LIVE: liveItems,
+        MOVIE: [],
+        SERIES: [],
+        _updatedAt: effectiveMeta.updatedAt || Date.now(),
+        _fromFullCache: true,
+        _indexedOnDemand: true,
+        _meta: effectiveMeta
+      };
+    }
+
+    // Modo legado completo (somente quando explicitamente solicitado com liveOnly: false)
     const liveItems = await readByType('LIVE');
     await new Promise(r => setTimeout(r, 0));
     const movieItems = await readByType('MOVIE');
     await new Promise(r => setTimeout(r, 0));
     const seriesItems = await readByType('SERIES');
     if ((liveItems.length + movieItems.length + seriesItems.length) === 0) return null;
-    liveItems.forEach(normalizeCachedItem);
-    movieItems.forEach(normalizeCachedItem);
-    seriesItems.forEach(normalizeCachedItem);
+    for (let i = 0; i < liveItems.length; i++) hydrateIndexedItem(liveItems[i], serverId, baseUrl, creds);
+    for (let i = 0; i < movieItems.length; i++) hydrateIndexedItem(movieItems[i], serverId, baseUrl, creds);
+    for (let i = 0; i < seriesItems.length; i++) hydrateIndexedItem(seriesItems[i], serverId, baseUrl, creds);
     return {
       LIVE: liveItems,
       MOVIE: movieItems,
       SERIES: seriesItems,
-      _updatedAt: meta.updatedAt || Date.now(),
-      _fromFullCache: true
+      _updatedAt: effectiveMeta.updatedAt || Date.now(),
+      _fromFullCache: true,
+      _indexedOnDemand: false,
+      _meta: effectiveMeta
     };
   } catch (e) {
     return null;
@@ -424,7 +537,10 @@ async function deleteStoredDataFromV6(id) {
 
 async function getStoredData(id, options) {
   const fullOnly = Boolean(options && options.fullOnly);
-  // 1. Cache completo no IndexedDB (catalog_cache_v6 — listas até 40k itens)
+  // 1. Índice persistente sob demanda no IndexedDB (mk21_catalog_index_v1 — LIVE em RAM, VOD/Séries sob demanda)
+  const indexed = await getStoredDataFromCatalogIndex(id, options);
+  if (indexed) return indexed;
+  // 2. Fallback legado: blob completo (catalog_cache_v6 — caches gravados antes da Fase 1)
   try {
     const db = await openDB();
     if (db) {
@@ -442,13 +558,11 @@ async function getStoredData(id, options) {
         (payload.SERIES || []).forEach(normalizeCachedItem);
         payload._updatedAt = (record && record.updatedAt) || Date.now();
         payload._fromFullCache = true;
+        payload._indexedOnDemand = false;
         return payload;
       }
     }
   } catch (e) {}
-  // 2. Índice completo persistente no IndexedDB (mk21_catalog_index_v1 — listas > 40k itens, ex.: TANNIX/MK21 PRÓ)
-  const indexed = await getStoredDataFromCatalogIndex(id);
-  if (indexed) return indexed;
   // 3. Cache rápido de canais ao vivo (localStorage, isolado por servidor)
   if (fullOnly) return null;
   return getFastCache(id);
@@ -509,9 +623,11 @@ function openCatalogIndexDb() {
   });
 }
 
-async function createCatalogIndexWriter(serverId) {
+async function createCatalogIndexWriter(serverId, serverBaseUrl) {
   const db = await openCatalogIndexDb();
-  if (!db) return { add() {}, async drain() {}, async finish() {} };
+  if (!db) return { isPersistent: false, add() {}, async drain() {}, async finish() {} };
+  const baseUrl = serverBaseUrl || getServerBaseUrlById(serverId);
+  const creds = getSavedCredentials();
   try {
     await new Promise((resolve, reject) => {
       const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
@@ -544,20 +660,27 @@ async function createCatalogIndexWriter(serverId) {
         const batchLen = toWrite.length;
         for (let i = 0; i < batchLen; i++) {
           const item = toWrite[i];
-          store.put({
-            key: serverId + ':' + item.contentType + ':' + position++,
+          const compacted = CatalogUtils.compactStreamUrl(item.url, baseUrl, creds);
+          const pos = position++;
+          // Schema compacto (Fase 1): omite credenciais/domínio repetidos em URLs Xtream (usa `ref`)
+          // e omite campos opcionais vazios para reduzir ~50% do espaço em flash e I/O no webOS.
+          const rec = {
+            key: serverId + ':' + item.contentType + ':' + pos,
             serverId,
             contentType: item.contentType,
             name: item.name || 'Item',
             normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
             group: item.group || 'Geral',
-            logo: item.logo || '',
-            tvgId: item.tvgId || '',
-            tvgName: item.tvgName || '',
-            url: item.url,
             isAdult: !!item.isAdult,
-            position: position - 1
-          });
+            position: pos
+          };
+          if (compacted.ref) rec.ref = compacted.ref;
+          else rec.url = compacted.url;
+          if (item.logo) rec.logo = item.logo;
+          if (item.tvgId) rec.tvgId = item.tvgId;
+          if (item.tvgName) rec.tvgName = item.tvgName;
+          if (item.rating) rec.rating = item.rating;
+          store.put(rec);
         }
         // Libera referências JS imediatamente após enfileirar no IDB para ajudar o GC do webOS
         toWrite.length = 0;
@@ -591,6 +714,7 @@ async function createCatalogIndexWriter(serverId) {
     }));
   };
   return {
+    isPersistent: true,
     add(item) {
       batch.push(item);
       if (batch.length >= BATCH_SIZE) flush();
@@ -601,13 +725,13 @@ async function createCatalogIndexWriter(serverId) {
         await pending;
       }
     },
-    async finish(metricsSnapshot) {
+    async finish(metricsSnapshot, groupCounts) {
       flush();
       await pending;
       try {
         await new Promise(resolve => {
           const tx = db.transaction(CATALOG_META_STORE, 'readwrite');
-          const metaRec = { serverId, updatedAt: Date.now(), itemCount: position };
+          const metaRec = { serverId, updatedAt: Date.now(), itemCount: position, schemaVersion: 2 };
           if (metricsSnapshot && typeof metricsSnapshot === 'object') {
             metaRec.metrics = {
               totalChannels: Number(metricsSnapshot.totalChannels) || 0,
@@ -617,6 +741,9 @@ async function createCatalogIndexWriter(serverId) {
               totalEPG: Number(metricsSnapshot.totalEPG) || 0,
               totalItems: Number(metricsSnapshot.totalItems) || position
             };
+          }
+          if (groupCounts && typeof groupCounts === 'object') {
+            metaRec.groupCounts = groupCounts;
           }
           tx.objectStore(CATALOG_META_STORE).put(metaRec);
           tx.oncomplete = resolve; tx.onerror = resolve;
@@ -636,24 +763,70 @@ async function createCatalogIndexWriter(serverId) {
   };
 }
 
-async function queryCatalogIndexPage(serverId, type, offset, limit, group) {
+async function queryCatalogIndexPage(serverId, type, offset, limit, group, options) {
   const db = await openCatalogIndexDb();
   if (!db) return [];
+  const opts = options || {};
+  const effectiveGroup = (group && group !== 'ALL') ? String(group) : '';
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const safeLimit = Math.max(1, Number(limit) || 120);
+  const filterAdult = opts.filterAdult !== false && !isAdultUnlocked;
+  const hiddenSet = opts.applyHiddenFilter === false ? null : getHiddenCategoriesSet();
+  const needsRowFilter = filterAdult || Boolean(hiddenSet && hiddenSet.size > 0);
+  const baseUrl = getServerBaseUrlById(serverId);
+  const creds = getSavedCredentials();
+
   return new Promise(resolve => {
     const result = [];
     try {
       const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
-      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
-      const range = IDBKeyRange.bound([serverId, type], [serverId, type + '\uffff']);
+      const store = tx.objectStore(CATALOG_INDEX_STORE);
+      // Usa índice composto `serverGroup` quando uma categoria é selecionada (O(pageSize) em vez de varrer 44k itens)
+      const useGroupIndex = Boolean(effectiveGroup);
+      const index = store.index(useGroupIndex ? 'serverGroup' : 'serverType');
+      const range = useGroupIndex
+        ? IDBKeyRange.only([serverId, type, effectiveGroup])
+        : IDBKeyRange.only([serverId, type]);
       const req = index.openCursor(range);
       let skipped = 0;
+      let advanced = false;
+      const adultGroupCache = Object.create(null);
+
       req.onsuccess = e => {
         const cursor = e.target.result;
-        if (!cursor || result.length >= limit) return;
+        if (!cursor || result.length >= safeLimit) return;
+        // Quando não há filtro por linha, cursor.advance() pula direto no B-tree nativo do IndexedDB
+        if (!needsRowFilter && !advanced && safeOffset > 0) {
+          advanced = true;
+          try {
+            cursor.advance(safeOffset);
+            return;
+          } catch (_) {
+            // Fallback seguro se o motor não suportar advance
+          }
+        }
         const item = cursor.value;
-        if (!group || item.group === group) {
-          if (skipped < offset) skipped++;
-          else result.push(item);
+        let visible = true;
+        if (needsRowFilter && item) {
+          const grp = item.group || 'Geral';
+          if (hiddenSet && hiddenSet.has(grp)) {
+            visible = false;
+          } else if (filterAdult) {
+            let adultGrp = adultGroupCache[grp];
+            if (typeof adultGrp === 'undefined') {
+              adultGrp = adultGroupCache[grp] = isAdult(grp);
+            }
+            if (item.isAdult || adultGrp) visible = false;
+          }
+        }
+        if (visible) {
+          if (needsRowFilter && skipped < safeOffset) {
+            skipped++;
+          } else if (!needsRowFilter && !advanced && skipped < safeOffset) {
+            skipped++;
+          } else {
+            result.push(hydrateIndexedItem(item, serverId, baseUrl, creds));
+          }
         }
         cursor.continue();
       };
@@ -666,19 +839,45 @@ async function queryCatalogIndexPage(serverId, type, offset, limit, group) {
 async function searchCatalogIndex(serverId, type, query, group, limit = 240) {
   const db = await openCatalogIndexDb();
   if (!db || !query) return [];
+  const effectiveGroup = (group && group !== 'ALL') ? String(group) : '';
+  const filterAdult = !isAdultUnlocked;
+  const hiddenSet = getHiddenCategoriesSet();
+  const baseUrl = getServerBaseUrlById(serverId);
+  const creds = getSavedCredentials();
+
   return new Promise(resolve => {
     const result = [];
     const needle = query.toLocaleLowerCase('pt-BR');
+    const adultGroupCache = Object.create(null);
     try {
       const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
-      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
-      const range = IDBKeyRange.bound([serverId, type], [serverId, type + '\uffff']);
+      const store = tx.objectStore(CATALOG_INDEX_STORE);
+      const useGroupIndex = Boolean(effectiveGroup);
+      const index = store.index(useGroupIndex ? 'serverGroup' : 'serverType');
+      const range = useGroupIndex
+        ? IDBKeyRange.only([serverId, type, effectiveGroup])
+        : IDBKeyRange.only([serverId, type]);
       const req = index.openCursor(range);
       req.onsuccess = e => {
         const cursor = e.target.result;
         if (!cursor || result.length >= limit) return;
         const item = cursor.value;
-        if ((!group || item.group === group) && String(item.normalizedName || '').includes(needle)) result.push(item);
+        if (item && String(item.normalizedName || '').includes(needle)) {
+          const grp = item.group || 'Geral';
+          let visible = true;
+          if (hiddenSet && hiddenSet.has(grp)) {
+            visible = false;
+          } else if (filterAdult) {
+            let adultGrp = adultGroupCache[grp];
+            if (typeof adultGrp === 'undefined') {
+              adultGrp = adultGroupCache[grp] = isAdult(grp);
+            }
+            if (item.isAdult || adultGrp) visible = false;
+          }
+          if (visible) {
+            result.push(hydrateIndexedItem(item, serverId, baseUrl, creds));
+          }
+        }
         cursor.continue();
       };
       tx.oncomplete = () => { try { db.close(); } catch (e) {} resolve(result); };
@@ -695,11 +894,12 @@ async function searchFromIndexedCatalog(query) {
   const generation = ++searchIndexGeneration;
   const srv = SERVERS[currentServerIndex];
   if (!srv) return;
-  const group = activeCategoryKey === 'ALL' ? '' : activeCategoryKey;
+  const group = (activeCategoryKey === 'ALL' || activeCategoryKey === '▶ Continuar Assistindo') ? '' : activeCategoryKey;
   const found = await searchCatalogIndex(srv.id, type, query, group, 240);
   if (generation !== searchIndexGeneration) return;
   const inputVal = ($('inputSearch') && $('inputSearch').value || '').toLowerCase().trim();
   if (inputVal !== query) return;
+  indexedSearchActive = true;
   currentFilteredItems = found;
   itemsDisplayLimit = 240;
   $('badgeItemsCount').textContent = currentFilteredItems.length;
@@ -709,6 +909,8 @@ async function searchFromIndexedCatalog(query) {
 async function queryIndexedFavorites(serverId, favoriteSet, limit = 1000) {
   const db = await openCatalogIndexDb();
   if (!db || !favoriteSet || !favoriteSet.size) return [];
+  const baseUrl = getServerBaseUrlById(serverId);
+  const creds = getSavedCredentials();
   return new Promise(resolve => {
     const result = [];
     try {
@@ -719,7 +921,11 @@ async function queryIndexedFavorites(serverId, favoriteSet, limit = 1000) {
         const cursor = e.target.result;
         if (!cursor || result.length >= limit) return;
         const item = cursor.value;
-        if (favoriteSet.has(item.url)) result.push(item);
+        const resolvedUrl = item ? CatalogUtils.expandStreamUrl(item, baseUrl, creds) : '';
+        if (resolvedUrl && favoriteSet.has(resolvedUrl)) {
+          item.url = resolvedUrl;
+          result.push(hydrateIndexedItem(item, serverId, baseUrl, creds));
+        }
         cursor.continue();
       };
       tx.oncomplete = () => { try { db.close(); } catch (e) {} resolve(result); };
@@ -744,22 +950,97 @@ async function hydrateIndexedFavorites() {
 
 let indexedPageLoading = false;
 let indexedOffsets = {};
+
+async function loadIndexedCategoryPage(srv, type, catKey, reset) {
+  if (!srv || !['MOVIE', 'SERIES'].includes(type)) return;
+  const group = catKey === 'ALL' ? '' : catKey;
+  const pageKey = type + '|' + (group || 'ALL');
+  const pageSize = type === 'SERIES' ? 160 : 120;
+  const reqGen = ++indexedPageRequestGen;
+
+  if (reset) {
+    indexedOffsets[pageKey] = 0;
+    indexedCategoryExhausted[pageKey] = false;
+    currentCategoriesMap[catKey] = [];
+  }
+
+  const offset = Math.max(0, Number(indexedOffsets[pageKey]) || 0);
+  indexedPageLoading = true;
+  indexedPageLoadingKey = pageKey;
+  if (reset) renderItemsList();
+
+  try {
+    const page = await queryCatalogIndexPage(srv.id, type, offset, pageSize, group);
+    if (reqGen !== indexedPageRequestGen || currentContentType !== type || activeCategoryKey !== catKey) return;
+    if (!SERVERS[currentServerIndex] || SERVERS[currentServerIndex].id !== srv.id) return;
+
+    const targetList = Array.isArray(currentCategoriesMap[catKey]) ? currentCategoriesMap[catKey] : [];
+    const seen = new Set(targetList.map(it => it.url || it.key || it.name));
+    for (let i = 0; i < page.length; i++) {
+      const it = page[i];
+      const dedupeKey = it.url || it.key || it.name;
+      if (!seen.has(dedupeKey)) {
+        seen.add(dedupeKey);
+        targetList.push(it);
+      }
+    }
+    currentCategoriesMap[catKey] = targetList;
+    indexedOffsets[pageKey] = offset + page.length;
+    if (page.length < pageSize) {
+      indexedCategoryExhausted[pageKey] = true;
+    }
+    if (!reset) {
+      itemsDisplayLimit = Math.max(itemsDisplayLimit + pageSize, targetList.length);
+    } else {
+      itemsDisplayLimit = Math.max(80, page.length);
+    }
+    indexedPageLoadingKey = '';
+    renderItemsList(!reset);
+    if (reset) {
+      // Se o foco estava em um botão desabilitado de loading, move suavemente para o primeiro item
+      const ae = document.activeElement;
+      if (!ae || ae === document.body || (ae.hasAttribute && ae.hasAttribute('disabled'))) {
+        const firstBtn = $('listItems') ? $('listItems').querySelector('.list-item-btn:not([disabled])') : null;
+        if (firstBtn && typeof mk21FocusSafe === 'function') mk21FocusSafe(firstBtn);
+      }
+    }
+  } finally {
+    indexedPageLoading = false;
+    if (indexedPageLoadingKey === pageKey) indexedPageLoadingKey = '';
+  }
+}
+
 async function loadMoreIndexedItems() {
   if (indexedPageLoading) return;
   const type = currentContentType;
   if (!['LIVE', 'MOVIE', 'SERIES'].includes(type)) {
     itemsDisplayLimit += 60;
-    renderItemsList();
+    renderItemsList(true);
     return;
   }
   const base = currentCategoriesMap[activeCategoryKey] || [];
   if (itemsDisplayLimit < base.length) {
-    itemsDisplayLimit += 60;
-    renderItemsList();
+    itemsDisplayLimit += 80;
+    renderItemsList(true);
     return;
   }
   const srv = SERVERS[currentServerIndex];
   if (!srv) return;
+
+  // Modo Fase 1 (VOD/Séries 100% sob demanda): pagina direto na categoria ativa sem inflar allCatalog
+  if (isOnDemandIndexedType(type) && activeCategoryKey !== '▶ Continuar Assistindo') {
+    const pageKey = type + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
+    if (indexedCategoryExhausted[pageKey]) {
+      showChannelBanner('Fim do catálogo nesta categoria');
+      return;
+    }
+    await loadIndexedCategoryPage(srv, type, activeCategoryKey, false);
+    if (indexedCategoryExhausted[pageKey] && (currentCategoriesMap[activeCategoryKey] || []).length === base.length) {
+      showChannelBanner('Fim do catálogo nesta categoria');
+    }
+    return;
+  }
+
   indexedPageLoading = true;
   try {
     const arr = allCatalog[type] || [];
@@ -775,7 +1056,7 @@ async function loadMoreIndexedItems() {
       itemsDisplayLimit += 60;
       buildCurrentCategories();
       renderCategoriesList();
-      renderItemsList();
+      renderItemsList(true);
     } else {
       showChannelBanner('Fim do catálogo nesta categoria');
     }
@@ -904,8 +1185,21 @@ function getStagedLoadingSummary(prefs) {
 }
 
 let activeCatalogServerId = null;
+let activeCatalogMeta = null;
+let currentCategoryCounts = Object.create(null);
+let indexedCategoryExhausted = Object.create(null);
+let indexedPageRequestGen = 0;
+let indexedSearchActive = false;
+let indexedPageLoadingKey = '';
 const mk21ServerProgressMap = Object.create(null);
 const mk21BgSyncControllers = Object.create(null);
+
+function isOnDemandIndexedType(type) {
+  if (type !== 'MOVIE' && type !== 'SERIES') return false;
+  if (!activeCatalogMeta || !activeCatalogServerId) return false;
+  if (activeCatalogMeta.serverId !== activeCatalogServerId) return false;
+  return Boolean(activeCatalogMeta.indexedOnDemand && activeCatalogMeta.indexedOnDemand[type]);
+}
 
 function getServerLastSyncTs(serverId) {
   if (!serverId) return 0;
@@ -965,6 +1259,24 @@ function savePerServerMetrics(serverId, metricsObj) {
 function computeAndSaveServerMetrics(serverId, catalogObj, epgObj, hasXmltv) {
   if (!serverId || !catalogObj) return null;
   const computed = CatalogUtils.computeCatalogMetrics(catalogObj, epgObj || null, Boolean(hasXmltv));
+  // Preserva métricas reais de VOD/Séries quando estão em modo sob demanda no IndexedDB
+  if (
+    catalogObj === allCatalog &&
+    activeCatalogMeta &&
+    activeCatalogMeta.serverId === serverId &&
+    activeCatalogMeta.metrics
+  ) {
+    const mm = activeCatalogMeta.metrics;
+    if (isOnDemandIndexedType('MOVIE') && computed.totalVOD === 0 && (Number(mm.totalVOD) || 0) > 0) {
+      computed.totalVOD = Number(mm.totalVOD) || 0;
+    }
+    if (isOnDemandIndexedType('SERIES') && computed.totalSeries === 0 && (Number(mm.totalSeries) || 0) > 0) {
+      computed.totalSeries = Number(mm.totalSeries) || 0;
+    }
+    computed.totalGroups = Math.max(computed.totalGroups, Number(mm.totalGroups) || 0);
+    computed.totalEPG = Math.max(computed.totalEPG, Number(mm.totalEPG) || 0);
+    computed.totalItems = computed.totalChannels + computed.totalVOD + computed.totalSeries;
+  }
   computed.updatedAt = Date.now();
   const saved = savePerServerMetrics(serverId, computed);
   if (typeof updateServerRowMetricsBadge === 'function') {
@@ -981,7 +1293,23 @@ function computeAndSaveServerMetrics(serverId, catalogObj, epgObj, hasXmltv) {
 
 function getCatalogMetricsSnapshot() {
   const epgObj = (typeof epgCache !== 'undefined' && epgCache) ? epgCache : null;
-  return CatalogUtils.computeCatalogMetrics(allCatalog, epgObj, Boolean(window.serverXmltvUrl));
+  const snap = CatalogUtils.computeCatalogMetrics(allCatalog, epgObj, Boolean(window.serverXmltvUrl));
+  if (activeCatalogMeta && activeCatalogMeta.serverId === activeCatalogServerId && activeCatalogMeta.metrics) {
+    const mm = activeCatalogMeta.metrics;
+    if (isOnDemandIndexedType('MOVIE') && snap.totalVOD === 0) {
+      snap.totalVOD = Number(mm.totalVOD) || 0;
+    }
+    if (isOnDemandIndexedType('SERIES') && snap.totalSeries === 0) {
+      snap.totalSeries = Number(mm.totalSeries) || 0;
+    }
+    if (snap.totalChannels === 0 && (Number(mm.totalChannels) || 0) > 0) {
+      snap.totalChannels = Number(mm.totalChannels) || 0;
+    }
+    snap.totalGroups = Math.max(snap.totalGroups, Number(mm.totalGroups) || 0);
+    snap.totalEPG = Math.max(snap.totalEPG, Number(mm.totalEPG) || 0);
+    snap.totalItems = snap.totalChannels + snap.totalVOD + snap.totalSeries;
+  }
+  return snap;
 }
 
 function getGlobalCatalogMetricsSnapshot() {
@@ -1085,6 +1413,9 @@ function resetListAndAuthState(options = {}) {
   if (!preserveCatalog) {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     activeCatalogServerId = null;
+    activeCatalogMeta = null;
+    indexedCategoryExhausted = Object.create(null);
+    indexedSearchActive = false;
     if (typeof currentCategoriesMap !== 'undefined') currentCategoriesMap = { ALL: [] };
     if (typeof currentCategoryKeys !== 'undefined') currentCategoryKeys = ['ALL'];
     if (typeof currentFilteredItems !== 'undefined') currentFilteredItems = [];
@@ -1210,13 +1541,24 @@ function scheduleSearchRender() {
     const input = $('inputSearch');
     const query = input ? input.value.toLowerCase().trim() : '';
     currentSearchQuery = query;
-    renderItemsList();
     if (query) {
+      indexedSearchActive = false;
+      renderItemsList();
       searchFromIndexedCatalog(query);
     } else {
-      buildCurrentCategories();
-      renderCategoriesList();
-      renderItemsList();
+      indexedSearchActive = false;
+      if (isOnDemandIndexedType(currentContentType) && activeCategoryKey !== '▶ Continuar Assistindo') {
+        const srv = SERVERS[currentServerIndex];
+        if (srv && (!currentCategoriesMap[activeCategoryKey] || currentCategoriesMap[activeCategoryKey].length === 0)) {
+          loadIndexedCategoryPage(srv, currentContentType, activeCategoryKey, true);
+          return;
+        }
+        renderItemsList();
+      } else {
+        buildCurrentCategories();
+        renderCategoriesList();
+        renderItemsList();
+      }
     }
   }, 180);
 }
@@ -2294,32 +2636,68 @@ async function loadServer(forceRefresh = false, options = {}) {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
     currentFilteredItems = [];
     currentCategoriesMap = {};
+    currentCategoryCounts = Object.create(null);
     indexedFavoriteResults = [];
+    indexedOffsets = {};
+    indexedCategoryExhausted = Object.create(null);
+    indexedSearchActive = false;
+    activeCatalogMeta = null;
     activeCatalogServerId = null;
   }
 
   // 1. CARGA INSTANTÂNEA VIA CACHE LOCAL (somente no boot/troca de servidor)
   if (!silent && !forceRefresh) {
-    // Cache completo (catalog_cache_v6 -> índice completo mk21_catalog_index_v1 -> fast cache isolado do servidor)
-    const cached = await getStoredData(srv.id);
+    // Cache completo (índice sob demanda mk21_catalog_index_v1 -> legado catalog_cache_v6 -> fast cache isolado)
+    const cached = await getStoredData(srv.id, { liveOnly: true });
     if (loadId !== serverLoadGeneration) return;
-    const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
-    const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
-    const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
+    const isIndexedOnDemand = Boolean(cached && cached._indexedOnDemand && cached._meta);
+    const metaMetrics = (isIndexedOnDemand && cached._meta.metrics) ? cached._meta.metrics : null;
+    const liveN = cached && cached.LIVE ? cached.LIVE.length : (metaMetrics ? (Number(metaMetrics.totalChannels) || 0) : 0);
+    const movN = isIndexedOnDemand && metaMetrics
+      ? (Number(metaMetrics.totalVOD) || 0)
+      : (cached && cached.MOVIE ? cached.MOVIE.length : 0);
+    const serN = isIndexedOnDemand && metaMetrics
+      ? (Number(metaMetrics.totalSeries) || 0)
+      : (cached && cached.SERIES ? cached.SERIES.length : 0);
     const totalCached = liveN + movN + serN;
     if (cached && totalCached > 0) {
       allCatalog = {
         LIVE: cached.LIVE || [],
-        MOVIE: cached.MOVIE || [],
-        SERIES: cached.SERIES || []
+        MOVIE: isIndexedOnDemand ? [] : (cached.MOVIE || []),
+        SERIES: isIndexedOnDemand ? [] : (cached.SERIES || [])
       };
       activeCatalogServerId = srv.id;
+      indexedOffsets = {};
+      indexedCategoryExhausted = Object.create(null);
+      indexedSearchActive = false;
+      activeCatalogMeta = isIndexedOnDemand
+        ? {
+            serverId: srv.id,
+            updatedAt: cached._updatedAt || Date.now(),
+            metrics: {
+              totalChannels: liveN,
+              totalVOD: movN,
+              totalSeries: serN,
+              totalGroups: Number(metaMetrics && metaMetrics.totalGroups) || 0,
+              totalEPG: Number(metaMetrics && metaMetrics.totalEPG) || 0,
+              totalItems: totalCached
+            },
+            groupCounts: cached._meta.groupCounts || null,
+            indexedOnDemand: {
+              MOVIE: movN > 0,
+              SERIES: serN > 0
+            }
+          }
+        : null;
+
       if (hud) hud.classList.add('hidden');
       hideSplash();
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
-      renderItemsList();
+      if (!isOnDemandIndexedType(currentContentType)) {
+        renderItemsList();
+      }
 
       const lastSync = getServerLastSyncTs(srv.id) || (cached._updatedAt || 0);
       const switchDecision = CatalogUtils.decideCachedServerSwitch(
@@ -2364,8 +2742,11 @@ async function loadServer(forceRefresh = false, options = {}) {
             serN.toLocaleString('pt-BR') + ' séries)'
           );
           addDevLog(
-            '[Cache] ' + cleanServerName(srv.name) + ' carregado da memória local (' +
-            totalCached.toLocaleString('pt-BR') + ' itens — sem novo download).',
+            '[Cache] ' + cleanServerName(srv.name) +
+            (isIndexedOnDemand
+              ? ' aberto em baixa RAM (' + liveN.toLocaleString('pt-BR') + ' canais em RAM · ' +
+                movN.toLocaleString('pt-BR') + ' filmes e ' + serN.toLocaleString('pt-BR') + ' séries sob demanda no IndexedDB).'
+              : ' carregado da memória local (' + totalCached.toLocaleString('pt-BR') + ' itens — sem novo download).'),
             'success'
           );
         } else {
@@ -2481,19 +2862,27 @@ async function loadServer(forceRefresh = false, options = {}) {
     if (!silent) {
       allCatalog = target;
       activeCatalogServerId = srv.id;
+      activeCatalogMeta = null;
     }
     indexedOffsets = {};
+    indexedCategoryExhausted = Object.create(null);
+    indexedSearchActive = false;
 
     let indexWriter;
     if (silent) {
-      // Reindexar 100k itens a cada abertura travava a TV. Só reindexa se o índice estiver velho.
+      // Reindexa se o índice estiver velho ou ainda não possuir groupCounts da Fase 1.
       const meta = await getCatalogIndexMeta(srv.id);
-      const stale = !meta || !meta.updatedAt || (Date.now() - meta.updatedAt > 12 * 60 * 60 * 1000);
-      indexWriter = stale ? await createCatalogIndexWriter(srv.id) : { add() {}, async finish() {} };
+      const stale = !meta || !meta.updatedAt || !meta.groupCounts || (Date.now() - meta.updatedAt > 12 * 60 * 60 * 1000);
+      indexWriter = stale
+        ? await createCatalogIndexWriter(srv.id, srv.url)
+        : { isPersistent: false, add() {}, async drain() {}, async finish() {} };
     } else {
-      indexWriter = await createCatalogIndexWriter(srv.id);
+      indexWriter = await createCatalogIndexWriter(srv.id, srv.url);
     }
 
+    // Fase 1: quando IndexedDB está ativo, VOD e Séries são gravados direto no índice sem manter 50k+ itens no heap JS.
+    const streamVodOnDemand = Boolean(indexWriter && indexWriter.isPersistent);
+    const metricsAcc = CatalogUtils.createStreamingCatalogMetricsAccumulator();
     const liveGrouper = window.MK21AlternativeSources ? MK21AlternativeSources.createGrouper() : null;
     let liveVisible = silent;
     let lastProgressUi = 0;
@@ -2515,12 +2904,16 @@ async function loadServer(forceRefresh = false, options = {}) {
       buildCurrentCategories();
       renderCategoriesList();
       if (!currentCategoriesMap[activeCategoryKey]) activeCategoryKey = 'ALL';
-      renderItemsList(true);
+      if (!isOnDemandIndexedType(currentContentType)) {
+        renderItemsList(true);
+      }
     };
 
     const revealLive = () => {
       if (liveVisible || loadId !== serverLoadGeneration) return;
-      const hasAnyFg = target.LIVE.length > 0 || target.MOVIE.length > 0 || target.SERIES.length > 0;
+      const metaHasVod = Boolean(activeCatalogMeta && activeCatalogMeta.serverId === srv.id && activeCatalogMeta.metrics && activeCatalogMeta.metrics.totalVOD > 0);
+      const metaHasSeries = Boolean(activeCatalogMeta && activeCatalogMeta.serverId === srv.id && activeCatalogMeta.metrics && activeCatalogMeta.metrics.totalSeries > 0);
+      const hasAnyFg = target.LIVE.length > 0 || target.MOVIE.length > 0 || target.SERIES.length > 0 || metaHasVod || metaHasSeries;
       if (!hasAnyFg) return;
       liveVisible = true;
       if (hudSafetyTimer) { clearTimeout(hudSafetyTimer); hudSafetyTimer = null; }
@@ -2529,15 +2922,21 @@ async function loadServer(forceRefresh = false, options = {}) {
       activeCatalogServerId = srv.id;
       if (allCatalog.LIVE.length > 0) saveFastCache(srv.id, allCatalog.LIVE, true);
 
-      updateSplash(80, 'Conteúdo inicial liberado (' + (allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) + ')');
+      const revealedCount = Math.max(
+        allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length,
+        (activeCatalogMeta && activeCatalogMeta.metrics && activeCatalogMeta.metrics.totalItems) || 0
+      );
+      updateSplash(80, 'Conteúdo inicial liberado (' + revealedCount + ')');
       if (allCatalog.LIVE.length === 0 && currentContentType === 'LIVE') {
-        if (allCatalog.MOVIE.length > 0) currentContentType = 'MOVIE';
-        else if (allCatalog.SERIES.length > 0) currentContentType = 'SERIES';
+        if (allCatalog.MOVIE.length > 0 || metaHasVod) currentContentType = 'MOVIE';
+        else if (allCatalog.SERIES.length > 0 || metaHasSeries) currentContentType = 'SERIES';
       }
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
-      renderItemsList();
+      if (!isOnDemandIndexedType(currentContentType)) {
+        renderItemsList();
+      }
       if (!activeItem && allCatalog.LIVE.length > 0) {
         playStream(allCatalog.LIVE[0]);
       }
@@ -2598,6 +2997,16 @@ async function loadServer(forceRefresh = false, options = {}) {
 
         const adultItem = slim.isAdult || isAdult(slim.name) || isAdult(slim.group);
         slim.isAdult = !!adultItem;
+        metricsAcc.add(slim);
+
+        // Fase 1: VOD e Séries vão direto para o IndexedDB compacto em streaming (O(1) RAM)
+        if (streamVodOnDemand && (type === 'MOVIE' || type === 'SERIES')) {
+          indexWriter.add(slim);
+          if (!silent && !liveVisible && target.LIVE.length > 0) {
+            revealLive();
+          }
+          return;
+        }
 
         // Carregamento em Etapas (APK): itens fora do 1º Plano vão para fila incremental de 2º Plano
         if (!silent && !isForegroundType(type)) {
@@ -2634,8 +3043,11 @@ async function loadServer(forceRefresh = false, options = {}) {
         if (now - lastProgressUi < 250) return;
         lastProgressUi = now;
 
-        const itemsCount = target.LIVE.length + target.MOVIE.length + target.SERIES.length +
-          deferredStage.LIVE.length + deferredStage.MOVIE.length + deferredStage.SERIES.length;
+        const itemsCount = Math.max(
+          metricsAcc.getTotalItems(),
+          target.LIVE.length + target.MOVIE.length + target.SERIES.length +
+          deferredStage.LIVE.length + deferredStage.MOVIE.length + deferredStage.SERIES.length
+        );
         let pct = 50;
         if (total && total > 0) {
           pct = Math.min(99, Math.max(10, Math.round((received / total) * 100)));
@@ -2672,7 +3084,8 @@ async function loadServer(forceRefresh = false, options = {}) {
 
     const fgTotal = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
     const deferredTotal = deferredStage.LIVE.length + deferredStage.MOVIE.length + deferredStage.SERIES.length;
-    if ((fgTotal + deferredTotal) === 0) {
+    const streamedTotal = metricsAcc.getTotalItems();
+    if ((fgTotal + deferredTotal + streamedTotal) === 0) {
       throw new Error('Lista do servidor retornou vazia (0 itens)');
     }
 
@@ -2691,7 +3104,7 @@ async function loadServer(forceRefresh = false, options = {}) {
       }
     }
 
-    // Processa etapas de 2º plano (VOD/Séries ou Canais diferidos) em lotes leves sem travar a UI
+    // Processa etapas de 2º plano (somente se não tiver ido direto para IndexedDB)
     if (deferredTotal > 0) {
       await flushDeferredStageIncrementally();
       if (loadId !== serverLoadGeneration) return;
@@ -2700,12 +3113,47 @@ async function loadServer(forceRefresh = false, options = {}) {
     loadInFlight = false;
     allCatalog = target;
     activeCatalogServerId = srv.id;
+
+    const accSnap = metricsAcc.snapshot(Boolean(window.serverXmltvUrl));
+    const groupCounts = metricsAcc.getGroupCounts();
+    const liveMetrics = CatalogUtils.computeCatalogMetrics(allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
+    const finalMetrics = {
+      totalChannels: allCatalog.LIVE.length > 0 ? allCatalog.LIVE.length : accSnap.totalChannels,
+      totalVOD: streamVodOnDemand ? accSnap.totalVOD : allCatalog.MOVIE.length,
+      totalSeries: streamVodOnDemand ? accSnap.totalSeries : allCatalog.SERIES.length,
+      totalGroups: Math.max(liveMetrics.totalGroups, accSnap.totalGroups),
+      totalEPG: Math.max(liveMetrics.totalEPG, accSnap.totalEPG),
+      totalItems: 0
+    };
+    finalMetrics.totalItems = finalMetrics.totalChannels + finalMetrics.totalVOD + finalMetrics.totalSeries;
+
+    if (streamVodOnDemand) {
+      activeCatalogMeta = {
+        serverId: srv.id,
+        updatedAt: Date.now(),
+        metrics: finalMetrics,
+        groupCounts,
+        indexedOnDemand: {
+          MOVIE: finalMetrics.totalVOD > 0,
+          SERIES: finalMetrics.totalSeries > 0
+        }
+      };
+    } else if (!silent) {
+      activeCatalogMeta = null;
+    }
+
+    await indexWriter.finish(finalMetrics, groupCounts);
+    if (streamVodOnDemand) {
+      // Remove eventual blob duplicado antigo em catalog_cache_v6 para economizar flash na TV
+      await deleteStoredDataFromV6(srv.id);
+    }
+
     if (!silent) revealLive();
     publishSilent(true);
     buildCurrentCategories();
     renderCategoriesList();
     if (!silent && !liveVisible) selectCategory('ALL');
-    const totalLoaded = allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length;
+    const totalLoaded = finalMetrics.totalItems;
     updateSplash(100, 'Lista completa carregada (' + totalLoaded.toLocaleString('pt-BR') + ' itens)');
     if (hud) {
       if ($('hudProgressBar')) $('hudProgressBar').style.width = '100%';
@@ -2716,20 +3164,27 @@ async function loadServer(forceRefresh = false, options = {}) {
     setServerLoadProgress(srv.id, 100, 'done');
     mk21AutoServerTries = 0;
     try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
-    const savedMetrics = computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
-    await indexWriter.finish(savedMetrics);
+    savePerServerMetrics(srv.id, Object.assign({}, finalMetrics, { updatedAt: Date.now() }));
+    if (typeof updateServerRowMetricsBadge === 'function') updateServerRowMetricsBadge(srv.id, getPerServerMetrics(srv.id));
+    if (typeof updateServerRowProgressBadge === 'function') updateServerRowProgressBadge(srv.id);
+    if (typeof mk21UpdateGlobalMetricsCardsInPlace === 'function') mk21UpdateGlobalMetricsCardsInPlace();
     saveFastCache(srv.id, allCatalog.LIVE, true);
-    saveStoredData(srv.id, allCatalog);
+    if (!streamVodOnDemand) {
+      saveStoredData(srv.id, allCatalog);
+    }
     // Redesenha a aba atual com o catálogo completo (o reveal ao vivo acontece
     // nos primeiros itens de 1º plano para abrir a tela rápido).
     if (currentContentType === 'LIVE' || currentContentType === 'MOVIE' || currentContentType === 'SERIES' || currentContentType === 'CONTINUE') {
       buildCurrentCategories();
       renderCategoriesList();
-      renderItemsList();
+      if (isOnDemandIndexedType(currentContentType)) {
+        selectCategory(currentCategoryKeys.includes(activeCategoryKey) ? activeCategoryKey : 'ALL');
+      } else {
+        renderItemsList();
+      }
     }
     if ($('txtCurrentCategoryTitle')) {
-      const live = allCatalog.LIVE.length;
-      $('txtCurrentCategoryTitle').textContent = '📺 Catálogo: ' + live.toLocaleString('pt-BR') + ' canais • ' + allCatalog.MOVIE.length.toLocaleString('pt-BR') + ' filmes • ' + allCatalog.SERIES.length.toLocaleString('pt-BR') + ' séries';
+      $('txtCurrentCategoryTitle').textContent = '📺 Catálogo: ' + finalMetrics.totalChannels.toLocaleString('pt-BR') + ' canais • ' + finalMetrics.totalVOD.toLocaleString('pt-BR') + ' filmes • ' + finalMetrics.totalSeries.toLocaleString('pt-BR') + ' séries';
     }
     if (typeof mk21UpdateCatalogMetricsUI === 'function') {
       mk21UpdateCatalogMetricsUI();
@@ -2806,6 +3261,50 @@ async function loadServer(forceRefresh = false, options = {}) {
 function buildCurrentCategories() {
   currentCategoriesMap = { 'ALL': [] };
   currentCategoryKeys = ['ALL'];
+  currentCategoryCounts = Object.create(null);
+  currentCategoryCounts['ALL'] = 0;
+
+  // Se houver histórico de continuar assistindo para Filmes/Séries, insere grupo especial
+  if ((currentContentType === 'MOVIE' || currentContentType === 'SERIES') && continueWatchingList.length > 0) {
+    const relevantWatched = continueWatchingList.filter(it => it.contentType === currentContentType);
+    if (relevantWatched.length > 0) {
+      currentCategoriesMap['▶ Continuar Assistindo'] = relevantWatched;
+      currentCategoryCounts['▶ Continuar Assistindo'] = relevantWatched.length;
+      currentCategoryKeys.push('▶ Continuar Assistindo');
+    }
+  }
+
+  const hiddenSet = getHiddenCategoriesSet();
+
+  // Fase 1: VOD e Séries leem categorias direto de `activeCatalogMeta.groupCounts` (O(1) RAM, sem carregar 50k objetos)
+  if (isOnDemandIndexedType(currentContentType)) {
+    const groupsList = (activeCatalogMeta && activeCatalogMeta.groupCounts && Array.isArray(activeCatalogMeta.groupCounts[currentContentType]))
+      ? activeCatalogMeta.groupCounts[currentContentType]
+      : [];
+    let totalVisible = 0;
+    for (let i = 0; i < groupsList.length; i++) {
+      const g = groupsList[i];
+      if (!g || !g.name) continue;
+      const grp = g.name;
+      if (hiddenSet && hiddenSet.has(grp)) continue;
+      if (!isAdultUnlocked && isAdult(grp)) continue;
+      const rawCount = Math.max(0, Number(g.count) || 0);
+      const adultCount = Math.max(0, Number(g.adultCount) || 0);
+      const visibleCount = isAdultUnlocked ? rawCount : Math.max(0, rawCount - adultCount);
+      if (visibleCount <= 0) continue;
+      currentCategoriesMap[grp] = [];
+      currentCategoryCounts[grp] = visibleCount;
+      currentCategoryKeys.push(grp);
+      totalVisible += visibleCount;
+    }
+    if (totalVisible === 0 && activeCatalogMeta && activeCatalogMeta.metrics) {
+      totalVisible = currentContentType === 'MOVIE'
+        ? (Number(activeCatalogMeta.metrics.totalVOD) || 0)
+        : (Number(activeCatalogMeta.metrics.totalSeries) || 0);
+    }
+    currentCategoryCounts['ALL'] = totalVisible;
+    return;
+  }
 
   let sourceItems = [];
   if (currentContentType === 'FAVORITES') {
@@ -2816,22 +3315,7 @@ function buildCurrentCategories() {
     sourceItems = allCatalog[currentContentType] || [];
   }
 
-  // Se houver histórico de continuar assistindo para Filmes/Séries, insere grupo especial
-  if ((currentContentType === 'MOVIE' || currentContentType === 'SERIES') && continueWatchingList.length > 0) {
-    const relevantWatched = continueWatchingList.filter(it => it.contentType === currentContentType);
-    if (relevantWatched.length > 0) {
-      currentCategoriesMap['▶ Continuar Assistindo'] = relevantWatched;
-      currentCategoryKeys.push('▶ Continuar Assistindo');
-    }
-  }
-
-  let hiddenCats = [];
-  try {
-    hiddenCats = JSON.parse(localStorage.getItem('mk21_hidden_categories') || '[]');
-  } catch (e) {}
-
   const adultGroupCache = Object.create(null);
-  const hiddenSet = hiddenCats.length ? new Set(hiddenCats) : null;
   for (let i = 0; i < sourceItems.length; i++) {
     const item = sourceItems[i];
     const grp = item.group || 'Geral';
@@ -2852,6 +3336,11 @@ function buildCurrentCategories() {
     }
     currentCategoriesMap[grp].push(item);
   }
+
+  for (let i = 0; i < currentCategoryKeys.length; i++) {
+    const k = currentCategoryKeys[i];
+    currentCategoryCounts[k] = currentCategoriesMap[k] ? currentCategoriesMap[k].length : 0;
+  }
 }
 
 function renderCategoriesList() {
@@ -2859,7 +3348,7 @@ function renderCategoriesList() {
   ul.innerHTML = '';
   const fragment = document.createDocumentFragment();
 
-  $('badgeCatCount').textContent = (currentCategoryKeys.length - 1) + ' grupos';
+  $('badgeCatCount').textContent = Math.max(0, currentCategoryKeys.length - 1) + ' grupos';
   $('txtCatHeaderTitle').textContent = 
     currentContentType === 'LIVE' ? '📁 Categorias TV' :
     (currentContentType === 'MOVIE' ? '📁 Gêneros Filmes' :
@@ -2873,6 +3362,7 @@ function renderCategoriesList() {
     btn.className = 'list-item-btn cat-item-btn' + (k === activeCategoryKey ? ' active' : '');
     btn.setAttribute('tabindex', '0');
     btn.setAttribute('data-idx', idx);
+    btn.setAttribute('data-cat', k);
 
     const spanName = document.createElement('span');
     spanName.textContent = k === 'ALL' ? (
@@ -2884,7 +3374,10 @@ function renderCategoriesList() {
 
     const spanCount = document.createElement('span');
     spanCount.className = 'counter-badge';
-    spanCount.textContent = currentCategoriesMap[k] ? currentCategoriesMap[k].length : 0;
+    const countVal = Number.isFinite(currentCategoryCounts[k])
+      ? currentCategoryCounts[k]
+      : (currentCategoriesMap[k] ? currentCategoriesMap[k].length : 0);
+    spanCount.textContent = countVal;
 
     btn.appendChild(spanName);
     btn.appendChild(spanCount);
@@ -2904,10 +3397,11 @@ function renderCategoriesList() {
 
 function selectCategory(catKey) {
   activeCategoryKey = catKey;
+  indexedSearchActive = false;
 
   const btns = $('listCategories').querySelectorAll('.cat-item-btn');
   btns.forEach(b => b.classList.remove('active'));
-  const activeBtn = Array.from(btns).find(b => (catKey === 'ALL' && b.textContent.includes('Todos')) || b.textContent.startsWith(catKey));
+  const activeBtn = Array.from(btns).find(b => b.getAttribute('data-cat') === catKey || (catKey === 'ALL' && b.textContent.includes('Todos')) || b.textContent.startsWith(catKey));
   if (activeBtn) activeBtn.classList.add('active');
 
   $('txtCurrentCategoryTitle').textContent = catKey === 'ALL' ? (
@@ -2917,7 +3411,16 @@ function selectCategory(catKey) {
     (currentContentType === 'CONTINUE' ? '▶ Continuar Assistindo' : '⭐ Favoritos')))
   ) : '📁 ' + catKey;
   $('inputSearch').value = '';
+  currentSearchQuery = '';
   itemsDisplayLimit = 80;
+
+  if (isOnDemandIndexedType(currentContentType) && catKey !== '▶ Continuar Assistindo') {
+    const srv = SERVERS[currentServerIndex];
+    if (srv) {
+      loadIndexedCategoryPage(srv, currentContentType, catKey, true);
+      return;
+    }
+  }
   renderItemsList();
 }
 
@@ -2927,14 +3430,22 @@ let itemsDisplayLimit = 80;
 function renderItemsList(preserveScroll) {
   const scrollAnterior = preserveScroll && $('listItems') ? $('listItems').scrollTop : 0;
   const query = $('inputSearch') ? $('inputSearch').value.toLowerCase().trim() : '';
-  const base = currentCategoriesMap[activeCategoryKey] || [];
+  const isOnDemand = isOnDemandIndexedType(currentContentType) && activeCategoryKey !== '▶ Continuar Assistindo';
+  const base = (indexedSearchActive && query)
+    ? (currentFilteredItems || [])
+    : (currentCategoriesMap[activeCategoryKey] || []);
   const indexedPageKey = currentContentType + '|' + (activeCategoryKey === 'ALL' ? 'ALL' : activeCategoryKey);
-  const indexedMoreAvailable = Object.prototype.hasOwnProperty.call(indexedOffsets, indexedPageKey);
+  const indexedMoreAvailable = !query && (
+    (isOnDemand && !indexedCategoryExhausted[indexedPageKey]) ||
+    (!isOnDemand && Object.prototype.hasOwnProperty.call(indexedOffsets, indexedPageKey))
+  );
 
   // Evita duplicar o array inteiro quando a categoria está na ordem padrão.
   // Em listas com centenas de milhares de itens isso reduz um pico de memória
   // sempre que a tela é redesenhada. Cópia só é criada quando necessária.
-  let items = query ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query))) : base;
+  let items = (query && !indexedSearchActive)
+    ? base.filter(c => (c.name && c.name.toLowerCase().includes(query)) || (c.normalizedName && c.normalizedName.includes(query)))
+    : base;
   if (!isAdultUnlocked) {
     items = items.filter(c => !c.isAdult);
   }
@@ -2972,13 +3483,20 @@ function renderItemsList(preserveScroll) {
   // DEFAULT: mantém ordem original (por número)
 
   currentFilteredItems = items;
-  $('badgeItemsCount').textContent = currentFilteredItems.length;
+  const totalInCategory = (!query && isOnDemand && Number.isFinite(currentCategoryCounts[activeCategoryKey]))
+    ? currentCategoryCounts[activeCategoryKey]
+    : currentFilteredItems.length;
+  $('badgeItemsCount').textContent = totalInCategory.toLocaleString('pt-BR');
 
   const ul = $('listItems');
   ul.innerHTML = '';
 
   if (currentFilteredItems.length === 0) {
-    ul.innerHTML = '<li><button class="list-item-btn" disabled>Nenhum item encontrado nesta categoria.</button></li>';
+    if (isOnDemand && indexedPageLoadingKey === indexedPageKey && !query) {
+      ul.innerHTML = '<li><button class="list-item-btn" disabled>⏳ Carregando catálogo...</button></li>';
+    } else {
+      ul.innerHTML = '<li><button class="list-item-btn" disabled>Nenhum item encontrado nesta categoria.</button></li>';
+    }
     return;
   }
 
@@ -2987,7 +3505,10 @@ function renderItemsList(preserveScroll) {
   // Se for a aba SÉRIES (e não for busca avulsa), exibir agrupado por série estilo Netflix!
   if (currentContentType === 'SERIES' && query.length === 0) {
     currentGroupedSeries = groupSeriesItems(currentFilteredItems);
-    $('badgeItemsCount').textContent = currentGroupedSeries.length + ' séries';
+    const seriesTotalBadge = isOnDemand && totalInCategory > currentGroupedSeries.length
+      ? totalInCategory.toLocaleString('pt-BR') + ' séries'
+      : currentGroupedSeries.length + ' séries';
+    $('badgeItemsCount').textContent = seriesTotalBadge;
 
     const limit = Math.min(currentGroupedSeries.length, itemsDisplayLimit);
     for (let i = 0; i < limit; i++) {
@@ -3014,13 +3535,16 @@ function renderItemsList(preserveScroll) {
       fragment.appendChild(li);
     }
 
-    if (currentGroupedSeries.length > limit || indexedMoreAvailable) {
+    const remainingSeries = isOnDemand
+      ? Math.max(0, totalInCategory - limit)
+      : Math.max(0, currentGroupedSeries.length - limit);
+    if (currentGroupedSeries.length > limit || (indexedMoreAvailable && remainingSeries > 0)) {
       const moreLi = document.createElement('li');
       const moreBtn = document.createElement('button');
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Séries (+150 de ${currentGroupedSeries.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Séries (${remainingSeries.toLocaleString('pt-BR')} restantes)...`;
       moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
@@ -3113,13 +3637,16 @@ function renderItemsList(preserveScroll) {
       fragment.appendChild(li);
     }
 
-    if (currentFilteredItems.length > limit || indexedMoreAvailable) {
+    const remainingItems = isOnDemand
+      ? Math.max(0, totalInCategory - limit)
+      : Math.max(0, currentFilteredItems.length - limit);
+    if (currentFilteredItems.length > limit || (indexedMoreAvailable && remainingItems > 0)) {
       const moreLi = document.createElement('li');
       const moreBtn = document.createElement('button');
       moreBtn.className = 'list-item-btn';
       moreBtn.style.textAlign = 'center';
       moreBtn.style.color = '#ffd54f';
-      moreBtn.textContent = `➕ Carregar Mais Itens (+150 de ${currentFilteredItems.length - limit} restantes)...`;
+      moreBtn.textContent = `➕ Carregar Mais Itens (${remainingItems.toLocaleString('pt-BR')} restantes)...`;
       moreBtn.onclick = () => { loadMoreIndexedItems(); };
       moreLi.appendChild(moreBtn);
       fragment.appendChild(moreLi);
@@ -4149,9 +4676,9 @@ async function executeOmnisearch(query) {
   }
   const q = query.toLowerCase().trim();
 
-  const liveList = (allContent.LIVE || []);
-  const movieList = (allContent.MOVIE || []);
-  const seriesList = (allContent.SERIES || []);
+  const liveList = (allCatalog && allCatalog.LIVE) ? allCatalog.LIVE : [];
+  const movieList = (allCatalog && allCatalog.MOVIE) ? allCatalog.MOVIE : [];
+  const seriesList = (allCatalog && allCatalog.SERIES) ? allCatalog.SERIES : [];
 
   const filterFn = item => {
     if (!item) return false;
@@ -4166,7 +4693,7 @@ async function executeOmnisearch(query) {
   const foundMovies = movieList.filter(filterFn).slice(0, 80);
   const foundSeries = seriesList.filter(filterFn).slice(0, 80);
 
-  // Busca no índice completo do IndexedDB para alcançar itens fora da janela inicial carregada em RAM
+  // Busca no índice completo do IndexedDB para alcançar VOD/Séries sob demanda fora da RAM
   try {
     const srv = SERVERS[currentServerIndex];
     if (srv && typeof searchCatalogIndex === 'function') {
@@ -4184,13 +4711,13 @@ async function executeOmnisearch(query) {
         }
       };
       if (foundLive.length < 80) {
-        mergeUnique(foundLive, await searchCatalogIndex(srv.id, 'LIVE', q, 'ALL', 80));
+        mergeUnique(foundLive, await searchCatalogIndex(srv.id, 'LIVE', q, '', 80));
       }
       if (foundMovies.length < 80) {
-        mergeUnique(foundMovies, await searchCatalogIndex(srv.id, 'MOVIE', q, 'ALL', 80));
+        mergeUnique(foundMovies, await searchCatalogIndex(srv.id, 'MOVIE', q, '', 80));
       }
       if (foundSeries.length < 80) {
-        mergeUnique(foundSeries, await searchCatalogIndex(srv.id, 'SERIES', q, 'ALL', 80));
+        mergeUnique(foundSeries, await searchCatalogIndex(srv.id, 'SERIES', q, '', 80));
       }
     }
   } catch (e) {}
@@ -7799,9 +8326,21 @@ function applyFontSize(size) {
 // LIMPAR ARMAZENAMENTO — CLONE IDÊNTICO À FOTO DO USUÁRIO (VIZZION PLAY)
 function renderClearStoragePanel() {
   const box = $('settingsDetailBox');
-  const favChannelsCount = Array.from(favoriteUrls).filter(u => allCatalog.LIVE.some(i => i.url === u)).length;
-  const favMoviesCount = Array.from(favoriteUrls).filter(u => allCatalog.MOVIE.some(i => i.url === u)).length;
-  const favSeriesCount = Array.from(favoriteUrls).filter(u => allCatalog.SERIES.some(i => i.url === u)).length;
+  const isMovieFavUrl = (u) => {
+    const s = String(u || '');
+    return s.includes('/movie/') || allCatalog.MOVIE.some(i => i.url === s);
+  };
+  const isSeriesFavUrl = (u) => {
+    const s = String(u || '');
+    return s.includes('/series/') || s.endsWith('.xtream') || allCatalog.SERIES.some(i => i.url === s);
+  };
+  const isLiveFavUrl = (u) => {
+    const s = String(u || '');
+    return s.includes('/live/') || allCatalog.LIVE.some(i => i.url === s) || (!isMovieFavUrl(s) && !isSeriesFavUrl(s));
+  };
+  const favChannelsCount = Array.from(favoriteUrls).filter(isLiveFavUrl).length;
+  const favMoviesCount = Array.from(favoriteUrls).filter(isMovieFavUrl).length;
+  const favSeriesCount = Array.from(favoriteUrls).filter(isSeriesFavUrl).length;
   const continueCount = continueWatchingList.length;
 
   box.innerHTML = `
@@ -7843,21 +8382,21 @@ function renderClearStoragePanel() {
   `;
 
   $('btnClearFavChannels').onclick = () => {
-    favoriteUrls = new Set(Array.from(favoriteUrls).filter(u => !allCatalog.LIVE.some(i => i.url === u)));
+    favoriteUrls = new Set(Array.from(favoriteUrls).filter(u => !isLiveFavUrl(u)));
     try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
     renderClearStoragePanel();
     alert('Canais favoritos removidos com sucesso.');
   };
 
   $('btnClearFavMovies').onclick = () => {
-    favoriteUrls = new Set(Array.from(favoriteUrls).filter(u => !allCatalog.MOVIE.some(i => i.url === u)));
+    favoriteUrls = new Set(Array.from(favoriteUrls).filter(u => !isMovieFavUrl(u)));
     try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
     renderClearStoragePanel();
     alert('Filmes favoritos removidos com sucesso.');
   };
 
   $('btnClearFavSeries').onclick = () => {
-    favoriteUrls = new Set(Array.from(favoriteUrls).filter(u => !allCatalog.SERIES.some(i => i.url === u)));
+    favoriteUrls = new Set(Array.from(favoriteUrls).filter(u => !isSeriesFavUrl(u)));
     try { localStorage.setItem('mk21_favs', JSON.stringify(Array.from(favoriteUrls))); } catch (e) {}
     renderClearStoragePanel();
     alert('Séries favoritas removidas com sucesso.');
@@ -8339,7 +8878,7 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     // Streaming direto para IndexedDB (O(1) RAM): sem array target de 60k itens nem liveGrouper no heap
     const metricsAcc = CatalogUtils.createStreamingCatalogMetricsAccumulator();
     const livePreview = [];
-    const indexWriter = await createCatalogIndexWriter(srv.id);
+    const indexWriter = await createCatalogIndexWriter(srv.id, srv.url);
     await streamPlaylistContent(
       srv.url,
       controller && controller.signal,
@@ -8373,10 +8912,11 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     );
     const hasDerivedXmltv = !CatalogUtils.isDirectPlaylistUrl(srv.url);
     const snapshot = metricsAcc.snapshot(hasDerivedXmltv);
+    const groupCounts = metricsAcc.getGroupCounts();
     const total = snapshot.totalItems;
     if (total > 0) {
       setServerLoadProgress(srv.id, 98, 'loading');
-      await indexWriter.finish(snapshot);
+      await indexWriter.finish(snapshot, groupCounts);
       if (livePreview.length > 0) saveFastCache(srv.id, livePreview, true);
       livePreview.length = 0;
       // Remove eventual registro duplicado antigo em catalog_cache_v6 para ler direto do índice atualizado
@@ -8985,7 +9525,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.9.8';
+const BASE_PACKAGE_VERSION = '2.9.9';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');

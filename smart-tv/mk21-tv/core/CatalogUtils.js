@@ -448,7 +448,8 @@ function decideCachedServerSwitch(cacheStats, lastSyncMs, bgSyncFrequency, nowMs
 
 /**
  * Acumulador streaming de métricas em O(1) RAM (sem manter arrays de 50k–100k itens no heap).
- * Usado no sync em segundo plano em Smart TVs (LG webOS / Tizen) para evitar OOM kill.
+ * Usado no sync em segundo plano e no carregamento sob demanda em Smart TVs (LG webOS / Tizen)
+ * para evitar OOM kill e fornecer contagens exatas de categorias (groupCounts) para o IndexedDB.
  */
 function createStreamingCatalogMetricsAccumulator() {
   let totalChannels = 0;
@@ -456,6 +457,23 @@ function createStreamingCatalogMetricsAccumulator() {
   let totalSeries = 0;
   let epgTaggedChannels = 0;
   const groupSet = new Set();
+  const groupMaps = {
+    LIVE: new Map(),
+    MOVIE: new Map(),
+    SERIES: new Map()
+  };
+
+  const toGroupList = (map) => {
+    const out = [];
+    map.forEach((entry) => {
+      out.push({
+        name: entry.name,
+        count: entry.count,
+        adultCount: entry.adultCount
+      });
+    });
+    return out;
+  };
 
   return {
     add(item) {
@@ -471,13 +489,34 @@ function createStreamingCatalogMetricsAccumulator() {
       } else {
         return;
       }
+      const g = (item.group && String(item.group).trim()) ? String(item.group).trim() : 'Geral';
       if (item.group && groupSet.size < 4000) {
-        const g = String(item.group).trim();
-        if (g) groupSet.add(g);
+        groupSet.add(g);
+      }
+      const typeMap = groupMaps[t];
+      if (typeMap) {
+        let entry = typeMap.get(g);
+        if (!entry) {
+          if (typeMap.size < 4000) {
+            entry = { name: g, count: 0, adultCount: 0 };
+            typeMap.set(g, entry);
+          }
+        }
+        if (entry) {
+          entry.count++;
+          if (item.isAdult) entry.adultCount++;
+        }
       }
     },
     getTotalItems() {
       return totalChannels + totalVOD + totalSeries;
+    },
+    getGroupCounts() {
+      return {
+        LIVE: toGroupList(groupMaps.LIVE),
+        MOVIE: toGroupList(groupMaps.MOVIE),
+        SERIES: toGroupList(groupMaps.SERIES)
+      };
     },
     snapshot(hasXmltv) {
       return {
@@ -490,6 +529,69 @@ function createStreamingCatalogMetricsAccumulator() {
       };
     }
   };
+}
+
+const COMPACT_KIND_TO_PREFIX = { live: 'l', movie: 'm', series: 's' };
+const COMPACT_PREFIX_TO_KIND = { l: 'live', m: 'movie', s: 'series' };
+
+/**
+ * Converte uma URL padrão Xtream (`<base>/(live|movie|series)/<user>/<pass>/<id>.<ext>`)
+ * em uma referência compacta (`l:<id>.<ext>`, `m:<id>.<ext>`, `s:<id>.xtream`) sem repetir
+ * o domínio nem persistir credenciais em 55k+ registros do IndexedDB.
+ * URLs M3U diretas, redirecionadas ou de outros domínios são preservadas intactas em `url`.
+ */
+function compactStreamUrl(rawUrl, serverBaseUrl, creds) {
+  const urlStr = String(rawUrl || '').trim();
+  if (!urlStr) return { ref: '', url: '' };
+  const cleanBase = String(serverBaseUrl || '').trim().replace(/\/+$/, '');
+  const u = creds && creds.user ? String(creds.user).trim() : '';
+  const p = creds && creds.pass ? String(creds.pass).trim() : '';
+  if (!cleanBase || !u || !p) return { ref: '', url: urlStr };
+  if (!urlStr.startsWith(cleanBase + '/')) return { ref: '', url: urlStr };
+
+  const rest = urlStr.slice(cleanBase.length + 1);
+  const parts = rest.split('/');
+  if (parts.length !== 4) return { ref: '', url: urlStr };
+
+  const kind = parts[0].toLowerCase();
+  const prefix = COMPACT_KIND_TO_PREFIX[kind];
+  if (!prefix) return { ref: '', url: urlStr };
+
+  const encU = encodeURIComponent(u);
+  const encP = encodeURIComponent(p);
+  const userMatches = parts[1] === encU || parts[1] === u;
+  const passMatches = parts[2] === encP || parts[2] === p;
+  if (!userMatches || !passMatches) return { ref: '', url: urlStr };
+
+  const tail = parts[3];
+  if (!tail || tail.includes('?') || tail.includes('#')) return { ref: '', url: urlStr };
+
+  return { ref: prefix + ':' + tail, url: '' };
+}
+
+/**
+ * Reconstrói a URL completa de reprodução a partir do registro compacto do IndexedDB.
+ * Retrocompatível: registros antigos que já armazenam `url` completa retornam `url` diretamente.
+ */
+function expandStreamUrl(record, serverBaseUrl, creds) {
+  if (!record || typeof record !== 'object') return '';
+  if (record.url && typeof record.url === 'string' && record.url.trim()) {
+    return record.url.trim();
+  }
+  const ref = typeof record.ref === 'string' ? record.ref.trim() : '';
+  if (!ref || ref.length < 3 || ref.charAt(1) !== ':') return '';
+
+  const kind = COMPACT_PREFIX_TO_KIND[ref.charAt(0)];
+  if (!kind) return '';
+  const tail = ref.slice(2);
+  if (!tail) return '';
+
+  const cleanBase = String(serverBaseUrl || '').trim().replace(/\/+$/, '');
+  const u = creds && creds.user ? String(creds.user).trim() : '';
+  const p = creds && creds.pass ? String(creds.pass).trim() : '';
+  if (!cleanBase || !u || !p) return '';
+
+  return cleanBase + '/' + kind + '/' + encodeURIComponent(u) + '/' + encodeURIComponent(p) + '/' + tail;
 }
 
 /**
@@ -557,6 +659,8 @@ module.exports = {
   computeServerLoadPercentage,
   decideCachedServerSwitch,
   createStreamingCatalogMetricsAccumulator,
+  compactStreamUrl,
+  expandStreamUrl,
   serializePersistedDevLogs,
   parsePersistedDevLogs,
   parseSafeJsonResponse,

@@ -430,4 +430,88 @@ test('app-legacy uses inline SVG icons, cancels pending reconnect timers, and st
   assert.ok(legacySrc.includes('async drain()'));
 });
 
+test('compactStreamUrl and expandStreamUrl shrink Xtream URLs without storing credentials and preserve direct M3U URLs', () => {
+  const { compactStreamUrl, expandStreamUrl } = require('../mk21-tv/core/CatalogUtils.js');
+  const creds = { user: 'user+1', pass: 'p@ss/2' };
+  const base = 'http://app.tigerouro.shop/';
 
+  // Live .ts (encoded credentials)
+  const liveUrl = 'http://app.tigerouro.shop/live/user%2B1/p%40ss%2F2/14859719.ts';
+  const cLive = compactStreamUrl(liveUrl, base, creds);
+  assert.deepEqual(cLive, { ref: 'l:14859719.ts', url: '' });
+  assert.equal(expandStreamUrl(cLive, base, creds), liveUrl);
+
+  // Movie .mp4
+  const movieUrl = 'http://app.tigerouro.shop/movie/user%2B1/p%40ss%2F2/998877.mp4';
+  const cMovie = compactStreamUrl(movieUrl, base, creds);
+  assert.deepEqual(cMovie, { ref: 'm:998877.mp4', url: '' });
+  assert.equal(expandStreamUrl(cMovie, base, creds), movieUrl);
+
+  // Series .xtream stub
+  const seriesUrl = 'http://app.tigerouro.shop/series/user%2B1/p%40ss%2F2/4455.xtream';
+  const cSeries = compactStreamUrl(seriesUrl, base, creds);
+  assert.deepEqual(cSeries, { ref: 's:4455.xtream', url: '' });
+  assert.equal(expandStreamUrl(cSeries, base, creds), seriesUrl);
+
+  // Non-Xtream / external host URL must remain untouched in `url`
+  const externalUrl = 'https://cdn.other-provider.com/hls/channel1/index.m3u8?token=abc';
+  const cExt = compactStreamUrl(externalUrl, base, creds);
+  assert.deepEqual(cExt, { ref: '', url: externalUrl });
+  assert.equal(expandStreamUrl(cExt, base, creds), externalUrl);
+
+  // Backward compatibility: legacy IndexedDB records that only have `url` (no `ref`)
+  assert.equal(
+    expandStreamUrl({ url: 'http://legacy.host/movie/u/p/123.mkv' }, base, creds),
+    'http://legacy.host/movie/u/p/123.mkv'
+  );
+
+  // Missing credentials must not drop original URL
+  assert.deepEqual(compactStreamUrl(liveUrl, base, null), { ref: '', url: liveUrl });
+  assert.equal(expandStreamUrl({ ref: 'm:123.mp4' }, base, null), '');
+});
+
+test('createStreamingCatalogMetricsAccumulator.getGroupCounts tracks per-type groups and adult counts accurately', () => {
+  const { createStreamingCatalogMetricsAccumulator } = require('../mk21-tv/core/CatalogUtils.js');
+  const acc = createStreamingCatalogMetricsAccumulator();
+  acc.add({ contentType: 'LIVE', group: 'Esportes', tvgId: 'espn.br', isAdult: false });
+  acc.add({ contentType: 'MOVIE', group: 'Ação', isAdult: false });
+  acc.add({ contentType: 'MOVIE', group: 'Ação', isAdult: false });
+  acc.add({ contentType: 'MOVIE', group: 'Adultos +18', isAdult: true });
+  acc.add({ contentType: 'SERIES', group: '', isAdult: false });
+
+  const gc = acc.getGroupCounts();
+  assert.deepEqual(gc.LIVE, [{ name: 'Esportes', count: 1, adultCount: 0 }]);
+  assert.deepEqual(gc.MOVIE, [
+    { name: 'Ação', count: 2, adultCount: 0 },
+    { name: 'Adultos +18', count: 1, adultCount: 1 }
+  ]);
+  assert.deepEqual(gc.SERIES, [{ name: 'Geral', count: 1, adultCount: 0 }]);
+});
+
+test('Fase 1: app-legacy queries VOD/Series on demand via serverGroup index and uses compact IndexedDB schema', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const legacySrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/src/legacy/app-legacy.js'), 'utf8');
+
+  // 1. Compact schema on write + expansion on read/favorites
+  assert.ok(legacySrc.includes('CatalogUtils.compactStreamUrl(item.url, baseUrl, creds)'));
+  assert.ok(legacySrc.includes('CatalogUtils.expandStreamUrl(raw, base, c)'));
+  assert.ok(legacySrc.includes('CatalogUtils.expandStreamUrl(item, baseUrl, creds)'));
+  assert.ok(legacySrc.includes('metaRec.groupCounts = groupCounts;'));
+
+  // 2. IndexedDB queries use serverGroup index + native cursor.advance
+  assert.ok(legacySrc.includes("store.index(useGroupIndex ? 'serverGroup' : 'serverType')"));
+  assert.ok(legacySrc.includes('IDBKeyRange.only([serverId, type, effectiveGroup])'));
+  assert.ok(legacySrc.includes('cursor.advance(safeOffset)'));
+
+  // 3. LIVE-only RAM load + streaming VOD/Series straight to IndexedDB
+  assert.ok(legacySrc.includes('getStoredData(srv.id, { liveOnly: true })'));
+  assert.ok(legacySrc.includes('const streamVodOnDemand = Boolean(indexWriter && indexWriter.isPersistent);'));
+  assert.ok(legacySrc.includes('function isOnDemandIndexedType(type)'));
+  assert.ok(legacySrc.includes('async function loadIndexedCategoryPage('));
+
+  // 4. Omnisearch fixed: references allCatalog (never undefined allContent) and queries IDB without literal 'ALL' group
+  assert.ok(!legacySrc.includes('allContent.LIVE'));
+  assert.ok(legacySrc.includes("searchCatalogIndex(srv.id, 'MOVIE', q, '', 80)"));
+  assert.ok(legacySrc.includes("searchCatalogIndex(srv.id, 'SERIES', q, '', 80)"));
+});
