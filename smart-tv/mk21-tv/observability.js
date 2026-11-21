@@ -174,8 +174,8 @@
 
     var sessionId = generateAnonymousId('ses');
     var platform = detectPlatform(opts.platform);
-    var version = String(opts.version || '2.9.7');
-    var build = Number(opts.build || 297);
+    var version = String(opts.version || '2.9.8');
+    var build = Number(opts.build || 298);
     var currentScreen = String(opts.initialScreen || 'boot');
     var buffer = [];
     var dirty = false;

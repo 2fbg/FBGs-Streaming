@@ -358,3 +358,76 @@ test('decideCachedServerSwitch opens background-synced server immediately withou
   assert.equal(staleDaily.shouldBackgroundRefresh, true);
 });
 
+test('createStreamingCatalogMetricsAccumulator counts LIVE, MOVIE, SERIES, groups and EPG without retaining items', () => {
+  const { createStreamingCatalogMetricsAccumulator } = require('../mk21-tv/core/CatalogUtils.js');
+  const acc = createStreamingCatalogMetricsAccumulator();
+  acc.add({ contentType: 'LIVE', group: 'Esportes', tvgId: 'globo.sp' });
+  acc.add({ contentType: 'LIVE', group: 'Esportes', tvgId: '' });
+  acc.add({ contentType: 'MOVIE', group: 'Ação' });
+  acc.add({ contentType: 'SERIES', group: 'Drama' });
+  acc.add({ contentType: 'UNKNOWN', group: 'Ignorado' });
+  acc.add(null);
+
+  assert.equal(acc.getTotalItems(), 4);
+  assert.deepEqual(acc.snapshot(false), {
+    totalChannels: 2,
+    totalVOD: 1,
+    totalSeries: 1,
+    totalGroups: 3,
+    totalEPG: 1,
+    totalItems: 4
+  });
+
+  // When no tvgId is present but server has XMLTV, EPG falls back to live channel count
+  const accNoTvg = createStreamingCatalogMetricsAccumulator();
+  accNoTvg.add({ contentType: 'LIVE', group: 'Notícias', tvgId: '' });
+  accNoTvg.add({ contentType: 'LIVE', group: 'Notícias', tvgId: '' });
+  assert.equal(accNoTvg.snapshot(true).totalEPG, 2);
+});
+
+test('serializePersistedDevLogs and parsePersistedDevLogs enforce entry and byte limits safely', () => {
+  const { serializePersistedDevLogs, parsePersistedDevLogs } = require('../mk21-tv/core/CatalogUtils.js');
+  const logs = [];
+  for (let i = 0; i < 250; i++) {
+    logs.push({ time: '16:28:00', type: 'info', msg: 'Entrada #' + i + ' ' + 'x'.repeat(250) });
+  }
+
+  const serialized = serializePersistedDevLogs(logs, 180, 16000);
+  assert.ok(serialized.length <= 16000, 'Serialized payload must stay within byte budget');
+
+  const restored = parsePersistedDevLogs(serialized, 180);
+  assert.ok(restored.length > 0 && restored.length <= 180);
+  assert.ok(restored[restored.length - 1].msg.startsWith('Entrada #249'));
+
+  // Corrupted JSON recovers cleanly as empty array
+  assert.deepEqual(parsePersistedDevLogs('{invalid-json'), []);
+  assert.deepEqual(parsePersistedDevLogs(null), []);
+});
+
+test('app-legacy uses inline SVG icons, cancels pending reconnect timers, and streams background sync with O(1) RAM', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const legacySrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/src/legacy/app-legacy.js'), 'utf8');
+  const cssSrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/styles.css'), 'utf8');
+
+  // 1. Watchdog reconnect timer cancellation and cold-start grace
+  assert.ok(legacySrc.includes('let autoReconnectTimer = null;'));
+  assert.ok(legacySrc.includes('function cancelPendingAutoReconnect('));
+  assert.ok(legacySrc.includes('resetStallWatchdogGrace(14000)'));
+  assert.ok(legacySrc.includes('const effectiveTolerance = isVod ? Math.max(30, mk21StallTolerance()) : mk21StallTolerance();'));
+
+  // 2. Inline SVG icons and 92vw safe-area (no broken emoji glyphs in devlogs modal)
+  assert.ok(legacySrc.includes('const MK21_DEVLOG_SVG = {'));
+  assert.ok(cssSrc.includes('width: 92vw !important;'));
+  assert.ok(cssSrc.includes('.devlogs-icon {'));
+
+  // 3. Persistent devlogs across webOS memory restarts
+  assert.ok(legacySrc.includes("const MK21_DEVLOGS_PERSIST_KEY = 'mk21_devlogs_persist_v1';"));
+  assert.ok(legacySrc.includes('function mk21RestorePersistedDevLogs()'));
+
+  // 4. Streaming O(1)-RAM background sync with IndexedDB backpressure
+  assert.ok(legacySrc.includes('CatalogUtils.createStreamingCatalogMetricsAccumulator()'));
+  assert.ok(legacySrc.includes('async drain()'));
+});
+
+

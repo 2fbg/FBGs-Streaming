@@ -3234,10 +3234,10 @@ body.osk-open .login-card {
 }
 
 .devlogs-card {
-  width: 96vw !important;
-  max-width: 96vw !important;
-  height: 92vh !important;
-  max-height: 92vh !important;
+  width: 92vw !important;
+  max-width: 92vw !important;
+  height: 90vh !important;
+  max-height: 90vh !important;
   display: flex !important;
   flex-direction: column !important;
   background: #05070d !important;
@@ -3258,10 +3258,28 @@ body.osk-open .login-card {
 }
 
 .devlogs-title {
+  display: inline-flex;
+  align-items: center;
   color: #ffd54f;
   font-weight: 800;
   font-size: 24px;
   margin-right: 16px;
+}
+
+.devlogs-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+@keyframes devlogsSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.devlogs-spin {
+  animation: devlogsSpin 0.9s linear infinite;
 }
 
 .devlogs-actions {
@@ -3273,12 +3291,15 @@ body.osk-open .login-card {
 .devlogs-head .devlogs-actions .ctrl-btn {
   width: auto !important;
   flex: 0 0 auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   font-size: 16px !important;
   line-height: 1.3 !important;
   font-weight: 700 !important;
-  padding: 10px 16px !important;
+  padding: 9px 14px !important;
   min-height: 44px !important;
-  margin-left: 10px !important;
+  margin-left: 8px !important;
   margin-bottom: 4px !important;
 }
 
@@ -3341,9 +3362,18 @@ body.osk-open .login-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   font-size: 16px;
   color: #cbd5e1;
   margin-top: 10px;
+}
+
+.devlogs-drive-status {
+  display: inline-flex;
+  align-items: center;
+  color: #93c5fd;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* Menu de configurações mais compacto para caber em 720p sem cortar itens */

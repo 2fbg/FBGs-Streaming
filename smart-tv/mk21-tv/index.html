@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MK21 Play</title>
-  <link rel="stylesheet" href="styles.css?v=2.9.7">
-  <link rel="stylesheet" href="css/style.css?v=2.9.7">
+  <link rel="stylesheet" href="styles.css?v=2.9.8">
+  <link rel="stylesheet" href="css/style.css?v=2.9.8">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style id="mk21-ota-override-css"></style>
-  <script src="observability.js?v=2.9.7"></script>
+  <script src="observability.js?v=2.9.8"></script>
   <script src="libs/hls.min.js"></script>
   <script src="libs/mpegts.min.js"></script>
   <script src="core/AlternativeSources.js"></script>
@@ -98,7 +98,7 @@
         </div>
 
         <div class="login-version" style="margin-top: 10px;">
-          MK21 PLAY OTT • v2.9.7 • Smart TV (webOS &amp; Tizen)
+          MK21 PLAY OTT • v2.9.8 • Smart TV (webOS &amp; Tizen)
         </div>
       </form>
     </div>
@@ -730,12 +730,12 @@
   <div id="modalDevLogs" class="app-modal devlogs-modal hidden">
     <div class="modal-content devlogs-card">
       <div class="modal-header devlogs-head">
-        <span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>
+        <span class="devlogs-title"><svg class="devlogs-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Diagnóstico em tempo real</span></span>
         <div class="devlogs-actions">
-          <button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">⏸ Pausar</button>
-          <button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">🗑️ Limpar</button>
-          <button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">💾 Salvar</button>
-          <button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">✕ Fechar</button>
+          <button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0"><svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg><span>Pausar</span></button>
+          <button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0"><svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span>Limpar</span></button>
+          <button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0"><svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg><span>Salvar no Drive</span></button>
+          <button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0"><svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Fechar</span></button>
         </div>
       </div>
       <div id="devLogsInfo" class="devlogs-info"></div>
@@ -743,7 +743,8 @@
         <div style="color:#64748b;">[Console inicializado. Logs do player, rede, codecs e controle remoto aparecerão aqui...]</div>
       </div>
       <div class="devlogs-foot">
-        <span>Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>
+        <span id="devLogsHint">Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>
+        <span id="devLogsDriveStatus" class="devlogs-drive-status"></span>
         <span id="devLogsCountBadge" style="background:#1e293b; padding:4px 12px; border-radius:6px;">0 entradas</span>
       </div>
     </div>
@@ -815,8 +816,8 @@
     (function() {
       try {
         var otaVer = localStorage.getItem('mk21_ota_app_version');
-        // Se a versão OTA armazenada for anterior a 2.9.7, limpa para usar o código empacotado no IPK
-        if (otaVer && otaVer < '2.9.7') {
+        // Se a versão OTA armazenada for anterior a 2.9.8, limpa para usar o código empacotado no IPK
+        if (otaVer && otaVer < '2.9.8') {
           try {
             localStorage.removeItem('mk21_ota_app_js');
             localStorage.removeItem('mk21_ota_app_version');
@@ -839,7 +840,7 @@
             s.src = blobUrl;
             s.onerror = function() {
               var fallback = document.createElement('script');
-              fallback.src = 'app.js?v=2.9.7';
+              fallback.src = 'app.js?v=2.9.8';
               document.body.appendChild(fallback);
             };
             document.body.appendChild(s);
@@ -856,7 +857,7 @@
         console.warn('OTA bootloader fallback:', e);
       }
       var s = document.createElement('script');
-      s.src = 'app.js?v=2.9.7';
+      s.src = 'app.js?v=2.9.8';
       document.body.appendChild(s);
     })();
   </script>

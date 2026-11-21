@@ -446,6 +446,104 @@ function decideCachedServerSwitch(cacheStats, lastSyncMs, bgSyncFrequency, nowMs
   };
 }
 
+/**
+ * Acumulador streaming de métricas em O(1) RAM (sem manter arrays de 50k–100k itens no heap).
+ * Usado no sync em segundo plano em Smart TVs (LG webOS / Tizen) para evitar OOM kill.
+ */
+function createStreamingCatalogMetricsAccumulator() {
+  let totalChannels = 0;
+  let totalVOD = 0;
+  let totalSeries = 0;
+  let epgTaggedChannels = 0;
+  const groupSet = new Set();
+
+  return {
+    add(item) {
+      if (!item || typeof item !== 'object') return;
+      const t = item.contentType;
+      if (t === 'LIVE') {
+        totalChannels++;
+        if (item.tvgId && String(item.tvgId).trim()) epgTaggedChannels++;
+      } else if (t === 'MOVIE') {
+        totalVOD++;
+      } else if (t === 'SERIES') {
+        totalSeries++;
+      } else {
+        return;
+      }
+      if (item.group && groupSet.size < 4000) {
+        const g = String(item.group).trim();
+        if (g) groupSet.add(g);
+      }
+    },
+    getTotalItems() {
+      return totalChannels + totalVOD + totalSeries;
+    },
+    snapshot(hasXmltv) {
+      return {
+        totalChannels,
+        totalVOD,
+        totalSeries,
+        totalGroups: groupSet.size,
+        totalEPG: epgTaggedChannels > 0 ? epgTaggedChannels : (hasXmltv ? totalChannels : 0),
+        totalItems: totalChannels + totalVOD + totalSeries
+      };
+    }
+  };
+}
+
+/**
+ * Serializa um ring buffer compacto dos logs de diagnóstico para sobreviver a reinícios
+ * forçados por limite de memória da Smart TV (LG webOS).
+ */
+function serializePersistedDevLogs(entries, maxEntries, maxBytes) {
+  const limitEntries = Math.max(20, Math.min(300, Number(maxEntries) || 180));
+  const limitBytes = Math.max(8192, Math.min(128000, Number(maxBytes) || 48000));
+  if (!Array.isArray(entries) || entries.length === 0) return '[]';
+
+  const compact = [];
+  const start = Math.max(0, entries.length - limitEntries);
+  for (let i = start; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e || typeof e !== 'object') continue;
+    compact.push({
+      time: String(e.time || '').slice(0, 16),
+      type: String(e.type || 'info').slice(0, 12),
+      msg: String(e.msg || '').slice(0, 320)
+    });
+  }
+
+  let json = JSON.stringify(compact);
+  while (json.length > limitBytes && compact.length > 10) {
+    compact.splice(0, Math.max(1, Math.floor(compact.length * 0.2)));
+    json = JSON.stringify(compact);
+  }
+  return json;
+}
+
+function parsePersistedDevLogs(raw, maxEntries) {
+  const limitEntries = Math.max(20, Math.min(300, Number(maxEntries) || 180));
+  if (!raw || typeof raw !== 'string') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const out = [];
+    const start = Math.max(0, parsed.length - limitEntries);
+    for (let i = start; i < parsed.length; i++) {
+      const e = parsed[i];
+      if (!e || typeof e !== 'object' || !e.msg) continue;
+      out.push({
+        time: String(e.time || '--:--:--').slice(0, 16),
+        type: String(e.type || 'info').slice(0, 12),
+        msg: String(e.msg).slice(0, 320)
+      });
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
+}
+
 module.exports = {
   BG_SYNC_INTERVALS_MS,
   BG_SYNC_LABELS,
@@ -458,6 +556,9 @@ module.exports = {
   computeGlobalServersMetrics,
   computeServerLoadPercentage,
   decideCachedServerSwitch,
+  createStreamingCatalogMetricsAccumulator,
+  serializePersistedDevLogs,
+  parsePersistedDevLogs,
   parseSafeJsonResponse,
   normalizeCatalogMode,
   isDirectPlaylistUrl,

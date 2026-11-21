@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.9.7 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.9.8 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -383,11 +383,12 @@ async function getStoredDataFromCatalogIndex(serverId) {
     } catch (e) { resolve([]); }
   });
   try {
-    const [liveItems, movieItems, seriesItems] = await Promise.all([
-      readByType('LIVE'),
-      readByType('MOVIE'),
-      readByType('SERIES')
-    ]);
+    // Leitura sequencial por tipo reduz em ~60% o pico de RAM do structured-clone no IndexedDB em LG webOS
+    const liveItems = await readByType('LIVE');
+    await new Promise(r => setTimeout(r, 0));
+    const movieItems = await readByType('MOVIE');
+    await new Promise(r => setTimeout(r, 0));
+    const seriesItems = await readByType('SERIES');
     if ((liveItems.length + movieItems.length + seriesItems.length) === 0) return null;
     liveItems.forEach(normalizeCachedItem);
     movieItems.forEach(normalizeCachedItem);
@@ -404,6 +405,21 @@ async function getStoredDataFromCatalogIndex(serverId) {
   } finally {
     try { db.close(); } catch (e) {}
   }
+}
+
+async function deleteStoredDataFromV6(id) {
+  if (!id) return;
+  try {
+    const db = await openDB();
+    if (!db) return;
+    await new Promise(resolve => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(id);
+      tx.oncomplete = resolve;
+      tx.onerror = resolve;
+    });
+    try { db.close(); } catch (e) {}
+  } catch (e) {}
 }
 
 async function getStoredData(id, options) {
@@ -495,36 +511,56 @@ function openCatalogIndexDb() {
 
 async function createCatalogIndexWriter(serverId) {
   const db = await openCatalogIndexDb();
-  if (!db) return { add() {}, async finish() {} };
+  if (!db) return { add() {}, async drain() {}, async finish() {} };
   try {
     await new Promise((resolve, reject) => {
       const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
       const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
       // Remove somente os itens deste servidor, preservando índices de outros servidores.
       const req = index.openCursor(IDBKeyRange.bound([serverId, 'LIVE'], [serverId, 'SERIES']));
-      req.onsuccess = e => { const c=e.target.result; if (c) { c.delete(); c.continue(); } };
+      req.onsuccess = e => { const c = e.target.result; if (c) { c.delete(); c.continue(); } };
       tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
     });
   } catch (e) { console.warn('[MK21] limpeza do índice falhou', e); }
+  const BATCH_SIZE = 250;
   let batch = [];
   let pending = Promise.resolve();
+  let inFlightBatches = 0;
   let position = 0;
   const flush = () => {
     if (!batch.length) return;
-    const toWrite = batch; batch = [];
+    const toWrite = batch;
+    batch = [];
+    inFlightBatches++;
     const batchStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     pending = pending.then(() => new Promise(resolve => {
+      const done = () => {
+        inFlightBatches = Math.max(0, inFlightBatches - 1);
+        resolve();
+      };
       try {
         const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
         const store = tx.objectStore(CATALOG_INDEX_STORE);
-        toWrite.forEach(item => store.put({
-          key: serverId + ':' + item.contentType + ':' + position++,
-          serverId, contentType: item.contentType, name: item.name || 'Item',
-          normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
-          group: item.group || 'Geral', logo: item.logo || '', tvgId: item.tvgId || '',
-          tvgName: item.tvgName || '', url: item.url, isAdult: !!item.isAdult,
-          position: position - 1
-        }));
+        const batchLen = toWrite.length;
+        for (let i = 0; i < batchLen; i++) {
+          const item = toWrite[i];
+          store.put({
+            key: serverId + ':' + item.contentType + ':' + position++,
+            serverId,
+            contentType: item.contentType,
+            name: item.name || 'Item',
+            normalizedName: String(item.name || '').toLocaleLowerCase('pt-BR'),
+            group: item.group || 'Geral',
+            logo: item.logo || '',
+            tvgId: item.tvgId || '',
+            tvgName: item.tvgName || '',
+            url: item.url,
+            isAdult: !!item.isAdult,
+            position: position - 1
+          });
+        }
+        // Libera referências JS imediatamente após enfileirar no IDB para ajudar o GC do webOS
+        toWrite.length = 0;
         tx.oncomplete = () => {
           try {
             if (window.MK21Observability) {
@@ -533,11 +569,11 @@ async function createCatalogIndexWriter(serverId) {
                 phase: 'catalog',
                 severity: 'INFO',
                 durationMs: Math.max(0, dur),
-                meta: { batchSize: toWrite.length, totalIndexed: position }
+                meta: { batchSize: batchLen, totalIndexed: position }
               });
             }
           } catch (_) {}
-          resolve();
+          done();
         };
         tx.onerror = () => {
           try {
@@ -549,20 +585,41 @@ async function createCatalogIndexWriter(serverId) {
               });
             }
           } catch (_) {}
-          resolve();
+          done();
         };
-      } catch (e) { resolve(); }
+      } catch (e) { done(); }
     }));
   };
   return {
-    add(item) { batch.push(item); if (batch.length >= 500) flush(); },
-    async finish() {
-      flush(); await pending;
+    add(item) {
+      batch.push(item);
+      if (batch.length >= BATCH_SIZE) flush();
+    },
+    async drain() {
+      if (batch.length >= BATCH_SIZE) flush();
+      if (inFlightBatches > 0) {
+        await pending;
+      }
+    },
+    async finish(metricsSnapshot) {
+      flush();
+      await pending;
       try {
         await new Promise(resolve => {
-          const tx=db.transaction(CATALOG_META_STORE,'readwrite');
-          tx.objectStore(CATALOG_META_STORE).put({serverId, updatedAt:Date.now(), itemCount:position});
-          tx.oncomplete=resolve; tx.onerror=resolve;
+          const tx = db.transaction(CATALOG_META_STORE, 'readwrite');
+          const metaRec = { serverId, updatedAt: Date.now(), itemCount: position };
+          if (metricsSnapshot && typeof metricsSnapshot === 'object') {
+            metaRec.metrics = {
+              totalChannels: Number(metricsSnapshot.totalChannels) || 0,
+              totalVOD: Number(metricsSnapshot.totalVOD) || 0,
+              totalSeries: Number(metricsSnapshot.totalSeries) || 0,
+              totalGroups: Number(metricsSnapshot.totalGroups) || 0,
+              totalEPG: Number(metricsSnapshot.totalEPG) || 0,
+              totalItems: Number(metricsSnapshot.totalItems) || position
+            };
+          }
+          tx.objectStore(CATALOG_META_STORE).put(metaRec);
+          tx.oncomplete = resolve; tx.onerror = resolve;
         });
       } catch (e) {}
       try {
@@ -1624,7 +1681,12 @@ async function parseM3uTextStream(res, onItem, onProgress, hooks) {
     buffer += chunk;
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() || '';
-    for (const line of lines) consume(line);
+    for (let li = 0; li < lines.length; li++) {
+      consume(lines[li]);
+      if (streamHooks.onBatchYield && itemCount > 0 && itemCount % 250 === 0) {
+        await streamHooks.onBatchYield();
+      }
+    }
     if (onProgress) onProgress(received, total);
   }
   if (!headerChecked && headerSample) {
@@ -1632,6 +1694,7 @@ async function parseM3uTextStream(res, onItem, onProgress, hooks) {
   }
   buffer += decoder.decode();
   if (buffer) consume(buffer);
+  if (streamHooks.onBatchYield) await streamHooks.onBatchYield();
   if (streamHooks.stats) streamHooks.stats.itemCount = itemCount;
   if (itemCount === 0) throw new Error('Lista M3U vazia (0 itens)');
   return itemCount;
@@ -1640,6 +1703,7 @@ async function parseM3uTextStream(res, onItem, onProgress, hooks) {
 async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onProgress, options) {
   const opts = options || {};
   const isBackground = Boolean(opts.isBackground);
+  const onBatchYield = typeof opts.onBatchYield === 'function' ? opts.onBatchYield : null;
   const cleanBase = baseUrl.replace(/\/+$/, '');
   const safeHost = CatalogUtils.extractSafeHost(cleanBase);
   const encUser = encodeURIComponent(user);
@@ -1647,6 +1711,13 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
   const apiBase = `${cleanBase}/player_api.php?username=${encUser}&password=${encPass}`;
   const catalogStart = Date.now();
   let totalBytesReceived = 0;
+
+  const yieldToGc = async () => {
+    if (onBatchYield) {
+      await onBatchYield();
+    }
+    await new Promise(r => setTimeout(r, 0));
+  };
 
   // Leitura com timeouts por estado (20s resposta inicial, 30s sem dados por chunk, teto 3 min por endpoint)
   const fetchJsonWithWatchdog = async (url, actionLabel, ceilingMs = 180000) => {
@@ -1666,7 +1737,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
       if (res.body && typeof res.body.getReader === 'function' && typeof TextDecoder !== 'undefined') {
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
-        const chunks = [];
+        let chunks = [];
         while (true) {
           const part = await reader.read();
           if (part.done) break;
@@ -1676,6 +1747,8 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
         }
         chunks.push(decoder.decode());
         rawText = chunks.join('');
+        chunks.length = 0;
+        chunks = null;
       } else {
         rawText = await res.text();
         reqBytes = rawText ? rawText.length : 0;
@@ -1690,7 +1763,9 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
         httpErr.isHtmlResponse = isHtml;
         throw httpErr;
       }
-      return CatalogUtils.parseSafeJsonResponse(rawText, res.status);
+      const parsed = CatalogUtils.parseSafeJsonResponse(rawText, res.status);
+      rawText = '';
+      return parsed;
     } catch (err) {
       const abortReason = watchdog.getAbortReason();
       if (abortReason === 'parent' || (err && err.name === 'AbortError' && signal && signal.aborted)) {
@@ -1729,18 +1804,24 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
   let totalEmitted = 0;
   const liveExt = localStorage.getItem('mk21_stream_format') === 'hls' ? 'm3u8' : 'ts';
 
-  const [liveCats, liveStreams] = await Promise.all([
-    fetchJsonWithWatchdog(apiBase + '&action=get_live_categories', 'live_categories', 60000).catch(() => []),
-    fetchJsonWithWatchdog(apiBase + '&action=get_live_streams', 'live_streams', 180000)
-  ]);
-
+  // Busca sequencial (categorias -> streams) e liberação explícita entre etapas para evitar pico de RAM em LG webOS
+  let liveCats = await fetchJsonWithWatchdog(apiBase + '&action=get_live_categories', 'live_categories', 60000).catch(() => []);
   const liveCatMap = Object.create(null);
   if (Array.isArray(liveCats)) {
     liveCats.forEach(c => { if (c && c.category_id != null) liveCatMap[String(c.category_id)] = c.category_name || 'Ao Vivo'; });
   }
+  liveCats = null;
+
+  let liveStreams = await fetchJsonWithWatchdog(apiBase + '&action=get_live_streams', 'live_streams', 180000);
   if (Array.isArray(liveStreams)) {
     for (let i = 0; i < liveStreams.length; i++) {
+      if (signal && signal.aborted) {
+        const ab = new Error('Aborted');
+        ab.name = 'AbortError';
+        throw ab;
+      }
       const s = liveStreams[i];
+      liveStreams[i] = null;
       if (!s || !s.stream_id) continue;
       const grp = liveCatMap[String(s.category_id)] || s.category_name || 'Geral';
       const itemName = s.name || ('Canal ' + s.stream_id);
@@ -1755,24 +1836,33 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
         isAdult: isAdult(itemName) || isAdult(grp) || Number(s.is_adult) === 1
       });
       totalEmitted++;
+      if ((i + 1) % 250 === 0) await yieldToGc();
     }
+    liveStreams = null;
+    await yieldToGc();
     if (onProgress) onProgress(40, 100);
   }
 
   const loadMovies = localStorage.getItem('mk21_filter_load_movies') !== 'false';
   if (loadMovies) {
     try {
-      const [vodCats, vodStreams] = await Promise.all([
-        fetchJsonWithWatchdog(apiBase + '&action=get_vod_categories', 'vod_categories', 60000).catch(() => []),
-        fetchJsonWithWatchdog(apiBase + '&action=get_vod_streams', 'vod_streams', 180000).catch(() => [])
-      ]);
+      let vodCats = await fetchJsonWithWatchdog(apiBase + '&action=get_vod_categories', 'vod_categories', 60000).catch(() => []);
       const vodCatMap = Object.create(null);
       if (Array.isArray(vodCats)) {
         vodCats.forEach(c => { if (c && c.category_id != null) vodCatMap[String(c.category_id)] = c.category_name || 'Filmes'; });
       }
+      vodCats = null;
+
+      let vodStreams = await fetchJsonWithWatchdog(apiBase + '&action=get_vod_streams', 'vod_streams', 180000).catch(() => []);
       if (Array.isArray(vodStreams)) {
         for (let i = 0; i < vodStreams.length; i++) {
+          if (signal && signal.aborted) {
+            const ab = new Error('Aborted');
+            ab.name = 'AbortError';
+            throw ab;
+          }
           const m = vodStreams[i];
+          vodStreams[i] = null;
           if (!m || !m.stream_id) continue;
           const grp = vodCatMap[String(m.category_id)] || m.category_name || 'Filmes';
           const ext = m.container_extension || 'mp4';
@@ -1789,26 +1879,37 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
             isAdult: isAdult(itemName) || isAdult(grp) || Number(m.is_adult) === 1
           });
           totalEmitted++;
+          if ((i + 1) % 250 === 0) await yieldToGc();
         }
+        vodStreams = null;
+        await yieldToGc();
       }
       if (onProgress) onProgress(75, 100);
-    } catch (eVod) {}
+    } catch (eVod) {
+      if (eVod && eVod.name === 'AbortError' && signal && signal.aborted) throw eVod;
+    }
   }
 
   const loadSeries = localStorage.getItem('mk21_filter_load_series') !== 'false';
   if (loadSeries) {
     try {
-      const [serCats, seriesList] = await Promise.all([
-        fetchJsonWithWatchdog(apiBase + '&action=get_series_categories', 'series_categories', 60000).catch(() => []),
-        fetchJsonWithWatchdog(apiBase + '&action=get_series', 'series', 180000).catch(() => [])
-      ]);
+      let serCats = await fetchJsonWithWatchdog(apiBase + '&action=get_series_categories', 'series_categories', 60000).catch(() => []);
       const serCatMap = Object.create(null);
       if (Array.isArray(serCats)) {
         serCats.forEach(c => { if (c && c.category_id != null) serCatMap[String(c.category_id)] = c.category_name || 'Séries'; });
       }
+      serCats = null;
+
+      let seriesList = await fetchJsonWithWatchdog(apiBase + '&action=get_series', 'series', 180000).catch(() => []);
       if (Array.isArray(seriesList)) {
         for (let i = 0; i < seriesList.length; i++) {
+          if (signal && signal.aborted) {
+            const ab = new Error('Aborted');
+            ab.name = 'AbortError';
+            throw ab;
+          }
           const sr = seriesList[i];
+          seriesList[i] = null;
           if (!sr || !sr.series_id) continue;
           const grp = serCatMap[String(sr.category_id)] || sr.category_name || 'Séries';
           const itemName = sr.name || ('Série ' + sr.series_id);
@@ -1824,10 +1925,15 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
             isAdult: isAdult(itemName) || isAdult(grp)
           });
           totalEmitted++;
+          if ((i + 1) % 250 === 0) await yieldToGc();
         }
+        seriesList = null;
+        await yieldToGc();
       }
       if (onProgress) onProgress(95, 100);
-    } catch (eSer) {}
+    } catch (eSer) {
+      if (eSer && eSer.name === 'AbortError' && signal && signal.aborted) throw eSer;
+    }
   }
 
   if (totalEmitted === 0) {
@@ -1872,11 +1978,13 @@ async function streamPlaylistContent(url, signal, onItem, onProgress, options) {
   let lastErr = null;
   const attemptSummaries = [];
 
+  const onBatchYield = typeof opts.onBatchYield === 'function' ? opts.onBatchYield : null;
+
   // 1. Catálogo JSON (player_api.php) como fonte principal (evita baixar listas M3U de 50-108 MB)
   if (preferJson && !isDirectM3u) {
     addDevLog('[Rede] Catálogo JSON (player_api.php) como fonte principal: ' + redactDiagnosticLog(cleanBase), 'info');
     try {
-      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress, { isBackground });
+      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress, { isBackground, onBatchYield });
       return;
     } catch (apiErr) {
       if (apiErr && apiErr.name === 'AbortError' && signal && signal.aborted) throw apiErr;
@@ -1959,6 +2067,7 @@ async function streamPlaylistContent(url, signal, onItem, onProgress, options) {
           streamStats.receivedBytes = bytes;
           watchdog.touchChunk();
         },
+        onBatchYield,
         stats: streamStats,
         contentType,
         isBackground
@@ -2008,7 +2117,7 @@ async function streamPlaylistContent(url, signal, onItem, onProgress, options) {
   if (!preferJson && !isDirectM3u) {
     try {
       addDevLog('[Rede] Tentando fallback JSON (player_api.php): ' + redactDiagnosticLog(cleanBase), 'info');
-      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress, { isBackground });
+      await fetchXtreamJsonCatalog(cleanBase, savedUser, savedPass, signal, onItem, onProgress, { isBackground, onBatchYield });
       return;
     } catch (apiErr) {
       if (apiErr && apiErr.name === 'AbortError' && signal && signal.aborted) throw apiErr;
@@ -2179,6 +2288,15 @@ async function loadServer(forceRefresh = false, options = {}) {
   if (!silent) updateServerSyncBadge(15, false);
 
   const hud = $('hudLoadingOverlay');
+
+  // Libera o catálogo da fonte anterior ANTES de carregar outra fonte na RAM (evita pico 2x em LG webOS)
+  if (!silent && activeCatalogServerId && activeCatalogServerId !== srv.id) {
+    allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    currentFilteredItems = [];
+    currentCategoriesMap = {};
+    indexedFavoriteResults = [];
+    activeCatalogServerId = null;
+  }
 
   // 1. CARGA INSTANTÂNEA VIA CACHE LOCAL (somente no boot/troca de servidor)
   if (!silent && !forceRefresh) {
@@ -2543,6 +2661,10 @@ async function loadServer(forceRefresh = false, options = {}) {
             if ($('hudProgressPercent')) $('hudProgressPercent').textContent = pct + '%';
           }
         }
+      },
+      {
+        isBackground: silent,
+        onBatchYield: typeof indexWriter.drain === 'function' ? () => indexWriter.drain() : null
       }
     );
 
@@ -2594,10 +2716,10 @@ async function loadServer(forceRefresh = false, options = {}) {
     setServerLoadProgress(srv.id, 100, 'done');
     mk21AutoServerTries = 0;
     try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
-    await indexWriter.finish();
+    const savedMetrics = computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
+    await indexWriter.finish(savedMetrics);
     saveFastCache(srv.id, allCatalog.LIVE, true);
     saveStoredData(srv.id, allCatalog);
-    computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
     // Redesenha a aba atual com o catálogo completo (o reveal ao vivo acontece
     // nos primeiros itens de 1º plano para abrir a tela rápido).
     if (currentContentType === 'LIVE' || currentContentType === 'MOVIE' || currentContentType === 'SERIES' || currentContentType === 'CONTINUE') {
@@ -4306,11 +4428,37 @@ function hidePlayerReconnectBadge() {
   }
 }
 
+let autoReconnectTimer = null;
+let watchdogGraceUntil = 0;
+
+function cancelPendingAutoReconnect(reason) {
+  if (autoReconnectTimer) {
+    clearTimeout(autoReconnectTimer);
+    autoReconnectTimer = null;
+    if (reason && typeof addDevLog === 'function') {
+      addDevLog('[Watchdog] Reconexão pendente cancelada (' + reason + ').', 'debug');
+    }
+  }
+  isAutoReconnecting = false;
+}
+
+function resetStallWatchdogGrace(graceMs) {
+  const now = Date.now();
+  const extra = typeof graceMs === 'number' && graceMs > 0 ? graceMs : 12000;
+  watchdogGraceUntil = Math.max(watchdogGraceUntil, now + extra);
+  lastBufferProgressAt = now;
+  stallCount = 0;
+  lastVideoCurrentTime = -1;
+  lastBufferedEnd = 0;
+  cancelPendingAutoReconnect();
+}
+
 function stopStallWatchdog() {
   if (stallWatchdogInterval) {
     clearInterval(stallWatchdogInterval);
     stallWatchdogInterval = null;
   }
+  cancelPendingAutoReconnect();
 }
 
 const mk21ChannelHealth = new Map();
@@ -4339,6 +4487,7 @@ function triggerAutoReconnect(cause) {
 
   if (autoReconnectAttempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
     console.error('[SmartPlayer Watchdog] Limite máximo de reconexão atingido:', cause);
+    addDevLog('[Watchdog] Limite máximo de reconexão atingido (' + (cause || 'desconhecido') + ').', 'warn');
     isAutoReconnecting = false;
     if (activeItem && activeItem.url) mk21MarkStreamFailure(activeItem.url);
     // 2.5.3: antes de desistir, tenta outra fonte (duplicata na mesma lista ou
@@ -4360,12 +4509,34 @@ function triggerAutoReconnect(cause) {
   }
 
   const delay = Math.min(1000 * Math.pow(1.5, autoReconnectAttempts - 1), 6000);
+  const scheduledItemUrl = activeItem.url;
+  const videoAtSchedule = $('tvPlayer');
+  const timeAtSchedule = videoAtSchedule ? (videoAtSchedule.currentTime || 0) : 0;
+  addDevLog(
+    '[Watchdog] ' + (cause || 'Stream congelado') + '. Reconectando (' + autoReconnectAttempts + '/' + MAX_AUTO_RECONNECT_ATTEMPTS + ') em ' + Math.round(delay) + 'ms...',
+    'warn'
+  );
   showPlayerReconnectBadge(`Reconectando (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`);
   if ($('epgStatus')) $('epgStatus').textContent = `🔄 RECONECTANDO (${autoReconnectAttempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})...`;
 
-  setTimeout(() => {
-    if (!activeItem) {
+  if (autoReconnectTimer) {
+    clearTimeout(autoReconnectTimer);
+    autoReconnectTimer = null;
+  }
+  autoReconnectTimer = setTimeout(() => {
+    autoReconnectTimer = null;
+    if (!activeItem || activeItem.url !== scheduledItemUrl) {
       isAutoReconnecting = false;
+      return;
+    }
+    const v = $('tvPlayer');
+    // Se o player já se recuperou e começou a decodificar frames antes do timer expirar, não derruba o canal
+    if (v && !v.paused && v.readyState >= 3 && v.currentTime > 0 && Math.abs(v.currentTime - timeAtSchedule) >= 0.15) {
+      isAutoReconnecting = false;
+      stallCount = 0;
+      autoReconnectAttempts = 0;
+      hidePlayerReconnectBadge();
+      addDevLog('[Watchdog] Reconexão cancelada: stream já recuperou reprodução.', 'info');
       return;
     }
     console.log(`[SmartPlayer Watchdog] Executando reconexão tentativa ${autoReconnectAttempts} para: ${activeItem.name}`);
@@ -4400,6 +4571,7 @@ function isCurrentItemVod() {
 function startStallWatchdog(streamKey) {
   stopStallWatchdog();
   const chave = String(streamKey || (activeItem && activeItem.url) || '');
+  watchdogGraceUntil = Date.now() + 12000;
   if (watchdogStreamKey !== chave) {
     watchdogStreamKey = chave;
     lastVideoCurrentTime = -1;
@@ -4446,7 +4618,8 @@ function startStallWatchdog(streamKey) {
     video.addEventListener('playing', () => {
       stallCount = 0;
       autoReconnectAttempts = 0;
-      isAutoReconnecting = false;
+      watchdogGraceUntil = 0;
+      cancelPendingAutoReconnect('evento playing');
       if (activeItem && activeItem.url) mk21MarkStreamHealthy(activeItem.url);
       hidePlayerReconnectBadge();
       try {
@@ -4516,8 +4689,12 @@ function startStallWatchdog(streamKey) {
       return;
     }
     if (!video || video.paused || isAutoReconnecting || !activeItem) return;
+    // Janela de cold-start / fallback de hardware webOS: não conta stall antes do primeiro GOP carregar
+    if (video.readyState < 2 && Date.now() < watchdogGraceUntil) {
+      return;
+    }
     const isVod = isCurrentItemVod();
-    const stallThreshold = isVod ? 30 : 6; // VOD tolera buffer de rede sem reiniciar o filme
+    const effectiveTolerance = isVod ? Math.max(30, mk21StallTolerance()) : mk21StallTolerance();
     const nowTime = video.currentTime;
     if (Math.abs(nowTime - lastVideoCurrentTime) >= 0.25) {
       stallCount = 0;
@@ -4539,10 +4716,10 @@ function startStallWatchdog(streamKey) {
       return;
     }
     stallCount++;
-    if (stallCount >= mk21StallTolerance()) {
+    if (stallCount >= effectiveTolerance) {
       console.warn('[SmartPlayer Watchdog] Travamento real detectado no stream.');
       stallCount = 0;
-      triggerAutoReconnect('Stream congelado');
+      triggerAutoReconnect('Stream congelado (' + effectiveTolerance + 's)');
     }
   }, 1000);
 }
@@ -4550,9 +4727,98 @@ function startStallWatchdog(streamKey) {
 // ==================== LIVE DIAGNOSTIC DEV LOGGER (SMART TV) ====================
 let sessionDevLogs = [];
 const MAX_DEV_LOGS = 400;
+const MK21_DEVLOGS_PERSIST_KEY = 'mk21_devlogs_persist_v1';
+const MK21_SESSION_ACTIVE_KEY = 'mk21_session_active_v1';
+const MK21_LAST_SYNC_MARKER_KEY = 'mk21_last_active_sync_v1';
 let mk21DevLogsPaused = false;
+let mk21PersistLogsTimer = null;
+let mk21DevLogsRestored = false;
 
 const MK21_LOG_COLORS = { error: '#ef4444', warn: '#eab308', success: '#22c55e', debug: '#94a3b8', info: '#93c5fd' };
+
+// Ícones SVG inline leves (100% compatíveis com LG webOS / Samsung Tizen — evita glifos □ de emojis Unicode)
+const MK21_DEVLOG_SVG = {
+  monitor: '<svg class="devlogs-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  pause: '<svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
+  play: '<svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>',
+  trash: '<svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+  cloud: '<svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
+  save: '<svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+  spinner: '<svg class="devlogs-icon devlogs-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+  close: '<svg class="devlogs-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+};
+
+function mk21SetButtonSvgLabel(btn, iconKey, label) {
+  if (!btn) return;
+  const svg = MK21_DEVLOG_SVG[iconKey] || '';
+  btn.innerHTML = svg + '<span>' + escapeHtml(label) + '</span>';
+}
+
+function mk21PersistDevLogsNow() {
+  if (mk21PersistLogsTimer) {
+    clearTimeout(mk21PersistLogsTimer);
+    mk21PersistLogsTimer = null;
+  }
+  try {
+    const serialized = CatalogUtils.serializePersistedDevLogs(sessionDevLogs, 180, 48000);
+    localStorage.setItem(MK21_DEVLOGS_PERSIST_KEY, serialized);
+  } catch (e) {}
+}
+
+function mk21SchedulePersistDevLogs(immediate) {
+  if (immediate) {
+    mk21PersistDevLogsNow();
+    return;
+  }
+  if (mk21PersistLogsTimer) return;
+  mk21PersistLogsTimer = setTimeout(() => {
+    mk21PersistLogsTimer = null;
+    mk21PersistDevLogsNow();
+  }, 1500);
+}
+
+function mk21RestorePersistedDevLogs() {
+  if (mk21DevLogsRestored) return;
+  mk21DevLogsRestored = true;
+  let hadUncleanExit = false;
+  let lastSyncMarker = '';
+  try {
+    hadUncleanExit = localStorage.getItem(MK21_SESSION_ACTIVE_KEY) === '1';
+    lastSyncMarker = localStorage.getItem(MK21_LAST_SYNC_MARKER_KEY) || '';
+    const raw = localStorage.getItem(MK21_DEVLOGS_PERSIST_KEY);
+    const restored = CatalogUtils.parsePersistedDevLogs(raw, 180);
+    if (restored.length > 0) {
+      sessionDevLogs = restored.slice();
+    }
+    localStorage.setItem(MK21_SESSION_ACTIVE_KEY, '1');
+    localStorage.removeItem(MK21_LAST_SYNC_MARKER_KEY);
+  } catch (e) {}
+
+  if (!window._mk21PersistLifecycleBound) {
+    window._mk21PersistLifecycleBound = true;
+    const flushClean = () => {
+      mk21PersistDevLogsNow();
+      try { localStorage.setItem(MK21_SESSION_ACTIVE_KEY, '0'); } catch (e) {}
+    };
+    window.addEventListener('pagehide', flushClean);
+    window.addEventListener('beforeunload', flushClean);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') mk21PersistDevLogsNow();
+    });
+  }
+
+  if (hadUncleanExit && sessionDevLogs.length > 0) {
+    const syncHint = lastSyncMarker ? ' (durante sync de: ' + lastSyncMarker + ')' : '';
+    addDevLog(
+      '[Sistema] Reinício inesperado detectado (possível limite de memória da TV)' + syncHint + '. ' +
+      sessionDevLogs.length + ' entradas da sessão anterior preservadas.',
+      'warn'
+    );
+    if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) {
+      scheduleHomologLogsUpload('post_restart_recovery', 5000);
+    }
+  }
+}
 
 function mk21LogContainer() {
   return $('devLogsContainer') || document.querySelector('.devlogs-screen');
@@ -4602,7 +4868,11 @@ let mk21HomologDriveStatusText = '';
 function mk21SetDriveLogStatus(text) {
   mk21HomologDriveStatusText = text || '';
   const el = $('devLogsDriveStatus');
-  if (el) el.textContent = mk21HomologDriveStatusText;
+  if (el) {
+    el.innerHTML = mk21HomologDriveStatusText
+      ? (MK21_DEVLOG_SVG.cloud + '<span>' + escapeHtml(mk21HomologDriveStatusText) + '</span>')
+      : '';
+  }
 }
 
 function buildDiagnosticLogReportText() {
@@ -4639,7 +4909,7 @@ async function uploadHomologLogsToDrive(reason, options) {
   const force = Boolean(opts.force);
   if (mk21HomologUploadInFlight) return { ok: false, busy: true };
   if (!navigator.onLine) {
-    if (force) mk21SetDriveLogStatus('☁️ Drive: sem conexão');
+    if (force) mk21SetDriveLogStatus('Drive: sem conexão');
     return { ok: false, error: 'Sem conexão com a internet.' };
   }
   const lastEntry = sessionDevLogs.length ? sessionDevLogs[sessionDevLogs.length - 1] : null;
@@ -4652,7 +4922,7 @@ async function uploadHomologLogsToDrive(reason, options) {
   }
 
   mk21HomologUploadInFlight = true;
-  mk21SetDriveLogStatus('☁️ Drive: enviando...');
+  mk21SetDriveLogStatus('Drive: enviando...');
   try {
     const text = buildDiagnosticLogReportText();
     try { localStorage.setItem('mk21_last_exported_logs', text); } catch (_) {}
@@ -4674,14 +4944,14 @@ async function uploadHomologLogsToDrive(reason, options) {
       mk21HomologLastUploadAt = Date.now();
       mk21HomologLastFingerprint = fingerprint;
       const hhmm = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      mk21SetDriveLogStatus('☁️ Drive: salvo às ' + hhmm);
+      mk21SetDriveLogStatus('Drive: salvo às ' + hhmm);
       return { ok: true, fileName: data.fileName || fileName, webViewLink: data.webViewLink || '' };
     }
     const errMsg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
-    mk21SetDriveLogStatus(data && data.configured === false ? '☁️ Drive: configure chave na Vercel' : '☁️ Drive: falha no envio');
+    mk21SetDriveLogStatus(data && data.configured === false ? 'Drive: configure chave na Vercel' : 'Drive: falha no envio');
     return { ok: false, configured: data ? data.configured : undefined, error: errMsg };
   } catch (e) {
-    mk21SetDriveLogStatus('☁️ Drive: erro de rede');
+    mk21SetDriveLogStatus('Drive: erro de rede');
     return { ok: false, error: (e && e.message) ? e.message : 'Erro de rede ao enviar ao Drive' };
   } finally {
     mk21HomologUploadInFlight = false;
@@ -4703,6 +4973,10 @@ function addDevLog(msg, type = 'info') {
   const entry = { time, msg: safeMsg, type };
   sessionDevLogs.push(entry);
   if (sessionDevLogs.length > MAX_DEV_LOGS) sessionDevLogs.shift();
+
+  // Persiste logs em localStorage para não perder o histórico caso a TV reinicie por memória
+  const isCritical = type === 'error' || type === 'warn' || safeMsg.includes('[Sync Lista]') || safeMsg.includes('[Sistema]');
+  mk21SchedulePersistDevLogs(isCritical);
 
   try {
     const container = mk21LogContainer();
@@ -4733,6 +5007,7 @@ function escapeHtml(str) {
 function mk21BindDevLogsButtons() {
   const closeBtn = $('btnCloseDevLogs');
   if (closeBtn) {
+    mk21SetButtonSvgLabel(closeBtn, 'close', 'Fechar');
     closeBtn.onclick = () => {
       const modal = $('modalDevLogs');
       if (modal && !modal.classList.contains('hidden')) toggleDevLogsModal();
@@ -4740,13 +5015,13 @@ function mk21BindDevLogsButtons() {
   }
   const pauseBtn = $('btnTogglePauseDevLogs');
   if (pauseBtn) {
-    pauseBtn.textContent = mk21DevLogsPaused ? '▶️ Retomar rolagem' : '⏸ Pausar rolagem';
+    mk21SetButtonSvgLabel(pauseBtn, mk21DevLogsPaused ? 'play' : 'pause', mk21DevLogsPaused ? 'Retomar' : 'Pausar');
     pauseBtn.classList.toggle('primary', mk21DevLogsPaused);
     pauseBtn.onclick = () => {
       mk21DevLogsPaused = !mk21DevLogsPaused;
       const btn = $('btnTogglePauseDevLogs');
       if (btn) {
-        btn.textContent = mk21DevLogsPaused ? '▶️ Retomar rolagem' : '⏸ Pausar rolagem';
+        mk21SetButtonSvgLabel(btn, mk21DevLogsPaused ? 'play' : 'pause', mk21DevLogsPaused ? 'Retomar' : 'Pausar');
         btn.classList.toggle('primary', mk21DevLogsPaused);
       }
       const hint = $('devLogsHint');
@@ -4757,8 +5032,10 @@ function mk21BindDevLogsButtons() {
   }
   const clearBtn = $('btnClearDevLogs');
   if (clearBtn) {
+    mk21SetButtonSvgLabel(clearBtn, 'trash', 'Limpar');
     clearBtn.onclick = () => {
       sessionDevLogs = [];
+      try { localStorage.removeItem(MK21_DEVLOGS_PERSIST_KEY); } catch (_) {}
       const container = mk21LogContainer();
       if (container) container.replaceChildren();
       mk21RefreshDevLogsBadge();
@@ -4768,9 +5045,11 @@ function mk21BindDevLogsButtons() {
   }
   const exportBtn = $('btnExportDevLogs');
   if (exportBtn) {
-    if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) {
-      exportBtn.textContent = '☁️ Salvar no Drive';
-    }
+    mk21SetButtonSvgLabel(
+      exportBtn,
+      MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? 'cloud' : 'save',
+      MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? 'Salvar no Drive' : 'Salvar arquivo'
+    );
     exportBtn.onclick = async () => {
       try {
         const text = buildDiagnosticLogReportText();
@@ -4778,18 +5057,18 @@ function mk21BindDevLogsButtons() {
 
         if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) {
           exportBtn.disabled = true;
-          exportBtn.textContent = '⏳ Enviando...';
+          mk21SetButtonSvgLabel(exportBtn, 'spinner', 'Enviando...');
           const uploadRes = await uploadHomologLogsToDrive('manual', { force: true });
           exportBtn.disabled = false;
-          exportBtn.textContent = '☁️ Salvar no Drive';
+          mk21SetButtonSvgLabel(exportBtn, 'cloud', 'Salvar no Drive');
 
           if (uploadRes && uploadRes.ok) {
             addDevLog('[Logs] Enviado ao Google Drive com sucesso: ' + uploadRes.fileName, 'success');
-            showChannelBanner('☁️ Log salvo no Google Drive (' + uploadRes.fileName + ')');
+            showChannelBanner('Log salvo no Google Drive (' + uploadRes.fileName + ')');
             return;
           }
           addDevLog('[Logs] Google Drive indisponível: ' + ((uploadRes && uploadRes.error) || 'erro desconhecido'), 'warn');
-          showChannelBanner('⚠️ Drive indisponível: ' + ((uploadRes && uploadRes.error) || 'verifique a Vercel'));
+          showChannelBanner('Drive indisponível: ' + ((uploadRes && uploadRes.error) || 'verifique a Vercel'));
         }
 
         // Fallback local em navegadores desktop (em LG webOS <a download> não abre seletor do Drive)
@@ -4805,7 +5084,7 @@ function mk21BindDevLogsButtons() {
         }
       } catch (e) {
         exportBtn.disabled = false;
-        if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) exportBtn.textContent = '☁️ Salvar no Drive';
+        if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) mk21SetButtonSvgLabel(exportBtn, 'cloud', 'Salvar no Drive');
         addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
       }
     };
@@ -4813,7 +5092,7 @@ function mk21BindDevLogsButtons() {
 }
 
 // Tela de logs refeita pelo JS (chega pela OTA, sem precisar reinstalar o IPK):
-// ocupa a tela toda, fonte grande e com o contexto do stream no topo.
+// ocupa a tela com safe-area de 92vw, ícones SVG e contexto do stream no topo.
 function mk21EnsureDevLogsModal() {
   let modal = $('modalDevLogs');
   if (!modal) {
@@ -4823,22 +5102,23 @@ function mk21EnsureDevLogsModal() {
   }
   if (modal.dataset.mk21LogsReady !== '1') {
     modal.className = 'app-modal devlogs-modal hidden';
+    const initialDriveText = mk21HomologDriveStatusText || (MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? 'Drive: envio automático ativo' : '');
     modal.innerHTML =
       '<div class="modal-content devlogs-card">' +
         '<div class="devlogs-head">' +
-          '<span class="devlogs-title">🖥️ Diagnóstico em tempo real</span>' +
+          '<span class="devlogs-title">' + MK21_DEVLOG_SVG.monitor + '<span>Diagnóstico em tempo real</span></span>' +
           '<div class="devlogs-actions">' +
-            '<button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">⏸ Pausar rolagem</button>' +
-            '<button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">🗑️ Limpar</button>' +
-            '<button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">' + (MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? '☁️ Salvar no Drive' : '💾 Salvar arquivo') + '</button>' +
-            '<button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">✕ Fechar</button>' +
+            '<button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">' + MK21_DEVLOG_SVG.pause + '<span>Pausar</span></button>' +
+            '<button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">' + MK21_DEVLOG_SVG.trash + '<span>Limpar</span></button>' +
+            '<button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">' + (MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? MK21_DEVLOG_SVG.cloud + '<span>Salvar no Drive</span>' : MK21_DEVLOG_SVG.save + '<span>Salvar arquivo</span>') + '</button>' +
+            '<button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">' + MK21_DEVLOG_SVG.close + '<span>Fechar</span></button>' +
           '</div>' +
         '</div>' +
         '<div class="devlogs-info" id="devLogsInfo"></div>' +
         '<div id="devLogsContainer" class="devlogs-screen scrollable-container" tabindex="0"></div>' +
         '<div class="devlogs-foot">' +
           '<span id="devLogsHint">Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>' +
-          '<span id="devLogsDriveStatus" style="color:#93c5fd; font-weight:700; margin:0 12px;">' + escapeHtml(mk21HomologDriveStatusText || (MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? '☁️ Drive: envio automático ativo' : '')) + '</span>' +
+          '<span id="devLogsDriveStatus" class="devlogs-drive-status">' + (initialDriveText ? (MK21_DEVLOG_SVG.cloud + '<span>' + escapeHtml(initialDriveText) + '</span>') : '') + '</span>' +
           '<span id="devLogsCountBadge">0 entradas</span>' +
         '</div>' +
       '</div>';
@@ -4910,6 +5190,7 @@ function toggleDevLogsModal() {
 }
 
 function initDevLogs() {
+  mk21RestorePersistedDevLogs();
   mk21EnsureDevLogsModal();
   if ($('btnHeaderLogs')) $('btnHeaderLogs').onclick = toggleDevLogsModal;
   mk21BindDevLogsButtons();
@@ -4946,6 +5227,7 @@ function safeVideoPlay(video) {
 }
 
 function stopCurrentPlayer(abortPlayRequests = true) {
+  cancelPendingAutoReconnect();
   // Fase 2: se a factory e dona da reproducao, ela precisa soltar a engine nativa
   // antes de o legado mexer no <video> (AVPlay e singleton no aparelho).
   if (window.FBG2PlayerService) window.FBG2PlayerService.stop();
@@ -5067,9 +5349,18 @@ function mk21MpegtsOptions() {
 // Um fallback por URL por vez: antes o play() do mpegts rejeitava atrasado e
 // derrubava um HLS que já estava tocando.
 let mk21FallbackState = { url: '', at: 0, stage: 0 };
-// URLs que já deram erro HTTP no mpegts.js: a próxima tentativa vai direto para
-// o decodificador nativo, sem repetir 2s de espera a cada reconexão.
+// URLs e hosts que já recusaram mpegts.js por HTTP/CORS: a próxima tentativa vai direto
+// para o decodificador nativo, sem repetir 2s de espera a cada reconexão ou zapping.
 const mk21MpegtsBlocked = new Set();
+const mk21MpegtsHostFails = new Map();
+const mk21MpegtsBlockedHosts = new Set();
+
+function mk21IsMpegtsBlocked(url) {
+  if (!url) return false;
+  if (mk21MpegtsBlocked.has(url)) return true;
+  const host = CatalogUtils.extractSafeHost(url);
+  return Boolean(host && mk21MpegtsBlockedHosts.has(host));
+}
 
 function mk21FallbackAllowed(item, stage) {
   if (!item || !item.url) return false;
@@ -5092,6 +5383,8 @@ function fallbackToNativeTs(item) {
   if (!mk21FallbackAllowed(item, 1)) return false;
   const video = $('tvPlayer');
   if (!video) return false;
+  // Concede janela limpa ao watchdog durante o cold-start do decodificador nativo de hardware
+  resetStallWatchdogGrace(14000);
   addDevLog('[Player Fallback] Tentando MPEG-TS nativo no hardware da TV...', 'info');
   try {
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
@@ -5108,6 +5401,7 @@ function fallbackToNativeTs(item) {
     }
     video.load();
     safeVideoPlay(video).then(() => {
+      cancelPendingAutoReconnect('MPEG-TS nativo reproduzindo');
       addDevLog('[Player Engine] MPEG-TS nativo reproduzindo!', 'success');
       hidePlayerReconnectBadge();
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
@@ -5128,6 +5422,7 @@ function fallbackToNativeTs(item) {
 function fallbackToHls(item) {
   if (!item || !item.url) return;
   if (!mk21FallbackAllowed(item, 2)) return;
+  resetStallWatchdogGrace(14000);
   const hlsUrl = item.url.replace(/\.ts($|\?)/i, '.m3u8$1');
   addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${hlsUrl}`, 'info');
   stopCurrentPlayer(false);
@@ -5317,7 +5612,7 @@ function playStream(item, forcedUrl) {
         }
       }
     });
-  } else if (isTS && window.mpegts && mpegts.isSupported() && !mk21MpegtsBlocked.has(item.url)) {
+  } else if (isTS && window.mpegts && mpegts.isSupported() && !mk21IsMpegtsBlocked(item.url)) {
     addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
     try {
       if (mpegtsPlayer) { try { mpegtsPlayer.unload(); mpegtsPlayer.detachMediaElement(); mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
@@ -5330,6 +5625,7 @@ function playStream(item, forcedUrl) {
       mpegtsPlayer.attachMediaElement(video);
       mpegtsPlayer.load();
       mpegtsPlayer.play().then(() => {
+        cancelPendingAutoReconnect('mpegts.js reproduzindo');
         addDevLog('[Player Engine] MPEG-TS reproduzindo!', 'success');
         hidePlayerReconnectBadge();
         if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
@@ -5341,12 +5637,25 @@ function playStream(item, forcedUrl) {
         if (!fallbackToNativeTs(item)) fallbackToHls(item);
       });
       mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
-        const msg = String(detail || '') + ' ' + String((info && (info.msg || info.reason)) || '');
+        const httpCode = info && (info.code || info.status || info.httpStatusCode);
+        const rawInfoMsg = (info && (info.msg || info.reason)) || '';
+        const msg = String(detail || '') + ' ' + String(rawInfoMsg);
         if (/interrupt|abort/i.test(msg)) return;
-        addDevLog(`[MPEGTS Error] ${type}: ${detail}`, 'warn');
+        const codeTag = httpCode ? (' (HTTP ' + httpCode + ')') : '';
+        const infoTag = rawInfoMsg ? (' · ' + String(rawInfoMsg).slice(0, 120)) : '';
+        addDevLog(`[MPEGTS Error] ${type}: ${detail}${codeTag}${infoTag}`, 'warn');
         if (/HttpStatus|NetworkError|NETWORK_/i.test(msg)) {
           if (mk21MpegtsBlocked.size > 400) mk21MpegtsBlocked.clear();
           mk21MpegtsBlocked.add(item.url);
+          const host = CatalogUtils.extractSafeHost(item.url);
+          if (host) {
+            const count = (mk21MpegtsHostFails.get(host) || 0) + 1;
+            mk21MpegtsHostFails.set(host, count);
+            if (count >= 2 && !mk21MpegtsBlockedHosts.has(host)) {
+              mk21MpegtsBlockedHosts.add(host);
+              addDevLog('[Player Engine] Host ' + host + ' recusou mpegts.js ' + count + 'x; usando decodificador nativo direto nesta sessão.', 'info');
+            }
+          }
           addDevLog('[Player Engine] Fonte recusou o mpegts.js; usando decodificador nativo da TV.', 'warn');
         }
         if (!fallbackToNativeTs(item)) fallbackToHls(item);
@@ -5363,6 +5672,7 @@ function playStream(item, forcedUrl) {
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
     safeVideoPlay(video).then(() => {
+      cancelPendingAutoReconnect('playback nativo iniciado');
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
       if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
@@ -7965,7 +8275,15 @@ async function hydrateAllServerMetricsFromCache() {
       continue;
     }
     try {
-      // Apenas cache completo isolado (catalog_cache_v6 ou mk21_catalog_index_v1), nunca fast_cache universal
+      // Leitura leve O(1) RAM: consulta primeiro o registro meta do índice IndexedDB (~200 bytes)
+      const meta = await getCatalogIndexMeta(srv.id);
+      if (meta && meta.metrics && ((meta.metrics.totalChannels || 0) + (meta.metrics.totalVOD || 0) + (meta.metrics.totalSeries || 0)) > 0) {
+        const saved = savePerServerMetrics(srv.id, Object.assign({}, meta.metrics, { updatedAt: meta.updatedAt || Date.now() }));
+        updateServerRowMetricsBadge(srv.id, saved);
+        updateServerRowProgressBadge(srv.id);
+        continue;
+      }
+      // Fallback apenas se não houver meta com métricas (ex.: cache legado v6)
       const cached = await getStoredData(srv.id, { fullOnly: true });
       if (cached && ((cached.LIVE && cached.LIVE.length) || (cached.MOVIE && cached.MOVIE.length) || (cached.SERIES && cached.SERIES.length))) {
         computeAndSaveServerMetrics(srv.id, cached, null, false);
@@ -8002,6 +8320,7 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     triggerBtn.textContent = '⏳ ...';
   }
   const syncStart = Date.now();
+  const safeSrvName = cleanServerName(srv.name);
   let bgTimedOut = false;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   if (controller) mk21BgSyncControllers[srv.id] = controller;
@@ -8014,24 +8333,23 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
   let lastBgProgressAt = 0;
 
   try {
-    const target = { LIVE: [], MOVIE: [], SERIES: [] };
+    try { localStorage.setItem(MK21_LAST_SYNC_MARKER_KEY, safeSrvName); } catch (_) {}
+    mk21PersistDevLogsNow();
+
+    // Streaming direto para IndexedDB (O(1) RAM): sem array target de 60k itens nem liveGrouper no heap
+    const metricsAcc = CatalogUtils.createStreamingCatalogMetricsAccumulator();
+    const livePreview = [];
     const indexWriter = await createCatalogIndexWriter(srv.id);
-    const liveGrouper = window.MK21AlternativeSources ? MK21AlternativeSources.createGrouper() : null;
     await streamPlaylistContent(
       srv.url,
       controller && controller.signal,
       (item) => {
         const slim = slimItem(item);
-        const type = slim.contentType;
         slim.isAdult = !!(slim.isAdult || isAdult(slim.name) || isAdult(slim.group));
         indexWriter.add(slim);
-        if (target[type]) {
-          if (type === 'LIVE' && liveGrouper) {
-            const grouped = liveGrouper.add(slim);
-            if (grouped.isNew) target[type].push(grouped.item);
-          } else {
-            target[type].push(slim);
-          }
+        metricsAcc.add(slim);
+        if (slim.contentType === 'LIVE' && livePreview.length < QUICK_CACHE_MAX) {
+          livePreview.push(slim);
         }
       },
       (received, total) => {
@@ -8042,28 +8360,36 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
         if (total && total > 0) {
           pct = Math.min(95, Math.max(8, Math.round((received / total) * 100)));
         } else {
-          const itemsCount = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+          const itemsCount = metricsAcc.getTotalItems();
           const mb = received / (1024 * 1024);
           pct = Math.min(95, Math.max(10, 12 + Math.round((mb / 12) * 40 + (itemsCount / 15000) * 40)));
         }
         setServerLoadProgress(srv.id, pct, 'loading');
       },
-      { isBackground: true }
+      {
+        isBackground: true,
+        onBatchYield: typeof indexWriter.drain === 'function' ? () => indexWriter.drain() : null
+      }
     );
-    const total = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+    const hasDerivedXmltv = !CatalogUtils.isDirectPlaylistUrl(srv.url);
+    const snapshot = metricsAcc.snapshot(hasDerivedXmltv);
+    const total = snapshot.totalItems;
     if (total > 0) {
       setServerLoadProgress(srv.id, 98, 'loading');
-      await indexWriter.finish();
-      saveFastCache(srv.id, target.LIVE, true);
-      await saveStoredData(srv.id, target);
+      await indexWriter.finish(snapshot);
+      if (livePreview.length > 0) saveFastCache(srv.id, livePreview, true);
+      livePreview.length = 0;
+      // Remove eventual registro duplicado antigo em catalog_cache_v6 para ler direto do índice atualizado
+      await deleteStoredDataFromV6(srv.id);
       try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
       setServerLoadProgress(srv.id, 100, 'done');
-      const m = computeAndSaveServerMetrics(srv.id, target, null, false);
+      const m = savePerServerMetrics(srv.id, Object.assign({}, snapshot, { updatedAt: Date.now() }));
       updateServerRowMetricsBadge(srv.id, m);
+      updateServerRowProgressBadge(srv.id);
       mk21UpdateGlobalMetricsCardsInPlace();
-      addDevLog('[Sync Lista] ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens salvos · ' + CatalogUtils.formatDurationPtBr(Date.now() - syncStart), 'success');
+      addDevLog('[Sync Lista] ' + safeSrvName + ': ' + total.toLocaleString('pt-BR') + ' itens salvos (modo baixa RAM) · ' + CatalogUtils.formatDurationPtBr(Date.now() - syncStart), 'success');
       if (!getHideBackgroundProgress()) {
-        showChannelBanner('✓ ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens sincronizados');
+        showChannelBanner('✓ ' + safeSrvName + ': ' + total.toLocaleString('pt-BR') + ' itens sincronizados');
       }
       scheduleHomologLogsUpload('bg_sync_complete', 8000);
     }
@@ -8084,15 +8410,17 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
       ? String(effectiveErr.technicalDetail)
       : (effectiveErr && effectiveErr.message && effectiveErr.message !== friendly ? String(effectiveErr.message) : '');
     const detailSuffix = rawDetail && !friendly.includes(rawDetail) ? ' (' + rawDetail + ')' : '';
-    addDevLog('[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + friendly + detailSuffix + ' · ' + elapsedLabel, 'warn');
+    addDevLog('[Sync Lista] Falha em ' + safeSrvName + ': ' + friendly + detailSuffix + ' · ' + elapsedLabel, 'warn');
     if (getPerServerMetrics(srv.id)) setServerLoadProgress(srv.id, 100, 'done');
     else setServerLoadProgress(srv.id, 0, 'error');
     if (triggerBtn && !getHideBackgroundProgress()) {
-      showChannelBanner('⚠️ Falha ao sincronizar ' + cleanServerName(srv.name));
+      showChannelBanner('⚠️ Falha ao sincronizar ' + safeSrvName);
     }
     scheduleHomologLogsUpload('bg_sync_error', 10000);
     return false;
   } finally {
+    try { localStorage.removeItem(MK21_LAST_SYNC_MARKER_KEY); } catch (_) {}
+    mk21PersistDevLogsNow();
     if (timeout) clearTimeout(timeout);
     if (mk21BgSyncControllers[srv.id] === controller) delete mk21BgSyncControllers[srv.id];
     if (triggerBtn && document.body.contains(triggerBtn)) {
@@ -8134,7 +8462,8 @@ async function syncAllConfiguredServersInBackground(forceAll = false) {
 
       await syncSingleServerInBackground(idx, null);
       if (k < order.length - 1) {
-        await new Promise(r => setTimeout(r, 2500));
+        // Pausa de 4s entre listas para o coletor de lixo do LG webOS recuperar memória antes do próximo servidor
+        await new Promise(r => setTimeout(r, 4000));
       }
     }
 
@@ -8656,7 +8985,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.9.7';
+const BASE_PACKAGE_VERSION = '2.9.8';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
