@@ -4215,6 +4215,41 @@ div[style*="overflow"], .pane-scroll, .list-container,
   flex-wrap: wrap;
 }
 
+.server-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 2px 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.server-progress-pill.is-done {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.50);
+  color: #4ade80;
+}
+
+.server-progress-pill.is-loading {
+  background: rgba(250, 204, 21, 0.18);
+  border-color: rgba(250, 204, 21, 0.55);
+  color: #ffd54f;
+}
+
+.server-progress-pill.is-error {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.50);
+  color: #f87171;
+}
+
 .server-info-name {
   font-size: 16px;
   font-weight: 800;

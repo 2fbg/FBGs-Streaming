@@ -321,6 +321,131 @@ function formatFriendlyLoadError(err) {
   return msg;
 }
 
+function isPollutedLegacyFastCacheMetrics(metrics, lastSyncMs, isActiveServer) {
+  if (!metrics || typeof metrics !== 'object') return false;
+  if (isActiveServer) return false;
+  if (Number(lastSyncMs) > 0) return false;
+  const ch = Number(metrics.totalChannels) || 0;
+  const vod = Number(metrics.totalVOD) || 0;
+  const ser = Number(metrics.totalSeries) || 0;
+  return ch === 400 && vod === 0 && ser === 0;
+}
+
+function computeGlobalServersMetrics(servers, perServerMetricsMap, activeServerId, activeCatalogMetrics, lastSyncMap) {
+  const list = Array.isArray(servers) ? servers : [];
+  const metricsMap = perServerMetricsMap && typeof perServerMetricsMap === 'object' ? perServerMetricsMap : {};
+  const syncMap = lastSyncMap && typeof lastSyncMap === 'object' ? lastSyncMap : {};
+  const seen = new Set();
+
+  let totalChannels = 0;
+  let totalVOD = 0;
+  let totalSeries = 0;
+  let totalGroups = 0;
+  let totalEPG = 0;
+  let syncedServers = 0;
+
+  for (let i = 0; i < list.length; i++) {
+    const srv = list[i];
+    if (!srv || !srv.id || seen.has(srv.id)) continue;
+    seen.add(srv.id);
+
+    const isActive = Boolean(activeServerId && srv.id === activeServerId);
+    const stored = metricsMap[srv.id] || null;
+    const lastSync = Number(syncMap[srv.id]) || 0;
+    const storedClean = (stored && !isPollutedLegacyFastCacheMetrics(stored, lastSync, isActive)) ? stored : null;
+
+    let chosen = storedClean;
+    if (isActive && activeCatalogMetrics && Number(activeCatalogMetrics.totalItems) > 0) {
+      const storedTotal = storedClean ? (Number(storedClean.totalChannels || 0) + Number(storedClean.totalVOD || 0) + Number(storedClean.totalSeries || 0)) : 0;
+      const activeTotal = Number(activeCatalogMetrics.totalChannels || 0) + Number(activeCatalogMetrics.totalVOD || 0) + Number(activeCatalogMetrics.totalSeries || 0);
+      chosen = activeTotal >= storedTotal ? activeCatalogMetrics : storedClean;
+    }
+
+    if (!chosen) continue;
+    const ch = Math.max(0, Number(chosen.totalChannels) || 0);
+    const vod = Math.max(0, Number(chosen.totalVOD) || 0);
+    const ser = Math.max(0, Number(chosen.totalSeries) || 0);
+    if ((ch + vod + ser) <= 0) continue;
+
+    totalChannels += ch;
+    totalVOD += vod;
+    totalSeries += ser;
+    totalGroups += Math.max(0, Number(chosen.totalGroups) || 0);
+    totalEPG += Math.max(0, Number(chosen.totalEPG) || 0);
+    syncedServers++;
+  }
+
+  return {
+    totalChannels,
+    totalVOD,
+    totalSeries,
+    totalGroups,
+    totalEPG,
+    totalItems: totalChannels + totalVOD + totalSeries,
+    syncedServers,
+    totalServers: seen.size
+  };
+}
+
+function computeServerLoadPercentage(serverId, progressMap, perServerMetrics, lastSyncMs, isActiveServer) {
+  const entry = (progressMap && serverId && progressMap[serverId]) ? progressMap[serverId] : null;
+  if (entry && entry.status === 'loading') {
+    const pct = Math.max(1, Math.min(99, Math.round(Number(entry.percent) || 1)));
+    return { percent: pct, status: 'loading', label: pct + '%' };
+  }
+
+  const syncTs = Number(lastSyncMs) || 0;
+  const cleanMetrics = (perServerMetrics && !isPollutedLegacyFastCacheMetrics(perServerMetrics, syncTs, Boolean(isActiveServer)))
+    ? perServerMetrics
+    : null;
+  const hasCachedData = Boolean(
+    (cleanMetrics && ((Number(cleanMetrics.totalChannels) || 0) + (Number(cleanMetrics.totalVOD) || 0) + (Number(cleanMetrics.totalSeries) || 0)) > 0) ||
+    syncTs > 0 ||
+    (entry && entry.status === 'done')
+  );
+
+  if (hasCachedData) {
+    return { percent: 100, status: 'done', label: '100%' };
+  }
+  if (entry && entry.status === 'error') {
+    return { percent: 0, status: 'error', label: '0%' };
+  }
+  return { percent: 0, status: 'idle', label: '0%' };
+}
+
+function decideCachedServerSwitch(cacheStats, lastSyncMs, bgSyncFrequency, nowMs) {
+  const stats = cacheStats || {};
+  const liveCount = Math.max(0, Number(stats.liveCount) || 0);
+  const vodCount = Math.max(0, Number(stats.vodCount) || 0);
+  const seriesCount = Math.max(0, Number(stats.seriesCount) || 0);
+  const totalCount = liveCount + vodCount + seriesCount;
+  const fromFullStore = Boolean(stats.fromFullStore);
+
+  if (totalCount <= 0) {
+    return { useCacheImmediately: false, isFullCache: false, shouldBackgroundRefresh: true };
+  }
+
+  const isFullCache = fromFullStore || (vodCount + seriesCount) > 0;
+  const now = typeof nowMs === 'number' && Number.isFinite(nowMs) ? nowMs : Date.now();
+  const lastSync = Number(lastSyncMs) || 0;
+
+  if (!isFullCache) {
+    return { useCacheImmediately: true, isFullCache: false, shouldBackgroundRefresh: true };
+  }
+
+  // Se o servidor já concluiu sincronização completa recentemente (ex.: em 2º plano),
+  // nunca dispara novo download ao selecioná-lo — respeita a frequência configurada e janela de 30 min.
+  const recentlySynced = lastSync > 0 && (now - lastSync) < 30 * 60 * 1000;
+  const freqNeedsSync = lastSync <= 0 ? false : shouldSyncServer(lastSync, bgSyncFrequency, now);
+  const shouldBackgroundRefresh = !recentlySynced && freqNeedsSync;
+
+  return {
+    useCacheImmediately: true,
+    isFullCache: true,
+    shouldBackgroundRefresh
+  };
+}
+
 module.exports = {
   BG_SYNC_INTERVALS_MS,
   BG_SYNC_LABELS,
@@ -329,6 +454,10 @@ module.exports = {
   getBgSyncIntervalMs,
   shouldSyncServer,
   computeCatalogMetrics,
+  isPollutedLegacyFastCacheMetrics,
+  computeGlobalServersMetrics,
+  computeServerLoadPercentage,
+  decideCachedServerSwitch,
   parseSafeJsonResponse,
   normalizeCatalogMode,
   isDirectPlaylistUrl,

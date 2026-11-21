@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.9.6 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.9.7 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -332,6 +332,7 @@ function saveFastCache(id, liveItems, force) {
 }
 
 function getFastCache(id) {
+  if (!id) return null;
   const readEntry = (key) => {
     try {
       const raw = localStorage.getItem(key);
@@ -346,33 +347,94 @@ function getFastCache(id) {
       };
     } catch (e) { return null; }
   };
-  const entry = readEntry('mk21_fast_cache_' + id) || readEntry('mk21_fast_cache_universal');
-  if (entry) return { LIVE: entry.items, MOVIE: [], SERIES: [], _totalLive: entry.total, _updatedAt: entry.updatedAt };
+  // Isolamento estrito por servidor: nunca reutiliza mk21_fast_cache_universal de outra fonte.
+  const entry = readEntry('mk21_fast_cache_' + id);
+  if (entry) return { LIVE: entry.items, MOVIE: [], SERIES: [], _totalLive: entry.total, _updatedAt: entry.updatedAt, _fromFullCache: false };
   return null;
 }
 
-async function getStoredData(id) {
-  // 1. Cache completo no IndexedDB (LIVE + FILMES + SERIES)
+async function getStoredDataFromCatalogIndex(serverId) {
+  if (!serverId) return null;
+  const meta = await getCatalogIndexMeta(serverId);
+  if (!meta || !(Number(meta.itemCount) > 0)) return null;
+  const db = await openCatalogIndexDb();
+  if (!db) return null;
+  const readByType = (type) => new Promise(resolve => {
+    try {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
+      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
+      const range = IDBKeyRange.only([serverId, type]);
+      if (typeof index.getAll === 'function') {
+        const req = index.getAll(range);
+        req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+        req.onerror = () => resolve([]);
+      } else {
+        const items = [];
+        const req = index.openCursor(range);
+        req.onsuccess = e => {
+          const cursor = e.target.result;
+          if (!cursor) return;
+          items.push(cursor.value);
+          cursor.continue();
+        };
+        tx.oncomplete = () => resolve(items);
+        tx.onerror = () => resolve(items);
+      }
+    } catch (e) { resolve([]); }
+  });
+  try {
+    const [liveItems, movieItems, seriesItems] = await Promise.all([
+      readByType('LIVE'),
+      readByType('MOVIE'),
+      readByType('SERIES')
+    ]);
+    if ((liveItems.length + movieItems.length + seriesItems.length) === 0) return null;
+    liveItems.forEach(normalizeCachedItem);
+    movieItems.forEach(normalizeCachedItem);
+    seriesItems.forEach(normalizeCachedItem);
+    return {
+      LIVE: liveItems,
+      MOVIE: movieItems,
+      SERIES: seriesItems,
+      _updatedAt: meta.updatedAt || Date.now(),
+      _fromFullCache: true
+    };
+  } catch (e) {
+    return null;
+  } finally {
+    try { db.close(); } catch (e) {}
+  }
+}
+
+async function getStoredData(id, options) {
+  const fullOnly = Boolean(options && options.fullOnly);
+  // 1. Cache completo no IndexedDB (catalog_cache_v6 — listas até 40k itens)
   try {
     const db = await openDB();
     if (db) {
-      const payload = await new Promise(res => {
+      const record = await new Promise(res => {
         const tx = db.transaction(STORE_NAME, 'readonly');
         const req = tx.objectStore(STORE_NAME).get(id);
-        req.onsuccess = () => res(req.result ? req.result.payload : null);
+        req.onsuccess = () => res(req.result || null);
         req.onerror = () => res(null);
       });
       try { db.close(); } catch (e) {}
-      if (payload && payload.LIVE && payload.LIVE.length > 0) {
-        payload.LIVE.forEach(normalizeCachedItem);
+      const payload = record ? record.payload : null;
+      if (payload && ((payload.LIVE && payload.LIVE.length > 0) || (payload.MOVIE && payload.MOVIE.length > 0) || (payload.SERIES && payload.SERIES.length > 0))) {
+        (payload.LIVE || []).forEach(normalizeCachedItem);
         (payload.MOVIE || []).forEach(normalizeCachedItem);
         (payload.SERIES || []).forEach(normalizeCachedItem);
-        payload._updatedAt = Date.now();
+        payload._updatedAt = (record && record.updatedAt) || Date.now();
+        payload._fromFullCache = true;
         return payload;
       }
     }
   } catch (e) {}
-  // 2. Cache rápido de canais ao vivo (localStorage)
+  // 2. Índice completo persistente no IndexedDB (mk21_catalog_index_v1 — listas > 40k itens, ex.: TANNIX/MK21 PRÓ)
+  const indexed = await getStoredDataFromCatalogIndex(id);
+  if (indexed) return indexed;
+  // 3. Cache rápido de canais ao vivo (localStorage, isolado por servidor)
+  if (fullOnly) return null;
   return getFastCache(id);
 }
 
@@ -784,14 +846,40 @@ function getStagedLoadingSummary(prefs) {
   return '1º Plano: ' + names.join(', ');
 }
 
+let activeCatalogServerId = null;
+const mk21ServerProgressMap = Object.create(null);
+const mk21BgSyncControllers = Object.create(null);
+
+function getServerLastSyncTs(serverId) {
+  if (!serverId) return 0;
+  try {
+    return parseInt(localStorage.getItem('mk21_last_sync_' + serverId) || '0', 10) || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 function getPerServerMetrics(serverId) {
   if (!serverId) return null;
-  if (mk21ServerMetricsCache[serverId]) return mk21ServerMetricsCache[serverId];
+  const lastSync = getServerLastSyncTs(serverId);
+  const isActiveLoaded = Boolean(activeCatalogServerId && activeCatalogServerId === serverId);
+  if (mk21ServerMetricsCache[serverId]) {
+    if (CatalogUtils.isPollutedLegacyFastCacheMetrics(mk21ServerMetricsCache[serverId], lastSync, isActiveLoaded)) {
+      delete mk21ServerMetricsCache[serverId];
+      try { localStorage.removeItem(MK21_SRV_METRICS_PREFIX + serverId); } catch (e) {}
+      return null;
+    }
+    return mk21ServerMetricsCache[serverId];
+  }
   try {
     const raw = localStorage.getItem(MK21_SRV_METRICS_PREFIX + serverId);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
+      if (CatalogUtils.isPollutedLegacyFastCacheMetrics(parsed, lastSync, isActiveLoaded)) {
+        try { localStorage.removeItem(MK21_SRV_METRICS_PREFIX + serverId); } catch (e) {}
+        return null;
+      }
       mk21ServerMetricsCache[serverId] = parsed;
       return parsed;
     }
@@ -825,12 +913,98 @@ function computeAndSaveServerMetrics(serverId, catalogObj, epgObj, hasXmltv) {
   if (typeof updateServerRowMetricsBadge === 'function') {
     updateServerRowMetricsBadge(serverId, saved);
   }
+  if (typeof updateServerRowProgressBadge === 'function') {
+    updateServerRowProgressBadge(serverId);
+  }
+  if (typeof mk21UpdateGlobalMetricsCardsInPlace === 'function') {
+    mk21UpdateGlobalMetricsCardsInPlace();
+  }
   return saved;
 }
 
 function getCatalogMetricsSnapshot() {
   const epgObj = (typeof epgCache !== 'undefined' && epgCache) ? epgCache : null;
   return CatalogUtils.computeCatalogMetrics(allCatalog, epgObj, Boolean(window.serverXmltvUrl));
+}
+
+function getGlobalCatalogMetricsSnapshot() {
+  const perMap = Object.create(null);
+  const syncMap = Object.create(null);
+  for (let i = 0; i < SERVERS.length; i++) {
+    const srv = SERVERS[i];
+    if (!srv || !srv.id) continue;
+    perMap[srv.id] = getPerServerMetrics(srv.id);
+    syncMap[srv.id] = getServerLastSyncTs(srv.id);
+  }
+  const activeMetrics = activeCatalogServerId ? getCatalogMetricsSnapshot() : null;
+  return CatalogUtils.computeGlobalServersMetrics(SERVERS, perMap, activeCatalogServerId, activeMetrics, syncMap);
+}
+
+function getServerProgressState(serverId) {
+  if (!serverId) return { percent: 0, status: 'idle', label: '0%' };
+  const isActiveLoaded = Boolean(activeCatalogServerId && activeCatalogServerId === serverId);
+  const srvMetrics = isActiveLoaded && getCatalogMetricsSnapshot().totalItems > 0
+    ? getCatalogMetricsSnapshot()
+    : getPerServerMetrics(serverId);
+  return CatalogUtils.computeServerLoadPercentage(
+    serverId,
+    mk21ServerProgressMap,
+    srvMetrics,
+    getServerLastSyncTs(serverId),
+    isActiveLoaded
+  );
+}
+
+function buildServerProgressBadgeHtml(serverId) {
+  const st = getServerProgressState(serverId);
+  const cls = st.status === 'done'
+    ? 'is-done'
+    : (st.status === 'loading' ? 'is-loading' : (st.status === 'error' ? 'is-error' : 'is-idle'));
+  return `<span class="server-progress-pill ${cls}" data-srv-progress-id="${escapeHtml(serverId)}">${escapeHtml(st.label)}</span>`;
+}
+
+function updateServerRowProgressBadge(serverId) {
+  if (!serverId) return;
+  const st = getServerProgressState(serverId);
+  const cls = st.status === 'done'
+    ? 'is-done'
+    : (st.status === 'loading' ? 'is-loading' : (st.status === 'error' ? 'is-error' : 'is-idle'));
+  document.querySelectorAll(`[data-srv-progress-id="${serverId}"]`).forEach(el => {
+    el.textContent = st.label;
+    el.className = 'server-progress-pill ' + cls;
+  });
+}
+
+function setServerLoadProgress(serverId, percent, status) {
+  if (!serverId) return;
+  const cleanPct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  mk21ServerProgressMap[serverId] = {
+    percent: cleanPct,
+    status: status || (cleanPct >= 100 ? 'done' : (cleanPct > 0 ? 'loading' : 'idle')),
+    updatedAt: Date.now()
+  };
+  updateServerRowProgressBadge(serverId);
+}
+
+function mk21UpdateGlobalMetricsCardsInPlace() {
+  const globalMetrics = getGlobalCatalogMetricsSnapshot();
+  const chStr = globalMetrics.totalChannels.toLocaleString('pt-BR');
+  const vodStr = globalMetrics.totalVOD.toLocaleString('pt-BR');
+  const serStr = globalMetrics.totalSeries.toLocaleString('pt-BR');
+  const epgStr = globalMetrics.totalEPG > 0
+    ? (globalMetrics.totalEPG.toLocaleString('pt-BR') + ' EPG')
+    : (globalMetrics.totalGroups.toLocaleString('pt-BR') + ' grupos');
+  const epgNumStr = (globalMetrics.totalEPG || globalMetrics.totalGroups).toLocaleString('pt-BR');
+
+  if ($('metricTotalChannels')) $('metricTotalChannels').textContent = chStr;
+  if ($('metricTotalVod')) $('metricTotalVod').textContent = vodStr;
+  if ($('metricTotalSeries')) $('metricTotalSeries').textContent = serStr;
+  if ($('metricTotalEpg')) $('metricTotalEpg').textContent = epgStr;
+
+  document.querySelectorAll('[data-global-metric="channels"]').forEach(el => { el.textContent = chStr; });
+  document.querySelectorAll('[data-global-metric="vod"]').forEach(el => { el.textContent = vodStr; });
+  document.querySelectorAll('[data-global-metric="series"]').forEach(el => { el.textContent = serStr; });
+  document.querySelectorAll('[data-global-metric="epg"]').forEach(el => { el.textContent = epgNumStr; });
 }
 
 function resetListAndAuthState(options = {}) {
@@ -853,6 +1027,7 @@ function resetListAndAuthState(options = {}) {
   if (typeof indexedOffsets !== 'undefined') indexedOffsets = {};
   if (!preserveCatalog) {
     allCatalog = { LIVE: [], MOVIE: [], SERIES: [] };
+    activeCatalogServerId = null;
     if (typeof currentCategoriesMap !== 'undefined') currentCategoriesMap = { ALL: [] };
     if (typeof currentCategoryKeys !== 'undefined') currentCategoryKeys = ['ALL'];
     if (typeof currentFilteredItems !== 'undefined') currentFilteredItems = [];
@@ -1543,6 +1718,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
     authErr.isAuthError = true;
     throw authErr;
   }
+  if (onProgress) onProgress(10, 100);
 
   // Deriva URL de EPG (/xmltv.php) no modo JSON usando o mesmo host e credenciais do servidor
   const derivedXmltv = CatalogUtils.buildXtreamXmltvUrl(cleanBase, user, pass);
@@ -1994,6 +2170,11 @@ async function loadServer(forceRefresh = false, options = {}) {
   if (currentServerIndex >= SERVERS.length) currentServerIndex = 0;
 
   const srv = SERVERS[currentServerIndex];
+  // Evita dois downloads simultâneos (2º plano + 1º plano) do mesmo servidor
+  if (!silent && srv && srv.id && mk21BgSyncControllers[srv.id]) {
+    try { mk21BgSyncControllers[srv.id].abort(); } catch (e) {}
+    delete mk21BgSyncControllers[srv.id];
+  }
   if ($('txtActiveServer')) $('txtActiveServer').textContent = cleanServerName(srv.name);
   if (!silent) updateServerSyncBadge(15, false);
 
@@ -2001,51 +2182,96 @@ async function loadServer(forceRefresh = false, options = {}) {
 
   // 1. CARGA INSTANTÂNEA VIA CACHE LOCAL (somente no boot/troca de servidor)
   if (!silent && !forceRefresh) {
-    // Cache completo (LIVE + FILMES + SÉRIES) primeiro: evita sincronizar à toa
-    // quando o catálogo já está salvo e fresco no aparelho.
-    let cached = await getStoredData(srv.id);
-    if (!cached || !cached.LIVE || cached.LIVE.length === 0) {
-      cached = getFastCache(srv.id);
-    }
+    // Cache completo (catalog_cache_v6 -> índice completo mk21_catalog_index_v1 -> fast cache isolado do servidor)
+    const cached = await getStoredData(srv.id);
     if (loadId !== serverLoadGeneration) return;
     const liveN = cached && cached.LIVE ? cached.LIVE.length : 0;
     const movN = cached && cached.MOVIE ? cached.MOVIE.length : 0;
     const serN = cached && cached.SERIES ? cached.SERIES.length : 0;
-    if (cached && (liveN + movN + serN) > 0) {
+    const totalCached = liveN + movN + serN;
+    if (cached && totalCached > 0) {
       allCatalog = {
         LIVE: cached.LIVE || [],
         MOVIE: cached.MOVIE || [],
         SERIES: cached.SERIES || []
       };
+      activeCatalogServerId = srv.id;
       if (hud) hud.classList.add('hidden');
       hideSplash();
       buildCurrentCategories();
       renderCategoriesList();
       selectCategory('ALL');
       renderItemsList();
-      updateServerSyncBadge(100, true);
-      if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
-      showChannelBanner('✓ Abrindo da memória local (' + liveN + ' canais). Sincronizando o resto...');
-      setTimeout(() => { resumeLastChannelIfPossible(); }, 150);
+
+      const lastSync = getServerLastSyncTs(srv.id) || (cached._updatedAt || 0);
+      const switchDecision = CatalogUtils.decideCachedServerSwitch(
+        {
+          liveCount: liveN,
+          vodCount: movN,
+          seriesCount: serN,
+          fromFullStore: Boolean(cached._fromFullCache)
+        },
+        lastSync,
+        getBgSyncFrequency()
+      );
+
       if (srv.epgUrl) {
         window.serverXmltvUrl = srv.epgUrl;
+      } else if (!CatalogUtils.isDirectPlaylistUrl(srv.url)) {
+        const creds = getSavedCredentials();
+        if (creds && creds.user && creds.pass) {
+          window.serverXmltvUrl = CatalogUtils.buildXtreamXmltvUrl(srv.url, creds.user, creds.pass);
+        }
+      }
+
+      if (switchDecision.isFullCache) {
+        setServerLoadProgress(srv.id, 100, 'done');
+        computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
+      }
+      updateServerSyncBadge(100, true);
+      if (typeof mk21UpdateCatalogMetricsUI === 'function') mk21UpdateCatalogMetricsUI();
+
+      if (switchDecision.isFullCache) {
+        if ($('txtCurrentCategoryTitle')) {
+          $('txtCurrentCategoryTitle').textContent =
+            '📺 Catálogo: ' + liveN.toLocaleString('pt-BR') + ' canais • ' +
+            movN.toLocaleString('pt-BR') + ' filmes • ' +
+            serN.toLocaleString('pt-BR') + ' séries';
+        }
+        if (!switchDecision.shouldBackgroundRefresh || srv.sourceKind === 'm3u_file') {
+          showChannelBanner(
+            '✓ ' + cleanServerName(srv.name) + ' aberto do cache (' +
+            liveN.toLocaleString('pt-BR') + ' canais · ' +
+            movN.toLocaleString('pt-BR') + ' filmes · ' +
+            serN.toLocaleString('pt-BR') + ' séries)'
+          );
+          addDevLog(
+            '[Cache] ' + cleanServerName(srv.name) + ' carregado da memória local (' +
+            totalCached.toLocaleString('pt-BR') + ' itens — sem novo download).',
+            'success'
+          );
+        } else {
+          showChannelBanner('✓ Abrindo ' + cleanServerName(srv.name) + ' da memória. Atualizando em segundo plano...');
+        }
+      } else {
+        if ($('txtCurrentCategoryTitle')) $('txtCurrentCategoryTitle').textContent = '📺 Memória: ' + liveN.toLocaleString('pt-BR') + ' canais';
+        showChannelBanner('✓ Abrindo da memória local (' + liveN + ' canais). Sincronizando o resto...');
+      }
+
+      setTimeout(() => { resumeLastChannelIfPossible(); }, 150);
+      if (currentContentType === 'SETTINGS' && $('cfgOpenServerManager')) {
+        renderServerPanel();
       }
       if (srv.sourceKind === 'm3u_file') {
         updateServerSyncBadge(100, true);
         return;
       }
-      // Sincroniza o catálogo em segundo plano, mas sem baixar de novo o que já está
-      // fresco: TV com catálogo recente abre instantânea e sem tráfego extra.
-      let lastSync = 0;
-      try { lastSync = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
-      const cacheFresh = lastSync > 0 && (Date.now() - lastSync) < 20 * 60 * 1000;
-      const faltaVod = (movN + serN) === 0;
-      if (!cacheFresh || faltaVod) {
+      if (switchDecision.shouldBackgroundRefresh) {
         setTimeout(() => {
           if (serverLoadGeneration === loadId) loadServer(true, { silent: true });
         }, 700);
       } else {
-        updateServerSyncBadge(100, true);
+        scheduleBackgroundSync();
       }
       return;
     }
@@ -2103,6 +2329,8 @@ async function loadServer(forceRefresh = false, options = {}) {
     updateSplash(35, 'Baixando grade de canais ao vivo...');
   }
 
+  setServerLoadProgress(srv.id, 5, 'loading');
+
   // Watchdog de segurança: se após 7 segundos a conexão estiver travada, oferece trocar de servidor
   let hudSafetyTimer = silent ? null : setTimeout(() => {
     if (loadId !== serverLoadGeneration) return;
@@ -2132,7 +2360,10 @@ async function loadServer(forceRefresh = false, options = {}) {
       return true;
     };
 
-    if (!silent) allCatalog = target;
+    if (!silent) {
+      allCatalog = target;
+      activeCatalogServerId = srv.id;
+    }
     indexedOffsets = {};
 
     let indexWriter;
@@ -2162,6 +2393,7 @@ async function loadServer(forceRefresh = false, options = {}) {
       if (!force && now - lastPublishAt < 3000) return;
       lastPublishAt = now;
       allCatalog = target;
+      activeCatalogServerId = srv.id;
       buildCurrentCategories();
       renderCategoriesList();
       if (!currentCategoriesMap[activeCategoryKey]) activeCategoryKey = 'ALL';
@@ -2176,6 +2408,7 @@ async function loadServer(forceRefresh = false, options = {}) {
       if (hudSafetyTimer) { clearTimeout(hudSafetyTimer); hudSafetyTimer = null; }
 
       allCatalog = target;
+      activeCatalogServerId = srv.id;
       if (allCatalog.LIVE.length > 0) saveFastCache(srv.id, allCatalog.LIVE, true);
 
       updateSplash(80, 'Conteúdo inicial liberado (' + (allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) + ')');
@@ -2224,6 +2457,7 @@ async function loadServer(forceRefresh = false, options = {}) {
         }
         const stagePct = Math.min(99, Math.round((end / pendingItems.length) * 100));
         updateServerSyncBadge(stagePct, false, { background: true });
+        setServerLoadProgress(srv.id, stagePct, 'loading');
         await new Promise(r => setTimeout(r, 16));
       }
     };
@@ -2298,6 +2532,7 @@ async function loadServer(forceRefresh = false, options = {}) {
         }
 
         updateServerSyncBadge(pct, false, { background: silent });
+        setServerLoadProgress(srv.id, pct, 'loading');
 
         if (!silent) {
           if (!liveVisible) {
@@ -2321,6 +2556,7 @@ async function loadServer(forceRefresh = false, options = {}) {
 
     // Libera a tela com os itens de 1º plano imediatamente antes da etapa incremental de 2º plano
     allCatalog = target;
+    activeCatalogServerId = srv.id;
     if (!silent && fgTotal > 0) {
       revealLive();
       buildCurrentCategories();
@@ -2341,6 +2577,7 @@ async function loadServer(forceRefresh = false, options = {}) {
 
     loadInFlight = false;
     allCatalog = target;
+    activeCatalogServerId = srv.id;
     if (!silent) revealLive();
     publishSilent(true);
     buildCurrentCategories();
@@ -2354,6 +2591,7 @@ async function loadServer(forceRefresh = false, options = {}) {
       hud.classList.add('hidden');
     }
     updateServerSyncBadge(100, true, { background: silent || bgLowPriority });
+    setServerLoadProgress(srv.id, 100, 'done');
     mk21AutoServerTries = 0;
     try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
     await indexWriter.finish();
@@ -2380,11 +2618,18 @@ async function loadServer(forceRefresh = false, options = {}) {
     } else if (bgLowPriority) {
       addDevLog('[Sync Segundo Plano] Catálogo atualizado silenciosamente (' + totalLoaded + ' itens).', 'success');
     }
+    scheduleHomologLogsUpload('load_complete', 8000);
     scheduleBackgroundSync();
   } catch (err) {
     if (loadId === serverLoadGeneration) loadInFlight = false;
     if (loadId !== serverLoadGeneration || (err && err.name === 'AbortError')) return;
     console.error('Server error:', err);
+    if (!getPerServerMetrics(srv.id)) {
+      setServerLoadProgress(srv.id, 0, 'error');
+    } else {
+      setServerLoadProgress(srv.id, 100, 'done');
+    }
+    scheduleHomologLogsUpload('load_error', 8000);
 
     const partialLive = allCatalog && Array.isArray(allCatalog.LIVE) ? allCatalog.LIVE.length : 0;
     if (silent) {
@@ -4345,6 +4590,113 @@ function mk21SanitizeLog(value) {
     .replace(/\/(live|movie|series)\/[^/\s?]+\/[^/\s?]+/gi, '/$1/[REDACTED]/[REDACTED]');
 }
 
+// ==================== HOMOLOGAÇÃO: ENVIO AUTOMÁTICO DE LOGS PARA GOOGLE DRIVE (REMOVER APÓS HOMOLOGAÇÃO) ====================
+const MK21_HOMOLOG_DRIVE_LOGS_ENABLED = true;
+const MK21_HOMOLOG_LOGS_ENDPOINT = 'https://bgstreaming.vercel.app/api/homolog-logs';
+let mk21HomologUploadTimer = null;
+let mk21HomologUploadInFlight = false;
+let mk21HomologLastUploadAt = 0;
+let mk21HomologLastFingerprint = '';
+let mk21HomologDriveStatusText = '';
+
+function mk21SetDriveLogStatus(text) {
+  mk21HomologDriveStatusText = text || '';
+  const el = $('devLogsDriveStatus');
+  if (el) el.textContent = mk21HomologDriveStatusText;
+}
+
+function buildDiagnosticLogReportText() {
+  const obsJsonl = (window.MK21Observability && typeof window.MK21Observability.exportJsonl === 'function')
+    ? window.MK21Observability.exportJsonl()
+    : '';
+  let activeSrvName = '--';
+  try { activeSrvName = cleanServerName((SERVERS[currentServerIndex] || {}).name || '--'); } catch (e) {}
+  const globalMetrics = typeof getGlobalCatalogMetricsSnapshot === 'function' ? getGlobalCatalogMetricsSnapshot() : null;
+  const globalSummary = globalMetrics
+    ? `Geral (${globalMetrics.syncedServers}/${globalMetrics.totalServers} fontes): ${globalMetrics.totalChannels} canais · ${globalMetrics.totalVOD} filmes · ${globalMetrics.totalSeries} séries · ${globalMetrics.totalEPG} EPG`
+    : '';
+  return [
+    'MK21 Smart TV - Logs de diagnostico (Homologacao)',
+    'Data: ' + new Date().toISOString(),
+    'Versao: v' + CURRENT_APP_VERSION,
+    'Fonte ativa: ' + activeSrvName,
+    globalSummary,
+    'Tela: ' + innerWidth + 'x' + innerHeight,
+    'Plataforma: ' + (navigator.userAgent || 'SmartTV'),
+    'Credenciais e caminhos autenticados foram mascarados.',
+    '',
+    '=== STRUCTURED JSONL ===',
+    obsJsonl,
+    '',
+    '=== SESSION CONSOLE ===',
+    ...sessionDevLogs.map(l => '[' + l.time + '] [' + String(l.type).toUpperCase() + '] ' + redactDiagnosticLog(l.msg))
+  ].filter(Boolean).join('\n');
+}
+
+async function uploadHomologLogsToDrive(reason, options) {
+  if (!MK21_HOMOLOG_DRIVE_LOGS_ENABLED) return { ok: false, disabled: true };
+  const opts = options || {};
+  const force = Boolean(opts.force);
+  if (mk21HomologUploadInFlight) return { ok: false, busy: true };
+  if (!navigator.onLine) {
+    if (force) mk21SetDriveLogStatus('☁️ Drive: sem conexão');
+    return { ok: false, error: 'Sem conexão com a internet.' };
+  }
+  const lastEntry = sessionDevLogs.length ? sessionDevLogs[sessionDevLogs.length - 1] : null;
+  const fingerprint = sessionDevLogs.length + '|' + (lastEntry ? (lastEntry.time + ':' + lastEntry.msg.slice(0, 60)) : '');
+  const now = Date.now();
+  if (!force) {
+    if (sessionDevLogs.length === 0) return { ok: false, skipped: true };
+    if (fingerprint === mk21HomologLastFingerprint) return { ok: false, skipped: true };
+    if (now - mk21HomologLastUploadAt < 45000) return { ok: false, throttled: true };
+  }
+
+  mk21HomologUploadInFlight = true;
+  mk21SetDriveLogStatus('☁️ Drive: enviando...');
+  try {
+    const text = buildDiagnosticLogReportText();
+    try { localStorage.setItem('mk21_last_exported_logs', text); } catch (_) {}
+    const fileName = 'mk21-tv-v' + CURRENT_APP_VERSION + '-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.txt';
+    const res = await fetch(MK21_HOMOLOG_LOGS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: text,
+        fileName,
+        platform: (typeof webOS !== 'undefined' ? 'webos-tv' : 'smart-tv'),
+        appVersion: CURRENT_APP_VERSION,
+        device: (navigator.userAgent || '').slice(0, 80),
+        reason: reason || 'auto'
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data && data.ok) {
+      mk21HomologLastUploadAt = Date.now();
+      mk21HomologLastFingerprint = fingerprint;
+      const hhmm = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      mk21SetDriveLogStatus('☁️ Drive: salvo às ' + hhmm);
+      return { ok: true, fileName: data.fileName || fileName, webViewLink: data.webViewLink || '' };
+    }
+    const errMsg = (data && data.error) ? String(data.error) : ('HTTP ' + res.status);
+    mk21SetDriveLogStatus(data && data.configured === false ? '☁️ Drive: configure chave na Vercel' : '☁️ Drive: falha no envio');
+    return { ok: false, configured: data ? data.configured : undefined, error: errMsg };
+  } catch (e) {
+    mk21SetDriveLogStatus('☁️ Drive: erro de rede');
+    return { ok: false, error: (e && e.message) ? e.message : 'Erro de rede ao enviar ao Drive' };
+  } finally {
+    mk21HomologUploadInFlight = false;
+  }
+}
+
+function scheduleHomologLogsUpload(reason, delayMs) {
+  if (!MK21_HOMOLOG_DRIVE_LOGS_ENABLED) return;
+  if (mk21HomologUploadTimer) clearTimeout(mk21HomologUploadTimer);
+  mk21HomologUploadTimer = setTimeout(() => {
+    mk21HomologUploadTimer = null;
+    uploadHomologLogsToDrive(reason || 'auto', { force: false }).catch(() => {});
+  }, typeof delayMs === 'number' ? delayMs : 12000);
+}
+
 function addDevLog(msg, type = 'info') {
   const safeMsg = mk21SanitizeLog(msg);
   const time = new Date().toLocaleTimeString('pt-BR', { hour12: false });
@@ -4366,6 +4718,10 @@ function addDevLog(msg, type = 'info') {
   if (type === 'error') console.error('[MK21-TV]', safeMsg);
   else if (type === 'warn') console.warn('[MK21-TV]', safeMsg);
   else console.log('[MK21-TV]', safeMsg);
+
+  if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED && (type === 'error' || safeMsg.includes('[Sync Lista] Falha'))) {
+    scheduleHomologLogsUpload('error_detected', 12000);
+  }
 }
 
 function escapeHtml(str) {
@@ -4412,35 +4768,44 @@ function mk21BindDevLogsButtons() {
   }
   const exportBtn = $('btnExportDevLogs');
   if (exportBtn) {
-    exportBtn.onclick = () => {
+    if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) {
+      exportBtn.textContent = '☁️ Salvar no Drive';
+    }
+    exportBtn.onclick = async () => {
       try {
-        const obsJsonl = (window.MK21Observability && typeof window.MK21Observability.exportJsonl === 'function')
-          ? window.MK21Observability.exportJsonl()
-          : '';
-        const text = [
-          'MK21 Smart TV - Logs de diagnostico',
-          'Data: ' + new Date().toISOString(),
-          'Versao: ' + CURRENT_APP_VERSION,
-          'Tela: ' + innerWidth + 'x' + innerHeight,
-          'Credenciais e caminhos autenticados foram mascarados.',
-          '',
-          '=== STRUCTURED JSONL ===',
-          obsJsonl,
-          '',
-          '=== SESSION CONSOLE ===',
-          ...sessionDevLogs.map(l => '[' + l.time + '] [' + String(l.type).toUpperCase() + '] ' + redactDiagnosticLog(l.msg))
-        ].join('\n');
-        localStorage.setItem('mk21_last_exported_logs', text);
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'mk21-tv-logs-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        addDevLog('[Logs] Arquivo de log exportado e salvo com sucesso!', 'success');
-        showChannelBanner('✅ Logs exportados com sucesso!');
+        const text = buildDiagnosticLogReportText();
+        try { localStorage.setItem('mk21_last_exported_logs', text); } catch (_) {}
+
+        if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) {
+          exportBtn.disabled = true;
+          exportBtn.textContent = '⏳ Enviando...';
+          const uploadRes = await uploadHomologLogsToDrive('manual', { force: true });
+          exportBtn.disabled = false;
+          exportBtn.textContent = '☁️ Salvar no Drive';
+
+          if (uploadRes && uploadRes.ok) {
+            addDevLog('[Logs] Enviado ao Google Drive com sucesso: ' + uploadRes.fileName, 'success');
+            showChannelBanner('☁️ Log salvo no Google Drive (' + uploadRes.fileName + ')');
+            return;
+          }
+          addDevLog('[Logs] Google Drive indisponível: ' + ((uploadRes && uploadRes.error) || 'erro desconhecido'), 'warn');
+          showChannelBanner('⚠️ Drive indisponível: ' + ((uploadRes && uploadRes.error) || 'verifique a Vercel'));
+        }
+
+        // Fallback local em navegadores desktop (em LG webOS <a download> não abre seletor do Drive)
+        if (typeof webOS === 'undefined') {
+          const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'mk21-tv-logs-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          addDevLog('[Logs] Cópia local salva no navegador.', 'info');
+        }
       } catch (e) {
+        exportBtn.disabled = false;
+        if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) exportBtn.textContent = '☁️ Salvar no Drive';
         addDevLog('[Logs] Erro ao exportar logs: ' + e.message, 'error');
       }
     };
@@ -4465,7 +4830,7 @@ function mk21EnsureDevLogsModal() {
           '<div class="devlogs-actions">' +
             '<button type="button" id="btnTogglePauseDevLogs" class="ctrl-btn" tabindex="0">⏸ Pausar rolagem</button>' +
             '<button type="button" id="btnClearDevLogs" class="ctrl-btn" tabindex="0">🗑️ Limpar</button>' +
-            '<button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">💾 Salvar arquivo</button>' +
+            '<button type="button" id="btnExportDevLogs" class="ctrl-btn primary" tabindex="0">' + (MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? '☁️ Salvar no Drive' : '💾 Salvar arquivo') + '</button>' +
             '<button type="button" id="btnCloseDevLogs" class="ctrl-btn" tabindex="0">✕ Fechar</button>' +
           '</div>' +
         '</div>' +
@@ -4473,6 +4838,7 @@ function mk21EnsureDevLogsModal() {
         '<div id="devLogsContainer" class="devlogs-screen scrollable-container" tabindex="0"></div>' +
         '<div class="devlogs-foot">' +
           '<span id="devLogsHint">Use o botão de rolagem do Magic Remote (ou CH + / CH -) para percorrer o histórico.</span>' +
+          '<span id="devLogsDriveStatus" style="color:#93c5fd; font-weight:700; margin:0 12px;">' + escapeHtml(mk21HomologDriveStatusText || (MK21_HOMOLOG_DRIVE_LOGS_ENABLED ? '☁️ Drive: envio automático ativo' : '')) + '</span>' +
           '<span id="devLogsCountBadge">0 entradas</span>' +
         '</div>' +
       '</div>';
@@ -4527,6 +4893,9 @@ function toggleDevLogsModal() {
       forceRevealScrollbar($('devLogsContainer'));
     }
     addDevLog('[UI] Console de logs aberto', 'info');
+    if (MK21_HOMOLOG_DRIVE_LOGS_ENABLED) {
+      scheduleHomologLogsUpload('console_opened', 2000);
+    }
     setTimeout(() => {
       const pauseBtn = $('btnTogglePauseDevLogs') || $('btnCloseDevLogs');
       if (pauseBtn) pauseBtn.focus();
@@ -6305,10 +6674,12 @@ function updateServerRowMetricsBadge(serverId, metrics) {
 function renderServerPanel() {
   const box = mk21SettingsBox();
   const atual = SERVERS[currentServerIndex] || SERVERS[0] || { name: 'Nenhum' };
-  const metrics = getCatalogMetricsSnapshot();
-  if (atual && atual.id && metrics.totalItems > 0) {
+  const activeMetrics = getCatalogMetricsSnapshot();
+  // Só grava allCatalog no servidor se o catálogo em memória realmente pertencer a atual.id
+  if (atual && atual.id && activeCatalogServerId === atual.id && activeMetrics.totalItems > 0) {
     computeAndSaveServerMetrics(atual.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
   }
+  const globalMetrics = getGlobalCatalogMetricsSnapshot();
   const curFreq = getBgSyncFrequency();
   const freqLabel = CatalogUtils.BG_SYNC_LABELS[curFreq] || 'Uma vez ao dia';
   const syncAllLabel = getSyncAllListsBackground() ? 'Todas em 2º plano' : 'Apenas lista ativa';
@@ -6317,13 +6688,14 @@ function renderServerPanel() {
 
   const rows = SERVERS.map((srv, i) => {
     const ativo = i === currentServerIndex;
-    const srvMetrics = (ativo && metrics.totalItems > 0) ? metrics : getPerServerMetrics(srv.id);
-    let lastTs = 0;
-    try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+    const isActiveLoaded = Boolean(ativo && activeCatalogServerId === srv.id && activeMetrics.totalItems > 0);
+    const srvMetrics = isActiveLoaded ? activeMetrics : getPerServerMetrics(srv.id);
+    const lastTs = getServerLastSyncTs(srv.id);
     return `
       <div class="server-manager-row ${ativo ? 'active-server' : ''}" style="margin-bottom:10px;">
         <div class="server-info-col">
           <div class="server-info-top-line">
+            ${buildServerProgressBadgeHtml(srv.id)}
             <span class="server-info-name">${ativo ? '🟢' : '⚪'} Fonte ${i + 1}: ${escapeHtml(cleanServerName(srv.name))}${ativo ? ' [✓ ATIVA]' : ''}</span>
             <span class="server-row-sync-meta">• ${escapeHtml(formatSyncTimestampShort(lastTs))}</span>
           </div>
@@ -6338,12 +6710,12 @@ function renderServerPanel() {
 
   box.innerHTML = `
     <h3 style="margin:0 0 8px 0; font-size:24px;">📡 Servidor / Fonte</h3>
-    <p style="color:#aaa; margin:0 0 12px 0; font-size:15px;">Fonte ativa: <strong style="color:#4caf50;">${escapeHtml(cleanServerName(atual.name))}</strong>. Configure a sincronização ou confira os totais individuais por servidor.</p>
+    <p style="color:#aaa; margin:0 0 12px 0; font-size:15px;">Fonte ativa: <strong style="color:#4caf50;">${escapeHtml(cleanServerName(atual.name))}</strong> · Total geral somado de <strong>${globalMetrics.syncedServers}/${globalMetrics.totalServers}</strong> fonte(s) sincronizadas.</p>
     <div class="server-metrics-grid" style="max-width:860px;">
-      <div class="server-metric-card"><span class="server-metric-label">📺 Canais (Geral)</span><strong class="server-metric-value">${metrics.totalChannels.toLocaleString('pt-BR')}</strong></div>
-      <div class="server-metric-card"><span class="server-metric-label">🎬 Filmes VOD (Geral)</span><strong class="server-metric-value">${metrics.totalVOD.toLocaleString('pt-BR')}</strong></div>
-      <div class="server-metric-card"><span class="server-metric-label">🍿 Séries (Geral)</span><strong class="server-metric-value">${metrics.totalSeries.toLocaleString('pt-BR')}</strong></div>
-      <div class="server-metric-card"><span class="server-metric-label">📡 EPG / Grupos</span><strong class="server-metric-value">${(metrics.totalEPG || metrics.totalGroups).toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">📺 Canais (Geral)</span><strong class="server-metric-value" data-global-metric="channels">${globalMetrics.totalChannels.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">🎬 Filmes VOD (Geral)</span><strong class="server-metric-value" data-global-metric="vod">${globalMetrics.totalVOD.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">🍿 Séries (Geral)</span><strong class="server-metric-value" data-global-metric="series">${globalMetrics.totalSeries.toLocaleString('pt-BR')}</strong></div>
+      <div class="server-metric-card"><span class="server-metric-label">📡 EPG / Grupos</span><strong class="server-metric-value" data-global-metric="epg">${(globalMetrics.totalEPG || globalMetrics.totalGroups).toLocaleString('pt-BR')}</strong></div>
     </div>
     <div class="apk-cfg-cards-grid" style="max-width:860px;">
       <div class="apk-cfg-card-wrap">
@@ -6411,13 +6783,18 @@ function renderServerPanel() {
       currentServerIndex = idx;
       try { localStorage.setItem('mk21_last_server', currentServerIndex); } catch (e) {}
       saveServersToStorage();
+      const targetSrv = SERVERS[idx];
+      const hasCached = Boolean(targetSrv && (getServerLastSyncTs(targetSrv.id) > 0 || getPerServerMetrics(targetSrv.id)));
       const msg = $('msgServerChanged');
       if (msg) {
-        msg.textContent = '✅ Conectando à fonte ' + (idx + 1) + '...';
+        msg.textContent = hasCached
+          ? '✅ Abrindo ' + cleanServerName(targetSrv.name) + ' do cache local...'
+          : '✅ Conectando à fonte ' + (idx + 1) + '...';
         msg.style.display = 'block';
       }
       renderServerPanel();
-      loadServer(true);
+      // Usa o cache local primeiro (evita baixar novamente servidor já sincronizado em 2º plano)
+      loadServer(false);
     };
   });
   if ($('cfgOpenServerManager')) $('cfgOpenServerManager').onclick = () => openServerPicker();
@@ -7577,22 +7954,28 @@ async function hydrateAllServerMetricsFromCache() {
   for (let i = 0; i < SERVERS.length; i++) {
     const srv = SERVERS[i];
     if (!srv || !srv.id) continue;
-    if (i === currentServerIndex && (allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) > 0) {
+    if (i === currentServerIndex && activeCatalogServerId === srv.id && (allCatalog.LIVE.length + allCatalog.MOVIE.length + allCatalog.SERIES.length) > 0) {
       computeAndSaveServerMetrics(srv.id, allCatalog, typeof epgCache !== 'undefined' ? epgCache : null, Boolean(window.serverXmltvUrl));
       continue;
     }
     const existing = getPerServerMetrics(srv.id);
     if (existing && (existing.totalChannels + existing.totalVOD + existing.totalSeries) > 0) {
       updateServerRowMetricsBadge(srv.id, existing);
+      updateServerRowProgressBadge(srv.id);
       continue;
     }
     try {
-      const cached = await getStoredData(srv.id);
+      // Apenas cache completo isolado (catalog_cache_v6 ou mk21_catalog_index_v1), nunca fast_cache universal
+      const cached = await getStoredData(srv.id, { fullOnly: true });
       if (cached && ((cached.LIVE && cached.LIVE.length) || (cached.MOVIE && cached.MOVIE.length) || (cached.SERIES && cached.SERIES.length))) {
         computeAndSaveServerMetrics(srv.id, cached, null, false);
+      } else {
+        updateServerRowMetricsBadge(srv.id, null);
+        updateServerRowProgressBadge(srv.id);
       }
     } catch (e) {}
   }
+  mk21UpdateGlobalMetricsCardsInPlace();
 }
 
 async function syncSingleServerInBackground(idx, triggerBtn) {
@@ -7609,6 +7992,11 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
     return true;
   }
 
+  if (mk21BgSyncControllers[srv.id]) {
+    try { mk21BgSyncControllers[srv.id].abort(); } catch (e) {}
+    delete mk21BgSyncControllers[srv.id];
+  }
+
   if (triggerBtn) {
     triggerBtn.disabled = true;
     triggerBtn.textContent = '⏳ ...';
@@ -7616,10 +8004,15 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
   const syncStart = Date.now();
   let bgTimedOut = false;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  if (controller) mk21BgSyncControllers[srv.id] = controller;
   const timeout = controller ? setTimeout(() => {
     bgTimedOut = true;
     controller.abort();
   }, CatalogUtils.PLAYLIST_TIMEOUTS.backgroundSyncMs) : null;
+
+  setServerLoadProgress(srv.id, 5, 'loading');
+  let lastBgProgressAt = 0;
+
   try {
     const target = { LIVE: [], MOVIE: [], SERIES: [] };
     const indexWriter = await createCatalogIndexWriter(srv.id);
@@ -7641,24 +8034,47 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
           }
         }
       },
-      null,
+      (received, total) => {
+        const now = Date.now();
+        if (now - lastBgProgressAt < 250) return;
+        lastBgProgressAt = now;
+        let pct = 15;
+        if (total && total > 0) {
+          pct = Math.min(95, Math.max(8, Math.round((received / total) * 100)));
+        } else {
+          const itemsCount = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
+          const mb = received / (1024 * 1024);
+          pct = Math.min(95, Math.max(10, 12 + Math.round((mb / 12) * 40 + (itemsCount / 15000) * 40)));
+        }
+        setServerLoadProgress(srv.id, pct, 'loading');
+      },
       { isBackground: true }
     );
     const total = target.LIVE.length + target.MOVIE.length + target.SERIES.length;
     if (total > 0) {
+      setServerLoadProgress(srv.id, 98, 'loading');
       await indexWriter.finish();
       saveFastCache(srv.id, target.LIVE, true);
       await saveStoredData(srv.id, target);
       try { localStorage.setItem('mk21_last_sync_' + srv.id, String(Date.now())); } catch (e) {}
+      setServerLoadProgress(srv.id, 100, 'done');
       const m = computeAndSaveServerMetrics(srv.id, target, null, false);
       updateServerRowMetricsBadge(srv.id, m);
+      mk21UpdateGlobalMetricsCardsInPlace();
       addDevLog('[Sync Lista] ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens salvos · ' + CatalogUtils.formatDurationPtBr(Date.now() - syncStart), 'success');
       if (!getHideBackgroundProgress()) {
         showChannelBanner('✓ ' + cleanServerName(srv.name) + ': ' + total.toLocaleString('pt-BR') + ' itens sincronizados');
       }
+      scheduleHomologLogsUpload('bg_sync_complete', 8000);
     }
     return true;
   } catch (err) {
+    if (!bgTimedOut && err && err.name === 'AbortError') {
+      // Cancelado intencionalmente (ex.: usuário conectou nesta fonte)
+      if (getPerServerMetrics(srv.id)) setServerLoadProgress(srv.id, 100, 'done');
+      else setServerLoadProgress(srv.id, 0, 'idle');
+      return false;
+    }
     const elapsedLabel = CatalogUtils.formatDurationPtBr(Date.now() - syncStart);
     const effectiveErr = bgTimedOut
       ? new Error('tempo esgotado no sync em segundo plano (limite de ' + CatalogUtils.formatDurationPtBr(CatalogUtils.PLAYLIST_TIMEOUTS.backgroundSyncMs) + ')')
@@ -7669,12 +8085,16 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
       : (effectiveErr && effectiveErr.message && effectiveErr.message !== friendly ? String(effectiveErr.message) : '');
     const detailSuffix = rawDetail && !friendly.includes(rawDetail) ? ' (' + rawDetail + ')' : '';
     addDevLog('[Sync Lista] Falha em ' + cleanServerName(srv.name) + ': ' + friendly + detailSuffix + ' · ' + elapsedLabel, 'warn');
+    if (getPerServerMetrics(srv.id)) setServerLoadProgress(srv.id, 100, 'done');
+    else setServerLoadProgress(srv.id, 0, 'error');
     if (triggerBtn && !getHideBackgroundProgress()) {
       showChannelBanner('⚠️ Falha ao sincronizar ' + cleanServerName(srv.name));
     }
+    scheduleHomologLogsUpload('bg_sync_error', 10000);
     return false;
   } finally {
     if (timeout) clearTimeout(timeout);
+    if (mk21BgSyncControllers[srv.id] === controller) delete mk21BgSyncControllers[srv.id];
     if (triggerBtn && document.body.contains(triggerBtn)) {
       triggerBtn.disabled = false;
       triggerBtn.textContent = '🔄 Sync';
@@ -7709,8 +8129,7 @@ async function syncAllConfiguredServersInBackground(forceAll = false) {
       const idx = order[k];
       const srv = SERVERS[idx];
       if (!srv) continue;
-      let lastTs = 0;
-      try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+      const lastTs = getServerLastSyncTs(srv.id);
       if (!forceAll && !CatalogUtils.shouldSyncServer(lastTs, freq)) continue;
 
       await syncSingleServerInBackground(idx, null);
@@ -7801,26 +8220,19 @@ function mk21EnsureServerManagerExtras() {
 
 function mk21UpdateCatalogMetricsUI() {
   mk21EnsureServerManagerExtras();
-  const metrics = getCatalogMetricsSnapshot();
-  if ($('metricTotalChannels')) $('metricTotalChannels').textContent = metrics.totalChannels.toLocaleString('pt-BR');
-  if ($('metricTotalVod')) $('metricTotalVod').textContent = metrics.totalVOD.toLocaleString('pt-BR');
-  if ($('metricTotalSeries')) $('metricTotalSeries').textContent = metrics.totalSeries.toLocaleString('pt-BR');
-  if ($('metricTotalEpg')) {
-    $('metricTotalEpg').textContent = metrics.totalEPG > 0
-      ? (metrics.totalEPG.toLocaleString('pt-BR') + ' EPG')
-      : (metrics.totalGroups.toLocaleString('pt-BR') + ' grupos');
-  }
+  const globalMetrics = getGlobalCatalogMetricsSnapshot();
+  mk21UpdateGlobalMetricsCardsInPlace();
   updateApkSyncLabelsUI();
 
   const srv = SERVERS[currentServerIndex];
   const lastSyncEl = $('txtServerSyncLast');
   if (lastSyncEl) {
-    let lastTs = 0;
-    try { if (srv) lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+    const lastTs = srv ? getServerLastSyncTs(srv.id) : 0;
+    const scopeText = `Geral: ${globalMetrics.syncedServers}/${globalMetrics.totalServers} fonte(s)`;
     if (lastTs > 0) {
-      lastSyncEl.textContent = 'Totais por servidor • Ativa sinc.: ' + formatSyncTimestampShort(lastTs);
+      lastSyncEl.textContent = scopeText + ' • Ativa sinc.: ' + formatSyncTimestampShort(lastTs);
     } else {
-      lastSyncEl.textContent = 'Totais individuais por servidor';
+      lastSyncEl.textContent = scopeText + ' • Totais individuais abaixo';
     }
   }
 }
@@ -7861,13 +8273,23 @@ function renderServerPickerList() {
     const topLine = document.createElement('div');
     topLine.className = 'server-info-top-line';
 
+    const progState = getServerProgressState(srv.id);
+    const progPill = document.createElement('span');
+    progPill.className = 'server-progress-pill ' + (
+      progState.status === 'done'
+        ? 'is-done'
+        : (progState.status === 'loading' ? 'is-loading' : (progState.status === 'error' ? 'is-error' : 'is-idle'))
+    );
+    progPill.setAttribute('data-srv-progress-id', srv.id);
+    progPill.textContent = progState.label;
+    topLine.appendChild(progPill);
+
     const nameLine = document.createElement('span');
     nameLine.className = 'server-info-name';
     nameLine.textContent = cleanServerName(srv.name) + (isCurrent ? '  [✓ ATIVO]' : '');
     topLine.appendChild(nameLine);
 
-    let lastTs = 0;
-    try { lastTs = parseInt(localStorage.getItem('mk21_last_sync_' + srv.id) || '0', 10) || 0; } catch (e) {}
+    const lastTs = getServerLastSyncTs(srv.id);
     const syncMeta = document.createElement('span');
     syncMeta.className = 'server-row-sync-meta';
     syncMeta.textContent = '• ' + formatSyncTimestampShort(lastTs);
@@ -7881,7 +8303,8 @@ function renderServerPickerList() {
     const metricsStrip = document.createElement('div');
     metricsStrip.className = 'server-row-metrics';
     metricsStrip.setAttribute('data-srv-metrics-id', srv.id);
-    const srvMetrics = (isCurrent && activeCatalogMetrics.totalItems > 0)
+    const isActiveLoaded = Boolean(isCurrent && activeCatalogServerId === srv.id && activeCatalogMetrics.totalItems > 0);
+    const srvMetrics = isActiveLoaded
       ? activeCatalogMetrics
       : getPerServerMetrics(srv.id);
     metricsStrip.innerHTML = buildPerServerMetricsPillsHtml(srvMetrics);
@@ -7910,15 +8333,24 @@ function renderServerPickerList() {
       try { localStorage.setItem('mk21_last_server', idx); } catch (e) {}
       resetListAndAuthState({ preserveCatalog: true });
 
-      btnConnect.textContent = '25%...';
-      setTimeout(() => { btnConnect.textContent = '65%...'; }, 200);
+      const alreadyCached = Boolean(getServerLastSyncTs(srv.id) > 0 || getPerServerMetrics(srv.id));
+      if (alreadyCached) {
+        $('modalServerPicker').classList.add('hidden');
+        mk21TeleportModalForFullscreen($('modalServerPicker'), false);
+        activeZone = 'channels';
+        activeItem = null;
+        loadServer(false);
+        return;
+      }
+
+      btnConnect.textContent = 'Conectando...';
       setTimeout(() => {
         $('modalServerPicker').classList.add('hidden');
         mk21TeleportModalForFullscreen($('modalServerPicker'), false);
         activeZone = 'channels';
         activeItem = null;
         loadServer(false);
-      }, 450);
+      }, 120);
     };
 
     const btnEdit = document.createElement('button');
@@ -8224,7 +8656,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.9.6';
+const BASE_PACKAGE_VERSION = '2.9.7';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');

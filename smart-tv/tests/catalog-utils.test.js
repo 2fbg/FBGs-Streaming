@@ -239,3 +239,122 @@ test('state-based timeout policy enforces 20s initial, 30s per-chunk stall watch
   assert.equal(w4.getAbortReason(), 'parent');
   w4.cleanup();
 });
+
+test('computeGlobalServersMetrics sums ALL synced servers and ignores legacy 400-channel universal cache pollution', () => {
+  const {
+    isPollutedLegacyFastCacheMetrics,
+    computeGlobalServersMetrics
+  } = require('../mk21-tv/core/CatalogUtils.js');
+
+  const servers = [
+    { id: 'vlog', name: 'VLOG' },
+    { id: 'tannix', name: 'TANNIX' },
+    { id: 'lub', name: 'LUB TV' },
+    { id: 'cb6000', name: 'CB6000' }
+  ];
+
+  // Legacy bug polluted unsynced servers (lastSync=0) with 400 LIVE / 0 VOD / 0 SERIES
+  assert.equal(
+    isPollutedLegacyFastCacheMetrics({ totalChannels: 400, totalVOD: 0, totalSeries: 0, totalEPG: 170 }, 0, false),
+    true
+  );
+  assert.equal(
+    isPollutedLegacyFastCacheMetrics({ totalChannels: 400, totalVOD: 0, totalSeries: 0, totalEPG: 170 }, 1700000000000, false),
+    false
+  );
+
+  const perMap = {
+    vlog: { totalChannels: 1235, totalVOD: 22203, totalSeries: 8699, totalEPG: 170, totalGroups: 120, totalItems: 32137 },
+    tannix: { totalChannels: 1303, totalVOD: 44379, totalSeries: 9523, totalEPG: 269, totalGroups: 210, totalItems: 55205 },
+    lub: { totalChannels: 400, totalVOD: 0, totalSeries: 0, totalEPG: 170, totalGroups: 10, totalItems: 400 },
+    cb6000: null
+  };
+  const syncMap = {
+    vlog: 1700000000000,
+    tannix: 1700000005000,
+    lub: 0,
+    cb6000: 0
+  };
+
+  // Even when switching (activeCatalogMetrics empty), Geral still reflects VLOG + TANNIX (never 0/0/0/0!)
+  const global = computeGlobalServersMetrics(servers, perMap, 'tannix', { totalChannels: 0, totalVOD: 0, totalSeries: 0, totalItems: 0 }, syncMap);
+  assert.equal(global.totalChannels, 1235 + 1303);
+  assert.equal(global.totalVOD, 22203 + 44379);
+  assert.equal(global.totalSeries, 8699 + 9523);
+  assert.equal(global.totalEPG, 170 + 269);
+  assert.equal(global.syncedServers, 2);
+  assert.equal(global.totalServers, 4);
+});
+
+test('computeServerLoadPercentage returns 0%, live loading %, and 100% accurately per server', () => {
+  const { computeServerLoadPercentage } = require('../mk21-tv/core/CatalogUtils.js');
+
+  assert.deepEqual(
+    computeServerLoadPercentage('cb6000', {}, null, 0, false),
+    { percent: 0, status: 'idle', label: '0%' }
+  );
+  assert.deepEqual(
+    computeServerLoadPercentage('tannix', { tannix: { percent: 42.4, status: 'loading' } }, null, 0, false),
+    { percent: 42, status: 'loading', label: '42%' }
+  );
+  assert.deepEqual(
+    computeServerLoadPercentage('tannix', {}, { totalChannels: 1303, totalVOD: 44379, totalSeries: 9523 }, 1700000000000, false),
+    { percent: 100, status: 'done', label: '100%' }
+  );
+  // Legacy polluted 400-channel unsynced entry must report 0%, not 100%
+  assert.deepEqual(
+    computeServerLoadPercentage('lub', {}, { totalChannels: 400, totalVOD: 0, totalSeries: 0 }, 0, false),
+    { percent: 0, status: 'idle', label: '0%' }
+  );
+});
+
+test('decideCachedServerSwitch opens background-synced server immediately without re-downloading', () => {
+  const { decideCachedServerSwitch } = require('../mk21-tv/core/CatalogUtils.js');
+  const now = 1700000000000;
+
+  // TANNIX finished background sync 5 minutes ago (55,205 items in catalog index) -> no re-download!
+  const hitDaily = decideCachedServerSwitch(
+    { liveCount: 1303, vodCount: 44379, seriesCount: 9523, fromFullStore: true },
+    now - 5 * 60 * 1000,
+    'daily',
+    now
+  );
+  assert.deepEqual(hitDaily, {
+    useCacheImmediately: true,
+    isFullCache: true,
+    shouldBackgroundRefresh: false
+  });
+
+  // Even on "startup" frequency, a server synced 5 min ago in this session must NOT re-download on select
+  const hitStartupRecent = decideCachedServerSwitch(
+    { liveCount: 1303, vodCount: 44379, seriesCount: 9523, fromFullStore: true },
+    now - 5 * 60 * 1000,
+    'startup',
+    now
+  );
+  assert.equal(hitStartupRecent.shouldBackgroundRefresh, false);
+
+  // Fast cache only (400 live channels, 0 VOD/Series, not fromFullStore) -> opens fast + silently fetches rest
+  const fastOnly = decideCachedServerSwitch(
+    { liveCount: 400, vodCount: 0, seriesCount: 0, fromFullStore: false },
+    now - 5 * 60 * 1000,
+    'daily',
+    now
+  );
+  assert.deepEqual(fastOnly, {
+    useCacheImmediately: true,
+    isFullCache: false,
+    shouldBackgroundRefresh: true
+  });
+
+  // Stale full cache (> 24h on daily frequency) -> opens from cache and refreshes silently
+  const staleDaily = decideCachedServerSwitch(
+    { liveCount: 1303, vodCount: 44379, seriesCount: 9523, fromFullStore: true },
+    now - 26 * 60 * 60 * 1000,
+    'daily',
+    now
+  );
+  assert.equal(staleDaily.useCacheImmediately, true);
+  assert.equal(staleDaily.shouldBackgroundRefresh, true);
+});
+

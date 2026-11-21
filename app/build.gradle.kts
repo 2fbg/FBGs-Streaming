@@ -120,8 +120,8 @@ android {
     applicationId = "com.aistudio.multiservidor.iptvmk"
     minSdk = 24
     targetSdk = 36
-    versionCode = 296
-    versionName = "2.9.6"
+    versionCode = 297
+    versionName = "2.9.7"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -313,6 +313,13 @@ secrets {
   ignoreList.add("KEY_PASSWORD")
   ignoreList.add("KEYSTORE_PATH")
   ignoreList.add("DEBUG_STORE_PASSWORD")
+  ignoreList.add("HOMOLOG_LOGS_ENABLED")
+  ignoreList.add("HOMOLOG_LOGS_TOKEN")
+  ignoreList.add("GOOGLE_DRIVE_LOGS_FOLDER_ID")
+  ignoreList.add("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
+  ignoreList.add("GOOGLE_DRIVE_CLIENT_EMAIL")
+  ignoreList.add("GOOGLE_DRIVE_PRIVATE_KEY")
+  ignoreList.add("GOOGLE_DRIVE_WEBHOOK_URL")
 }
 
 // Some unused dependencies are commented out below instead of being removed.
