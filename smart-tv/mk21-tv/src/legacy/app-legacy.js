@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.9.9 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.10.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -884,6 +884,214 @@ async function searchCatalogIndex(serverId, type, query, group, limit = 240) {
       tx.onerror = () => { try { db.close(); } catch (e) {} resolve(result); };
     } catch (e) { try { db.close(); } catch (e) {} resolve([]); }
   });
+}
+
+// ==================== FASE 2: BUSCA UNIFICADA MULTI-SERVIDOR & FAILOVER O(1) RAM ====================
+const mk21AltSourceCache = new Map();
+const MK21_ALT_SOURCE_CACHE_MAX = 50;
+
+function mk21GetServerListForCrossQuery(excludeServerId) {
+  const activeSrv = SERVERS[currentServerIndex] || null;
+  const ordered = [];
+  const seen = new Set();
+  const pushIfValid = (srv) => {
+    if (!srv || !srv.id || seen.has(srv.id)) return;
+    if (excludeServerId && srv.id === excludeServerId) return;
+    seen.add(srv.id);
+    ordered.push(srv);
+  };
+  if (activeSrv) pushIfValid(activeSrv);
+  for (let i = 0; i < SERVERS.length; i++) {
+    pushIfValid(SERVERS[i]);
+  }
+  return ordered;
+}
+
+/**
+ * Busca um termo em TODOS os servidores sincronizados no IndexedDB usando uma única conexão.
+ * Retorna itens hidratados com `serverId` e `serverName` preservando O(1) RAM.
+ */
+async function searchCatalogIndexAcrossServers(serversList, type, query, limitPerServer = 60, totalCap = 240) {
+  const db = await openCatalogIndexDb();
+  if (!db || !query) return [];
+  const targets = Array.isArray(serversList) && serversList.length ? serversList : mk21GetServerListForCrossQuery('');
+  if (!targets.length) {
+    try { db.close(); } catch (e) {}
+    return [];
+  }
+
+  const filterAdult = !isAdultUnlocked;
+  const hiddenSet = getHiddenCategoriesSet();
+  const creds = getSavedCredentials();
+  const needle = String(query || '').toLocaleLowerCase('pt-BR').trim();
+  const normNeedle = CatalogUtils.normalizeUnifiedTitle(query);
+  if (!needle) {
+    try { db.close(); } catch (e) {}
+    return [];
+  }
+
+  return new Promise(resolve => {
+    const combined = [];
+    const adultGroupCache = Object.create(null);
+    let idx = 0;
+
+    try {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
+      const store = tx.objectStore(CATALOG_INDEX_STORE);
+      const index = store.index('serverType');
+
+      const scanNextServer = () => {
+        if (idx >= targets.length || combined.length >= totalCap) return;
+        const srv = targets[idx++];
+        const baseUrl = getServerBaseUrlById(srv.id);
+        const srvLabel = typeof cleanServerName === 'function' ? cleanServerName(srv.name) : (srv.name || srv.id);
+        let serverMatches = 0;
+        const req = index.openCursor(IDBKeyRange.only([srv.id, type]));
+        req.onsuccess = e => {
+          const cursor = e.target.result;
+          if (!cursor || serverMatches >= limitPerServer || combined.length >= totalCap) {
+            scanNextServer();
+            return;
+          }
+          const item = cursor.value;
+          if (item) {
+            const rawNorm = String(item.normalizedName || '');
+            const matched = rawNorm.includes(needle) || (normNeedle.length >= 2 && rawNorm.includes(normNeedle));
+            if (matched) {
+              const grp = item.group || 'Geral';
+              let visible = true;
+              if (hiddenSet && hiddenSet.has(grp)) {
+                visible = false;
+              } else if (filterAdult) {
+                let adultGrp = adultGroupCache[grp];
+                if (typeof adultGrp === 'undefined') {
+                  adultGrp = adultGroupCache[grp] = isAdult(grp);
+                }
+                if (item.isAdult || adultGrp) visible = false;
+              }
+              if (visible) {
+                const hydrated = hydrateIndexedItem(item, srv.id, baseUrl, creds);
+                hydrated.serverId = srv.id;
+                hydrated.serverName = srvLabel;
+                combined.push(hydrated);
+                serverMatches++;
+              }
+            }
+          }
+          cursor.continue();
+        };
+        req.onerror = () => scanNextServer();
+      };
+
+      scanNextServer();
+      tx.oncomplete = () => { try { db.close(); } catch (e) {} resolve(combined); };
+      tx.onerror = () => { try { db.close(); } catch (e) {} resolve(combined); };
+    } catch (e) {
+      try { db.close(); } catch (_) {}
+      resolve(combined);
+    }
+  });
+}
+
+/**
+ * Busca fontes alternativas em outros servidores diretamente no IndexedDB (O(1) RAM),
+ * evitando carregar catálogos completos na memória durante failover automático.
+ */
+async function findAlternativeSourcesInIndex(targetItem, excludeServerId, limit = 12) {
+  if (!targetItem || !targetItem.name) return [];
+  const type = String(targetItem.contentType || 'LIVE').toUpperCase();
+  const targetTvg = targetItem.tvgId ? String(targetItem.tvgId).trim().toLowerCase() : '';
+  const targetNorm = CatalogUtils.normalizeUnifiedTitle(targetItem.name);
+  if (!targetTvg && !targetNorm) return [];
+
+  const cacheKey = `${excludeServerId || ''}|${type}|${targetTvg || targetNorm}`;
+  if (mk21AltSourceCache.has(cacheKey)) {
+    return mk21AltSourceCache.get(cacheKey);
+  }
+
+  const peerServers = mk21GetServerListForCrossQuery(excludeServerId);
+  if (!peerServers.length) return [];
+
+  const db = await openCatalogIndexDb();
+  if (!db) return [];
+
+  const creds = getSavedCredentials();
+  const candidates = await new Promise(resolve => {
+    const found = [];
+    const seenUrls = new Set();
+    let idx = 0;
+
+    try {
+      const tx = db.transaction(CATALOG_INDEX_STORE, 'readonly');
+      const index = tx.objectStore(CATALOG_INDEX_STORE).index('serverType');
+
+      const scanNextPeer = () => {
+        if (idx >= peerServers.length || found.length >= limit) return;
+        const srv = peerServers[idx++];
+        const baseUrl = getServerBaseUrlById(srv.id);
+        const srvLabel = typeof cleanServerName === 'function' ? cleanServerName(srv.name) : (srv.name || srv.id);
+        let bestForServer = null;
+        let bestScore = -999;
+
+        const req = index.openCursor(IDBKeyRange.only([srv.id, type]));
+        req.onsuccess = e => {
+          const cursor = e.target.result;
+          if (!cursor) {
+            if (bestForServer && bestForServer.url && !seenUrls.has(bestForServer.url)) {
+              seenUrls.add(bestForServer.url);
+              found.push(bestForServer);
+            }
+            scanNextPeer();
+            return;
+          }
+          const rec = cursor.value;
+          if (rec) {
+            const recTvg = rec.tvgId ? String(rec.tvgId).trim().toLowerCase() : '';
+            const tvgHit = Boolean(targetTvg && recTvg && recTvg === targetTvg);
+            let titleHit = false;
+            if (!tvgHit && targetNorm) {
+              const recNorm = CatalogUtils.normalizeUnifiedTitle(rec.name || '');
+              titleHit = Boolean(recNorm && recNorm === targetNorm);
+            }
+            if (tvgHit || titleHit) {
+              const expandedUrl = CatalogUtils.expandStreamUrl(rec, baseUrl, creds);
+              if (expandedUrl && expandedUrl !== targetItem.url) {
+                const quality = CatalogUtils.computeStreamQualityScore(rec.name) + (tvgHit ? 10 : 0);
+                if (quality > bestScore) {
+                  bestScore = quality;
+                  bestForServer = {
+                    url: expandedUrl,
+                    origem: srvLabel,
+                    serverId: srv.id,
+                    name: rec.name || targetItem.name,
+                    quality
+                  };
+                }
+              }
+            }
+          }
+          cursor.continue();
+        };
+        req.onerror = () => scanNextPeer();
+      };
+
+      scanNextPeer();
+      tx.oncomplete = () => { try { db.close(); } catch (e) {} resolve(found); };
+      tx.onerror = () => { try { db.close(); } catch (e) {} resolve(found); };
+    } catch (e) {
+      try { db.close(); } catch (_) {}
+      resolve(found);
+    }
+  });
+
+  candidates.sort((a, b) => (b.quality || 0) - (a.quality || 0));
+
+  if (mk21AltSourceCache.size >= MK21_ALT_SOURCE_CACHE_MAX) {
+    const oldestKey = mk21AltSourceCache.keys().next().value;
+    if (oldestKey) mk21AltSourceCache.delete(oldestKey);
+  }
+  mk21AltSourceCache.set(cacheKey, candidates);
+  return candidates;
 }
 
 let searchIndexGeneration = 0;
@@ -4668,13 +4876,21 @@ function closeOmnisearch() {
   } catch (_) {}
 }
 
+let omnisearchGeneration = 0;
+
 async function executeOmnisearch(query) {
+  const gen = ++omnisearchGeneration;
   if (!query || query.trim().length < 2) {
     omnisearchResults = { ALL: [], LIVE: [], MOVIE: [], SERIES: [] };
     renderOmnisearchResults();
     return;
   }
   const q = query.toLowerCase().trim();
+  const activeSrv = SERVERS[currentServerIndex] || null;
+  const activeSrvId = activeSrv ? activeSrv.id : '';
+  const activeSrvName = activeSrv
+    ? (typeof cleanServerName === 'function' ? cleanServerName(activeSrv.name) : activeSrv.name)
+    : '';
 
   const liveList = (allCatalog && allCatalog.LIVE) ? allCatalog.LIVE : [];
   const movieList = (allCatalog && allCatalog.MOVIE) ? allCatalog.MOVIE : [];
@@ -4689,38 +4905,37 @@ async function executeOmnisearch(query) {
     return nameMatch || normMatch || groupMatch;
   };
 
-  const foundLive = liveList.filter(filterFn).slice(0, 80);
-  const foundMovies = movieList.filter(filterFn).slice(0, 80);
-  const foundSeries = seriesList.filter(filterFn).slice(0, 80);
+  const tagActive = (arr) => arr.filter(filterFn).slice(0, 80).map(item => Object.assign({}, item, {
+    serverId: item.serverId || activeSrvId,
+    serverName: item.serverName || activeSrvName
+  }));
 
-  // Busca no índice completo do IndexedDB para alcançar VOD/Séries sob demanda fora da RAM
+  const rawLive = tagActive(liveList);
+  const rawMovies = tagActive(movieList);
+  const rawSeries = tagActive(seriesList);
+
+  // Fase 2: Busca unificada em TODOS os servidores sincronizados no IndexedDB (O(1) RAM)
+  // e deduplica títulos idênticos anexando fontes alternativas para failover automático.
   try {
-    const srv = SERVERS[currentServerIndex];
-    if (srv && typeof searchCatalogIndex === 'function') {
-      const mergeUnique = (targetArr, extras) => {
-        if (!Array.isArray(extras) || !extras.length) return;
-        const seen = new Set(targetArr.map(i => i.url || i.name));
-        for (let i = 0; i < extras.length && targetArr.length < 80; i++) {
-          const it = extras[i];
-          if (!it) continue;
-          if (!isAdultUnlocked && (it.isAdult || isAdult(it.name) || isAdult(it.group))) continue;
-          const key = it.url || it.name;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          targetArr.push(it);
-        }
-      };
-      if (foundLive.length < 80) {
-        mergeUnique(foundLive, await searchCatalogIndex(srv.id, 'LIVE', q, '', 80));
-      }
-      if (foundMovies.length < 80) {
-        mergeUnique(foundMovies, await searchCatalogIndex(srv.id, 'MOVIE', q, '', 80));
-      }
-      if (foundSeries.length < 80) {
-        mergeUnique(foundSeries, await searchCatalogIndex(srv.id, 'SERIES', q, '', 80));
-      }
+    const allServers = mk21GetServerListForCrossQuery('');
+    if (allServers.length > 0 && typeof searchCatalogIndexAcrossServers === 'function') {
+      const [idbLive, idbMovies, idbSeries] = await Promise.all([
+        searchCatalogIndexAcrossServers(allServers, 'LIVE', q, 50, 220),
+        searchCatalogIndexAcrossServers(allServers, 'MOVIE', q, 50, 220),
+        searchCatalogIndexAcrossServers(allServers, 'SERIES', q, 50, 220)
+      ]);
+      if (gen !== omnisearchGeneration) return;
+      if (Array.isArray(idbLive) && idbLive.length) rawLive.push(...idbLive);
+      if (Array.isArray(idbMovies) && idbMovies.length) rawMovies.push(...idbMovies);
+      if (Array.isArray(idbSeries) && idbSeries.length) rawSeries.push(...idbSeries);
     }
   } catch (e) {}
+
+  if (gen !== omnisearchGeneration) return;
+
+  const foundLive = CatalogUtils.mergeUnifiedSearchResults(rawLive, activeSrvId, 80);
+  const foundMovies = CatalogUtils.mergeUnifiedSearchResults(rawMovies, activeSrvId, 80);
+  const foundSeries = CatalogUtils.mergeUnifiedSearchResults(rawSeries, activeSrvId, 80);
 
   omnisearchResults = {
     ALL: [...foundLive, ...foundMovies, ...foundSeries],
@@ -4751,7 +4966,7 @@ function renderOmnisearchResults() {
       const input = $('inputOmnisearch');
       emptyState.textContent = (input && input.value.trim().length >= 2) ?
         'Nenhum resultado encontrado para "' + input.value.trim() + '" nesta categoria.' :
-        'Digite uma palavra-chave para buscar instantaneamente em todo o catálogo.';
+        'Digite uma palavra-chave para buscar instantaneamente em todos os servidores sincronizados.';
     }
     return;
   }
@@ -4769,11 +4984,18 @@ function renderOmnisearchResults() {
 
     const typeBadgeClass = item.contentType === 'LIVE' ? 'badge-live' : (item.contentType === 'MOVIE' ? 'badge-movie' : 'badge-series');
     const typeLabel = item.contentType === 'LIVE' ? 'Ao Vivo' : (item.contentType === 'MOVIE' ? 'Filme' : 'Série');
+    const srvTag = item.serverName
+      ? `<span class="omnisearch-server-badge">${escapeHtml(item.serverName)}</span>`
+      : '';
+    const multiSourceTag = (item.sourceCount && item.sourceCount > 1)
+      ? `<span class="omnisearch-sources-pill">+${item.sourceCount - 1} ${item.sourceCount - 1 === 1 ? 'fonte' : 'fontes'}</span>`
+      : '';
+    const adultTag = item.isAdult ? '<span class="omnisearch-adult-badge">+18</span>' : '';
 
     btn.innerHTML = `
       <div class="omnisearch-item-header">
         <span class="omnisearch-type-badge ${typeBadgeClass}">${escapeHtml(typeLabel)}</span>
-        <span style="font-size:12px; color:#ffd54f;">${item.isAdult ? '+18' : ''}</span>
+        <div class="omnisearch-meta-badges">${srvTag}${multiSourceTag}${adultTag}</div>
       </div>
       <div class="omnisearch-item-name">${escapeHtml(item.name)}</div>
       <div class="omnisearch-item-group">${escapeHtml(item.group || 'Geral')}</div>
@@ -7934,22 +8156,39 @@ async function runSpeedTest() {
   window.__mk21SpeedTestController = controller;
   const signal = controller ? controller.signal : undefined;
 
+  // Pausa qualquer reprodução IPTV em andamento para evitar concorrência de 10–18 Mbps e CPU na TV
+  try {
+    if (typeof stopCurrentPlayer === 'function') {
+      stopCurrentPlayer(false);
+    }
+  } catch (e) {}
+
+  const svgSpeed = (pathD) => `<svg class="speed-card-svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${pathD}"/></svg>`;
+  const ICON_DOWN = svgSpeed('M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z');
+  const ICON_UP = svgSpeed('M5 20h14v-2H5v2zm7-16l-5 5 1.41 1.41L11 7.83V18h2V7.83l2.59 2.58L17 9l-5-5z');
+  const ICON_PING = svgSpeed('M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z');
+  const ICON_JITTER = svgSpeed('M3 13h3l2-6 4 12 3-8 2 2h4v-2h-3.2l-3.3-3.3-2.5 6.8L8.2 3 4.8 11H3v2z');
+  const ICON_RETRY = svgSpeed('M17.65 6.35A7.95 7.95 0 0012 4a8 8 0 108 8h-2a6 6 0 11-1.76-4.24L13 11h7V4l-2.35 2.35z');
+
   const box = $('settingsDetailBox');
   box.innerHTML = `
-    <h3 style="margin-top:0; font-size:24px;">🚀 Teste de Velocidade da Conexão</h3>
-    <p style="color:#aaa;">Medição multi-conexão progressiva (padrão Fast.com / Open Connect CDN).</p>
+    <h3 class="settings-panel-title">Teste de Velocidade da Conexão</h3>
+    <p class="settings-panel-subtitle">Medição multi-conexão progressiva (padrão Fast.com / Open Connect CDN).</p>
     <div class="speed-meter-box">
-      <div id="speedMeterStatus" style="font-size:18px;color:#94a3b8;margin-bottom:12px;">1/4 - Conectando aos servidores Fast / CDN...</div>
+      <div id="speedMeterStatus" class="speed-meter-status">1/4 - Conectando aos servidores Fast.com / CDN...</div>
       <div class="speed-gauge-wrap"><div id="speedGaugeArc" class="speed-gauge-arc" style="transform:rotate(-45deg);"></div></div>
       <div><span id="speedMeterNumber" class="speed-meter-val">0.0</span><span id="speedMeterUnit" class="speed-meter-unit">Mbps</span></div>
       <div class="speed-progress-bar-wrap"><div id="speedProgressBar" class="speed-progress-bar-fill" style="width:0%;"></div></div>
       <div class="speed-metrics-grid">
-        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">⬇️ Download</div><div id="speedMeterDownload" style="font-size:20px;font-weight:bold;color:#4caf50;">-- Mbps</div></div>
-        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">⬆️ Upload</div><div id="speedMeterUpload" style="font-size:20px;font-weight:bold;color:#64b5f6;">-- Mbps</div></div>
-        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">⏱️ Latência</div><div id="speedMeterPing" style="font-size:20px;font-weight:bold;color:#ffd54f;">-- ms</div></div>
-        <div class="speed-metric-card"><div style="font-size:13px;color:#888;">📶 Jitter</div><div id="speedMeterJitter" style="font-size:20px;font-weight:bold;color:#ff8a65;">-- ms</div></div>
-      </div><div id="speedQualityRating" style="margin-top:16px;font-size:16px;font-weight:bold;color:#fff;"></div>
-    </div><button id="btnStartSpeedTest" class="ctrl-btn primary" style="padding:12px 28px;" tabindex="0">🔄 Iniciar Novo Teste</button>`;
+        <div class="speed-metric-card"><div class="speed-metric-label">${ICON_DOWN}<span>Download</span></div><div id="speedMeterDownload" class="speed-metric-value speed-val-down">-- Mbps</div></div>
+        <div class="speed-metric-card"><div class="speed-metric-label">${ICON_UP}<span>Upload</span></div><div id="speedMeterUpload" class="speed-metric-value speed-val-up">-- Mbps</div></div>
+        <div class="speed-metric-card"><div class="speed-metric-label">${ICON_PING}<span>Latência</span></div><div id="speedMeterPing" class="speed-metric-value speed-val-ping">-- ms</div></div>
+        <div class="speed-metric-card"><div class="speed-metric-label">${ICON_JITTER}<span>Jitter</span></div><div id="speedMeterJitter" class="speed-metric-value speed-val-jitter">-- ms</div></div>
+      </div>
+      <div id="speedQualityRating" class="speed-quality-rating"></div>
+      <div id="speedHardwareNote" class="speed-hardware-note hidden"></div>
+    </div>
+    <button id="btnStartSpeedTest" class="ctrl-btn primary speed-start-btn" tabindex="0">${ICON_RETRY}<span>Iniciar Novo Teste</span></button>`;
   $('btnStartSpeedTest').onclick = runSpeedTest;
 
   const isStale = () => (window.__mk21SpeedTestController !== controller) || (signal && signal.aborted);
@@ -7958,7 +8197,6 @@ async function runSpeedTest() {
   const setGauge = value => {
     if (isStale() || !$('speedGaugeArc')) return;
     const safeVal = Math.max(0, Number(value) || 0);
-    // Escala logarítmica suave até ~1000 Mbps para boa leitura de 5 Mbps a 500+ Mbps
     const ratio = Math.min(1, Math.log10(1 + safeVal) / Math.log10(1001));
     $('speedGaugeArc').style.transform = `rotate(${(-45 + ratio * 180).toFixed(1)}deg)`;
   };
@@ -7970,17 +8208,12 @@ async function runSpeedTest() {
   const customEndpoint = (localStorage.getItem('mk21_speed_test_endpoint') || '').trim().replace(/\/+$/, '');
   const cloudflareBase = customEndpoint || 'https://speed.cloudflare.com';
 
-  function buildRangeUrl(url, startByte, endByte) {
-    const sep = url.indexOf('?') !== -1 ? '&' : '?';
-    return `${url}${sep}range=${startByte}-${endByte}&_=${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  }
-
   async function discoverTargets() {
     if (!customEndpoint) {
-      const fastApiUrl = 'https://api.fast.com/netflix/speedtest/v2?https=true&token=YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm&urlCount=5';
+      const fastApiUrl = 'https://api.fast.com/netflix/speedtest/v2?https=true&token=YXNkZmFzZGxmbnNkYWZoYXNkZmhrYWxm&urlCount=8';
       try {
         const fastCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = fastCtrl ? setTimeout(() => fastCtrl.abort(), 3500) : null;
+        const timer = fastCtrl ? setTimeout(() => fastCtrl.abort(), 4000) : null;
         const onParentAbort = () => { if (fastCtrl) fastCtrl.abort(); };
         if (signal && fastCtrl) signal.addEventListener('abort', onParentAbort, { once: true });
         try {
@@ -7994,8 +8227,16 @@ async function runSpeedTest() {
             const validUrls = targets
               .map(t => (t && typeof t.url === 'string' ? t.url.trim() : ''))
               .filter(u => /^https?:\/\//i.test(u));
+            const locObj = targets[0] && targets[0].location ? targets[0].location : null;
+            const locText = locObj && locObj.city
+              ? `${locObj.city}${locObj.country ? ', ' + locObj.country : ''}`
+              : '';
             if (validUrls.length > 0) {
-              return { provider: 'Fast.com (Netflix Open Connect)', mode: 'fast', urls: validUrls };
+              return {
+                provider: locText ? `Fast.com (${locText})` : 'Fast.com (Netflix Open Connect)',
+                mode: 'fast',
+                urls: validUrls
+              };
             }
           }
         } finally {
@@ -8011,99 +8252,118 @@ async function runSpeedTest() {
     };
   }
 
-  async function probeOnce(targetInfo) {
-    const base = targetInfo.urls[0];
-    const url = targetInfo.mode === 'fast'
-      ? buildRangeUrl(base, 0, 0)
-      : `${base}?bytes=1&_=${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  async function probeLatencyRtt(url) {
     const t0 = performance.now();
     const r = await fetch(url, { cache: 'no-store', signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    await r.arrayBuffer();
-    return performance.now() - t0;
+    const buf = await r.arrayBuffer();
+    return { ms: performance.now() - t0, bytes: buf.byteLength };
   }
 
-  try {
-    const targetInfo = await discoverTargets();
-    if (isStale()) return;
+  async function measureLatency(targetInfo) {
+    // Netflix OCA usa PATH `/speedtest/range/0-0` (e NÃO query param `&range=0-0`, que fazia baixar 26 MB!).
+    let useCloudflareFallback = targetInfo.mode !== 'fast';
+    const nextProbeUrl = () => useCloudflareFallback
+      ? `${cloudflareBase}/__down?bytes=0&_=${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      : CatalogUtils.buildFastComRangeUrl(targetInfo.urls[0], 0, 0);
 
-    setStatus(`1/4 - Medindo latência (${targetInfo.provider})...`);
-    // Warm-up para estabilizar DNS + TLS keep-alive antes das amostras de RTT
-    await probeOnce(targetInfo);
+    // Warm-up para DNS + TLS keep-alive e validação de payload pequeno (<= 4 KB)
+    try {
+      const warm = await probeLatencyRtt(nextProbeUrl());
+      if (!useCloudflareFallback && warm.bytes > 4096) {
+        useCloudflareFallback = true;
+        await probeLatencyRtt(nextProbeUrl());
+      }
+    } catch (e) {
+      if (!useCloudflareFallback) {
+        useCloudflareFallback = true;
+        await probeLatencyRtt(nextProbeUrl());
+      } else {
+        throw e;
+      }
+    }
+
     const samples = [];
-    for (let i = 0; i < 5; i++) {
-      if (isStale()) return;
-      samples.push(await probeOnce(targetInfo));
+    for (let i = 0; i < 6; i++) {
+      if (isStale()) return { ping: 0, jitter: 0 };
+      const res = await probeLatencyRtt(nextProbeUrl());
+      samples.push(res.ms);
     }
     const sorted = samples.slice().sort((a, b) => a - b);
     const ping = sorted[Math.floor(sorted.length / 2)];
     let jitterSum = 0;
     for (let i = 1; i < samples.length; i++) jitterSum += Math.abs(samples[i] - samples[i - 1]);
     const jitter = samples.length > 1 ? jitterSum / (samples.length - 1) : 0;
+    return { ping, jitter };
+  }
+
+  try {
+    const targetInfo = await discoverTargets();
+    if (isStale()) return;
+
+    // 1/4: Latência real (unloaded RTT com range 0-0 no PATH)
+    setStatus(`1/4 - Medindo latência (${targetInfo.provider})...`);
+    const { ping, jitter } = await measureLatency(targetInfo);
+    if (isStale()) return;
 
     if ($('speedMeterPing')) $('speedMeterPing').textContent = Math.round(ping) + ' ms';
     if ($('speedMeterJitter')) $('speedMeterJitter').textContent = jitter.toFixed(1) + ' ms';
     setProgress(12);
 
-    // 2/4: Download multi-stream progressivo estilo Fast.com (5 conexões simultâneas, 8.5s)
+    // 2/4: Download multi-stream (6–8 conexões paralelas, 10s, amostragem zero-GC a cada 200ms)
     setStatus(`2/4 - Medindo download multi-conexão (${targetInfo.provider})...`);
-    const CONCURRENCY = Math.min(6, Math.max(4, targetInfo.urls.length));
-    const DURATION_MS = 8500;
-    const WARMUP_MS = 1000;
-    const WINDOW_MS = 2500;
+    const CONCURRENCY = Math.min(8, Math.max(6, targetInfo.urls.length));
+    const DURATION_MS = 10000;
+    const WARMUP_MS = 2000;
 
     const dlCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const onAbortDl = () => { if (dlCtrl) dlCtrl.abort(); };
     if (signal && dlCtrl) signal.addEventListener('abort', onAbortDl, { once: true });
 
     let dlFirstByteTs = 0;
-    let totalBytesSinceFirst = 0;
-    const byteEvents = []; // { t, b }
+    let totalBytesDownloaded = 0;
+    let lastTickBytes = 0;
+    let lastTickTs = 0;
+    let steadyStartBytes = 0;
+    let steadyStartTs = 0;
+    const steadyBucketSamples = []; // Apenas números (max ~45 amostras) -> zero pressão de GC na TV
     let dlStopped = false;
-    let peakWindowMbps = 0;
-
-    function computeWindowMbps(now) {
-      const cutoff = Math.max(dlFirstByteTs + WARMUP_MS, now - WINDOW_MS);
-      let sum = 0;
-      let firstT = now;
-      for (let i = byteEvents.length - 1; i >= 0; i--) {
-        const ev = byteEvents[i];
-        if (ev.t < cutoff) break;
-        sum += ev.b;
-        if (ev.t < firstT) firstT = ev.t;
-      }
-      const elapsedSec = (now - firstT) / 1000;
-      if (sum <= 0 || elapsedSec < 0.35) return 0;
-      return (sum * 8) / elapsedSec / 1000000;
-    }
-
-    function computeSteadyMbps(now) {
-      const steadyStart = dlFirstByteTs + WARMUP_MS;
-      if (now <= steadyStart + 500) {
-        const elapsedAll = Math.max(0.25, (now - dlFirstByteTs) / 1000);
-        return (totalBytesSinceFirst * 8) / elapsedAll / 1000000;
-      }
-      let steadyBytes = 0;
-      for (let i = 0; i < byteEvents.length; i++) {
-        if (byteEvents[i].t >= steadyStart) steadyBytes += byteEvents[i].b;
-      }
-      const steadySec = (now - steadyStart) / 1000;
-      return steadySec > 0 ? (steadyBytes * 8) / steadySec / 1000000 : 0;
-    }
 
     const dlTicker = setInterval(() => {
       if (isStale() || dlStopped) return;
       const now = performance.now();
       if (dlFirstByteTs <= 0) return;
       const elapsed = now - dlFirstByteTs;
-      const liveMbps = computeWindowMbps(now) || computeSteadyMbps(now);
-      if (liveMbps > peakWindowMbps && elapsed > WARMUP_MS + 800) {
-        peakWindowMbps = liveMbps;
+
+      if (elapsed >= WARMUP_MS && steadyStartTs === 0) {
+        steadyStartTs = now;
+        steadyStartBytes = totalBytesDownloaded;
       }
-      if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(liveMbps);
-      if ($('speedMeterDownload')) $('speedMeterDownload').textContent = formatMbps(liveMbps);
-      setGauge(liveMbps);
-      setProgress(12 + Math.min(53, Math.round((elapsed / DURATION_MS) * 53)));
+
+      let liveMbps = 0;
+      if (lastTickTs > 0 && now > lastTickTs + 50) {
+        const deltaBytes = totalBytesDownloaded - lastTickBytes;
+        const deltaSec = (now - lastTickTs) / 1000;
+        const instantMbps = deltaSec > 0 ? (deltaBytes * 8) / deltaSec / 1000000 : 0;
+        if (elapsed >= WARMUP_MS && instantMbps > 0) {
+          steadyBucketSamples.push(instantMbps);
+        }
+        if (steadyBucketSamples.length >= 3) {
+          liveMbps = CatalogUtils.computeTrimmedThroughputMbps(steadyBucketSamples);
+        } else {
+          const allSec = Math.max(0.25, elapsed / 1000);
+          liveMbps = (totalBytesDownloaded * 8) / allSec / 1000000;
+        }
+      }
+      lastTickBytes = totalBytesDownloaded;
+      lastTickTs = now;
+
+      if (liveMbps > 0) {
+        if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(liveMbps);
+        if ($('speedMeterDownload')) $('speedMeterDownload').textContent = formatMbps(liveMbps);
+        setGauge(liveMbps);
+      }
+      setProgress(12 + Math.min(56, Math.round((elapsed / DURATION_MS) * 56)));
     }, 200);
 
     const dlStopTimer = setTimeout(() => {
@@ -8117,7 +8377,7 @@ async function runSpeedTest() {
         const base = targetInfo.urls[(workerIdx + iter) % targetInfo.urls.length];
         iter++;
         const url = targetInfo.mode === 'fast'
-          ? buildRangeUrl(base, 0, 26214399)
+          ? CatalogUtils.buildFastComRangeUrl(base, 0, 26214399)
           : `${base}?bytes=25000000&_=${Date.now()}_${workerIdx}_${iter}`;
         try {
           const res = await fetch(url, {
@@ -8132,23 +8392,18 @@ async function runSpeedTest() {
               if (part.done) break;
               const chunkLen = part.value ? part.value.byteLength : 0;
               if (chunkLen > 0) {
-                const now = performance.now();
-                if (dlFirstByteTs === 0) dlFirstByteTs = now;
-                totalBytesSinceFirst += chunkLen;
-                byteEvents.push({ t: now, b: chunkLen });
+                if (dlFirstByteTs === 0) dlFirstByteTs = performance.now();
+                totalBytesDownloaded += chunkLen;
               }
             }
             try { await reader.cancel(); } catch (e) {}
           } else {
             const buf = await res.arrayBuffer();
-            const now = performance.now();
-            if (dlFirstByteTs === 0) dlFirstByteTs = now;
-            totalBytesSinceFirst += buf.byteLength;
-            byteEvents.push({ t: now, b: buf.byteLength });
+            if (dlFirstByteTs === 0) dlFirstByteTs = performance.now();
+            totalBytesDownloaded += buf.byteLength;
           }
         } catch (err) {
           if (dlStopped || isStale() || (err && err.name === 'AbortError')) break;
-          // Troca silenciosamente para próxima URL em caso de erro pontual de um worker
           await new Promise(r => setTimeout(r, 120));
         }
       }
@@ -8166,19 +8421,23 @@ async function runSpeedTest() {
     }
 
     if (isStale()) return;
-    if (totalBytesSinceFirst <= 0 || dlFirstByteTs <= 0) {
+    if (totalBytesDownloaded <= 0 || dlFirstByteTs <= 0) {
       throw new Error('Não foi possível baixar dados dos servidores de teste');
     }
 
     const dlEndTs = performance.now();
-    const steadyMbps = computeSteadyMbps(dlEndTs);
-    const downMbps = Math.max(steadyMbps, peakWindowMbps * 0.92);
+    const steadyAvgMbps = (steadyStartTs > 0 && dlEndTs > steadyStartTs + 500)
+      ? ((totalBytesDownloaded - steadyStartBytes) * 8) / ((dlEndTs - steadyStartTs) / 1000) / 1000000
+      : ((totalBytesDownloaded * 8) / Math.max(0.25, (dlEndTs - dlFirstByteTs) / 1000) / 1000000);
+    const trimmedMbps = CatalogUtils.computeTrimmedThroughputMbps(steadyBucketSamples);
+    const downMbps = Math.max(steadyAvgMbps, trimmedMbps);
+
     if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(downMbps);
     if ($('speedMeterDownload')) $('speedMeterDownload').textContent = formatMbps(downMbps);
     setGauge(downMbps);
-    setProgress(68);
+    setProgress(70);
 
-    // 3/4: Upload multi-stream (3 conexões simultâneas no endpoint com CORS)
+    // 3/4: Upload multi-stream (4 conexões simultâneas no endpoint com CORS)
     setStatus('3/4 - Medindo upload multi-conexão...');
     let upMbps = NaN;
     try {
@@ -8186,11 +8445,10 @@ async function runSpeedTest() {
       const onAbortUp = () => { if (upCtrl) upCtrl.abort(); };
       if (signal && upCtrl) signal.addEventListener('abort', onAbortUp, { once: true });
 
-      const chunkSize = 1500000; // 1.5 MB por envio
+      const chunkSize = 2000000; // 2 MB por envio
       const payload = new Uint8Array(chunkSize);
       if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(payload.subarray(0, 65536));
 
-      // Warm-up único para abrir conexão HTTP/2/TLS antes do cronômetro de upload
       const warmRes = await fetch(`${cloudflareBase}/__up?_=${Date.now()}`, {
         method: 'POST',
         body: payload.subarray(0, 16384),
@@ -8204,7 +8462,7 @@ async function runSpeedTest() {
       let upStopped = false;
       let uploadedBytes = 0;
       const upStart = performance.now();
-      const UP_DURATION_MS = 4500;
+      const UP_DURATION_MS = 5000;
       const upTimer = setTimeout(() => {
         upStopped = true;
         if (upCtrl) try { upCtrl.abort(); } catch (e) {}
@@ -8227,12 +8485,12 @@ async function runSpeedTest() {
           const elapsedSec = Math.max(0.25, (performance.now() - upStart) / 1000);
           const curUp = (uploadedBytes * 8) / elapsedSec / 1000000;
           if ($('speedMeterUpload')) $('speedMeterUpload').textContent = formatMbps(curUp);
-          setProgress(68 + Math.min(28, Math.round(((performance.now() - upStart) / UP_DURATION_MS) * 28)));
+          setProgress(70 + Math.min(26, Math.round(((performance.now() - upStart) / UP_DURATION_MS) * 26)));
         }
       }
 
       try {
-        await Promise.all([uploadWorker(0), uploadWorker(1), uploadWorker(2)]);
+        await Promise.all([uploadWorker(0), uploadWorker(1), uploadWorker(2), uploadWorker(3)]);
       } catch (upWorkerErr) {
         if (!upStopped && (!upWorkerErr || upWorkerErr.name !== 'AbortError')) throw upWorkerErr;
       } finally {
@@ -8251,14 +8509,17 @@ async function runSpeedTest() {
 
     if (isStale()) return;
     if ($('speedMeterUpload')) $('speedMeterUpload').textContent = formatMbps(upMbps);
-    // Padrão Fast.com: número principal exibe Download ao finalizar
     if ($('speedMeterNumber')) $('speedMeterNumber').textContent = formatBigNumber(downMbps);
     setGauge(downMbps);
     setProgress(100);
-    setStatus(`4/4 - ✅ Concluído (${targetInfo.provider})`);
+    setStatus(`4/4 - Concluído (${targetInfo.provider})`);
     if ($('speedQualityRating')) {
       const upLabel = Number.isFinite(upMbps) ? formatMbps(upMbps) : 'Indisponível';
       $('speedQualityRating').textContent = `Download ${formatMbps(downMbps)} • Upload ${upLabel} • Latência ${Math.round(ping)} ms • Jitter ${jitter.toFixed(1)} ms`;
+    }
+    if ($('speedHardwareNote') && downMbps >= 65 && downMbps <= 98) {
+      $('speedHardwareNote').textContent = 'Nota de hardware da TV: a porta de cabo Ethernet da maioria das Smart TVs LG/Samsung tem limite físico de 100 Mbps (teto real ~94 Mbps) e placas Wi-Fi 5 ficam abaixo do Wi-Fi 6 de celulares. Para 4K IPTV bastam ~25 Mbps.';
+      $('speedHardwareNote').classList.remove('hidden');
     }
   } catch (err) {
     if (isStale()) return;
@@ -8270,31 +8531,41 @@ async function runSpeedTest() {
   }
 }
 
-// 6 NÍVEIS DE TAMANHO DA FONTE (ACESSIBILIDADE EM TODOS OS MENUS)
+// 6 NÍVEIS DE TAMANHO DA FONTE (ACESSIBILIDADE EM 100% DA INTERFACE SEM CORTES)
+const MK21_FONT_SCALES = {
+  normal: 1,
+  large: 1.15,
+  xlarge: 1.3,
+  xxlarge: 1.45,
+  huge: 1.6,
+  ultra: 1.75
+};
+
 function renderFontSizePanel() {
   const cur = localStorage.getItem('mk21_font_size') || 'normal';
   const box = $('settingsDetailBox');
+  if (!box) return;
   box.innerHTML = `
-    <h3 style="margin-top:0;">🔤 Tamanho da Fonte de Todos os Menus</h3>
-    <p style="color:#aaa;">Ajusta o tamanho das fontes em toda a interface (canais, EPG, categorias e botões):</p>
-    <div style="display:flex; flex-direction:column; gap:12px; max-width:480px; margin-top:16px;">
-      <button id="btnFontNormal" class="list-item-btn ${cur === 'normal' ? 'active' : ''}" style="padding:14px 18px;" tabindex="0">
+    <h3 class="settings-panel-title">Tamanho da Fonte de Todos os Menus</h3>
+    <p class="settings-panel-subtitle">Ajusta proporcionalmente o texto em 100% da interface (barra lateral, categorias, canais, EPG, configurações, busca e modais):</p>
+    <div class="font-size-options-list">
+      <button id="btnFontNormal" class="list-item-btn font-size-opt-btn ${cur === 'normal' ? 'active' : ''}" data-preview="normal" tabindex="0">
         1. Padrão (Normal 1080p)
       </button>
-      <button id="btnFontLarge" class="list-item-btn ${cur === 'large' ? 'active' : ''}" style="padding:16px 20px; font-size:21px;" tabindex="0">
-        2. Grande (+25% Visibilidade)
+      <button id="btnFontLarge" class="list-item-btn font-size-opt-btn ${cur === 'large' ? 'active' : ''}" data-preview="large" tabindex="0">
+        2. Grande (+15% Visibilidade)
       </button>
-      <button id="btnFontXLarge" class="list-item-btn ${cur === 'xlarge' ? 'active' : ''}" style="padding:18px 22px; font-size:25px;" tabindex="0">
-        3. Muito Grande (+50% Sofá Distante)
+      <button id="btnFontXLarge" class="list-item-btn font-size-opt-btn ${cur === 'xlarge' ? 'active' : ''}" data-preview="xlarge" tabindex="0">
+        3. Muito Grande (+30% Sofá Médio)
       </button>
-      <button id="btnFontXXLarge" class="list-item-btn ${cur === 'xxlarge' ? 'active' : ''}" style="padding:20px 24px; font-size:29px;" tabindex="0">
-        4. Gigante (+75% Máxima Legibilidade)
+      <button id="btnFontXXLarge" class="list-item-btn font-size-opt-btn ${cur === 'xxlarge' ? 'active' : ''}" data-preview="xxlarge" tabindex="0">
+        4. Gigante (+45% Máxima Legibilidade)
       </button>
-      <button id="btnFontHuge" class="list-item-btn ${cur === 'huge' ? 'active' : ''}" style="padding:22px 26px; font-size:33px;" tabindex="0">
-        5. Extra Gigante (+100% Super Visível)
+      <button id="btnFontHuge" class="list-item-btn font-size-opt-btn ${cur === 'huge' ? 'active' : ''}" data-preview="huge" tabindex="0">
+        5. Extra Gigante (+60% Super Visível)
       </button>
-      <button id="btnFontUltra" class="list-item-btn ${cur === 'ultra' ? 'active' : ''}" style="padding:24px 28px; font-size:37px;" tabindex="0">
-        6. Máxima Sofá Distante (+125% TV Grande)
+      <button id="btnFontUltra" class="list-item-btn font-size-opt-btn ${cur === 'ultra' ? 'active' : ''}" data-preview="ultra" tabindex="0">
+        6. Máxima Sofá Distante (+75% TV Grande)
       </button>
     </div>
   `;
@@ -8308,18 +8579,38 @@ function renderFontSizePanel() {
 }
 
 function applyFontSize(size) {
-  document.body.classList.remove('font-large', 'font-xlarge', 'font-xxlarge', 'font-huge', 'font-ultra');
-  if (size === 'large') document.body.classList.add('font-large');
-  if (size === 'xlarge') document.body.classList.add('font-xlarge');
-  if (size === 'xxlarge') document.body.classList.add('font-xxlarge');
-  if (size === 'huge') document.body.classList.add('font-huge');
-  if (size === 'ultra') document.body.classList.add('font-ultra');
-  localStorage.setItem('mk21_font_size', size);
-  renderFontSizePanel();
-  const idMap = { normal: 'btnFontNormal', large: 'btnFontLarge', xlarge: 'btnFontXLarge', xxlarge: 'btnFontXXLarge', huge: 'btnFontHuge', ultra: 'btnFontUltra' };
-  const targetBtn = $(idMap[size] || 'btnFontNormal');
-  if (targetBtn) {
-    try { targetBtn.focus(); } catch (e) {}
+  const safeSize = Object.prototype.hasOwnProperty.call(MK21_FONT_SCALES, size) ? size : 'normal';
+  const scale = MK21_FONT_SCALES[safeSize];
+  const fontClasses = ['font-large', 'font-xlarge', 'font-xxlarge', 'font-huge', 'font-ultra'];
+  const targets = [document.documentElement, document.body];
+
+  for (let i = 0; i < targets.length; i++) {
+    const el = targets[i];
+    if (!el) continue;
+    el.classList.remove.apply(el.classList, fontClasses);
+    if (safeSize !== 'normal') {
+      el.classList.add('font-' + safeSize);
+    }
+    try { el.style.setProperty('--font-scale', String(scale)); } catch (e) {}
+  }
+
+  localStorage.setItem('mk21_font_size', safeSize);
+
+  // Só re-renderiza o painel se ele estiver realmente aberto na tela (evita sobrescrever DOM no boot)
+  if ($('btnFontNormal')) {
+    renderFontSizePanel();
+    const idMap = {
+      normal: 'btnFontNormal',
+      large: 'btnFontLarge',
+      xlarge: 'btnFontXLarge',
+      xxlarge: 'btnFontXXLarge',
+      huge: 'btnFontHuge',
+      ultra: 'btnFontUltra'
+    };
+    const targetBtn = $(idMap[safeSize] || 'btnFontNormal');
+    if (targetBtn) {
+      try { targetBtn.focus(); } catch (e) {}
+    }
   }
 }
 
@@ -9525,7 +9816,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.9.9';
+const BASE_PACKAGE_VERSION = '2.10.0';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -12019,22 +12310,37 @@ async function mk21TryAlternativeSource() {
   const sources = window.MK21AlternativeSources || null;
   try {
     const candidates = [];
+    const seenUrls = new Set();
+    const pushCandidate = (url, origem) => {
+      const cleanUrl = String(url || '').trim();
+      if (!cleanUrl || seenUrls.has(cleanUrl)) return;
+      seenUrls.add(cleanUrl);
+      candidates.push({ url: cleanUrl, origem: origem || 'fonte alternativa' });
+    };
+
+    // 1) Fontes alternativas já anexadas ao item (ex.: resultado unificado do Omnisearch Fase 2)
+    if (Array.isArray(activeItem.alternateSources)) {
+      activeItem.alternateSources.forEach(src => {
+        if (src && src.url) pushCandidate(src.url, src.serverName || src.origem || 'outro servidor');
+      });
+    }
     if (sources) {
-      sources.sourceUrls(activeItem).forEach(url => candidates.push({ url: url, origem: 'mesma lista' }));
+      sources.sourceUrls(activeItem).forEach(url => pushCandidate(url, 'mesma lista'));
     }
-    for (let i = 0; i < SERVERS.length; i++) {
-      const srv = SERVERS[i];
-      if (!srv || (SERVERS[currentServerIndex] && srv.id === SERVERS[currentServerIndex].id)) continue;
-      let cached = null;
+
+    // 2) Consulta direta em O(1) RAM no IndexedDB de todos os outros servidores sincronizados
+    const activeSrvId = (activeItem.serverId || (SERVERS[currentServerIndex] && SERVERS[currentServerIndex].id) || '');
+    if (typeof findAlternativeSourcesInIndex === 'function') {
       try {
-        cached = getFastCache(srv.id) || await getStoredData(srv.id);
-      } catch (e) {
-        cached = null;
-      }
-      const list = cached && Array.isArray(cached.LIVE) ? cached.LIVE : [];
-      const match = list.find(candidate => mk21SameChannel(activeItem, candidate, sources));
-      if (match && match.url) candidates.push({ url: match.url, origem: cleanServerName(srv.name) });
+        const indexedPeers = await findAlternativeSourcesInIndex(activeItem, activeSrvId, 12);
+        if (Array.isArray(indexedPeers)) {
+          indexedPeers.forEach(peer => {
+            if (peer && peer.url) pushCandidate(peer.url, peer.origem || 'outro servidor');
+          });
+        }
+      } catch (e) {}
     }
+
     const next = candidates.find(c => c.url && !mk21TriedSourceUrls.has(c.url) && !mk21IsRecentlyUnhealthy(c.url)) ||
       candidates.find(c => c.url && !mk21TriedSourceUrls.has(c.url));
     if (!next) {
@@ -12044,7 +12350,7 @@ async function mk21TryAlternativeSource() {
     mk21TriedSourceUrls.add(next.url);
     watchdogStreamKey = ''; // fonte nova = contador de reconexão zerado
     addDevLog('[AutoFonte] Alternando para ' + next.origem, 'warn');
-    showChannelBanner('🔄 Fonte alternativa: ' + next.origem);
+    showChannelBanner('Fonte alternativa: ' + next.origem);
     autoReconnectAttempts = 0;
     isAutoReconnecting = false;
     playStream(activeItem, next.url);

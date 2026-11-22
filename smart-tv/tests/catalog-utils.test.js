@@ -510,8 +510,107 @@ test('Fase 1: app-legacy queries VOD/Series on demand via serverGroup index and 
   assert.ok(legacySrc.includes('function isOnDemandIndexedType(type)'));
   assert.ok(legacySrc.includes('async function loadIndexedCategoryPage('));
 
-  // 4. Omnisearch fixed: references allCatalog (never undefined allContent) and queries IDB without literal 'ALL' group
+  // 4. Omnisearch fixed: references allCatalog (never undefined allContent) and queries IDB across all synced servers
   assert.ok(!legacySrc.includes('allContent.LIVE'));
-  assert.ok(legacySrc.includes("searchCatalogIndex(srv.id, 'MOVIE', q, '', 80)"));
-  assert.ok(legacySrc.includes("searchCatalogIndex(srv.id, 'SERIES', q, '', 80)"));
+  assert.ok(legacySrc.includes("searchCatalogIndexAcrossServers(allServers, 'MOVIE', q,"));
+  assert.ok(legacySrc.includes("searchCatalogIndexAcrossServers(allServers, 'SERIES', q,"));
 });
+
+test('Fase 2: normalizeUnifiedTitle, computeStreamQualityScore, and mergeUnifiedSearchResults deduplicate multi-server hits', () => {
+  const {
+    normalizeUnifiedTitle,
+    computeStreamQualityScore,
+    mergeUnifiedSearchResults
+  } = require('../mk21-tv/core/CatalogUtils.js');
+
+  assert.equal(normalizeUnifiedTitle('BR | Globo SP FHD H265 [VIP]'), 'globo sp');
+  assert.equal(normalizeUnifiedTitle('Globo SP 4K UHD (Backup)'), 'globo sp');
+  assert.equal(normalizeUnifiedTitle('Ação & Aventura — 1080p Dublado'), 'acao aventura');
+
+  assert.ok(computeStreamQualityScore('ESPN 4K UHD') > computeStreamQualityScore('ESPN FHD'));
+  assert.ok(computeStreamQualityScore('ESPN FHD H265') > computeStreamQualityScore('ESPN HD'));
+  assert.ok(computeStreamQualityScore('ESPN HD') > computeStreamQualityScore('ESPN SD Backup'));
+
+  const merged = mergeUnifiedSearchResults([
+    { name: 'SporTV HD', url: 'http://srv2/live/u/p/10.ts', contentType: 'LIVE', tvgId: 'sportv.br', serverId: 'tannix', serverName: 'TANNIX' },
+    { name: 'SporTV 4K UHD', url: 'http://srv3/live/u/p/20.ts', contentType: 'LIVE', tvgId: 'sportv.br', serverId: 'lub', serverName: 'LUB TV' },
+    { name: 'SporTV FHD', url: 'http://srv1/live/u/p/30.ts', contentType: 'LIVE', tvgId: 'sportv.br', serverId: 'vlog', serverName: 'VLOG' },
+    { name: 'Matrix (1999) 4K', url: 'http://srv2/movie/u/p/99.mp4', contentType: 'MOVIE', serverId: 'tannix', serverName: 'TANNIX' },
+    { name: 'Matrix FHD Dublado', url: 'http://srv1/movie/u/p/88.mp4', contentType: 'MOVIE', serverId: 'vlog', serverName: 'VLOG' }
+  ], 'vlog', 20);
+
+  // Deduplicated into 2 items (1 LIVE + 1 MOVIE), preferring active server 'vlog' as primary and attaching backups
+  assert.equal(merged.length, 2);
+
+  const liveHit = merged.find(i => i.contentType === 'LIVE');
+  assert.equal(liveHit.serverId, 'vlog');
+  assert.equal(liveHit.sourceCount, 3);
+  assert.equal(liveHit.alternateSources.length, 2);
+  // Highest-quality backup (4K UHD on LUB TV) ranked first among alternates
+  assert.equal(liveHit.alternateSources[0].serverId, 'lub');
+  assert.equal(liveHit.alternateUrls.length, 2);
+
+  const movieHit = merged.find(i => i.contentType === 'MOVIE');
+  assert.equal(movieHit.serverId, 'vlog');
+  assert.equal(movieHit.sourceCount, 2);
+  assert.equal(movieHit.alternateSources[0].serverId, 'tannix');
+});
+
+test('Speed Test: buildFastComRangeUrl rewrites Netflix OCA path range (never query param) and computeTrimmedThroughputMbps trims ramp-up/spikes', () => {
+  const { buildFastComRangeUrl, computeTrimmedThroughputMbps } = require('../mk21-tv/core/CatalogUtils.js');
+
+  const ocaWithRange = 'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest/range/0-26214400?c=br&n=1234&v=10';
+  const pingUrl = buildFastComRangeUrl(ocaWithRange, 0, 0, 'abc');
+  assert.equal(
+    pingUrl,
+    'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest/range/0-0?c=br&n=1234&v=10&_=abc'
+  );
+  assert.ok(!pingUrl.includes('&range='), 'Must NEVER append &range= query param on Fast.com OCA URLs');
+
+  const ocaBase = 'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest?c=br&n=1234';
+  assert.equal(
+    buildFastComRangeUrl(ocaBase, 0, 26214399, 'xyz'),
+    'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest/range/0-26214399?c=br&n=1234&_=xyz'
+  );
+
+  // Non-Fast.com URL falls back safely to query range
+  assert.equal(
+    buildFastComRangeUrl('https://custom.cdn.example/payload', 0, 1024, 't1'),
+    'https://custom.cdn.example/payload?range=0-1024&_=t1'
+  );
+
+  // Trimmed throughput discards slow-start low tail & burst spike
+  const trimmed = computeTrimmedThroughputMbps([40, 85, 310, 355, 365, 370, 372, 368, 375, 590]);
+  assert.ok(trimmed >= 340 && trimmed <= 385, `Expected ~365 Mbps trimmed mean, got ${trimmed}`);
+  assert.equal(computeTrimmedThroughputMbps([]), 0);
+});
+
+test('Fase 2, Speed Test & 100% Font Size regression checks on app-legacy.js and styles.css', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const legacySrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/src/legacy/app-legacy.js'), 'utf8');
+  const cssSrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/styles.css'), 'utf8');
+
+  // 1. Fase 2: O(1)-RAM cross-server IndexedDB failover & unified Omnisearch
+  assert.ok(legacySrc.includes('async function searchCatalogIndexAcrossServers('));
+  assert.ok(legacySrc.includes('async function findAlternativeSourcesInIndex('));
+  assert.ok(legacySrc.includes('CatalogUtils.mergeUnifiedSearchResults('));
+  assert.ok(legacySrc.includes('findAlternativeSourcesInIndex(activeItem, activeSrvId, 12)'));
+  assert.ok(!legacySrc.includes('cached = getFastCache(srv.id) || await getStoredData(srv.id);'));
+
+  // 2. Speed Test: uses CatalogUtils.buildFastComRangeUrl, pauses playback, zero-GC bucket sampling
+  assert.ok(legacySrc.includes('CatalogUtils.buildFastComRangeUrl(targetInfo.urls[0], 0, 0)'));
+  assert.ok(legacySrc.includes('CatalogUtils.computeTrimmedThroughputMbps(steadyBucketSamples)'));
+  assert.ok(!legacySrc.includes('byteEvents.push('));
+  assert.ok(legacySrc.includes('speedHardwareNote'));
+
+  // 3. Global 100% Font Size scaling on html+body, boot-safe applyFontSize, and widened sidebar without clipping
+  assert.ok(legacySrc.includes('const MK21_FONT_SCALES = {'));
+  assert.ok(legacySrc.includes("if ($('btnFontNormal')) {"));
+  assert.ok(cssSrc.includes('html[class*="font-"] .app-header'));
+  assert.ok(cssSrc.includes('html[class*="font-"] .settings-detail-panel'));
+  assert.ok(cssSrc.includes('html[class*="font-"] .channel-name'));
+  assert.ok(cssSrc.includes('html[class*="font-"] .remote-key'));
+  assert.ok(cssSrc.includes('.omnisearch-sources-pill'));
+});
+

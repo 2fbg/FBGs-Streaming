@@ -646,6 +646,189 @@ function parsePersistedDevLogs(raw, maxEntries) {
   }
 }
 
+/**
+ * Normaliza título de canal/filme/série para unificação e failover entre múltiplos servidores.
+ * Remove acentos, prefixos de país/provedor, tags de qualidade/codec e pontuação.
+ */
+function normalizeUnifiedTitle(name) {
+  let s = String(name || '').toLowerCase();
+  try {
+    s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch (e) {}
+  s = s
+    .replace(/\[[^\]]*\]|\([^)]*\)/g, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/\b(4k|uhd|fhd|full\s*hd|hd|sd|2k|1080p|720p|480p|h\.?265|h\.?264|hevc|60fps|50fps|hdr|hdr10|dolby|atmos|aac|br|bra|brasil|pt|pt-br|dub|dublado|leg|legendado|dual|backup|bkp|alt|alternativo|vip|plus|low|delay|h265|h264)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return s;
+}
+
+/**
+ * Pontua a qualidade provável de um stream pelo nome para priorizar a melhor fonte na busca unificada e failover.
+ */
+function computeStreamQualityScore(name) {
+  const s = String(name || '').toUpperCase();
+  let score = 15;
+  if (/\b(4K|UHD|2160P)\b/.test(s)) score = 40;
+  else if (/\b(FHD|FULL\s*HD|1080P)\b/.test(s)) score = 30;
+  else if (/\b(HD|720P)\b/.test(s)) score = 22;
+  else if (/\b(SD|480P|360P)\b/.test(s)) score = 10;
+
+  if (/\b(H\.?265|HEVC)\b/.test(s)) score += 3;
+  if (/\b(60FPS|50FPS)\b/.test(s)) score += 2;
+  if (/\b(BACKUP|BKP|ALT|ALTERNATIVO|LOW)\b/.test(s)) score -= 5;
+  return score;
+}
+
+/**
+ * Mescla e deduplica resultados de busca (Omnisearch) oriundos de múltiplos servidores.
+ * Mantém a melhor fonte como item principal (priorizando o servidor ativo quando empatado/disponível)
+ * e anexa `alternateUrls`, `alternateSources` e `sourceCount` para failover automático.
+ */
+function mergeUnifiedSearchResults(entries, preferredServerId, limit) {
+  const list = Array.isArray(entries) ? entries : [];
+  const maxItems = Math.max(1, Number(limit) || 80);
+  const groups = new Map();
+  const order = [];
+
+  for (let i = 0; i < list.length; i++) {
+    const raw = list[i];
+    if (!raw || typeof raw !== 'object') continue;
+    const type = String(raw.contentType || 'LIVE').toUpperCase();
+    const tvg = raw.tvgId ? String(raw.tvgId).trim().toLowerCase() : '';
+    const normTitle = normalizeUnifiedTitle(raw.name || '');
+    const key = type + '::' + (type === 'LIVE' && tvg ? ('tvg:' + tvg) : ('title:' + (normTitle || String(raw.url || i))));
+
+    let bucket = groups.get(key);
+    if (!bucket) {
+      bucket = [];
+      groups.set(key, bucket);
+      order.push(key);
+    }
+    bucket.push(raw);
+  }
+
+  const merged = [];
+  for (let i = 0; i < order.length && merged.length < maxItems; i++) {
+    const bucket = groups.get(order[i]);
+    if (!bucket || !bucket.length) continue;
+
+    // Deduplica URLs idênticas preservando metadados do servidor
+    const uniqueCandidates = [];
+    const seenUrls = new Set();
+    for (let j = 0; j < bucket.length; j++) {
+      const c = bucket[j];
+      const u = c.url ? String(c.url).trim() : '';
+      if (u && seenUrls.has(u)) continue;
+      if (u) seenUrls.add(u);
+      uniqueCandidates.push({
+        item: c,
+        url: u,
+        serverId: c.serverId || '',
+        serverName: c.serverName || '',
+        isPreferred: Boolean(preferredServerId && c.serverId === preferredServerId),
+        quality: computeStreamQualityScore(c.name)
+      });
+    }
+
+    uniqueCandidates.sort((a, b) => {
+      if (a.isPreferred !== b.isPreferred) return a.isPreferred ? -1 : 1;
+      if (b.quality !== a.quality) return b.quality - a.quality;
+      return 0;
+    });
+
+    const primary = Object.assign({}, uniqueCandidates[0].item);
+    const distinctServers = new Set();
+    const altSources = [];
+    const altUrls = [];
+
+    for (let j = 0; j < uniqueCandidates.length; j++) {
+      const c = uniqueCandidates[j];
+      if (c.serverId) distinctServers.add(c.serverId);
+      if (j > 0 && c.url) {
+        altUrls.push(c.url);
+        altSources.push({
+          url: c.url,
+          serverId: c.serverId,
+          serverName: c.serverName,
+          name: c.item.name || primary.name,
+          quality: c.quality
+        });
+      }
+    }
+
+    primary.serverId = uniqueCandidates[0].serverId || primary.serverId || '';
+    primary.serverName = uniqueCandidates[0].serverName || primary.serverName || '';
+    primary.sourceCount = Math.max(1, distinctServers.size || uniqueCandidates.length);
+    if (altUrls.length > 0) {
+      const existingAlts = Array.isArray(primary.alternateUrls) ? primary.alternateUrls : [];
+      primary.alternateUrls = Array.from(new Set(existingAlts.concat(altUrls)));
+      primary.alternateSources = altSources;
+    }
+    merged.push(primary);
+  }
+
+  return merged;
+}
+
+/**
+ * Monta corretamente a URL de range do Netflix Open Connect (Fast.com).
+ * A API OCA espera `/speedtest/range/<inicio>-<fim>` no PATH (e NÃO `?range=` na query string).
+ * Passar `&range=0-0` na query fazia o OCA ignorar o range e baixar 26 MB em cada probe de latência.
+ */
+function buildFastComRangeUrl(baseUrl, startByte, endByte, cacheBuster) {
+  const raw = String(baseUrl || '').trim();
+  if (!raw) return '';
+  const start = Math.max(0, Math.floor(Number(startByte) || 0));
+  const end = Math.max(start, Math.floor(Number(endByte) || 0));
+  const rangeToken = `${start}-${end}`;
+  const buster = cacheBuster ? String(cacheBuster) : `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+  let updated = raw;
+  if (/\/speedtest\/range\/[^/?#]+/i.test(updated)) {
+    updated = updated.replace(/\/speedtest\/range\/[^/?#]+/i, `/speedtest/range/${rangeToken}`);
+  } else if (/\/speedtest(?=[/?#]|$)/i.test(updated)) {
+    updated = updated.replace(/\/speedtest(?=\/|\?|#|$)/i, `/speedtest/range/${rangeToken}`);
+  } else {
+    // Fallback seguro para endpoints não-Fast.com
+    const sep0 = updated.indexOf('?') !== -1 ? '&' : '?';
+    return `${updated}${sep0}range=${rangeToken}&_=${buster}`;
+  }
+
+  const sep = updated.indexOf('?') !== -1 ? '&' : '?';
+  return `${updated}${sep}_=${buster}`;
+}
+
+/**
+ * Calcula a vazão sustentada (estilo Fast.com) a partir de amostras periódicas em Mbps.
+ * Descarta os 20% inferiores (ramp-up TCP / quedas pontuais) e 10% superiores (picos de cache/burst)
+ * para reportar a banda sustentada real sem distorções.
+ */
+function computeTrimmedThroughputMbps(samples) {
+  if (!Array.isArray(samples) || samples.length === 0) return 0;
+  const clean = [];
+  for (let i = 0; i < samples.length; i++) {
+    const v = Number(samples[i]);
+    if (Number.isFinite(v) && v > 0) clean.push(v);
+  }
+  if (!clean.length) return 0;
+  if (clean.length <= 2) {
+    return clean.reduce((a, b) => a + b, 0) / clean.length;
+  }
+  clean.sort((a, b) => a - b);
+  const lowCut = Math.floor(clean.length * 0.25);
+  const highCut = Math.max(lowCut + 1, Math.floor(clean.length * 0.9));
+  let sum = 0;
+  let count = 0;
+  for (let i = lowCut; i < highCut; i++) {
+    sum += clean[i];
+    count++;
+  }
+  return count > 0 ? sum / count : clean[clean.length - 1];
+}
+
 module.exports = {
   BG_SYNC_INTERVALS_MS,
   BG_SYNC_LABELS,
@@ -663,6 +846,11 @@ module.exports = {
   expandStreamUrl,
   serializePersistedDevLogs,
   parsePersistedDevLogs,
+  normalizeUnifiedTitle,
+  computeStreamQualityScore,
+  mergeUnifiedSearchResults,
+  buildFastComRangeUrl,
+  computeTrimmedThroughputMbps,
   parseSafeJsonResponse,
   normalizeCatalogMode,
   isDirectPlaylistUrl,
@@ -676,3 +864,4 @@ module.exports = {
   createStallAwareAbortController,
   formatFriendlyLoadError
 };
+

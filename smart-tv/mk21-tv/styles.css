@@ -1251,54 +1251,12 @@ video {
   box-shadow: 0 0 12px rgba(229, 9, 20, 0.8);
 }
 
-/* ================= 10. TAMANHO DA FONTE EXPANDIDO (ACESSIBILIDADE EM TODOS OS MENUS) ================= */
-body.font-large { --font-scale: 1.2; font-size: 24px; }
-body.font-xlarge { --font-scale: 1.4; font-size: 28px; }
-body.font-xxlarge { --font-scale: 1.65; font-size: 33px; }
-body.font-huge { --font-scale: 1.9; font-size: 38px; }
-body.font-ultra { --font-scale: 2.2; font-size: 44px; }
-
-/* Aplica escala a todos os menus, botões, títulos e inputs */
-body[class*="font-"] .list-item-btn,
-body[class*="font-"] .cat-item-btn,
-body[class*="font-"] .channel-item-btn,
-body[class*="font-"] .series-card-btn,
-body[class*="font-"] .season-tab-btn,
-body[class*="font-"] .episode-item-btn,
-body[class*="font-"] .cfg-menu-item,
-body[class*="font-"] .tab-btn,
-body[class*="font-"] .action-btn,
-body[class*="font-"] .ctrl-btn,
-body[class*="font-"] .btn-server-connect,
-body[class*="font-"] .btn-server-edit,
-body[class*="font-"] .btn-server-delete,
-body[class*="font-"] .remote-key {
-  font-size: calc(18px * var(--font-scale, 1)) !important;
-  padding-top: calc(8px * var(--font-scale, 1)) !important;
-  padding-bottom: calc(8px * var(--font-scale, 1)) !important;
-}
-
-body[class*="font-"] .epg-name {
-  font-size: calc(24px * var(--font-scale, 1)) !important;
-}
-
-body[class*="font-"] .epg-sub,
-body[class*="font-"] .epg-next-text,
-body[class*="font-"] .badge-quality,
-body[class*="font-"] #epgStatus {
-  font-size: calc(15px * var(--font-scale, 1)) !important;
-}
-
-body[class*="font-"] .pane-header,
-body[class*="font-"] .modal-header,
-body[class*="font-"] .settings-detail-panel h3 {
-  font-size: calc(22px * var(--font-scale, 1)) !important;
-}
-
-body[class*="font-"] #inputSearch,
-body[class*="font-"] .search-box input {
-  font-size: calc(18px * var(--font-scale, 1)) !important;
-}
+/* ================= 10. TAMANHO DA FONTE EXPANDIDO (ACESSIBILIDADE EM 100% DA INTERFACE) ================= */
+html.font-large, body.font-large { --font-scale: 1.15; }
+html.font-xlarge, body.font-xlarge { --font-scale: 1.3; }
+html.font-xxlarge, body.font-xxlarge { --font-scale: 1.45; }
+html.font-huge, body.font-huge { --font-scale: 1.6; }
+html.font-ultra, body.font-ultra { --font-scale: 1.75; }
 
 /* ================= 11. TELA DE INICIALIZAÇÃO PREMIUM (SPLASH SCREEN) ================= */
 .startup-splash-overlay {
@@ -5422,6 +5380,399 @@ div[style*="overflow"], .pane-scroll, .list-container,
   font-weight: 700;
   color: #ffd54f;
   margin-right: auto;
+}
+
+/* ==========================================================================
+   v2.10.0 — FASE 2 (OMNISEARCH MULTI-SERVIDOR), SPEED TEST & FONTE 100% GLOBAL
+   ========================================================================== */
+
+/* Omnisearch Fase 2: badges de servidor e multi-fonte */
+.omnisearch-meta-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.omnisearch-server-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #e2e8f0;
+  font-size: calc(11px * var(--font-scale, 1));
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.omnisearch-sources-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(74, 222, 128, 0.55);
+  color: #4ade80;
+  font-size: calc(11px * var(--font-scale, 1));
+  font-weight: 800;
+}
+
+.omnisearch-adult-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 213, 79, 0.18);
+  border: 1px solid rgba(255, 213, 79, 0.5);
+  color: #ffd54f;
+  font-size: calc(11px * var(--font-scale, 1));
+  font-weight: 800;
+}
+
+/* Speed Test v2.10.0: SVG limpos, sem cortes e 100% escalável */
+.settings-panel-title {
+  margin: 0 0 10px 0;
+  font-size: calc(23px * var(--font-scale, 1)) !important;
+  font-weight: 800;
+  line-height: 1.25;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.settings-panel-subtitle {
+  margin: 0 0 16px 0;
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  line-height: 1.45;
+  color: #cbd5e1;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+.speed-meter-status {
+  font-size: calc(16px * var(--font-scale, 1)) !important;
+  color: #cbd5e1;
+  margin-bottom: 12px;
+  line-height: 1.35;
+}
+
+.speed-metric-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: calc(13px * var(--font-scale, 1)) !important;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.speed-card-svg {
+  width: calc(16px * var(--font-scale, 1));
+  height: calc(16px * var(--font-scale, 1));
+  flex-shrink: 0;
+}
+
+.speed-metric-value {
+  font-size: calc(19px * var(--font-scale, 1)) !important;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.speed-val-down { color: #4caf50; }
+.speed-val-up { color: #64b5f6; }
+.speed-val-ping { color: #ffd54f; }
+.speed-val-jitter { color: #ff8a65; }
+
+.speed-quality-rating {
+  margin-top: 14px;
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.4;
+}
+
+.speed-hardware-note {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 213, 79, 0.1);
+  border: 1px solid rgba(255, 213, 79, 0.35);
+  color: #fde68a;
+  font-size: calc(13px * var(--font-scale, 1)) !important;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.speed-start-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 26px !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+}
+
+/* Painel de Tamanho da Fonte: largura fluida e sem corte lateral */
+.font-size-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 720px;
+  margin-top: 14px;
+}
+
+.font-size-opt-btn {
+  white-space: normal !important;
+  line-height: 1.3 !important;
+  padding: 14px 18px !important;
+  height: auto !important;
+}
+
+.font-size-opt-btn[data-preview="normal"]  { font-size: 17px !important; }
+.font-size-opt-btn[data-preview="large"]   { font-size: 20px !important; }
+.font-size-opt-btn[data-preview="xlarge"]  { font-size: 23px !important; }
+.font-size-opt-btn[data-preview="xxlarge"] { font-size: 26px !important; }
+.font-size-opt-btn[data-preview="huge"]    { font-size: 29px !important; }
+.font-size-opt-btn[data-preview="ultra"]   { font-size: 32px !important; }
+
+/* ==========================================================================
+   APLICAÇÃO GLOBAL 100% DA ESCALA DE FONTE (--font-scale) SEM CORTES
+   Sobrescreve blocos legados (inclusive !important e inline styles de submenus)
+   ========================================================================== */
+html[class*="font-"] .app-header,
+body[class*="font-"] .app-header {
+  width: clamp(236px, calc(236px * var(--font-scale, 1)), 340px) !important;
+  min-width: clamp(220px, calc(220px * var(--font-scale, 1)), 320px) !important;
+  max-width: 340px !important;
+  flex: 0 0 clamp(236px, calc(236px * var(--font-scale, 1)), 340px) !important;
+}
+
+html[class*="font-"] .app-header .logo-title,
+body[class*="font-"] .app-header .logo-title {
+  font-size: calc(18px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .app-header .tab-btn,
+body[class*="font-"] .app-header .tab-btn {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  min-height: calc(40px * var(--font-scale, 1)) !important;
+  padding: calc(8px * var(--font-scale, 1)) 12px !important;
+}
+
+html[class*="font-"] .app-header .tab-btn i,
+body[class*="font-"] .app-header .tab-btn i {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .app-header .header-right .action-btn,
+body[class*="font-"] .app-header .header-right .action-btn {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  line-height: 1.25 !important;
+  min-height: calc(40px * var(--font-scale, 1)) !important;
+  padding: calc(7px * var(--font-scale, 1)) 10px !important;
+}
+
+html[class*="font-"] .app-header #liveClock,
+body[class*="font-"] .app-header #liveClock {
+  font-size: calc(18px * var(--font-scale, 1)) !important;
+}
+
+/* Configurações: menu esquerdo + todos os painéis de detalhe */
+html[class*="font-"] #sectionSettings:not(.hidden),
+body[class*="font-"] #sectionSettings:not(.hidden) {
+  grid-template-columns: minmax(clamp(250px, calc(255px * var(--font-scale, 1)), 400px), 31%) 1fr !important;
+}
+
+html[class*="font-"] .cfg-menu-item,
+body[class*="font-"] .cfg-menu-item {
+  font-size: calc(16px * var(--font-scale, 1)) !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  padding: calc(9px * var(--font-scale, 1)) 14px !important;
+}
+
+html[class*="font-"] .cfg-tmdb-toggle,
+body[class*="font-"] .cfg-tmdb-toggle {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  white-space: normal !important;
+}
+
+html[class*="font-"] .settings-detail-panel h3,
+body[class*="font-"] .settings-detail-panel h3 {
+  font-size: calc(22px * var(--font-scale, 1)) !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+html[class*="font-"] .settings-detail-panel p,
+html[class*="font-"] .settings-detail-panel label,
+html[class*="font-"] .settings-detail-panel select,
+html[class*="font-"] .settings-detail-panel input,
+body[class*="font-"] .settings-detail-panel p,
+body[class*="font-"] .settings-detail-panel label,
+body[class*="font-"] .settings-detail-panel select,
+body[class*="font-"] .settings-detail-panel input {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+html[class*="font-"] .settings-detail-panel .list-item-btn:not(.font-size-opt-btn),
+html[class*="font-"] .settings-detail-panel .ctrl-btn,
+body[class*="font-"] .settings-detail-panel .list-item-btn:not(.font-size-opt-btn),
+body[class*="font-"] .settings-detail-panel .ctrl-btn {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+  height: auto !important;
+}
+
+html[class*="font-"] .settings-detail-panel span:not(.speed-meter-val):not(.speed-meter-unit):not(.server-pct-pill),
+body[class*="font-"] .settings-detail-panel span:not(.speed-meter-val):not(.speed-meter-unit):not(.server-pct-pill) {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .speed-meter-val,
+body[class*="font-"] .speed-meter-val {
+  font-size: calc(52px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .speed-meter-unit,
+body[class*="font-"] .speed-meter-unit {
+  font-size: calc(18px * var(--font-scale, 1)) !important;
+}
+
+/* Tela principal 3 colunas: categorias, lista de canais/filmes/séries e painel EPG */
+html[class*="font-"] .pane-header,
+body[class*="font-"] .pane-header {
+  font-size: calc(19px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .counter-badge,
+body[class*="font-"] .counter-badge {
+  font-size: calc(14px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .search-box input,
+html[class*="font-"] #inputSearch,
+body[class*="font-"] .search-box input,
+body[class*="font-"] #inputSearch {
+  font-size: calc(16px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .cat-item-btn,
+body[class*="font-"] .cat-item-btn {
+  font-size: calc(16px * var(--font-scale, 1)) !important;
+  min-height: calc(44px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .channel-name,
+body[class*="font-"] .channel-name {
+  font-size: calc(16px * var(--font-scale, 1)) !important;
+  line-height: 1.25 !important;
+}
+
+html[class*="font-"] .channel-epg-sub,
+body[class*="font-"] .channel-epg-sub {
+  font-size: calc(13px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .epg-name,
+body[class*="font-"] .epg-name {
+  font-size: calc(20px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .epg-sub,
+html[class*="font-"] .preview-epg-now,
+html[class*="font-"] .epg-meta,
+html[class*="font-"] .epg-next-text,
+html[class*="font-"] .badge-quality,
+html[class*="font-"] #epgStatus,
+body[class*="font-"] .epg-sub,
+body[class*="font-"] .preview-epg-now,
+body[class*="font-"] .epg-meta,
+body[class*="font-"] .epg-next-text,
+body[class*="font-"] .badge-quality,
+body[class*="font-"] #epgStatus {
+  font-size: calc(14px * var(--font-scale, 1)) !important;
+}
+
+/* Barra inferior de atalhos do controle remoto */
+html[class*="font-"] .remote-bar,
+body[class*="font-"] .remote-bar {
+  height: auto !important;
+  min-height: 48px !important;
+  padding: 6px 24px !important;
+  flex-wrap: wrap !important;
+  gap: 8px 18px !important;
+}
+
+html[class*="font-"] .remote-key,
+body[class*="font-"] .remote-key {
+  font-size: calc(13px * var(--font-scale, 1)) !important;
+}
+
+/* Modais (Omnisearch, Servidores, Séries, Áudio/Legendas, DevLogs, Guia EPG, Zap HUD) */
+html[class*="font-"] .modal-header,
+body[class*="font-"] .modal-header {
+  font-size: calc(20px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .modal-btn,
+html[class*="font-"] .modal-button,
+html[class*="font-"] .season-tab-btn,
+html[class*="font-"] .episode-item-btn,
+html[class*="font-"] .track-item-btn,
+html[class*="font-"] .btn-server-connect,
+html[class*="font-"] .btn-server-edit,
+html[class*="font-"] .btn-server-delete,
+html[class*="font-"] .omnisearch-tab-btn,
+html[class*="font-"] .omnisearch-input,
+body[class*="font-"] .modal-btn,
+body[class*="font-"] .modal-button,
+body[class*="font-"] .season-tab-btn,
+body[class*="font-"] .episode-item-btn,
+body[class*="font-"] .track-item-btn,
+body[class*="font-"] .btn-server-connect,
+body[class*="font-"] .btn-server-edit,
+body[class*="font-"] .btn-server-delete,
+body[class*="font-"] .omnisearch-tab-btn,
+body[class*="font-"] .omnisearch-input {
+  font-size: calc(15px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .server-info-name,
+html[class*="font-"] .omnisearch-item-name,
+html[class*="font-"] .zap-hud-name,
+body[class*="font-"] .server-info-name,
+body[class*="font-"] .omnisearch-item-name,
+body[class*="font-"] .zap-hud-name {
+  font-size: calc(17px * var(--font-scale, 1)) !important;
+}
+
+html[class*="font-"] .server-info-url,
+html[class*="font-"] .omnisearch-item-group,
+html[class*="font-"] .zap-hud-now,
+html[class*="font-"] .zap-hud-next,
+html[class*="font-"] #devLogsContainer,
+body[class*="font-"] .server-info-url,
+body[class*="font-"] .omnisearch-item-group,
+body[class*="font-"] .zap-hud-now,
+body[class*="font-"] .zap-hud-next,
+body[class*="font-"] #devLogsContainer {
+  font-size: calc(13px * var(--font-scale, 1)) !important;
 }
 
 
