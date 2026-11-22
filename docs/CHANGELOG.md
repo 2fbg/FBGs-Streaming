@@ -2,6 +2,12 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
+## [2.10.1] - 2026-11-22
+
+- **Tamanho da fonte só afeta o texto:** a escala (`--font-scale`) parou de redimensionar a barra lateral, a coluna de configurações, paddings, alturas mínimas dos botões e a grade de 3 colunas. Agora as telas mantêm o mesmo layout em qualquer um dos 6 tamanhos; só a tipografia cresce.
+- **Player principal sem moldura amarela:** o foco do D-Pad desenhava `outline` amarelo de 4 px nas bordas do vídeo (regras `:focus` globais). O container do player (`#videoContainer`, `.video-box`, `#tvPlayer`) foi excluído do anel de foco.
+- **Memória no webOS:** a sincronização de catálogos em segundo plano passou a rodar em fila única (antes, conectar numa fonte + "Sincronizar Todas" mantinha dois catálogos grandes no heap ao mesmo tempo), o JSON do catálogo não duplica mais o texto de 30–40 MB no `join` dos chunks, e cada sync registra o heap em uso/limite. O log de homologação ganhou as linhas `Memória:` e `Sessão:` (a segunda detecta encerramento inesperado da execução anterior, indício de OOM).
+
 ## [2.9.6] - 2026-11-20
 
 - **Catálogo JSON como fonte principal na Smart TV:** em vez de baixar a lista M3U inteira (77–108 MB nos servidores atuais), o app passou a montar o catálogo por `player_api.php` (`get_live_streams`, `get_vod_streams`, `get_series` + categorias), com fallback automático para o M3U. Medido: ~16 MB/4 s no VLOG e ~46 MB/8 s no MK21 PRÓ, contra 77 MB/13 s e 108 MB/>20 s do M3U. Preferência ajustável em `localStorage.mk21_catalog_mode` (`json`, `m3u`, `auto`).

@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.10.0 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v2.10.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -2287,18 +2287,16 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
       if (res.body && typeof res.body.getReader === 'function' && typeof TextDecoder !== 'undefined') {
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
-        let chunks = [];
+        // Concatenação direta (sem array de chunks + join): no webOS o join duplicava
+        // os 30-40 MB do catálogo VOD no heap e ajudava a derrubar o app por falta de memória.
         while (true) {
           const part = await reader.read();
           if (part.done) break;
           reqBytes += part.value.byteLength || part.value.length || 0;
           watchdog.touchChunk();
-          chunks.push(decoder.decode(part.value, { stream: true }));
+          rawText += decoder.decode(part.value, { stream: true });
         }
-        chunks.push(decoder.decode());
-        rawText = chunks.join('');
-        chunks.length = 0;
-        chunks = null;
+        rawText += decoder.decode();
       } else {
         rawText = await res.text();
         reqBytes = rawText ? rawText.length : 0;
@@ -5624,6 +5622,71 @@ function mk21SetDriveLogStatus(text) {
   }
 }
 
+// ===== Memória / sessão (webOS mata o app sem aviso quando o heap estoura) =====
+let mk21SessionHistoryText = '';
+
+function mk21ReadHeapUsage() {
+  try {
+    const m = window.performance && performance.memory;
+    if (!m || !m.jsHeapSizeLimit) return null;
+    return {
+      used: Number(m.usedJSHeapSize) || 0,
+      total: Number(m.totalJSHeapSize) || 0,
+      limit: Number(m.jsHeapSizeLimit) || 0
+    };
+  } catch (e) { return null; }
+}
+
+function mk21FormatMb(bytes) {
+  return (Math.max(0, Number(bytes) || 0) / 1048576).toFixed(0) + ' MB';
+}
+
+function mk21HeapSummaryLine() {
+  const h = mk21ReadHeapUsage();
+  if (!h) return 'Memória: métricas de heap indisponíveis nesta versão do webOS';
+  const pct = h.limit ? Math.round((h.used / h.limit) * 100) : 0;
+  return 'Memória: ' + mk21FormatMb(h.used) + ' em uso de ' + mk21FormatMb(h.limit) + ' (' + pct + '%) · pico alocado ' + mk21FormatMb(h.total);
+}
+
+function mk21LogHeapUsage(label) {
+  const h = mk21ReadHeapUsage();
+  if (!h) {
+    addDevLog('[Memória] ' + label + ': heap não exposto por este webOS', 'info');
+    return null;
+  }
+  const pct = h.limit ? Math.round((h.used / h.limit) * 100) : 0;
+  let type = 'info';
+  if (pct >= 85) type = 'error';
+  else if (pct >= 70) type = 'warn';
+  addDevLog(
+    '[Memória] ' + label + ': ' + mk21FormatMb(h.used) + ' de ' + mk21FormatMb(h.limit) + ' (' + pct + '%)' +
+    (pct >= 70 ? ' — perto do limite do webOS' : ''),
+    type
+  );
+  return h;
+}
+
+function mk21MarkSessionStart() {
+  try {
+    const wasRunning = localStorage.getItem('mk21_session_running');
+    const bootAt = Number(localStorage.getItem('mk21_session_boot_at') || 0);
+    if (wasRunning) {
+      const sinceLabel = bootAt ? new Date(bootAt).toLocaleString('pt-BR') : 'horário desconhecido';
+      mk21SessionHistoryText = 'Encerramento inesperado da execução anterior (iniciada em ' + sinceLabel + ') — o webOS encerrou o app sem fechar, indício de falta de memória.';
+      addDevLog('[Sessão] ' + mk21SessionHistoryText, 'warn');
+    } else {
+      mk21SessionHistoryText = 'Encerramento anterior normal.';
+    }
+    localStorage.setItem('mk21_session_running', '1');
+    localStorage.setItem('mk21_session_boot_at', String(Date.now()));
+  } catch (e) {}
+  try {
+    const clearMarker = () => { try { localStorage.removeItem('mk21_session_running'); } catch (e) {} };
+    window.addEventListener('pagehide', clearMarker, false);
+    window.addEventListener('beforeunload', clearMarker, false);
+  } catch (e) {}
+}
+
 function buildDiagnosticLogReportText() {
   const obsJsonl = (window.MK21Observability && typeof window.MK21Observability.exportJsonl === 'function')
     ? window.MK21Observability.exportJsonl()
@@ -5642,6 +5705,8 @@ function buildDiagnosticLogReportText() {
     globalSummary,
     'Tela: ' + innerWidth + 'x' + innerHeight,
     'Plataforma: ' + (navigator.userAgent || 'SmartTV'),
+    mk21HeapSummaryLine(),
+    'Sessão: ' + (mk21SessionHistoryText || 'sem registro'),
     'Credenciais e caminhos autenticados foram mascarados.',
     '',
     '=== STRUCTURED JSONL ===',
@@ -9126,7 +9191,18 @@ async function hydrateAllServerMetricsFromCache() {
   mk21UpdateGlobalMetricsCardsInPlace();
 }
 
-async function syncSingleServerInBackground(idx, triggerBtn) {
+// Fila global: duas sincronizações simultâneas (conectar numa fonte + rodar "Sincronizar
+// Todas") mantinham dois catálogos na RAM e derrubavam o app por falta de memória.
+let mk21BgSyncChain = Promise.resolve();
+
+function syncSingleServerInBackground(idx, triggerBtn) {
+  const run = () => runSingleServerSyncInBackground(idx, triggerBtn);
+  const chained = mk21BgSyncChain.then(run, run);
+  mk21BgSyncChain = chained.catch(() => {});
+  return chained;
+}
+
+async function runSingleServerSyncInBackground(idx, triggerBtn) {
   const srv = SERVERS[idx];
   if (!srv) return false;
   if (idx === currentServerIndex) {
@@ -9160,6 +9236,7 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
   }, CatalogUtils.PLAYLIST_TIMEOUTS.backgroundSyncMs) : null;
 
   setServerLoadProgress(srv.id, 5, 'loading');
+  mk21LogHeapUsage('início sync ' + safeSrvName);
   let lastBgProgressAt = 0;
 
   try {
@@ -9219,6 +9296,7 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
       updateServerRowProgressBadge(srv.id);
       mk21UpdateGlobalMetricsCardsInPlace();
       addDevLog('[Sync Lista] ' + safeSrvName + ': ' + total.toLocaleString('pt-BR') + ' itens salvos (modo baixa RAM) · ' + CatalogUtils.formatDurationPtBr(Date.now() - syncStart), 'success');
+      mk21LogHeapUsage('fim sync ' + safeSrvName);
       if (!getHideBackgroundProgress()) {
         showChannelBanner('✓ ' + safeSrvName + ': ' + total.toLocaleString('pt-BR') + ' itens sincronizados');
       }
@@ -9242,6 +9320,7 @@ async function syncSingleServerInBackground(idx, triggerBtn) {
       : (effectiveErr && effectiveErr.message && effectiveErr.message !== friendly ? String(effectiveErr.message) : '');
     const detailSuffix = rawDetail && !friendly.includes(rawDetail) ? ' (' + rawDetail + ')' : '';
     addDevLog('[Sync Lista] Falha em ' + safeSrvName + ': ' + friendly + detailSuffix + ' · ' + elapsedLabel, 'warn');
+    mk21LogHeapUsage('falha sync ' + safeSrvName);
     if (getPerServerMetrics(srv.id)) setServerLoadProgress(srv.id, 100, 'done');
     else setServerLoadProgress(srv.id, 0, 'error');
     if (triggerBtn && !getHideBackgroundProgress()) {
@@ -9816,7 +9895,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.10.0';
+const BASE_PACKAGE_VERSION = '2.10.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
@@ -11230,6 +11309,8 @@ window.addEventListener('load', () => {
   try {
     initDevLogs();
     addDevLog('[App] MK21 Play v' + CURRENT_APP_VERSION + ' inicializado', 'success');
+    mk21MarkSessionStart();
+    mk21LogHeapUsage('boot');
   } catch (e) {}
 });
 

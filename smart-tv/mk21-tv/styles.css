@@ -38,7 +38,7 @@ html, body {
 
 /* ================= 1. CABEÇALHO SUPERIOR ================= */
 .app-header {
-  height: calc(80px * var(--font-scale, 1));
+  height: 80px;
   min-height: 80px;
   background: var(--header-bg);
   border-bottom: 2px solid rgba(229, 9, 20, 0.4);
@@ -1547,10 +1547,21 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   z-index: 50;
 }
 
-.scrollable-container:focus,
-#videoContainer:focus {
+.scrollable-container:focus {
   transform: none !important;
   outline-offset: -3px !important;
+}
+
+/* Player: o foco do D-Pad não deve desenhar moldura amarela nas bordas do vídeo */
+#videoContainer:focus,
+#videoContainer:focus-visible,
+#tvPlayer:focus,
+.video-box:focus {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  z-index: auto !important;
 }
 
 .scrollable-container.scroll-mode-active {
@@ -5544,13 +5555,6 @@ div[style*="overflow"], .pane-scroll, .list-container,
    APLICAÇÃO GLOBAL 100% DA ESCALA DE FONTE (--font-scale) SEM CORTES
    Sobrescreve blocos legados (inclusive !important e inline styles de submenus)
    ========================================================================== */
-html[class*="font-"] .app-header,
-body[class*="font-"] .app-header {
-  width: clamp(236px, calc(236px * var(--font-scale, 1)), 340px) !important;
-  min-width: clamp(220px, calc(220px * var(--font-scale, 1)), 320px) !important;
-  max-width: 340px !important;
-  flex: 0 0 clamp(236px, calc(236px * var(--font-scale, 1)), 340px) !important;
-}
 
 html[class*="font-"] .app-header .logo-title,
 body[class*="font-"] .app-header .logo-title {
@@ -5563,8 +5567,8 @@ body[class*="font-"] .app-header .tab-btn {
   line-height: 1.25 !important;
   white-space: normal !important;
   word-break: break-word !important;
-  min-height: calc(40px * var(--font-scale, 1)) !important;
-  padding: calc(8px * var(--font-scale, 1)) 12px !important;
+  min-height: 40px !important;
+  padding: 8px 12px !important;
 }
 
 html[class*="font-"] .app-header .tab-btn i,
@@ -5576,8 +5580,8 @@ html[class*="font-"] .app-header .header-right .action-btn,
 body[class*="font-"] .app-header .header-right .action-btn {
   font-size: calc(15px * var(--font-scale, 1)) !important;
   line-height: 1.25 !important;
-  min-height: calc(40px * var(--font-scale, 1)) !important;
-  padding: calc(7px * var(--font-scale, 1)) 10px !important;
+  min-height: 40px !important;
+  padding: 7px 10px !important;
 }
 
 html[class*="font-"] .app-header #liveClock,
@@ -5588,7 +5592,7 @@ body[class*="font-"] .app-header #liveClock {
 /* Configurações: menu esquerdo + todos os painéis de detalhe */
 html[class*="font-"] #sectionSettings:not(.hidden),
 body[class*="font-"] #sectionSettings:not(.hidden) {
-  grid-template-columns: minmax(clamp(250px, calc(255px * var(--font-scale, 1)), 400px), 31%) 1fr !important;
+  grid-template-columns: minmax(255px, 31%) 1fr !important;
 }
 
 html[class*="font-"] .cfg-menu-item,
@@ -5598,7 +5602,7 @@ body[class*="font-"] .cfg-menu-item {
   white-space: normal !important;
   overflow: visible !important;
   text-overflow: clip !important;
-  padding: calc(9px * var(--font-scale, 1)) 14px !important;
+  padding: 9px 14px !important;
 }
 
 html[class*="font-"] .cfg-tmdb-toggle,
@@ -5675,7 +5679,6 @@ body[class*="font-"] #inputSearch {
 html[class*="font-"] .cat-item-btn,
 body[class*="font-"] .cat-item-btn {
   font-size: calc(16px * var(--font-scale, 1)) !important;
-  min-height: calc(44px * var(--font-scale, 1)) !important;
 }
 
 html[class*="font-"] .channel-name,
@@ -5712,10 +5715,8 @@ body[class*="font-"] #epgStatus {
 /* Barra inferior de atalhos do controle remoto */
 html[class*="font-"] .remote-bar,
 body[class*="font-"] .remote-bar {
-  height: auto !important;
   min-height: 48px !important;
   padding: 6px 24px !important;
-  flex-wrap: wrap !important;
   gap: 8px 18px !important;
 }
 
