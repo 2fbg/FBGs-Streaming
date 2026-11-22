@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v2.10.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v3.0.1 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -5652,7 +5652,7 @@ function mk21LogHeapUsage(label) {
   const h = mk21ReadHeapUsage();
   if (!h) {
     addDevLog('[Memória] ' + label + ': heap não exposto por este webOS', 'info');
-    return null;
+    return;
   }
   const pct = h.limit ? Math.round((h.used / h.limit) * 100) : 0;
   let type = 'info';
@@ -5663,7 +5663,6 @@ function mk21LogHeapUsage(label) {
     (pct >= 70 ? ' — perto do limite do webOS' : ''),
     type
   );
-  return h;
 }
 
 function mk21MarkSessionStart() {
@@ -9197,7 +9196,8 @@ let mk21BgSyncChain = Promise.resolve();
 
 function syncSingleServerInBackground(idx, triggerBtn) {
   const run = () => runSingleServerSyncInBackground(idx, triggerBtn);
-  const chained = mk21BgSyncChain.then(run, run);
+  // mk21BgSyncChain guarda sempre a versão já tratada, então não há rejeição para a fila parar.
+  const chained = mk21BgSyncChain.then(run);
   mk21BgSyncChain = chained.catch(() => {});
   return chained;
 }
@@ -9895,7 +9895,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '2.10.1';
+const BASE_PACKAGE_VERSION = '3.0.1';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');

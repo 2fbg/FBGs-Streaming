@@ -1552,13 +1552,13 @@ button:focus, [tabindex="0"]:focus, .header-focusable:focus,
   outline-offset: -3px !important;
 }
 
-/* Player: o foco do D-Pad não deve desenhar moldura amarela nas bordas do vídeo */
+/* Player: o foco do D-Pad não deve desenhar moldura amarela nas bordas do vídeo.
+   Sem :focus-visible de propósito: o Chromium 68 do webOS não conhece o seletor e uma
+   lista com seletor inválido é descartada inteira, o que traria a moldura de volta. */
 #videoContainer:focus,
-#videoContainer:focus-visible,
 #tvPlayer:focus,
 .video-box:focus {
   outline: none !important;
-  outline-offset: 0 !important;
   box-shadow: none !important;
   transform: none !important;
   z-index: auto !important;

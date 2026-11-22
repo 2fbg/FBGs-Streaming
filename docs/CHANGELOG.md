@@ -2,7 +2,9 @@
 
 Todas as alterações notáveis deste projeto serão documentadas neste arquivo.
 
-## [2.10.1] - 2026-11-22
+## [3.0.1] - 2026-11-22
+
+Substitui a 2.10.1 (não publicada) sobre a 2.10.0 — Code 302, com atualização pela própria TV em Configurações → Atualização.
 
 - **Tamanho da fonte só afeta o texto:** a escala (`--font-scale`) parou de redimensionar a barra lateral, a coluna de configurações, paddings, alturas mínimas dos botões e a grade de 3 colunas. Agora as telas mantêm o mesmo layout em qualquer um dos 6 tamanhos; só a tipografia cresce.
 - **Player principal sem moldura amarela:** o foco do D-Pad desenhava `outline` amarelo de 4 px nas bordas do vídeo (regras `:focus` globais). O container do player (`#videoContainer`, `.video-box`, `#tvPlayer`) foi excluído do anel de foco.
