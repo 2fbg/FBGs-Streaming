@@ -36,6 +36,7 @@ const SINGLE_FILES = [
   'api/epg.js',
   'api/sync.js',
   'api/subtitles.js',
+  'api/homolog-logs.js',
   'assets/logo.png',
 ];
 

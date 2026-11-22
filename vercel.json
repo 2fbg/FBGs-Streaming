@@ -35,6 +35,7 @@
     { "source": "/api/epg", "destination": "/api/epg.js" },
     { "source": "/api/sync", "destination": "/api/sync.js" },
     { "source": "/api/subtitles", "destination": "/api/subtitles.js" },
+    { "source": "/api/homolog-logs", "destination": "/api/homolog-logs.js" },
     { "source": "/api/version.json", "destination": "/version.json" },
     { "source": "/web", "destination": "/index.html" },
     { "source": "/web/", "destination": "/index.html" },

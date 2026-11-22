@@ -2,11 +2,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   BG_SYNC_LABELS,
+  PLAYLIST_TIMEOUTS,
   normalizeBgSyncFrequency,
   getBgSyncIntervalMs,
   shouldSyncServer,
   computeCatalogMetrics,
   parseSafeJsonResponse,
+  normalizeCatalogMode,
+  isDirectPlaylistUrl,
+  shouldPreferXtreamJson,
+  buildXtreamXmltvUrl,
+  extractSafeHost,
+  formatDurationPtBr,
+  formatBytesMb,
+  formatSpeedMbPerSec,
+  detectHtmlPayload,
+  createStallAwareAbortController,
   formatFriendlyLoadError
 } = require('../mk21-tv/core/CatalogUtils.js');
 
@@ -50,9 +61,18 @@ test('parseSafeJsonResponse handles valid JSON, HTML pages, and HTTP 401/403 aut
   );
 });
 
-test('formatFriendlyLoadError translates raw JSON syntax errors to readable Portuguese', () => {
+test('formatFriendlyLoadError translates raw JSON syntax errors and preserves detailed timeout/HTML diagnostics', () => {
   const friendly = formatFriendlyLoadError(new SyntaxError('Unexpected token < in JSON at position 0'));
   assert.match(friendly, /HTML inválido/i);
+
+  const htmlMsg = formatFriendlyLoadError(new Error('HTTP 404 (página HTML em vez de M3U)'));
+  assert.equal(htmlMsg, 'HTTP 404 (página HTML em vez de M3U)');
+
+  const stallMsg = formatFriendlyLoadError(new Error('tempo esgotado (sem dados) após 30s · 12,4 MB em 30s · 0,4 MB/s'));
+  assert.match(stallMsg, /tempo esgotado \(sem dados\) após 30s/);
+
+  const rawAbort = formatFriendlyLoadError(new Error('The user aborted a request.'));
+  assert.match(rawAbort, /Conexão cancelada ou tempo esgotado/i);
 });
 
 test('normalizeBgSyncFrequency and shouldSyncServer match APK options and legacy aliases', () => {
@@ -86,3 +106,511 @@ test('normalizeBgSyncFrequency and shouldSyncServer match APK options and legacy
   assert.equal(shouldSyncServer(now - 86400000, 'weekly', now), false);
   assert.equal(shouldSyncServer(now - 700000000, 'weekly', now), true);
 });
+
+test('catalog mode defaults to Xtream JSON primary and builds /xmltv.php EPG URL', () => {
+  assert.equal(normalizeCatalogMode(null), 'json');
+  assert.equal(normalizeCatalogMode(''), 'json');
+  assert.equal(normalizeCatalogMode('unknown'), 'json');
+  assert.equal(normalizeCatalogMode('auto'), 'auto');
+  assert.equal(normalizeCatalogMode('m3u'), 'm3u');
+
+  assert.equal(isDirectPlaylistUrl('http://host/get.php?username=a&password=b'), true);
+  assert.equal(isDirectPlaylistUrl('http://host/list.m3u8'), true);
+  assert.equal(isDirectPlaylistUrl('http://tocombox21.cyou'), false);
+
+  assert.equal(shouldPreferXtreamJson('http://tocombox21.cyou', null), true);
+  assert.equal(shouldPreferXtreamJson('http://tocombox21.cyou', 'auto'), true);
+  assert.equal(shouldPreferXtreamJson('http://tocombox21.cyou', 'm3u'), false);
+  assert.equal(shouldPreferXtreamJson('http://tocombox21.cyou/get.php?username=a&password=b', 'json'), false);
+
+  assert.equal(
+    buildXtreamXmltvUrl('http://ovo54.sbs///', 'user+1', 'p@ss'),
+    'http://ovo54.sbs/xmltv.php?username=user%2B1&password=p%40ss'
+  );
+  assert.equal(buildXtreamXmltvUrl('', 'user', 'pass'), '');
+  assert.equal(buildXtreamXmltvUrl('http://ovo54.sbs', 'user', ''), '');
+});
+
+test('network diagnostics helpers redact credentials, detect HTML/XUI responses, and format pt-BR metrics', () => {
+  assert.equal(extractSafeHost('http://user:secret@ovo54.sbs:8080/get.php?username=u&password=p'), 'ovo54.sbs:8080');
+  assert.equal(extractSafeHost('https://app.tigerouro.shop/player_api.php?username=u&password=p'), 'app.tigerouro.shop');
+
+  assert.equal(formatDurationPtBr(0), '0s');
+  assert.equal(formatDurationPtBr(30000), '30s');
+  assert.equal(formatDurationPtBr(72000), '1min 12s');
+  assert.equal(formatDurationPtBr(123000), '2min 03s');
+
+  assert.equal(formatBytesMb(108 * 1024 * 1024), '108,0 MB');
+  assert.equal(formatBytesMb(12.4 * 1024 * 1024), '12,4 MB');
+  assert.equal(formatSpeedMbPerSec(12 * 1024 * 1024, 30000), '0,4 MB/s');
+
+  assert.equal(detectHtmlPayload('', 'text/html; charset=utf-8'), true);
+  assert.equal(detectHtmlPayload('<html><title>XUI - Debug Mode</title></html>', 'text/plain'), true);
+  assert.equal(detectHtmlPayload('XUI - Debug Mode: Error 404', ''), true);
+  assert.equal(detectHtmlPayload('#EXTM3U\n#EXTINF:-1,Globo\nhttp://host/1.ts', 'audio/x-mpegurl'), false);
+});
+
+test('state-based timeout policy enforces 20s initial, 30s per-chunk stall watchdog, 5m ceiling, and 4m bg sync', () => {
+  assert.equal(PLAYLIST_TIMEOUTS.initialResponseMs, 20000);
+  assert.equal(PLAYLIST_TIMEOUTS.stallWatchdogMs, 30000);
+  assert.equal(PLAYLIST_TIMEOUTS.hardCeilingMs, 300000);
+  assert.equal(PLAYLIST_TIMEOUTS.backgroundSyncMs, 240000);
+
+  // Fake deterministic clock for fast state-machine assertions
+  const makeFakeClock = () => {
+    let now = 0;
+    let nextId = 1;
+    const timers = new Map();
+    return {
+      api: {
+        setTimeout(fn, delay) {
+          const id = nextId++;
+          timers.set(id, { fn, at: now + delay });
+          return id;
+        },
+        clearTimeout(id) {
+          timers.delete(id);
+        }
+      },
+      advance(ms) {
+        const target = now + ms;
+        while (true) {
+          let earliestId = null;
+          let earliestAt = Infinity;
+          for (const [id, t] of timers.entries()) {
+            if (t.at <= target && t.at < earliestAt) {
+              earliestAt = t.at;
+              earliestId = id;
+            }
+          }
+          if (earliestId === null) break;
+          const entry = timers.get(earliestId);
+          timers.delete(earliestId);
+          now = entry.at;
+          entry.fn();
+        }
+        now = target;
+      }
+    };
+  };
+
+  // 1) Initial response timeout fires at 20s if no headers arrive
+  const c1 = makeFakeClock();
+  const w1 = createStallAwareAbortController(null, { timerApi: c1.api });
+  c1.advance(19999);
+  assert.equal(w1.getAbortReason(), null);
+  c1.advance(1);
+  assert.equal(w1.getAbortReason(), 'initial_timeout');
+  assert.match(w1.describeAbortReason(), /sem resposta inicial após 20s/);
+  w1.cleanup();
+
+  // 2) Receiving response + chunks keeps stream alive well past 45s (e.g. 90s), then stalls after 30s of silence
+  const c2 = makeFakeClock();
+  const w2 = createStallAwareAbortController(null, { timerApi: c2.api });
+  c2.advance(5000);
+  w2.markResponseReceived();
+  for (let step = 0; step < 5; step++) {
+    c2.advance(20000);
+    w2.touchChunk();
+    assert.equal(w2.getAbortReason(), null);
+  }
+  c2.advance(30000);
+  assert.equal(w2.getAbortReason(), 'stall_timeout');
+  assert.match(w2.describeAbortReason(), /sem dados\) após 30s/);
+  w2.cleanup();
+
+  // 3) Hard ceiling (5 min) aborts even if chunks keep trickling
+  const c3 = makeFakeClock();
+  const w3 = createStallAwareAbortController(null, { timerApi: c3.api });
+  w3.markResponseReceived();
+  for (let step = 0; step < 15; step++) {
+    c3.advance(20000);
+    if (!w3.getAbortReason()) w3.touchChunk();
+  }
+  assert.equal(w3.getAbortReason(), 'ceiling_timeout');
+  assert.match(w3.describeAbortReason(), /limite máximo de 5min 00s/);
+  w3.cleanup();
+
+  // 4) Parent signal cancellation is classified as 'parent'
+  const c4 = makeFakeClock();
+  const parent = new AbortController();
+  const w4 = createStallAwareAbortController(parent.signal, { timerApi: c4.api });
+  parent.abort();
+  assert.equal(w4.getAbortReason(), 'parent');
+  w4.cleanup();
+});
+
+test('computeGlobalServersMetrics sums ALL synced servers and ignores legacy 400-channel universal cache pollution', () => {
+  const {
+    isPollutedLegacyFastCacheMetrics,
+    computeGlobalServersMetrics
+  } = require('../mk21-tv/core/CatalogUtils.js');
+
+  const servers = [
+    { id: 'vlog', name: 'VLOG' },
+    { id: 'tannix', name: 'TANNIX' },
+    { id: 'lub', name: 'LUB TV' },
+    { id: 'cb6000', name: 'CB6000' }
+  ];
+
+  // Legacy bug polluted unsynced servers (lastSync=0) with 400 LIVE / 0 VOD / 0 SERIES
+  assert.equal(
+    isPollutedLegacyFastCacheMetrics({ totalChannels: 400, totalVOD: 0, totalSeries: 0, totalEPG: 170 }, 0, false),
+    true
+  );
+  assert.equal(
+    isPollutedLegacyFastCacheMetrics({ totalChannels: 400, totalVOD: 0, totalSeries: 0, totalEPG: 170 }, 1700000000000, false),
+    false
+  );
+
+  const perMap = {
+    vlog: { totalChannels: 1235, totalVOD: 22203, totalSeries: 8699, totalEPG: 170, totalGroups: 120, totalItems: 32137 },
+    tannix: { totalChannels: 1303, totalVOD: 44379, totalSeries: 9523, totalEPG: 269, totalGroups: 210, totalItems: 55205 },
+    lub: { totalChannels: 400, totalVOD: 0, totalSeries: 0, totalEPG: 170, totalGroups: 10, totalItems: 400 },
+    cb6000: null
+  };
+  const syncMap = {
+    vlog: 1700000000000,
+    tannix: 1700000005000,
+    lub: 0,
+    cb6000: 0
+  };
+
+  // Even when switching (activeCatalogMetrics empty), Geral still reflects VLOG + TANNIX (never 0/0/0/0!)
+  const global = computeGlobalServersMetrics(servers, perMap, 'tannix', { totalChannels: 0, totalVOD: 0, totalSeries: 0, totalItems: 0 }, syncMap);
+  assert.equal(global.totalChannels, 1235 + 1303);
+  assert.equal(global.totalVOD, 22203 + 44379);
+  assert.equal(global.totalSeries, 8699 + 9523);
+  assert.equal(global.totalEPG, 170 + 269);
+  assert.equal(global.syncedServers, 2);
+  assert.equal(global.totalServers, 4);
+});
+
+test('computeServerLoadPercentage returns 0%, live loading %, and 100% accurately per server', () => {
+  const { computeServerLoadPercentage } = require('../mk21-tv/core/CatalogUtils.js');
+
+  assert.deepEqual(
+    computeServerLoadPercentage('cb6000', {}, null, 0, false),
+    { percent: 0, status: 'idle', label: '0%' }
+  );
+  assert.deepEqual(
+    computeServerLoadPercentage('tannix', { tannix: { percent: 42.4, status: 'loading' } }, null, 0, false),
+    { percent: 42, status: 'loading', label: '42%' }
+  );
+  assert.deepEqual(
+    computeServerLoadPercentage('tannix', {}, { totalChannels: 1303, totalVOD: 44379, totalSeries: 9523 }, 1700000000000, false),
+    { percent: 100, status: 'done', label: '100%' }
+  );
+  // Legacy polluted 400-channel unsynced entry must report 0%, not 100%
+  assert.deepEqual(
+    computeServerLoadPercentage('lub', {}, { totalChannels: 400, totalVOD: 0, totalSeries: 0 }, 0, false),
+    { percent: 0, status: 'idle', label: '0%' }
+  );
+});
+
+test('decideCachedServerSwitch opens background-synced server immediately without re-downloading', () => {
+  const { decideCachedServerSwitch } = require('../mk21-tv/core/CatalogUtils.js');
+  const now = 1700000000000;
+
+  // TANNIX finished background sync 5 minutes ago (55,205 items in catalog index) -> no re-download!
+  const hitDaily = decideCachedServerSwitch(
+    { liveCount: 1303, vodCount: 44379, seriesCount: 9523, fromFullStore: true },
+    now - 5 * 60 * 1000,
+    'daily',
+    now
+  );
+  assert.deepEqual(hitDaily, {
+    useCacheImmediately: true,
+    isFullCache: true,
+    shouldBackgroundRefresh: false
+  });
+
+  // Even on "startup" frequency, a server synced 5 min ago in this session must NOT re-download on select
+  const hitStartupRecent = decideCachedServerSwitch(
+    { liveCount: 1303, vodCount: 44379, seriesCount: 9523, fromFullStore: true },
+    now - 5 * 60 * 1000,
+    'startup',
+    now
+  );
+  assert.equal(hitStartupRecent.shouldBackgroundRefresh, false);
+
+  // Fast cache only (400 live channels, 0 VOD/Series, not fromFullStore) -> opens fast + silently fetches rest
+  const fastOnly = decideCachedServerSwitch(
+    { liveCount: 400, vodCount: 0, seriesCount: 0, fromFullStore: false },
+    now - 5 * 60 * 1000,
+    'daily',
+    now
+  );
+  assert.deepEqual(fastOnly, {
+    useCacheImmediately: true,
+    isFullCache: false,
+    shouldBackgroundRefresh: true
+  });
+
+  // Stale full cache (> 24h on daily frequency) -> opens from cache and refreshes silently
+  const staleDaily = decideCachedServerSwitch(
+    { liveCount: 1303, vodCount: 44379, seriesCount: 9523, fromFullStore: true },
+    now - 26 * 60 * 60 * 1000,
+    'daily',
+    now
+  );
+  assert.equal(staleDaily.useCacheImmediately, true);
+  assert.equal(staleDaily.shouldBackgroundRefresh, true);
+});
+
+test('createStreamingCatalogMetricsAccumulator counts LIVE, MOVIE, SERIES, groups and EPG without retaining items', () => {
+  const { createStreamingCatalogMetricsAccumulator } = require('../mk21-tv/core/CatalogUtils.js');
+  const acc = createStreamingCatalogMetricsAccumulator();
+  acc.add({ contentType: 'LIVE', group: 'Esportes', tvgId: 'globo.sp' });
+  acc.add({ contentType: 'LIVE', group: 'Esportes', tvgId: '' });
+  acc.add({ contentType: 'MOVIE', group: 'Ação' });
+  acc.add({ contentType: 'SERIES', group: 'Drama' });
+  acc.add({ contentType: 'UNKNOWN', group: 'Ignorado' });
+  acc.add(null);
+
+  assert.equal(acc.getTotalItems(), 4);
+  assert.deepEqual(acc.snapshot(false), {
+    totalChannels: 2,
+    totalVOD: 1,
+    totalSeries: 1,
+    totalGroups: 3,
+    totalEPG: 1,
+    totalItems: 4
+  });
+
+  // When no tvgId is present but server has XMLTV, EPG falls back to live channel count
+  const accNoTvg = createStreamingCatalogMetricsAccumulator();
+  accNoTvg.add({ contentType: 'LIVE', group: 'Notícias', tvgId: '' });
+  accNoTvg.add({ contentType: 'LIVE', group: 'Notícias', tvgId: '' });
+  assert.equal(accNoTvg.snapshot(true).totalEPG, 2);
+});
+
+test('serializePersistedDevLogs and parsePersistedDevLogs enforce entry and byte limits safely', () => {
+  const { serializePersistedDevLogs, parsePersistedDevLogs } = require('../mk21-tv/core/CatalogUtils.js');
+  const logs = [];
+  for (let i = 0; i < 250; i++) {
+    logs.push({ time: '16:28:00', type: 'info', msg: 'Entrada #' + i + ' ' + 'x'.repeat(250) });
+  }
+
+  const serialized = serializePersistedDevLogs(logs, 180, 16000);
+  assert.ok(serialized.length <= 16000, 'Serialized payload must stay within byte budget');
+
+  const restored = parsePersistedDevLogs(serialized, 180);
+  assert.ok(restored.length > 0 && restored.length <= 180);
+  assert.ok(restored[restored.length - 1].msg.startsWith('Entrada #249'));
+
+  // Corrupted JSON recovers cleanly as empty array
+  assert.deepEqual(parsePersistedDevLogs('{invalid-json'), []);
+  assert.deepEqual(parsePersistedDevLogs(null), []);
+});
+
+test('app-legacy uses inline SVG icons, cancels pending reconnect timers, and streams background sync with O(1) RAM', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const legacySrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/src/legacy/app-legacy.js'), 'utf8');
+  const cssSrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/styles.css'), 'utf8');
+
+  // 1. Watchdog reconnect timer cancellation and cold-start grace
+  assert.ok(legacySrc.includes('let autoReconnectTimer = null;'));
+  assert.ok(legacySrc.includes('function cancelPendingAutoReconnect('));
+  assert.ok(legacySrc.includes('resetStallWatchdogGrace(14000)'));
+  assert.ok(legacySrc.includes('const effectiveTolerance = isVod ? Math.max(30, mk21StallTolerance()) : mk21StallTolerance();'));
+
+  // 2. Inline SVG icons and 92vw safe-area (no broken emoji glyphs in devlogs modal)
+  assert.ok(legacySrc.includes('const MK21_DEVLOG_SVG = {'));
+  assert.ok(cssSrc.includes('width: 92vw !important;'));
+  assert.ok(cssSrc.includes('.devlogs-icon {'));
+
+  // 3. Persistent devlogs across webOS memory restarts
+  assert.ok(legacySrc.includes("const MK21_DEVLOGS_PERSIST_KEY = 'mk21_devlogs_persist_v1';"));
+  assert.ok(legacySrc.includes('function mk21RestorePersistedDevLogs()'));
+
+  // 4. Streaming O(1)-RAM background sync with IndexedDB backpressure
+  assert.ok(legacySrc.includes('CatalogUtils.createStreamingCatalogMetricsAccumulator()'));
+  assert.ok(legacySrc.includes('async drain()'));
+});
+
+test('compactStreamUrl and expandStreamUrl shrink Xtream URLs without storing credentials and preserve direct M3U URLs', () => {
+  const { compactStreamUrl, expandStreamUrl } = require('../mk21-tv/core/CatalogUtils.js');
+  const creds = { user: 'user+1', pass: 'p@ss/2' };
+  const base = 'http://app.tigerouro.shop/';
+
+  // Live .ts (encoded credentials)
+  const liveUrl = 'http://app.tigerouro.shop/live/user%2B1/p%40ss%2F2/14859719.ts';
+  const cLive = compactStreamUrl(liveUrl, base, creds);
+  assert.deepEqual(cLive, { ref: 'l:14859719.ts', url: '' });
+  assert.equal(expandStreamUrl(cLive, base, creds), liveUrl);
+
+  // Movie .mp4
+  const movieUrl = 'http://app.tigerouro.shop/movie/user%2B1/p%40ss%2F2/998877.mp4';
+  const cMovie = compactStreamUrl(movieUrl, base, creds);
+  assert.deepEqual(cMovie, { ref: 'm:998877.mp4', url: '' });
+  assert.equal(expandStreamUrl(cMovie, base, creds), movieUrl);
+
+  // Series .xtream stub
+  const seriesUrl = 'http://app.tigerouro.shop/series/user%2B1/p%40ss%2F2/4455.xtream';
+  const cSeries = compactStreamUrl(seriesUrl, base, creds);
+  assert.deepEqual(cSeries, { ref: 's:4455.xtream', url: '' });
+  assert.equal(expandStreamUrl(cSeries, base, creds), seriesUrl);
+
+  // Non-Xtream / external host URL must remain untouched in `url`
+  const externalUrl = 'https://cdn.other-provider.com/hls/channel1/index.m3u8?token=abc';
+  const cExt = compactStreamUrl(externalUrl, base, creds);
+  assert.deepEqual(cExt, { ref: '', url: externalUrl });
+  assert.equal(expandStreamUrl(cExt, base, creds), externalUrl);
+
+  // Backward compatibility: legacy IndexedDB records that only have `url` (no `ref`)
+  assert.equal(
+    expandStreamUrl({ url: 'http://legacy.host/movie/u/p/123.mkv' }, base, creds),
+    'http://legacy.host/movie/u/p/123.mkv'
+  );
+
+  // Missing credentials must not drop original URL
+  assert.deepEqual(compactStreamUrl(liveUrl, base, null), { ref: '', url: liveUrl });
+  assert.equal(expandStreamUrl({ ref: 'm:123.mp4' }, base, null), '');
+});
+
+test('createStreamingCatalogMetricsAccumulator.getGroupCounts tracks per-type groups and adult counts accurately', () => {
+  const { createStreamingCatalogMetricsAccumulator } = require('../mk21-tv/core/CatalogUtils.js');
+  const acc = createStreamingCatalogMetricsAccumulator();
+  acc.add({ contentType: 'LIVE', group: 'Esportes', tvgId: 'espn.br', isAdult: false });
+  acc.add({ contentType: 'MOVIE', group: 'Ação', isAdult: false });
+  acc.add({ contentType: 'MOVIE', group: 'Ação', isAdult: false });
+  acc.add({ contentType: 'MOVIE', group: 'Adultos +18', isAdult: true });
+  acc.add({ contentType: 'SERIES', group: '', isAdult: false });
+
+  const gc = acc.getGroupCounts();
+  assert.deepEqual(gc.LIVE, [{ name: 'Esportes', count: 1, adultCount: 0 }]);
+  assert.deepEqual(gc.MOVIE, [
+    { name: 'Ação', count: 2, adultCount: 0 },
+    { name: 'Adultos +18', count: 1, adultCount: 1 }
+  ]);
+  assert.deepEqual(gc.SERIES, [{ name: 'Geral', count: 1, adultCount: 0 }]);
+});
+
+test('Fase 1: app-legacy queries VOD/Series on demand via serverGroup index and uses compact IndexedDB schema', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const legacySrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/src/legacy/app-legacy.js'), 'utf8');
+
+  // 1. Compact schema on write + expansion on read/favorites
+  assert.ok(legacySrc.includes('CatalogUtils.compactStreamUrl(item.url, baseUrl, creds)'));
+  assert.ok(legacySrc.includes('CatalogUtils.expandStreamUrl(raw, base, c)'));
+  assert.ok(legacySrc.includes('CatalogUtils.expandStreamUrl(item, baseUrl, creds)'));
+  assert.ok(legacySrc.includes('metaRec.groupCounts = groupCounts;'));
+
+  // 2. IndexedDB queries use serverGroup index + native cursor.advance
+  assert.ok(legacySrc.includes("store.index(useGroupIndex ? 'serverGroup' : 'serverType')"));
+  assert.ok(legacySrc.includes('IDBKeyRange.only([serverId, type, effectiveGroup])'));
+  assert.ok(legacySrc.includes('cursor.advance(safeOffset)'));
+
+  // 3. LIVE-only RAM load + streaming VOD/Series straight to IndexedDB
+  assert.ok(legacySrc.includes('getStoredData(srv.id, { liveOnly: true })'));
+  assert.ok(legacySrc.includes('const streamVodOnDemand = Boolean(indexWriter && indexWriter.isPersistent);'));
+  assert.ok(legacySrc.includes('function isOnDemandIndexedType(type)'));
+  assert.ok(legacySrc.includes('async function loadIndexedCategoryPage('));
+
+  // 4. Omnisearch fixed: references allCatalog (never undefined allContent) and queries IDB across all synced servers
+  assert.ok(!legacySrc.includes('allContent.LIVE'));
+  assert.ok(legacySrc.includes("searchCatalogIndexAcrossServers(allServers, 'MOVIE', q,"));
+  assert.ok(legacySrc.includes("searchCatalogIndexAcrossServers(allServers, 'SERIES', q,"));
+});
+
+test('Fase 2: normalizeUnifiedTitle, computeStreamQualityScore, and mergeUnifiedSearchResults deduplicate multi-server hits', () => {
+  const {
+    normalizeUnifiedTitle,
+    computeStreamQualityScore,
+    mergeUnifiedSearchResults
+  } = require('../mk21-tv/core/CatalogUtils.js');
+
+  assert.equal(normalizeUnifiedTitle('BR | Globo SP FHD H265 [VIP]'), 'globo sp');
+  assert.equal(normalizeUnifiedTitle('Globo SP 4K UHD (Backup)'), 'globo sp');
+  assert.equal(normalizeUnifiedTitle('Ação & Aventura — 1080p Dublado'), 'acao aventura');
+
+  assert.ok(computeStreamQualityScore('ESPN 4K UHD') > computeStreamQualityScore('ESPN FHD'));
+  assert.ok(computeStreamQualityScore('ESPN FHD H265') > computeStreamQualityScore('ESPN HD'));
+  assert.ok(computeStreamQualityScore('ESPN HD') > computeStreamQualityScore('ESPN SD Backup'));
+
+  const merged = mergeUnifiedSearchResults([
+    { name: 'SporTV HD', url: 'http://srv2/live/u/p/10.ts', contentType: 'LIVE', tvgId: 'sportv.br', serverId: 'tannix', serverName: 'TANNIX' },
+    { name: 'SporTV 4K UHD', url: 'http://srv3/live/u/p/20.ts', contentType: 'LIVE', tvgId: 'sportv.br', serverId: 'lub', serverName: 'LUB TV' },
+    { name: 'SporTV FHD', url: 'http://srv1/live/u/p/30.ts', contentType: 'LIVE', tvgId: 'sportv.br', serverId: 'vlog', serverName: 'VLOG' },
+    { name: 'Matrix (1999) 4K', url: 'http://srv2/movie/u/p/99.mp4', contentType: 'MOVIE', serverId: 'tannix', serverName: 'TANNIX' },
+    { name: 'Matrix FHD Dublado', url: 'http://srv1/movie/u/p/88.mp4', contentType: 'MOVIE', serverId: 'vlog', serverName: 'VLOG' }
+  ], 'vlog', 20);
+
+  // Deduplicated into 2 items (1 LIVE + 1 MOVIE), preferring active server 'vlog' as primary and attaching backups
+  assert.equal(merged.length, 2);
+
+  const liveHit = merged.find(i => i.contentType === 'LIVE');
+  assert.equal(liveHit.serverId, 'vlog');
+  assert.equal(liveHit.sourceCount, 3);
+  assert.equal(liveHit.alternateSources.length, 2);
+  // Highest-quality backup (4K UHD on LUB TV) ranked first among alternates
+  assert.equal(liveHit.alternateSources[0].serverId, 'lub');
+  assert.equal(liveHit.alternateUrls.length, 2);
+
+  const movieHit = merged.find(i => i.contentType === 'MOVIE');
+  assert.equal(movieHit.serverId, 'vlog');
+  assert.equal(movieHit.sourceCount, 2);
+  assert.equal(movieHit.alternateSources[0].serverId, 'tannix');
+});
+
+test('Speed Test: buildFastComRangeUrl rewrites Netflix OCA path range (never query param) and computeTrimmedThroughputMbps trims ramp-up/spikes', () => {
+  const { buildFastComRangeUrl, computeTrimmedThroughputMbps } = require('../mk21-tv/core/CatalogUtils.js');
+
+  const ocaWithRange = 'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest/range/0-26214400?c=br&n=1234&v=10';
+  const pingUrl = buildFastComRangeUrl(ocaWithRange, 0, 0, 'abc');
+  assert.equal(
+    pingUrl,
+    'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest/range/0-0?c=br&n=1234&v=10&_=abc'
+  );
+  assert.ok(!pingUrl.includes('&range='), 'Must NEVER append &range= query param on Fast.com OCA URLs');
+
+  const ocaBase = 'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest?c=br&n=1234';
+  assert.equal(
+    buildFastComRangeUrl(ocaBase, 0, 26214399, 'xyz'),
+    'https://ipv4-c014-gru001-ix.1.oca.nflxvideo.net/speedtest/range/0-26214399?c=br&n=1234&_=xyz'
+  );
+
+  // Non-Fast.com URL falls back safely to query range
+  assert.equal(
+    buildFastComRangeUrl('https://custom.cdn.example/payload', 0, 1024, 't1'),
+    'https://custom.cdn.example/payload?range=0-1024&_=t1'
+  );
+
+  // Trimmed throughput discards slow-start low tail & burst spike
+  const trimmed = computeTrimmedThroughputMbps([40, 85, 310, 355, 365, 370, 372, 368, 375, 590]);
+  assert.ok(trimmed >= 340 && trimmed <= 385, `Expected ~365 Mbps trimmed mean, got ${trimmed}`);
+  assert.equal(computeTrimmedThroughputMbps([]), 0);
+});
+
+test('Fase 2, Speed Test & 100% Font Size regression checks on app-legacy.js and styles.css', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const legacySrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/src/legacy/app-legacy.js'), 'utf8');
+  const cssSrc = fs.readFileSync(path.join(__dirname, '../mk21-tv/styles.css'), 'utf8');
+
+  // 1. Fase 2: O(1)-RAM cross-server IndexedDB failover & unified Omnisearch
+  assert.ok(legacySrc.includes('async function searchCatalogIndexAcrossServers('));
+  assert.ok(legacySrc.includes('async function findAlternativeSourcesInIndex('));
+  assert.ok(legacySrc.includes('CatalogUtils.mergeUnifiedSearchResults('));
+  assert.ok(legacySrc.includes('findAlternativeSourcesInIndex(activeItem, activeSrvId, 12)'));
+  assert.ok(!legacySrc.includes('cached = getFastCache(srv.id) || await getStoredData(srv.id);'));
+
+  // 2. Speed Test: uses CatalogUtils.buildFastComRangeUrl, pauses playback, zero-GC bucket sampling
+  assert.ok(legacySrc.includes('CatalogUtils.buildFastComRangeUrl(targetInfo.urls[0], 0, 0)'));
+  assert.ok(legacySrc.includes('CatalogUtils.computeTrimmedThroughputMbps(steadyBucketSamples)'));
+  assert.ok(!legacySrc.includes('byteEvents.push('));
+  assert.ok(legacySrc.includes('speedHardwareNote'));
+
+  // 3. Global 100% Font Size scaling on html+body, boot-safe applyFontSize, and widened sidebar without clipping
+  assert.ok(legacySrc.includes('const MK21_FONT_SCALES = {'));
+  assert.ok(legacySrc.includes("if ($('btnFontNormal')) {"));
+  assert.ok(cssSrc.includes('html[class*="font-"] .app-header'));
+  assert.ok(cssSrc.includes('html[class*="font-"] .settings-detail-panel'));
+  assert.ok(cssSrc.includes('html[class*="font-"] .channel-name'));
+  assert.ok(cssSrc.includes('html[class*="font-"] .remote-key'));
+  assert.ok(cssSrc.includes('.omnisearch-sources-pill'));
+});
+
