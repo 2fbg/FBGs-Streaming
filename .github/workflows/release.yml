@@ -431,6 +431,11 @@ jobs:
           IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
           NOTES=$(python3 -c 'import json, sys; print(json.load(open("version.json", encoding="utf-8")).get("releaseNotes", f"Release {sys.argv[1]}"))' "$TAG")
           if gh release view "$TAG" > /dev/null 2>&1; then
+            # Republicação (force=true): move a tag para o commit carimbado antes de atualizar os assets,
+            # garantindo que o OTA da Smart TV (raw.githubusercontent.com/.../${TAG}/...) receba o código novo.
+            gh auth setup-git
+            git tag -f "$TAG" "$TARGET_SHA"
+            git push --force origin "refs/tags/${TAG}"
             gh release upload "$TAG" mk21.apk "$IPK_PATH" SHA256SUMS --clobber
             gh release edit "$TAG" --draft=false --title "MK21 Play ${TAG}" --notes "$NOTES"
           else
