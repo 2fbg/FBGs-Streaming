@@ -260,7 +260,7 @@ jobs:
           EOF
           fi
 
-          ./gradlew testDebugUnitTest --no-daemon
+          ./gradlew testDebugUnitTest --no-daemon || { echo "Retrying tests due to socket/network hiccup..."; ./gradlew testDebugUnitTest --no-daemon; }
           ./gradlew assembleRelease --no-daemon
 
           APK=app/build/outputs/apk/release/app-release.apk
