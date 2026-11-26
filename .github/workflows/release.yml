@@ -472,13 +472,37 @@ jobs:
         run: |
           set -euo pipefail
           IPK_PATH="smart-tv/mk21play_${VER}_all.ipk"
-          node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "$IPK_PATH" --require-release-url --remote
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
 
-          # Prova que o SHA256SUMS publicado corresponde aos binários publicados.
+          # Os assets recém-enviados levam alguns segundos para propagar no CDN de
+          # releases do GitHub (404/403 logo após o upload). Espera curta + retry
+          # evita que a release termine em falha falsa.
+          MAX_ATTEMPTS=6
+          DELAY=15
           TMPD=$(mktemp -d)
           trap 'rm -rf "$TMPD"' EXIT
-          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
-          curl -fsSL -o "$TMPD/mk21.apk" "$BASE/mk21.apk"
-          curl -fsSL -o "$TMPD/mk21play_${VER}_all.ipk" "$BASE/mk21play_${VER}_all.ipk"
-          curl -fsSL -o "$TMPD/SHA256SUMS" "$BASE/SHA256SUMS"
-          ( cd "$TMPD" && sha256sum -c SHA256SUMS )
+
+          verify_assets() {
+            rm -f "$TMPD"/*
+            node scripts/verify-release-manifests.mjs --apk mk21.apk --ipk "$IPK_PATH" --require-release-url --remote || return 1
+            curl -fsSL -o "$TMPD/mk21.apk" "$BASE/mk21.apk" || return 1
+            curl -fsSL -o "$TMPD/mk21play_${VER}_all.ipk" "$BASE/mk21play_${VER}_all.ipk" || return 1
+            curl -fsSL -o "$TMPD/SHA256SUMS" "$BASE/SHA256SUMS" || return 1
+            # Prova que o SHA256SUMS publicado corresponde aos binários publicados.
+            ( cd "$TMPD" && sha256sum -c SHA256SUMS ) || return 1
+          }
+
+          attempt=1
+          while true; do
+            if verify_assets; then
+              echo "Assets remotos verificados (tentativa ${attempt}/${MAX_ATTEMPTS})."
+              break
+            fi
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "::error::Assets remotos não verificáveis após ${MAX_ATTEMPTS} tentativas."
+              exit 1
+            fi
+            echo "::warning::Assets ainda não disponíveis (tentativa ${attempt}/${MAX_ATTEMPTS}); nova tentativa em ${DELAY}s."
+            sleep "$DELAY"
+            attempt=$((attempt + 1))
+          done
