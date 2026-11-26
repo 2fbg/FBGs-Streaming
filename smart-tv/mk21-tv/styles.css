@@ -948,7 +948,8 @@ video {
   transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
-.modal-btn:focus, .modal-btn:focus-visible, .modal-button:focus, .modal-button:focus-visible {
+/* Sem :focus-visible de propósito: Chromium 68 (webOS 5) descarta a lista inteira se não conhecer o seletor */
+.modal-btn:focus, .modal-button:focus {
   background: #ff9800 !important; /* MK21 Orange */
   color: #000000 !important;
   -webkit-transform: scale(1.05);
@@ -4093,9 +4094,9 @@ div[style*="overflow"], .pane-scroll, .list-container,
   margin-right: 0;
 }
 
+/* Sem :focus-visible: Chromium 68 (webOS 5) descarta o bloco inteiro */
 .apk-setting-card:hover,
-.apk-setting-card:focus,
-.apk-setting-card:focus-visible {
+.apk-setting-card:focus {
   background: #1f2230 !important;
   border-color: #ffd54f !important;
   outline: none !important;
@@ -4477,9 +4478,9 @@ div[style*="overflow"], .pane-scroll, .list-container,
   margin-bottom: 0;
 }
 
+/* Sem :focus-visible: Chromium 68 (webOS 5) descarta o bloco inteiro */
 .apk-radio-option:hover,
-.apk-radio-option:focus,
-.apk-radio-option:focus-visible {
+.apk-radio-option:focus {
   background: rgba(255, 213, 79, 0.14) !important;
   border-color: #ffd54f !important;
   outline: none !important;
@@ -4542,8 +4543,8 @@ div[style*="overflow"], .pane-scroll, .list-container,
   margin-bottom: 0;
 }
 
-.apk-staged-row:focus,
-.apk-staged-row:focus-visible {
+/* Sem :focus-visible: Chromium 68 (webOS 5) descarta o bloco inteiro */
+.apk-staged-row:focus {
   background: rgba(255, 213, 79, 0.14) !important;
   border-color: #ffd54f !important;
   outline: none !important;

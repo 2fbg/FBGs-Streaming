@@ -306,6 +306,40 @@ class PackageIpkTests(unittest.TestCase):
                 build_ipk(source_dir, os.path.join(temp_dir, "mk21.ipk"))
             self.assertIn('"splashBackground" points to a missing file', str(context.exception))
 
+    def test_excludes_bundled_files_and_heavy_assets_from_ipk(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_dir = os.path.join(temp_dir, "app")
+            make_app(source_dir)
+            for rel, content in (
+                ("assets/logo.png", b"heavy-png"),
+                ("assets/mk21-logo.svg", b"<svg/>"),
+                ("components/PlayerOverlay.js", b"export {}"),
+                ("css/style.css", b"/* empty */"),
+                ("core/AlternativeSources.js", b"window.Alt = {};"),
+                ("core/CatalogUtils.js", b"module.exports = {};"),
+                ("src/main.js", b"console.log('src');"),
+            ):
+                full_path = os.path.join(source_dir, rel)
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "wb") as file:
+                    file.write(content)
+
+            output_path = os.path.join(temp_dir, "mk21.ipk")
+            build_ipk(source_dir, output_path)
+            _, members = read_ar_members(output_path)
+            data = gzip.decompress(members["data.tar.gz"])
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as tar:
+                names = set(tar.getnames())
+
+            prefix = "usr/palm/applications/com.example.mk21"
+            self.assertIn(f"{prefix}/assets/mk21-logo.svg", names)
+            self.assertIn(f"{prefix}/core/AlternativeSources.js", names)
+            self.assertNotIn(f"{prefix}/assets/logo.png", names)
+            self.assertNotIn(f"{prefix}/components/PlayerOverlay.js", names)
+            self.assertNotIn(f"{prefix}/css/style.css", names)
+            self.assertNotIn(f"{prefix}/core/CatalogUtils.js", names)
+            self.assertNotIn(f"{prefix}/src/main.js", names)
+
 
 if __name__ == "__main__":
     unittest.main()

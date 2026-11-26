@@ -10022,17 +10022,20 @@ async function startDirectUpdate() {
   try {
     setProgress('Conectando ao repositório oficial de atualizações...', 15);
 
-    // URLs dos arquivos da TV para atualização OTA imediata
+    // URLs dos arquivos da TV para atualização OTA imediata (pinados na tag da release)
     const now = Date.now();
+    const tag = `v${String(targetVer).replace(/^v/i, '')}`;
     const appJsCandidates = [
-      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/app.js?t=${now}`,
-      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/mk21-tv/app.js?t=${now}`,
-      `https://bgstreaming.vercel.app/smart-tv/mk21-tv/app.js?t=${now}`
+      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/${tag}/smart-tv/mk21-tv/app.js?t=${now}`,
+      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@${tag}/smart-tv/mk21-tv/app.js?t=${now}`,
+      `https://bgstreaming.vercel.app/smart-tv/mk21-tv/app.js?t=${now}`,
+      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/app.js?t=${now}`
     ];
     const stylesCssCandidates = [
-      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=${now}`,
-      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@main/smart-tv/mk21-tv/styles.css?t=${now}`,
-      `https://bgstreaming.vercel.app/smart-tv/mk21-tv/styles.css?t=${now}`
+      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/${tag}/smart-tv/mk21-tv/styles.css?t=${now}`,
+      `https://cdn.jsdelivr.net/gh/2fbg/FBGs-Streaming@${tag}/smart-tv/mk21-tv/styles.css?t=${now}`,
+      `https://bgstreaming.vercel.app/smart-tv/mk21-tv/styles.css?t=${now}`,
+      `https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/styles.css?t=${now}`
     ];
 
     let newAppJs = null;

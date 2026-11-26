@@ -267,11 +267,48 @@ def build_ipk(src_dir, output_ipk_path):
     title = appinfo.get("title", "MK21 Streaming")
     vendor = appinfo.get("vendor", "FBG2")
     timestamp = _build_timestamp()
-    installed_size = math.ceil(sum(
-        os.path.getsize(os.path.join(root, filename))
-        for root, _, files in os.walk(src_dir)
-        for filename in files
-    ) / 1024)
+    # Fase 2: o fonte do app (src/), arquivos já embutidos no bundle (components/, css/,
+    # core/* exceto AlternativeSources.js) e assets pesados não usados ficam fora do pacote;
+    # o cliente roda o bundle app.js gerado por `npm run build:tv`.
+    excluded_dirs = {
+        "src",
+        "components",
+        "css",
+        ".git",
+        "node_modules",
+        "tests",
+        "__pycache__",
+    }
+    excluded_files = {
+        "MIGRACAO-FASE2-NOTAS.md",
+        ".DS_Store",
+        "package_ipk.py",
+    }
+    excluded_rel_paths = {
+        "assets/logo.png",
+    }
+    kept_core_files = {"AlternativeSources.js"}
+
+    def should_exclude(rel_path):
+        norm_path = rel_path.replace("\\", "/").lstrip("./")
+        parts = norm_path.split("/")
+        if any(p in excluded_dirs for p in parts[:-1]):
+            return True
+        if norm_path.startswith("core/") and parts[-1] not in kept_core_files:
+            return True
+        if norm_path in excluded_rel_paths or parts[-1] in excluded_files:
+            return True
+        return False
+
+    installed_bytes = 0
+    for root, dirs, files in os.walk(src_dir):
+        dirs[:] = sorted(d for d in dirs if d not in excluded_dirs)
+        for filename in files:
+            rel_path = os.path.relpath(os.path.join(root, filename), src_dir).replace("\\", "/")
+            if should_exclude(rel_path):
+                continue
+            installed_bytes += os.path.getsize(os.path.join(root, filename))
+    installed_size = math.ceil(installed_bytes / 1024)
 
     print(f"[*] Packaging webOS app: {title} ({app_id} v{version})...")
 
@@ -312,21 +349,19 @@ Installed-Size: {installed_size}
     }
     pkg_bytes = json.dumps(packageinfo, indent=2).encode("utf-8")
 
-    # Fase 2: o fonte do app (src/) e as notas de migracao ficam fora do pacote;
-    # o cliente roda o bundle app.js gerado por `npm run build:tv`.
-    excluded_dirs = {"src", "node_modules", "tests", "__pycache__"}
-    excluded_files = {"MIGRACAO-FASE2-NOTAS.md", ".DS_Store"}
-
     def add_data(tar):
         # Add all files from src_dir, sorted for a stable member order
         for root, dirs, files in os.walk(src_dir):
             dirs[:] = sorted(d for d in dirs if d not in excluded_dirs)
-            files = sorted(f for f in files if f not in excluded_files)
+            files = sorted(files)
             rel_dir = os.path.relpath(root, src_dir)
             target_base = app_target_dir if rel_dir == "." else f"{app_target_dir}/{rel_dir}"
 
             for f in files:
                 file_path = os.path.join(root, f)
+                rel_path = os.path.relpath(file_path, src_dir).replace("\\", "/")
+                if should_exclude(rel_path):
+                    continue
                 arcname = f"{target_base}/{f}".replace("\\", "/")
                 _add_file(tar, file_path, arcname, timestamp)
 
