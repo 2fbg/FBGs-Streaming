@@ -4,7 +4,8 @@ import android.content.Context
 import com.example.data.model.PlaylistItem
 
 /**
- * Backward compatibility facade delegating to modularized Cast components.
+ * Facade delegating to modularized Cast components (LocalHttpServer, DlnaDiscoveryService, DlnaSoapClient)
+ * while maintaining active session state across dialog re-opens.
  */
 object LocalCastServer {
     val httpServer = LocalHttpServer()
@@ -38,14 +39,47 @@ object LocalCastServer {
         get() = httpServer.tvCurrentTimeSeconds
         set(value) { httpServer.tvCurrentTimeSeconds = value }
 
-    var dlnaControlUrl: String? = null
+    @Volatile
+    var pairedDevice: DLNADevice? = null
+
+    @Volatile
+    var useLocalProxyForDlna: Boolean = true
+
+    var dlnaControlUrl: String?
+        get() = pairedDevice?.controlUrl
+        set(value) {
+            if (value == null) {
+                pairedDevice = null
+            } else if (pairedDevice == null) {
+                pairedDevice = DLNADevice(
+                    friendlyName = "Smart TV",
+                    controlUrl = value,
+                    baseUrl = "",
+                    ipAddress = dlnaDeviceIp.orEmpty()
+                )
+            }
+        }
+
     var dlnaDeviceIp: String? = null
+
+    val dlnaRenderingControlUrl: String?
+        get() = pairedDevice?.renderingControlUrl
 
     fun startServer(context: Context, item: PlaylistItem): String? =
         httpServer.startServer(context, item)
 
-    fun stopServer() =
+    fun stopServer() {
+        pairedDevice?.controlUrl?.let { soapClient.stopDlna(it) }
+        pairedDevice = null
+        dlnaDeviceIp = null
         httpServer.stopServer()
+    }
+
+    fun disconnectDlna() {
+        pairedDevice?.controlUrl?.let { soapClient.stopDlna(it) }
+        pairedDevice = null
+        dlnaDeviceIp = null
+    }
 
     fun getLocalIpAddress(context: Context): String =
         httpServer.getLocalIpAddress(context)
@@ -53,14 +87,31 @@ object LocalCastServer {
     fun getCastUrl(context: Context): String =
         httpServer.getCastUrl(context)
 
+    fun getStreamProxyUrl(context: Context, item: PlaylistItem): String =
+        httpServer.getStreamProxyUrl(context, item)
+
     fun discoverDlnaDevices(onDeviceDiscovered: (DLNADevice) -> Unit) =
         discovery.discoverDlnaDevices(onDeviceDiscovered)
+
+    fun discoverDlnaDevices(
+        context: Context?,
+        onDeviceDiscovered: (DLNADevice) -> Unit,
+        onScanComplete: (() -> Unit)? = null
+    ) = discovery.discoverDlnaDevices(context, onDeviceDiscovered, onScanComplete)
 
     fun probeManualDevice(ip: String, onResult: (Boolean, DLNADevice?) -> Unit) =
         discovery.probeManualDevice(ip, onResult)
 
     fun castUrlToDlna(controlUrl: String, streamUrl: String, title: String) =
         soapClient.castUrlToDlna(controlUrl, streamUrl, title)
+
+    fun castUrlToDlna(
+        controlUrl: String,
+        streamUrl: String,
+        title: String,
+        contentType: String = "LIVE",
+        onResult: ((DlnaCastResult) -> Unit)? = null
+    ) = soapClient.castUrlToDlna(controlUrl, streamUrl, title, contentType, onResult)
 
     fun pauseDlna(controlUrl: String) =
         soapClient.pauseDlna(controlUrl)
@@ -73,4 +124,7 @@ object LocalCastServer {
 
     fun stopDlna(controlUrl: String) =
         soapClient.stopDlna(controlUrl)
+
+    fun setVolumeDlna(renderingControlUrl: String, volumePercent: Int) =
+        soapClient.setVolumeDlna(renderingControlUrl, volumePercent)
 }
