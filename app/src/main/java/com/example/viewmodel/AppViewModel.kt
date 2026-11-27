@@ -553,6 +553,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadXmltvForActiveServer(force: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
+            loadXmltvForActiveServerSuspend(force = force)
+        }
+    }
+
+    suspend fun loadXmltvForActiveServerSuspend(force: Boolean = false): com.example.data.parser.XmltvIndex? =
+        withContext(Dispatchers.IO) {
             val creds = resolveActiveXtreamCredentials()
             if (creds != null) {
                 com.example.data.service.AndroidEpgManager.loadXmltv(
@@ -570,9 +576,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     force = force,
                     client = okHttpClient
                 )
+            } else {
+                com.example.data.service.AndroidEpgManager.xmltvIndex.value
             }
         }
-    }
 
     suspend fun fetchShortEpgForChannel(item: PlaylistItem): List<com.example.data.parser.XmltvProgramme> {
         val creds = resolveActiveXtreamCredentials()

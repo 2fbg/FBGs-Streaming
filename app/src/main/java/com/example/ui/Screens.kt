@@ -2198,6 +2198,7 @@ fun HomeScreen(
     }
 
     var selectedChannelForEpg by remember { mutableStateOf<PlaylistItem?>(null) }
+    var selectedChannelForFullEpg by remember { mutableStateOf<PlaylistItem?>(null) }
 
     Box(
         modifier = Modifier
@@ -2906,7 +2907,11 @@ fun HomeScreen(
                                         isGridCompact = contentType != ContentType.LIVE,
                                         onClick = { viewModel.playContent(item) },
                                         onToggleFavorite = { viewModel.toggleFavorite(item) },
-                                        onPreviewEpg = { selectedChannelForEpg = item }
+                                        onPreviewEpg = if (contentType == ContentType.LIVE) {
+                                            { selectedChannelForFullEpg = item }
+                                        } else {
+                                            null
+                                        }
                                     )
                                 }
                             }
@@ -2997,6 +3002,24 @@ fun HomeScreen(
                 onDismiss = { selectedChannelForEpg = null },
                 onPlay = { channelItem ->
                     selectedChannelForEpg = null
+                    viewModel.playContent(channelItem)
+                },
+                onOpenFullSchedule = {
+                    val ch = selectedChannelForEpg
+                    selectedChannelForEpg = null
+                    selectedChannelForFullEpg = ch
+                }
+            )
+        }
+
+        // Selected Live Channel Full XMLTV EPG Schedule Modal
+        if (selectedChannelForFullEpg != null) {
+            ChannelFullEpgScheduleModal(
+                channel = selectedChannelForFullEpg!!,
+                viewModel = viewModel,
+                onDismiss = { selectedChannelForFullEpg = null },
+                onPlayChannel = { channelItem ->
+                    selectedChannelForFullEpg = null
                     viewModel.playContent(channelItem)
                 }
             )
@@ -4035,7 +4058,7 @@ fun GridItemCard(
                         // Favorite Button for TV Channels
                         IconButton(
                             onClick = onToggleFavorite,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
                                 imageVector = if (item.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -4043,6 +4066,23 @@ fun GridItemCard(
                                 tint = if (item.isFavorite) Color.Red else Color.White.copy(alpha = 0.6f),
                                 modifier = Modifier.size(15.dp)
                             )
+                        }
+
+                        if (onPreviewEpg != null) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            IconButton(
+                                onClick = onPreviewEpg,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .testTag("channel_card_epg_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = "Grade completa de programação de ${item.name}",
+                                    tint = GoldPremium,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -4084,7 +4124,8 @@ fun ChannelEpgPreviewDialog(
     item: PlaylistItem,
     viewModel: AppViewModel? = null,
     onDismiss: () -> Unit,
-    onPlay: (PlaylistItem) -> Unit
+    onPlay: (PlaylistItem) -> Unit,
+    onOpenFullSchedule: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var schedule by remember(item.name, item.url) {
@@ -4491,13 +4532,40 @@ fun ChannelEpgPreviewDialog(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Text(
-                        text = "PROGRAMAÇÃO DO DIA",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color.Gray,
-                        letterSpacing = 1.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "PROGRAMAÇÃO DO DIA",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.Gray,
+                            letterSpacing = 1.sp
+                        )
+                        if (onOpenFullSchedule != null) {
+                            TextButton(
+                                onClick = onOpenFullSchedule,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.testTag("preview_open_full_epg_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = GoldPremium,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Grade Completa",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GoldPremium
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(6.dp))
 
@@ -4723,6 +4791,7 @@ fun VideoPlayerUI(
     var aspectOverlayText by remember { mutableStateOf("Ajustar (Original)") }
     var aspectOverlayJob by remember { mutableStateOf<Job?>(null) }
     var showCastDialog by remember { mutableStateOf(false) }
+    var showChannelEpgModal by remember { mutableStateOf(false) }
     var showAudioSubDialog by remember { mutableStateOf(false) }
     var isTouchLocked by remember { mutableStateOf(false) }
     var sleepTimerMinutesRemaining by remember { mutableIntStateOf(0) }
@@ -5816,20 +5885,46 @@ fun VideoPlayerUI(
                                 overflow = TextOverflow.Ellipsis
                             )
                             if (playlistItem.contentType == "LIVE") {
+                                val xmltvIdx by com.example.data.service.AndroidEpgManager.xmltvIndex.collectAsState()
+                                val liveNowTitle = remember(playlistItem.url, playlistItem.name, xmltvIdx) {
+                                    val (nowProg, _) = com.example.data.service.AndroidEpgManager.getNowAndNext(playlistItem)
+                                    nowProg?.title ?: getCurrentEpgProgram(playlistItem.name)
+                                }
                                 Box(
                                     modifier = Modifier
                                         .size(4.dp)
                                         .background(GoldPremium, CircleShape)
                                 )
                                 Text(
-                                    text = "NO AR: ${getCurrentEpgProgram(playlistItem.name)}",
+                                    text = "NO AR: $liveNowTitle",
                                     color = GoldPremium,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { showChannelEpgModal = true }
                                 )
                             }
+                        }
+                    }
+
+                    if (playlistItem.contentType == "LIVE") {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { showChannelEpgModal = true },
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .testTag("player_epg_schedule_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = "Grade completa do canal (EPG)",
+                                tint = GoldPremium,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
@@ -6411,6 +6506,14 @@ fun VideoPlayerUI(
                     )
                 }
             }
+        }
+
+        if (showChannelEpgModal && playlistItem.contentType == "LIVE") {
+            ChannelFullEpgScheduleModal(
+                channel = playlistItem,
+                viewModel = viewModel,
+                onDismiss = { showChannelEpgModal = false }
+            )
         }
 
         if (showAudioSubDialog) {

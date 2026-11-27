@@ -1,3 +1,36 @@
 <resources>
     <string name="app_name">MK21 Player</string>
+
+    <!-- Channel Full EPG Schedule Modal -->
+    <string name="channel_epg_modal_title">Grade Completa (EPG)</string>
+    <string name="channel_epg_open_button_cd">Abrir grade completa do canal</string>
+    <string name="channel_epg_close_cd">Fechar grade do canal</string>
+    <string name="channel_epg_refresh_cd">Atualizar grade XMLTV</string>
+    <string name="channel_epg_play_now">Assistir Agora</string>
+    <string name="channel_epg_badge_live">NO AR</string>
+    <string name="channel_epg_badge_now_playing">PASSANDO AGORA</string>
+    <string name="channel_epg_badge_past">Encerrado</string>
+    <string name="channel_epg_badge_upcoming">A Seguir</string>
+    <string name="channel_epg_source_xmltv">XMLTV Real</string>
+    <string name="channel_epg_source_short">EPG do Canal</string>
+    <string name="channel_epg_source_loading">Baixando XMLTV...</string>
+    <string name="channel_epg_source_unavailable">Sem grade XMLTV</string>
+    <string name="channel_epg_filter_all">Todos</string>
+    <string name="channel_epg_jump_now">Agora</string>
+    <string name="channel_epg_search_placeholder">Filtrar programas, sinopses ou categorias...</string>
+    <string name="channel_epg_search_clear_cd">Limpar filtro de programação</string>
+    <string name="channel_epg_loading_title">Carregando grade completa</string>
+    <string name="channel_epg_loading_subtitle">Analisando programação XMLTV deste canal...</string>
+    <string name="channel_epg_empty_title">Grade indisponível para este canal</string>
+    <string name="channel_epg_empty_subtitle">O servidor não retornou programação XMLTV ou EPG para este canal no momento.</string>
+    <string name="channel_epg_empty_filter_title">Nenhum programa encontrado</string>
+    <string name="channel_epg_empty_filter_subtitle">Tente ajustar o termo de busca ou selecionar outro dia.</string>
+    <string name="channel_epg_retry">Tentar Novamente</string>
+    <string name="channel_epg_next_prefix">A seguir:</string>
+    <string name="channel_epg_programmes_count">%1$d programas</string>
+    <string name="channel_epg_remaining_minutes">restam %1$d min</string>
+    <string name="channel_epg_day_today">Hoje</string>
+    <string name="channel_epg_day_tomorrow">Amanhã</string>
+    <string name="channel_epg_day_yesterday">Ontem</string>
+    <string name="channel_epg_full_schedule_cta">Grade Completa</string>
 </resources>
