@@ -1,6 +1,6 @@
 // smart-tv/mk21-tv/workers/playlistWorker.js - Parser Assíncrono Isolado
 self.onmessage = async (e) => {
-  const { m3uText, batchSize = 500 } = e.data;
+  const { m3uText, batchSize = 80 } = e.data;
   const lines = m3uText.split(/\r?\n/);
   const totalLines = lines.length;
   let currentItem = null;

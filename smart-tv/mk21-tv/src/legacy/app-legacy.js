@@ -16,7 +16,7 @@ const Mk21DnsResolver = {
     }
 };
 
-// MK21 PLAY v3.0.3 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
+// MK21 PLAY v3.0.4 — Navegação espacial DPAD — Motor Otimizado para Smart TV LG webOS/Tizen
 // Prioridade Máxima no Ao Vivo, Carga em Etapas/Segundo Plano, Totais por Servidor, Diálogos Estilo APK e D-Pad Total
 const CatalogUtils = require('../../core/CatalogUtils.js');
 // Modulos puros das funcionalidades portadas do Saimo TV (Guia de Programação,
@@ -60,6 +60,41 @@ window.mk21App = {
   subtitles: SubtitleAndSkip
 };
 
+// ==================== ESTADO REATIVO DE PLAYER & PROTECAO DE CPU (v3.0.4) ====================
+const mk21PlayerState = {
+  isBuffering: false,
+  isPlaying: false
+};
+let mk21SpeedTestRunning = false;
+let mk21CurrentPlaybackMode = 'idle';
+const MK21_INDEX_BATCH_SIZE = 80;
+const MK21_INDEX_PLAYBACK_DELAY_MS = 1200;
+
+function mk21IsWebOsDevice() {
+  return /Web0S|SmartTV/i.test((typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '');
+}
+
+function mk21IsNativePriorityLiveUrl(url) {
+  const u = String(url || '').toLowerCase();
+  if (!u) return false;
+  if (/\.m3u8($|\?)/i.test(u) || /\.(mp4|mkv|webm|mov|m4v|avi|mpd)($|\?)/i.test(u)) return false;
+  return /\.ts($|\?)/i.test(u) || /\/live\//i.test(u);
+}
+
+async function mk21WaitForIndexerThrottle() {
+  if (mk21SpeedTestRunning || mk21PlayerState.isBuffering || mk21PlayerState.isPlaying) {
+    await new Promise(r => setTimeout(r, MK21_INDEX_PLAYBACK_DELAY_MS));
+  }
+}
+
+function abortActiveSpeedTest() {
+  mk21SpeedTestRunning = false;
+  if (window.__mk21SpeedTestController) {
+    try { window.__mk21SpeedTestController.abort(); } catch (e) {}
+    window.__mk21SpeedTestController = null;
+  }
+}
+
 // ==================== FASE 2: LIGACAO COM O PLAYERSERVICE ====================
 // O PlayerService (src/player-service.js) roda antes deste arquivo no bundle.
 // Aqui registramos o que ele pode chamar de volta na UI legada, para que o
@@ -78,13 +113,19 @@ let mk21FactoryAudioTracks = [];
       return Math.max(3000, seg * 1000);
     },
     onFactoryStart: function (info) {
+      mk21CurrentPlaybackMode = 'factory';
+      mk21PlayerState.isBuffering = true;
+      mk21PlayerState.isPlaying = false;
       addDevLog('[Player Engine] PlayerFactory (' + (info && info.platform) + ') em: ' + (info && info.url), 'info');
       addDevLog('[Player Engine] Motor escolhido: ' + (info && info.reason), 'debug');
     },
     onBuffering: function () {
+      mk21PlayerState.isBuffering = true;
       if ($('epgStatus')) $('epgStatus').textContent = '\u23F3 CARREGANDO...';
     },
     onPlaying: function () {
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = true;
       hidePlayerReconnectBadge();
       stallCount = 0;
       lastBufferProgressAt = Date.now();
@@ -94,9 +135,13 @@ let mk21FactoryAudioTracks = [];
       updateRealResolution(activeItem);
     },
     onPaused: function () {
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = false;
       if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(false);
     },
     onEnded: function () {
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = false;
       if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(false);
     },
     onTracks: function (payload) {
@@ -110,6 +155,10 @@ let mk21FactoryAudioTracks = [];
       if (typeof updateVodProgressTimeline === 'function') updateVodProgressTimeline();
     },
     onError: function (payload, fatal) {
+      if (fatal) {
+        mk21PlayerState.isBuffering = false;
+        mk21PlayerState.isPlaying = false;
+      }
       const msg = (payload && (payload.message || payload.code)) || 'erro desconhecido';
       addDevLog('[Player Engine] Erro da factory: ' + msg, fatal ? 'error' : 'warn');
       if (fatal) triggerAutoReconnect('Erro do player (factory)');
@@ -638,7 +687,7 @@ async function createCatalogIndexWriter(serverId, serverBaseUrl) {
       tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
     });
   } catch (e) { console.warn('[MK21] limpeza do índice falhou', e); }
-  const BATCH_SIZE = 250;
+  const BATCH_SIZE = MK21_INDEX_BATCH_SIZE;
   let batch = [];
   let pending = Promise.resolve();
   let inFlightBatches = 0;
@@ -648,12 +697,15 @@ async function createCatalogIndexWriter(serverId, serverBaseUrl) {
     const toWrite = batch;
     batch = [];
     inFlightBatches++;
-    const batchStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    pending = pending.then(() => new Promise(resolve => {
-      const done = () => {
-        inFlightBatches = Math.max(0, inFlightBatches - 1);
-        resolve();
-      };
+    pending = pending.then(async () => {
+      // Proteção de CPU no webOS: pausa 1200ms entre lotes quando o vídeo está sintonizando/tocando ou durante teste de rede
+      await mk21WaitForIndexerThrottle();
+      const batchStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      return new Promise(resolve => {
+        const done = () => {
+          inFlightBatches = Math.max(0, inFlightBatches - 1);
+          resolve();
+        };
       try {
         const tx = db.transaction(CATALOG_INDEX_STORE, 'readwrite');
         const store = tx.objectStore(CATALOG_INDEX_STORE);
@@ -711,7 +763,8 @@ async function createCatalogIndexWriter(serverId, serverBaseUrl) {
           done();
         };
       } catch (e) { done(); }
-    }));
+      });
+    });
   };
   return {
     isPersistent: true,
@@ -724,6 +777,7 @@ async function createCatalogIndexWriter(serverId, serverBaseUrl) {
       if (inFlightBatches > 0) {
         await pending;
       }
+      await mk21WaitForIndexerThrottle();
     },
     async finish(metricsSnapshot, groupCounts) {
       flush();
@@ -2233,8 +2287,12 @@ async function parseM3uTextStream(res, onItem, onProgress, hooks) {
     buffer = lines.pop() || '';
     for (let li = 0; li < lines.length; li++) {
       consume(lines[li]);
-      if (streamHooks.onBatchYield && itemCount > 0 && itemCount % 250 === 0) {
-        await streamHooks.onBatchYield();
+      if (itemCount > 0 && itemCount % MK21_INDEX_BATCH_SIZE === 0) {
+        if (streamHooks.onBatchYield) {
+          await streamHooks.onBatchYield();
+        } else {
+          await mk21WaitForIndexerThrottle();
+        }
       }
     }
     if (onProgress) onProgress(received, total);
@@ -2265,6 +2323,8 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
   const yieldToGc = async () => {
     if (onBatchYield) {
       await onBatchYield();
+    } else {
+      await mk21WaitForIndexerThrottle();
     }
     await new Promise(r => setTimeout(r, 0));
   };
@@ -2384,7 +2444,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
         isAdult: isAdult(itemName) || isAdult(grp) || Number(s.is_adult) === 1
       });
       totalEmitted++;
-      if ((i + 1) % 250 === 0) await yieldToGc();
+      if ((i + 1) % MK21_INDEX_BATCH_SIZE === 0) await yieldToGc();
     }
     liveStreams = null;
     await yieldToGc();
@@ -2427,7 +2487,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
             isAdult: isAdult(itemName) || isAdult(grp) || Number(m.is_adult) === 1
           });
           totalEmitted++;
-          if ((i + 1) % 250 === 0) await yieldToGc();
+          if ((i + 1) % MK21_INDEX_BATCH_SIZE === 0) await yieldToGc();
         }
         vodStreams = null;
         await yieldToGc();
@@ -2473,7 +2533,7 @@ async function fetchXtreamJsonCatalog(baseUrl, user, pass, signal, onItem, onPro
             isAdult: isAdult(itemName) || isAdult(grp)
           });
           totalEmitted++;
-          if ((i + 1) % 250 === 0) await yieldToGc();
+          if ((i + 1) % MK21_INDEX_BATCH_SIZE === 0) await yieldToGc();
         }
         seriesList = null;
         await yieldToGc();
@@ -3161,7 +3221,7 @@ async function loadServer(forceRefresh = false, options = {}) {
         .concat(deferredStage.SERIES);
       if (pendingItems.length === 0) return;
 
-      const BATCH = 450;
+      const BATCH = MK21_INDEX_BATCH_SIZE;
       for (let offset = 0; offset < pendingItems.length; offset += BATCH) {
         if (loadId !== serverLoadGeneration) return;
         const end = Math.min(pendingItems.length, offset + BATCH);
@@ -3181,7 +3241,7 @@ async function loadServer(forceRefresh = false, options = {}) {
         const stagePct = Math.min(99, Math.round((end / pendingItems.length) * 100));
         updateServerSyncBadge(stagePct, false, { background: true });
         setServerLoadProgress(srv.id, stagePct, 'loading');
-        await new Promise(r => setTimeout(r, 16));
+        await new Promise(r => setTimeout(r, (mk21SpeedTestRunning || mk21PlayerState.isBuffering || mk21PlayerState.isPlaying) ? MK21_INDEX_PLAYBACK_DELAY_MS : 16));
       }
     };
 
@@ -4495,13 +4555,17 @@ let prefetchAbortController = null;
 const prefetchManifestCache = new Map();
 
 function prefetchAdjacentChannels(item) {
+  if (prefetchAbortController) {
+    try { prefetchAbortController.abort(); } catch (e) {}
+    prefetchAbortController = null;
+  }
+  // v3.0.4: desativa pré-busca de canais adjacentes no webOS e durante teste de rede,
+  // e remove completamente chamadas HEAD redundantes que causam HTTP 500 em servidores IPTV.
+  if (mk21IsWebOsDevice() || mk21SpeedTestRunning) return;
   if (!item || !item.url) return;
   if (!currentFilteredItems || currentFilteredItems.length <= 1) return;
   if (currentContentType !== 'LIVE') return;
 
-  if (prefetchAbortController) {
-    try { prefetchAbortController.abort(); } catch (e) {}
-  }
   prefetchAbortController = new AbortController();
   const signal = prefetchAbortController.signal;
 
@@ -4513,6 +4577,7 @@ function prefetchAdjacentChannels(item) {
   const adjacents = [currentFilteredItems[nextIdx], currentFilteredItems[prevIdx]];
 
   setTimeout(() => {
+    if (signal.aborted || mk21SpeedTestRunning) return;
     adjacents.forEach(adj => {
       if (!adj || !adj.url || adj.url === item.url) return;
       try {
@@ -4535,8 +4600,6 @@ function prefetchAdjacentChannels(item) {
               }
             }
           }).catch(() => {});
-        } else {
-          fetch(adj.url, { method: 'HEAD', signal: signal, priority: 'low' }).catch(() => {});
         }
       } catch (err) {}
     });
@@ -5228,7 +5291,7 @@ function mk21IsRecentlyUnhealthy(url) {
 }
 
 function triggerAutoReconnect(cause) {
-  if (isAutoReconnecting || !activeItem) return;
+  if (mk21SpeedTestRunning || isAutoReconnecting || !activeItem) return;
   isAutoReconnecting = true;
   autoReconnectAttempts++;
 
@@ -5344,6 +5407,7 @@ function startStallWatchdog(streamKey) {
     let mk21FirstFrameLoggedForSrc = '';
     const marcarEngasgo = () => {
       lastStallSignalAt = Date.now();
+      mk21PlayerState.isBuffering = true;
       if (stallCount < 1) stallCount = 1;
       if (!mk21IsBuffering) {
         mk21IsBuffering = true;
@@ -5362,7 +5426,17 @@ function startStallWatchdog(streamKey) {
     video.addEventListener('waiting', marcarEngasgo);
     video.addEventListener('stalled', marcarEngasgo);
     video.addEventListener('seeking', marcarEngasgo);
+    video.addEventListener('pause', () => {
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = false;
+    });
+    video.addEventListener('ended', () => {
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = false;
+    });
     video.addEventListener('playing', () => {
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = true;
       stallCount = 0;
       autoReconnectAttempts = 0;
       watchdogGraceUntil = 0;
@@ -5395,6 +5469,8 @@ function startStallWatchdog(streamKey) {
     });
     video.addEventListener('error', (e) => {
       if (!video.currentSrc && !video.src) return; // troca de canal, não erro
+      mk21PlayerState.isBuffering = false;
+      mk21PlayerState.isPlaying = false;
       console.warn('[SmartPlayer] Erro nativo no vídeo:', e);
       try {
         if (window.MK21Observability) {
@@ -5405,7 +5481,14 @@ function startStallWatchdog(streamKey) {
           });
         }
       } catch (_) {}
-      if (!isCurrentItemVod()) {
+      if (!isCurrentItemVod() && activeItem && !mk21SpeedTestRunning) {
+        if (mk21CurrentPlaybackMode === 'native_webos_priority') {
+          addDevLog('[Player Fallback] Decodificador nativo falhou no webOS. Acionando fallback secundário...', 'warn');
+          if (fallbackToMpegts(activeItem, video.currentSrc || video.src || activeItem.url)) return;
+          if (fallbackToHls(activeItem)) return;
+        } else if (mk21CurrentPlaybackMode === 'native_ts') {
+          if (fallbackToHls(activeItem)) return;
+        }
         triggerAutoReconnect('Erro nativo de reprodução');
       }
     });
@@ -6020,7 +6103,7 @@ let mpegtsPlayer = null;
 
 let playAbortController = null;
 
-function safeVideoPlay(video) {
+function safeVideoPlay(video, rethrowNonAbort = false) {
   if (!video) return Promise.resolve();
   try {
     const p = video.play();
@@ -6031,16 +6114,22 @@ function safeVideoPlay(video) {
           return;
         }
         console.warn('[Player Play Error]:', err && err.message);
+        if (rethrowNonAbort) throw err;
       });
     }
   } catch (e) {
     console.warn('[Player Exception]:', e);
+    if (rethrowNonAbort) return Promise.reject(e);
   }
   return Promise.resolve();
 }
 
 function stopCurrentPlayer(abortPlayRequests = true) {
   cancelPendingAutoReconnect();
+  if (abortPlayRequests) cancelPendingChannelZap();
+  mk21PlayerState.isBuffering = false;
+  mk21PlayerState.isPlaying = false;
+  mk21CurrentPlaybackMode = 'idle';
   // Fase 2: se a factory e dona da reproducao, ela precisa soltar a engine nativa
   // antes de o legado mexer no <video> (AVPlay e singleton no aparelho).
   if (window.FBG2PlayerService) window.FBG2PlayerService.stop();
@@ -6189,6 +6278,57 @@ function isPlayInterruption(err) {
   return name === 'AbortError' || /interrupted|abort/i.test(msg);
 }
 
+// Fallback secundário MPEG-TS via MSE (mpegts.js): usado no webOS apenas se o hardware nativo falhar
+function fallbackToMpegts(item, streamUrl) {
+  if (!item || !item.url) return false;
+  if (!window.mpegts || !mpegts.isSupported() || mk21IsMpegtsBlocked(item.url)) return false;
+  if (!mk21FallbackAllowed(item, 1)) return false;
+  const video = $('tvPlayer');
+  if (!video) return false;
+  resetStallWatchdogGrace(14000);
+  mk21CurrentPlaybackMode = 'mpegts_fallback';
+  const targetUrl = streamUrl || item.url;
+  addDevLog('[Player Fallback] Tentando mpegts.js como fallback secundário...', 'info');
+  try {
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    if (mpegtsPlayer) { try { mpegtsPlayer.unload(); mpegtsPlayer.detachMediaElement(); mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
+    video.pause();
+    video.src = '';
+    video.removeAttribute('src');
+    video.innerHTML = '';
+    mpegtsPlayer = mpegts.createPlayer({
+      type: 'mse',
+      isLive: (currentContentType === 'LIVE'),
+      url: targetUrl
+    }, mk21MpegtsOptions());
+    mpegtsPlayer.attachMediaElement(video);
+    mpegtsPlayer.load();
+    mpegtsPlayer.play().then(() => {
+      cancelPendingAutoReconnect('mpegts.js fallback reproduzindo');
+      addDevLog('[Player Engine] Fallback mpegts.js reproduzindo!', 'success');
+      hidePlayerReconnectBadge();
+      if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      updateRealResolution(item);
+    }).catch(err => {
+      if (isPlayInterruption(err)) return;
+      addDevLog(`[MPEGTS Fallback Error] ${err && err.message}. Tentando HLS...`, 'warn');
+      if (!fallbackToHls(item)) triggerAutoReconnect('Falha mpegts fallback');
+    });
+    mpegtsPlayer.on(mpegts.Events.ERROR, (type, detail, info) => {
+      const rawInfoMsg = (info && (info.msg || info.reason)) || '';
+      const msg = String(detail || '') + ' ' + String(rawInfoMsg);
+      if (/interrupt|abort/i.test(msg)) return;
+      addDevLog(`[MPEGTS Fallback Error] ${type}: ${detail}`, 'warn');
+      if (!fallbackToHls(item)) triggerAutoReconnect('Erro mpegts fallback');
+    });
+    return true;
+  } catch (e) {
+    addDevLog('[Player Fallback] mpegts.js indisponível. Tentando HLS...', 'warn');
+    return false;
+  }
+}
+
 // Fallback nativo de MPEG-TS: no webOS/Tizen o pipeline de hardware costuma
 // abrir canais .ts que o mpegts.js (MSE) não consegue decodificar.
 function fallbackToNativeTs(item) {
@@ -6198,6 +6338,7 @@ function fallbackToNativeTs(item) {
   if (!video) return false;
   // Concede janela limpa ao watchdog durante o cold-start do decodificador nativo de hardware
   resetStallWatchdogGrace(14000);
+  mk21CurrentPlaybackMode = 'native_ts';
   addDevLog('[Player Fallback] Tentando MPEG-TS nativo no hardware da TV...', 'info');
   try {
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
@@ -6213,7 +6354,7 @@ function fallbackToNativeTs(item) {
       video.appendChild(src);
     }
     video.load();
-    safeVideoPlay(video).then(() => {
+    safeVideoPlay(video, true).then(() => {
       cancelPendingAutoReconnect('MPEG-TS nativo reproduzindo');
       addDevLog('[Player Engine] MPEG-TS nativo reproduzindo!', 'success');
       hidePlayerReconnectBadge();
@@ -6233,14 +6374,16 @@ function fallbackToNativeTs(item) {
 }
 
 function fallbackToHls(item) {
-  if (!item || !item.url) return;
-  if (!mk21FallbackAllowed(item, 2)) return;
+  if (!item || !item.url) return false;
+  if (!mk21FallbackAllowed(item, 2)) return false;
   resetStallWatchdogGrace(14000);
   const hlsUrl = item.url.replace(/\.ts($|\?)/i, '.m3u8$1');
   addDevLog(`[Player Fallback] Rotacionando formato para HLS (.m3u8): ${hlsUrl}`, 'info');
   stopCurrentPlayer(false);
+  mk21CurrentPlaybackMode = 'hls_fallback';
+  mk21PlayerState.isBuffering = true;
   const video = $('tvPlayer');
-  if (!video) return;
+  if (!video) return false;
 
   if (window.Hls && Hls.isSupported()) {
     if (hlsInstance) { try { hlsInstance.destroy(); } catch (e) {} hlsInstance = null; }
@@ -6266,16 +6409,18 @@ function fallbackToHls(item) {
   } else {
     video.src = hlsUrl;
     video.load();
-    safeVideoPlay(video).then(() => {
+    safeVideoPlay(video, true).then(() => {
       addDevLog('[Player Engine] Fallback HLS nativo reproduzindo!', 'success');
       hidePlayerReconnectBadge();
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
+      if (isPlayInterruption(err)) return;
       addDevLog(`[Player Error] Falha no fallback: ${err && err.message}`, 'error');
       triggerAutoReconnect('Falha no fallback');
     });
   }
+  return true;
 }
 
 let zappingLockPromise = Promise.resolve();
@@ -6283,6 +6428,10 @@ let zappingLockPromise = Promise.resolve();
 // 10. PLAYER DE VÍDEO & CONTROLE DE VELOCIDADE ATÉ 4X
 function playStream(item, forcedUrl) {
   if (!item || !item.url) return;
+
+  // Isolamento v3.0.4: qualquer novo canal aborta teste de velocidade e zapping pendente
+  abortActiveSpeedTest();
+  cancelPendingChannelZap();
 
   if (playAbortController) {
     try { playAbortController.abort(); } catch (e) {}
@@ -6293,6 +6442,8 @@ function playStream(item, forcedUrl) {
   zappingLockPromise = zappingLockPromise.catch(() => {}).then(async () => {
     if (currentSignal.aborted) return;
     stopCurrentPlayer(false);
+    mk21PlayerState.isBuffering = true;
+    mk21PlayerState.isPlaying = false;
     const video = $('tvPlayer');
     if (video) {
       try {
@@ -6383,10 +6534,37 @@ function playStream(item, forcedUrl) {
     return;
   }
 
-  const isM3U8 = streamUrl.toLowerCase().includes('.m3u8');
-  const isTS = streamUrl.toLowerCase().includes('.ts');
+  const isM3U8 = /\.m3u8($|\?)/i.test(streamUrl) || streamUrl.toLowerCase().includes('.m3u8');
+  const isTS = /\.ts($|\?)/i.test(streamUrl) || streamUrl.toLowerCase().includes('.ts');
+  const isWebOsTv = mk21IsWebOsDevice();
+  const prioritizeNativeWebOs = isWebOsTv && mk21IsNativePriorityLiveUrl(streamUrl);
 
-  if (isM3U8 && window.Hls && Hls.isSupported()) {
+  if (prioritizeNativeWebOs) {
+    // v3.0.4: prioridade absoluta ao decodificador nativo por hardware da TV LG webOS
+    // para fluxos .ts e /live/, evitando 5–12s de tela preta causados pelo mpegts.js.
+    mk21FallbackState = { url: item.url, at: 0, stage: 0 };
+    mk21CurrentPlaybackMode = 'native_webos_priority';
+    addDevLog('[Player Engine] webOS detectado: injetando stream direto no decodificador nativo por hardware...', 'info');
+    video.innerHTML = '';
+    video.src = streamUrl;
+    try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
+    video.load();
+    safeVideoPlay(video, true).then(() => {
+      cancelPendingAutoReconnect('playback nativo webOS iniciado');
+      addDevLog('[Player Engine] Decodificador nativo webOS reproduzindo!', 'success');
+      hidePlayerReconnectBadge();
+      if (typeof updatePlayPauseBtnUI === 'function') updatePlayPauseBtnUI(true);
+      if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
+      updateRealResolution(item);
+    }).catch(err => {
+      if (isPlayInterruption(err)) return;
+      addDevLog(`[Player Fallback] Nativo webOS falhou (${err && err.message}). Acionando fallback secundário...`, 'warn');
+      if (!fallbackToMpegts(item, streamUrl)) {
+        if (!fallbackToHls(item)) triggerAutoReconnect('Falha playback nativo webOS');
+      }
+    });
+  } else if (isM3U8 && window.Hls && Hls.isSupported()) {
+    mk21CurrentPlaybackMode = 'hls';
     addDevLog('[Player Engine] Usando decodificador Hls.js Low-Latency...', 'info');
     hlsInstance = new Hls(Object.assign(mk21HlsOptions(), { startLevel: -1 }));
     hlsInstance.loadSource(streamUrl);
@@ -6426,6 +6604,7 @@ function playStream(item, forcedUrl) {
       }
     });
   } else if (isTS && window.mpegts && mpegts.isSupported() && !mk21IsMpegtsBlocked(item.url)) {
+    mk21CurrentPlaybackMode = 'mpegts';
     addDevLog('[Player Engine] Canal MPEG-TS identificado. Construindo mpegts.js player...', 'info');
     try {
       if (mpegtsPlayer) { try { mpegtsPlayer.unload(); mpegtsPlayer.detachMediaElement(); mpegtsPlayer.destroy(); } catch (e) {} mpegtsPlayer = null; }
@@ -6479,12 +6658,13 @@ function playStream(item, forcedUrl) {
     }
   } else {
     // Decodificação direta no hardware da TV com tags de fonte MIME apropriadas e suporte direto a VOD
+    mk21CurrentPlaybackMode = 'native_direct';
     addDevLog('[Player Engine] Usando decodificação nativa acelerada por hardware...', 'info');
     video.innerHTML = '';
     video.src = streamUrl;
     try { video.preservesPitch = true; video.webkitPreservesPitch = true; video.playbackRate = currentPlaybackSpeed; } catch (e) {}
     video.load();
-    safeVideoPlay(video).then(() => {
+    safeVideoPlay(video, true).then(() => {
       cancelPendingAutoReconnect('playback nativo iniciado');
       addDevLog('[Player Engine] Playback nativo iniciado com sucesso!', 'success');
       hidePlayerReconnectBadge();
@@ -6492,6 +6672,7 @@ function playStream(item, forcedUrl) {
       if ($('epgStatus')) $('epgStatus').textContent = '🔴 NO AR';
       updateRealResolution(item);
     }).catch(err => {
+      if (isPlayInterruption(err)) return;
       addDevLog(`[Player Fallback] Falha no playback nativo (${err && err.message}). Tentando fallback HLS...`, 'warn');
       fallbackToHls(item);
     });
@@ -6678,23 +6859,59 @@ function initFocus() {
   }, 150);
 }
 
-// TROCA DE CANAIS COM SETAS CIMA E BAIXO
-function playNextChannel() {
+// TROCA DE CANAIS COM SETAS CIMA/BAIXO E CH+/CH- (DEBOUNCE 400ms v3.0.4)
+const MK21_ZAP_DEBOUNCE_MS = 400;
+let mk21ZapDebounceTimer = null;
+let mk21PendingZapIdx = -1;
+
+function cancelPendingChannelZap() {
+  if (mk21ZapDebounceTimer) {
+    clearTimeout(mk21ZapDebounceTimer);
+    mk21ZapDebounceTimer = null;
+  }
+  mk21PendingZapIdx = -1;
+}
+
+function scheduleDebouncedChannelZap(direction) {
   if (!currentFilteredItems || currentFilteredItems.length === 0) return;
-  const currentIdx = currentFilteredItems.findIndex(it => activeItem && it.url === activeItem.url);
-  const nextIdx = (currentIdx + 1) % currentFilteredItems.length;
-  playStream(currentFilteredItems[nextIdx]);
-  showChannelBanner('▲ Próximo: ' + currentFilteredItems[nextIdx].name);
-  mk21ShowZapHud(currentFilteredItems[nextIdx]);
+  const len = currentFilteredItems.length;
+  let baseIdx = mk21PendingZapIdx;
+  if (baseIdx < 0 || baseIdx >= len) {
+    baseIdx = currentFilteredItems.findIndex(it => activeItem && it.url === activeItem.url);
+  }
+  const targetIdx = baseIdx === -1
+    ? (direction > 0 ? 0 : len - 1)
+    : (baseIdx + direction + len) % len;
+  mk21PendingZapIdx = targetIdx;
+  const targetItem = currentFilteredItems[targetIdx];
+  if (!targetItem) return;
+
+  // Atualiza HUD e banner instantaneamente enquanto aguarda 400ms de inatividade para abrir o stream
+  const prefix = direction > 0 ? '▲ Próximo: ' : '▼ Anterior: ';
+  if ($('epgTitle')) $('epgTitle').textContent = (favoriteUrls.has(targetItem.url) ? '⭐ ' : '▶ ') + targetItem.name;
+  if ($('fsHudTitle')) $('fsHudTitle').textContent = (favoriteUrls.has(targetItem.url) ? '⭐ ' : '') + targetItem.name;
+  if ($('epgGroup')) $('epgGroup').textContent = 'Categoria: ' + (targetItem.group || '');
+  if ($('epgStatus')) $('epgStatus').textContent = '⏳ Sintonizando...';
+  showChannelBanner(prefix + targetItem.name);
+  mk21ShowZapHud(targetItem);
+
+  if (mk21ZapDebounceTimer) {
+    clearTimeout(mk21ZapDebounceTimer);
+  }
+  mk21ZapDebounceTimer = setTimeout(() => {
+    mk21ZapDebounceTimer = null;
+    const chosen = currentFilteredItems[mk21PendingZapIdx] || targetItem;
+    mk21PendingZapIdx = -1;
+    if (chosen) playStream(chosen);
+  }, MK21_ZAP_DEBOUNCE_MS);
+}
+
+function playNextChannel() {
+  scheduleDebouncedChannelZap(1);
 }
 
 function playPreviousChannel() {
-  if (!currentFilteredItems || currentFilteredItems.length === 0) return;
-  const currentIdx = currentFilteredItems.findIndex(it => activeItem && it.url === activeItem.url);
-  const prevIdx = (currentIdx - 1 + currentFilteredItems.length) % currentFilteredItems.length;
-  playStream(currentFilteredItems[prevIdx]);
-  showChannelBanner('▼ Anterior: ' + currentFilteredItems[prevIdx].name);
-  mk21ShowZapHud(currentFilteredItems[prevIdx]);
+  scheduleDebouncedChannelZap(-1);
 }
 
 function isAppFullscreen() {
@@ -7455,6 +7672,9 @@ let mk21SettingsPreviousType = 'LIVE';
 let mk21SettingsPreviousFocus = null;
 
 function switchContentType(type) {
+  if (type !== 'SETTINGS') {
+    abortActiveSpeedTest();
+  }
   // Guarda a aba e o foco de origem para restaurar ao sair do Guia ou de Configurações.
   if (type === 'GUIDE' && typeof mk21Guide !== 'undefined') {
     mk21Guide.previousType = (currentContentType && currentContentType !== 'GUIDE') ? currentContentType : 'LIVE';
@@ -7614,9 +7834,8 @@ CFG_BUTTONS.forEach(bId => {
 });
 
 function renderSettings(sec) {
-  if (sec !== 'speedtest' && window.__mk21SpeedTestController) {
-    try { window.__mk21SpeedTestController.abort(); } catch (e) {}
-    window.__mk21SpeedTestController = null;
+  if (sec !== 'speedtest') {
+    abortActiveSpeedTest();
   }
   if (sec === 'logout') {
     logout();
@@ -8213,18 +8432,30 @@ function renderNotificationsPanel() {
 }
 
 async function runSpeedTest() {
-  if (window.__mk21SpeedTestController) {
-    try { window.__mk21SpeedTestController.abort(); } catch (e) {}
-  }
+  abortActiveSpeedTest();
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   window.__mk21SpeedTestController = controller;
+  mk21SpeedTestRunning = true;
   const signal = controller ? controller.signal : undefined;
 
-  // Pausa qualquer reprodução IPTV em andamento para evitar concorrência de 10–18 Mbps e CPU na TV
+  // v3.0.4: isolamento total de sockets durante o teste de velocidade — encerra player,
+  // cancela pré-busca de canais e aborta sincronizações em segundo plano para não saturar a TV.
   try {
     if (typeof stopCurrentPlayer === 'function') {
-      stopCurrentPlayer(false);
+      stopCurrentPlayer(true);
     }
+    if (prefetchAbortController) {
+      try { prefetchAbortController.abort(); } catch (e) {}
+      prefetchAbortController = null;
+    }
+    if (prefetchHlsNext) {
+      try { prefetchHlsNext.destroy(); } catch (e) {}
+      prefetchHlsNext = null;
+    }
+    Object.keys(mk21BgSyncControllers).forEach(sid => {
+      try { mk21BgSyncControllers[sid].abort(); } catch (e) {}
+      delete mk21BgSyncControllers[sid];
+    });
   } catch (e) {}
 
   const svgSpeed = (pathD) => `<svg class="speed-card-svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${pathD}"/></svg>`;
@@ -8591,6 +8822,10 @@ async function runSpeedTest() {
     setStatus('Teste não disponível nesta rede/TV');
     if ($('speedQualityRating')) {
       $('speedQualityRating').textContent = 'Não foi possível medir: ' + (err && err.message ? err.message : 'endpoint bloqueado') + '.';
+    }
+  } finally {
+    if (window.__mk21SpeedTestController === controller) {
+      mk21SpeedTestRunning = false;
     }
   }
 }
@@ -9203,6 +9438,7 @@ function syncSingleServerInBackground(idx, triggerBtn) {
 }
 
 async function runSingleServerSyncInBackground(idx, triggerBtn) {
+  if (mk21SpeedTestRunning) return false;
   const srv = SERVERS[idx];
   if (!srv) return false;
   if (idx === currentServerIndex) {
@@ -9895,7 +10131,7 @@ function compareSemver(v1, v2) {
   return 0;
 }
 
-const BASE_PACKAGE_VERSION = '3.0.3';
+const BASE_PACKAGE_VERSION = '3.0.4';
 let savedOtaVer = null;
 try {
   savedOtaVer = localStorage.getItem('mk21_ota_app_version');
