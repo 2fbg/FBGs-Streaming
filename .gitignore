@@ -47,3 +47,7 @@ FETCH_HEAD
 # Chaves de licença ECDSA (NUNCA commitar)
 license-private.pem
 license-public.pem
+# Capturas, vídeos e logs do AI Studio: não versionar (ficam fora do repositório)
+public/assets/aistudio/
+# Gerado automaticamente pelo build (fallback em app/build.gradle.kts)
+app/google-services.json

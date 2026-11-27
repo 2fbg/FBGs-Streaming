@@ -130,6 +130,13 @@ class LocalHttpServer {
             while (isRunning) {
                 try {
                     val socket = serverSocket?.accept() ?: break
+                    // O servidor escuta em todas as interfaces (a TV precisa alcançá-lo): descarta pares
+                    // que não são da rede local/loopback/VPN antes de qualquer leitura.
+                    if (!CastNetworkPolicy.isLanPeer(socket.inetAddress)) {
+                        Log.w(TAG, "Conexão recusada de par fora da rede local: ${socket.inetAddress?.hostAddress}")
+                        try { socket.close() } catch (_: Exception) {}
+                        continue
+                    }
                     executorService?.execute {
                         handleConnection(socket)
                     }
@@ -166,8 +173,8 @@ class LocalHttpServer {
 
         val host = uri.host?.lowercase(Locale.US)?.trim() ?: return false
         if (host.isEmpty()) return false
-        if (host == "localhost" || host == "0.0.0.0" || host == "::1" || host == "[::1]") return false
-        if (host.startsWith("127.") || host.startsWith("169.254.")) return false
+        // Loopback, 0.0.0.0/8, link-local/metadata, IPv6 loopback/link-local e formas ofuscadas de IP.
+        if (CastNetworkPolicy.isBlockedUpstreamHost(host)) return false
 
         // Impede recursão apontando para o próprio servidor local
         val port = if (uri.port != -1) uri.port else if (scheme == "https") 443 else 80

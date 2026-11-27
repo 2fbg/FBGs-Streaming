@@ -31,7 +31,8 @@ fun configureAppCheck(context: Context, intent: Intent?) {
         val appCheck = FirebaseAppCheck.getInstance()
         val debugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)
 
-        if (!debugToken.isNullOrEmpty()) {
+        // Token de debug via Intent só vale em build debug: em release qualquer app poderia forçar o provedor de debug.
+        if (BuildConfig.DEBUG && !debugToken.isNullOrEmpty()) {
             // Automated test runner or CI provided an explicit debug token
             val persistenceKey = FirebaseApp.getInstance().persistenceKey
             val prefs = context.getSharedPreferences(
@@ -60,10 +61,9 @@ fun configureAppCheck(context: Context, intent: Intent?) {
                 )
                 Log.d(TAG, "PlayIntegrityAppCheckProviderFactory installed successfully.")
             } catch (e: Throwable) {
-                Log.w(TAG, "PlayIntegrity fallback to Debug provider: ${e.message}")
-                appCheck.installAppCheckProviderFactory(
-                    DebugAppCheckProviderFactory.getInstance()
-                )
+                // Em release não há fallback para o provedor de debug: sem atestado, o App Check
+                // simplesmente não instala provedor e o backend recusa as chamadas de IA.
+                Log.w(TAG, "PlayIntegrity indisponível; App Check não inicializado: ${e.message}")
             }
         }
     } catch (e: Exception) {

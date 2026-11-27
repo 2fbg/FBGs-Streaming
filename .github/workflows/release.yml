@@ -225,40 +225,6 @@ jobs:
           if [ -z "${KEY_PASSWORD:-}" ]; then
             export KEY_PASSWORD="$STORE_PASSWORD"
           fi
-          if [ ! -f "app/google-services.json" ]; then
-            mkdir -p app
-            cat << 'EOF' > app/google-services.json
-          {
-            "project_info": {
-              "project_number": "736577956980",
-              "project_id": "gen-lang-client-0474959166",
-              "storage_bucket": "gen-lang-client-0474959166.firebasestorage.app"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:736577956980:android:8b24803d286868ab723521",
-                  "android_client_info": {
-                    "package_name": "com.aistudio.multiservidor.iptvmk"
-                  }
-                },
-                "oauth_client": [],
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDbFO4VGaBNxxphP99Mu6NbKZ1nATzHMmI"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                }
-              }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
-          fi
 
           ./gradlew testDebugUnitTest --no-daemon || { echo "Retrying tests due to socket/network hiccup..."; ./gradlew testDebugUnitTest --no-daemon; }
           ./gradlew assembleRelease --no-daemon
@@ -388,6 +354,13 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Mantém só o IPK da versão atual no repositório; as anteriores ficam nas GitHub Releases.
+          for old_ipk in smart-tv/mk21play_*_all.ipk; do
+            if [ "$old_ipk" != "smart-tv/mk21play_${VER}_all.ipk" ]; then
+              git rm -q --ignore-unmatch -- "$old_ipk"
+            fi
+          done
 
           git add \
             mk21.apk \

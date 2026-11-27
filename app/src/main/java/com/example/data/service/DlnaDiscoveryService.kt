@@ -100,6 +100,9 @@ class DlnaDiscoveryService {
             } catch (_: Exception) {
                 return null
             }
+            // controlURL absoluto ou URLBase apontando para outro host faria o app enviar o comando
+            // (com a URL do stream e o token) para fora do dispositivo que respondeu.
+            if (!CastNetworkPolicy.isSameHost(descUrl, resolvedControlUrl)) return null
 
             val renderingControlRaw = extractServiceControlUrl(xml, "RenderingControl")
             val resolvedRenderingUrl = renderingControlRaw?.let {
@@ -108,7 +111,7 @@ class DlnaDiscoveryService {
                 } catch (_: Exception) {
                     null
                 }
-            }
+            }?.takeIf { CastNetworkPolicy.isSameHost(descUrl, it) }
 
             val ip = fallbackIp.ifBlank { parsedUrl.host }
             return DLNADevice(
@@ -298,22 +301,65 @@ class DlnaDiscoveryService {
         }, "mk21-dlna-desc").start()
     }
 
+    private val maxDescriptionBytes = 256 * 1024
+
+    /** Lê no máximo [maxBytes]; acima disso descarta (dispositivo malicioso enviando XML infinito). */
+    private fun readCapped(input: java.io.InputStream, maxBytes: Int): String? {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        var total = 0
+        input.use { stream ->
+            while (true) {
+                val n = stream.read(buf)
+                if (n < 0) break
+                total += n
+                if (total > maxBytes) return null
+                out.write(buf, 0, n)
+            }
+        }
+        return out.toString(Charsets.UTF_8.name())
+    }
+
     private fun fetchDeviceDescriptionSync(descUrl: String, ip: String): DLNADevice? {
+        // LOCATION vem de um dispositivo não confiável: só aceita http na LAN, no IP de quem respondeu.
+        if (!CastNetworkPolicy.isTrustedSsdpLocation(descUrl, ip)) {
+            Log.w(TAG, "LOCATION rejeitado (fora da rede local ou diferente de quem respondeu): $descUrl")
+            return null
+        }
         var conn: HttpURLConnection? = null
         return try {
-            val url = URL(descUrl)
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 2000
-                readTimeout = 2000
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "MK21-DLNA/3.0 UPnP/1.1")
+            var current = descUrl
+            var hops = 0
+            var xml: String? = null
+            while (hops <= 2) {
+                val c = (URL(current).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 2000
+                    readTimeout = 2000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "MK21-DLNA/3.0 UPnP/1.1")
+                }
+                conn = c
+                val code = c.responseCode
+                if (code in 300..399) {
+                    // Redirecionamento só dentro do mesmo host da LAN.
+                    val next = c.getHeaderField("Location")?.let { URL(URL(current), it).toString() }
+                    c.disconnect()
+                    if (next == null ||
+                        !CastNetworkPolicy.isTrustedSsdpLocation(next, ip) ||
+                        !CastNetworkPolicy.isSameHost(descUrl, next)
+                    ) {
+                        return null
+                    }
+                    current = next
+                    hops++
+                    continue
+                }
+                if (code in 200..299) {
+                    xml = readCapped(c.inputStream, maxDescriptionBytes)
+                }
+                break
             }
-            if (conn.responseCode in 200..299) {
-                val xml = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                parseDeviceDescriptionXml(xml, descUrl, ip)
-            } else {
-                null
-            }
+            xml?.let { parseDeviceDescriptionXml(it, current, ip) }
         } catch (e: Exception) {
             Log.d(TAG, "Description fetch failed for $descUrl: ${e.message}")
             null
