@@ -19,7 +19,7 @@
         "largeIcon": "https://raw.githubusercontent.com/2fbg/FBGs-Streaming/main/smart-tv/mk21-tv/largeIcon.png",
         "ipkUrl": "https://github.com/2fbg/FBGs-Streaming/releases/download/v3.0.4/mk21play_3.0.4_all.ipk",
         "ipkHash": {
-          "sha256": "8337bbdfc3e1b5cb432b7dd5eca46a39ea115d78270165b86b15f17f345a1f3f"
+          "sha256": "ea6cbea665c80d1fcbcefa4e0134fe55fd3f970f859cf63f060fc1bab6ff59d5"
         },
         "vendor": "MK21"
       }
